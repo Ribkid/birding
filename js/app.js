@@ -1479,8 +1479,9 @@ async function renderListen() {
       await loading;
       prog.classList.add('hidden');
       status.textContent = 'Listening. Keep still and let the birds call.';
-      const pos = state.lastPos || await getPosition().catch(() => null);
-      mod.setLocation(pos?.lat ?? -27.47, pos?.lng ?? 153.02);
+      // Filter to birds of this area: start with Brisbane, then refine with GPS.
+      mod.setLocation(state.lastPos?.lat ?? -27.47, state.lastPos?.lng ?? 153.02);
+      getPosition().then(pos => { state.lastPos = { ...pos, at: Date.now() }; mod.setLocation(pos.lat, pos.lng); }).catch(() => {});
     } catch (err) {
       stop();
       status.textContent = /denied|NotAllowed/i.test(String(err?.name || err?.message)) ? 'Microphone permission was denied. Allow it in your browser settings and try again.' : `Couldn't start listening: ${err.message || err}`;

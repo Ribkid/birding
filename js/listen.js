@@ -7,6 +7,7 @@ let worker = null, ready = false, readyP = null;
 let ctx = null, stream = null, node = null, analyser = null, ring = null, ringIdx = 0, filled = 0;
 let timer = null, raf = null, listening = false;
 let labelMap = null;
+let geoReady = false;
 let handlers = {};
 
 function postProgress(p, text) { handlers.onProgress?.(p, text); }
@@ -22,6 +23,7 @@ export function loadListenModel(onProgress) {
       else if (data.message === 'warmup') onProgress?.(75, 'Warming up');
       else if (data.message === 'load_geomodel' || data.message === 'load_labels') onProgress?.(92, 'Almost ready');
       else if (data.message === 'loaded') { ready = true; onProgress?.(100, 'Ready'); resolve(); }
+      else if (data.message === 'area-scores') geoReady = true;
       else if (data.message === 'pooled') handlePooled(data.pooled);
       else if (data.message === 'error') { readyP = null; reject(new Error(data.error)); }
     };
@@ -39,7 +41,7 @@ async function getMap() {
 }
 
 function handlePooled(pooled) {
-  if (!listening && !handlers.oneShot) return;
+  if (!listening || !geoReady) return; // wait until results are filtered to birds of this area
   const hits = pooled
     .filter(p => p.confidence >= (handlers.threshold ?? 0.3) && p.geoscore >= 0.01)
     .sort((a, b) => b.confidence - a.confidence)
