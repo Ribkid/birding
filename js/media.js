@@ -129,19 +129,20 @@ const strip = html => {
   return (d.textContent || '').replace(/\s+/g, ' ').trim();
 };
 
-// Detail: Wikipedia intro + image licence. Cached per species.
+// Detail: Wikipedia intro + image licence. Cached per species (only once both lookups succeed).
 export async function details(species) {
-  const key = `detail-v1-${species.id}`;
+  const key = `detail-v2-${species.id}`;
   const cached = await db.kvGet(key);
   if (cached) return cached;
   await loadIndex();
   const p = photoFor(species.id);
   if (!p) return null;
   const out = { title: p.title, url: p.url, extract: '', credit: null };
+  let ok = true;
   try {
     const ex = await api(WP, { action: 'query', prop: 'extracts', exintro: 1, explaintext: 1, exsentences: 5, titles: p.title });
     out.extract = ex.query?.pages?.[0]?.extract || '';
-  } catch (_) {}
+  } catch (_) { ok = false; }
   if (p.file) {
     try {
       const ii = await api(WP, {
@@ -156,58 +157,59 @@ export async function details(species) {
         licenseUrl: m.LicenseUrl?.value || '',
         page: info?.descriptionurl || `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(p.file)}`,
       };
-    } catch (_) {}
+    } catch (_) { ok = false; }
   }
-  await db.kvSet(key, out);
+  if (ok) await db.kvSet(key, out);
   return out;
 }
 
 // Calls: search Wikimedia Commons for audio recordings of the species.
+const MULTI = /soundscape|mystery|identity unknown|dawn chorus|chorus|bird ?song,|ambien|various|birds of|mixed/i;
 export async function calls(species) {
-  const key = `calls-v1-${species.id}`;
+  const key = `calls-v2-${species.id}`;
   const cached = await db.kvGet(key);
-  if (cached) return cached;
-  const [genus, epithet] = species.sci.split(' ');
-  const searches = [`"${species.sci}" filetype:audio`, `"${species.name}" filetype:audio`];
-  const seen = new Set();
-  const results = [];
-  for (const q of searches) {
+  if (cached && (cached.list.length || Date.now() - cached.at < 7 * 864e5)) return cached.list;
+  const sci = species.sci.toLowerCase(), name = species.name.toLowerCase();
+  const alt = (species.wiki || '').toLowerCase();
+  const found = new Map();
+  let failed = false;
+  for (const q of [`"${species.sci}" filetype:audio`, `"${species.name}" filetype:audio`]) {
     let data;
     try {
       data = await api(CM, {
-        action: 'query', generator: 'search', gsrsearch: q, gsrnamespace: 6, gsrlimit: 10,
+        action: 'query', generator: 'search', gsrsearch: q, gsrnamespace: 6, gsrlimit: 15,
         prop: 'imageinfo', iiprop: 'url|mime|size|extmetadata',
-        iiextmetadatafilter: 'Artist|LicenseShortName|LicenseUrl|ImageDescription',
+        iiextmetadatafilter: 'Artist|LicenseShortName|ImageDescription',
       });
-    } catch (_) { continue; }
-    const pages = (data.query?.pages || []).sort((a, b) => (a.index || 0) - (b.index || 0));
-    for (const pg of pages) {
+      if (data.error) throw new Error(data.error.info);
+    } catch (_) { failed = true; continue; }
+    for (const pg of data.query?.pages || []) {
       const ii = pg.imageinfo?.[0];
-      if (!ii || seen.has(pg.title)) continue;
-      if (!/^audio\/|application\/ogg/.test(ii.mime || '')) continue;
-      if (ii.size > 12e6) continue;
+      if (!ii || found.has(pg.title)) continue;
+      if (!/^audio\/|application\/ogg/.test(ii.mime || '') || ii.size > 12e6) continue;
       const m = ii.extmetadata || {};
-      const text = `${pg.title} ${strip(m.ImageDescription?.value)}`.toLowerCase();
-      const matches = text.includes(epithet?.toLowerCase()) && text.includes(genus.toLowerCase())
-        || text.includes(species.name.toLowerCase());
-      if (!matches) continue;
-      seen.add(pg.title);
-      results.push({
+      const title = pg.title.toLowerCase().replace(/_/g, ' ');
+      if (MULTI.test(title)) continue;
+      const desc = strip(m.ImageDescription?.value).toLowerCase();
+      const inTitle = title.includes(sci) || title.includes(name) || (alt && title.includes(alt));
+      const inDesc = desc.includes(sci) || desc.includes(name);
+      found.set(pg.title, {
+        score: (inTitle ? 4 : 0) + (inDesc ? 2 : 0) - (pg.index || 0) / 100,
         title: pg.title.replace(/^File:/, '').replace(/\.[a-z0-9]+$/i, '').replace(/_/g, ' '),
         src: ii.url, mime: ii.mime,
         artist: strip(m.Artist?.value) || 'Unknown',
         license: strip(m.LicenseShortName?.value) || '',
         page: ii.descriptionurl,
       });
-      if (results.length >= 3) break;
     }
-    if (results.length >= 3) break;
   }
-  // Prefer formats every Android browser plays well.
-  const rank = r => /mpeg|mp3/.test(r.mime) ? 0 : /ogg|opus|vorbis/.test(r.mime) ? 1 : 2;
-  results.sort((a, b) => rank(a) - rank(b));
-  await db.kvSet(key, results);
-  return results;
+  // Prefer files that name the bird, then formats every Android browser plays well.
+  const fmt = r => /mpeg|mp3/.test(r.mime) ? 0.5 : /ogg|opus|vorbis/.test(r.mime) ? 0.3 : 0;
+  const list = [...found.values()].filter(r => r.score >= 2)
+    .sort((a, b) => (b.score + fmt(b)) - (a.score + fmt(a))).slice(0, 3)
+    .map(({ score, ...r }) => r);
+  if (!failed || list.length) await db.kvSet(key, { at: Date.now(), list });
+  return list;
 }
 
 // Audio is fetched whole and kept in the cache so it plays offline later.
@@ -231,7 +233,8 @@ export async function downloadAll(onProgress) {
   await loadIndex();
   let done = 0;
   const list = SPECIES.filter(s => photoFor(s.id));
-  for (const part of chunk(list, 6)) {
+  for (const part of chunk(list, 4)) {
+    await new Promise(r => setTimeout(r, 250));
     await Promise.all(part.map(async s => {
       try {
         await Promise.all([

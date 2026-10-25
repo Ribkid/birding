@@ -1,5 +1,5 @@
 // Birddex service worker: app shell offline, plus cached bird photos and map tiles.
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL = `birddex-shell-${VERSION}`;
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
