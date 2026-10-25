@@ -4,6 +4,9 @@ import { loadIndex, photoFor, sized, details, calls, audioUrl, downloadAll, onMe
 import { speciesList, periodFilter, totals, yearTotals, targets, badges, inPatch, haversineKm, MONTHS, inSeason } from './stats.js';
 import { toEbirdCsv } from './ebird.js';
 import { loadSeq, seq, monthRates, likelihood, recordCount, spotsFor, pointsFor, hotspots, nearbyTargets } from './seqdata.js';
+import { openCard, confetti, shareCard } from './card3d.js';
+import { renderQuiz } from './quiz.js';
+import { renderStats } from './statsview.js';
 
 const relRate = (id, month) => { const m = monthRates(id); return m ? m.rel[month - 1] : null; };
 const targetOpts = () => seq()?.hotspots?.length ? { score: likelihood, rel: relRate } : {};
@@ -11,9 +14,11 @@ const targetOpts = () => seq()?.hotspots?.length ? { score: likelihood, rel: rel
 // ---------- state ----------
 const state = {
   sightings: [], outings: [], patches: [],
-  settings: { colourUnseen: false },
+  settings: { colourUnseen: false, theme: 'auto' },
   activeOutingId: null,
-  dex: { q: '', show: 'all', group: '', habitat: '' },
+  dex: { q: '', show: 'all', group: '', habitat: '', rarity: '', season: false, sort: 'dex', layout: 'grid' },
+  listen: { hits: new Map() },
+  installPrompt: null,
   listSort: 'dex',
 };
 const $ = (sel, el = document) => el.querySelector(sel);
@@ -88,6 +93,14 @@ const icon = {
   cam: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   gear: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M4.2 6.5l2.6 1.5M17.2 16l2.6 1.5M4.2 17.5l2.6-1.5M17.2 8l2.6-1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 15l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  mic: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  scan: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4M5 13v6h14v-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  list: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  quiz: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9a3 3 0 1 1 4 2.8c-.8.3-1.2 1-1.2 1.8V15M12 18.5v.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  chart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
 };
 
 function toast(msg) {
@@ -190,6 +203,10 @@ async function deleteSighting(id) {
 }
 
 function celebrate(sp, newBadges) {
+  navigator.vibrate?.([60, 40, 120]);
+  confetti();
+  const hist = sightingsOf(sp.id);
+  const first = hist[hist.length - 1];
   const el = document.createElement('div');
   el.className = 'celebrate';
   el.setAttribute('role', 'status');
@@ -199,10 +216,15 @@ function celebrate(sp, newBadges) {
     <h2>${esc(sp.name)}</h2>
     <p class="muted">${seenSet().size} of ${SPECIES.length} species seen</p>
     ${newBadges.length ? `<p class="celebrate-badges">Badge earned: ${newBadges.map(b => `<strong>${esc(b.name)}</strong>`).join(', ')}</p>` : ''}
-    <button class="btn btn--primary" data-dismiss>Nice</button></div>`;
+    <div class="row-center"><button class="btn" data-share>${icon.share} Share</button><button class="btn" data-card>See card</button><button class="btn btn--primary" data-dismiss>Nice</button></div></div>`;
   document.body.append(el);
   const done = () => { el.classList.add('celebrate--out'); setTimeout(() => el.remove(), 250); };
-  el.addEventListener('click', done);
+  const info = { seen: true, isNew: true, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
+  el.addEventListener('click', e => {
+    if (e.target.closest('[data-share]')) { shareCard(sp, info); return; }
+    if (e.target.closest('[data-card]')) { done(); openCard(sp, info); return; }
+    if (e.target.closest('[data-dismiss]') || e.target === el) done();
+  });
   setTimeout(() => $('[data-dismiss]', el)?.focus(), 50);
 }
 
@@ -255,14 +277,14 @@ function wirePicker(root, onPick) {
   });
 }
 
-async function openSightingSheet({ speciesId = null, sightingId = null } = {}) {
+async function openSightingSheet({ speciesId = null, sightingId = null, autoGps = false, photoBlob = null, notes = '' } = {}) {
   const existing = sightingId ? state.sightings.find(s => s.id === sightingId) : null;
   const rec = existing ? { ...existing } : {
     speciesId, count: 1, heard: false, date: todayStr(), time: timeStr(),
-    lat: null, lng: null, acc: null, place: '', notes: '', photoId: null, outingId: null,
+    lat: null, lng: null, acc: null, place: '', notes, photoId: null, outingId: null,
   };
   const outing = !existing && activeOuting();
-  let newPhoto = null, removePhoto = false;
+  let newPhoto = photoBlob || null, removePhoto = false;
   const existingPhoto = rec.photoId ? await photoUrl(rec.photoId) : null;
   const sheet = openSheet(`
     <h2 class="sheet-title">${existing ? 'Edit sighting' : 'Log a sighting'}</h2>
@@ -305,6 +327,12 @@ async function openSightingSheet({ speciesId = null, sightingId = null } = {}) {
   const locSet = $('.loc', form);
   const syncOuting = () => locSet.classList.toggle('hidden', !!toOuting?.checked);
   toOuting?.addEventListener('change', syncOuting); syncOuting();
+  if (photoBlob) {
+    $('[data-photo-preview]', sheet).innerHTML = `<img src="${URL.createObjectURL(photoBlob)}" alt="Your photo">`;
+    $('[data-photo-label]', sheet).textContent = 'Replace photo';
+    $('[data-photo-remove]', sheet).classList.remove('hidden');
+  }
+  if (autoGps && !outing) setTimeout(() => $('[data-gps]', sheet)?.click(), 0);
 
   sheet.addEventListener('click', async e => {
     const step = e.target.closest('[data-step]');
@@ -374,6 +402,10 @@ function openPlusSheet() {
   const o = activeOuting();
   const s = openSheet(`<h2 class="sheet-title">Add birds</h2>
     <div class="plus-options">
+      <div class="plus-id">
+        <a class="plus-opt plus-opt--id" href="#/listen" data-close>${icon.mic}<strong>Listen</strong><span>Name birds by their calls</span></a>
+        <a class="plus-opt plus-opt--id" href="#/scan" data-close>${icon.scan}<strong>Scan a photo</strong><span>Name a bird from a picture</span></a>
+      </div>
       <button class="plus-opt" data-one><strong>Log one bird</strong><span>A single sighting with photo, place and notes.</span></button>
       ${o ? `<button class="plus-opt" data-resume><strong>Back to your outing</strong><span>${esc(o.place || 'Current outing')}, started ${o.time}</span></button>`
           : `<button class="plus-opt" data-outing><strong>Start an outing</strong><span>Tally every bird at one place, like an eBird checklist.</span></button>`}
@@ -480,17 +512,24 @@ const routes = [
   [/^#\/map\/sp\/(\d+)$/, m => renderMap(Number(m[1]))],
   [/^#\/badges$/, () => renderBadges()],
   [/^#\/settings$/, () => renderSettings()],
+  [/^#\/map\/at\/(-?[\d.]+),(-?[\d.]+)$/, m => renderMap(null, [Number(m[1]), Number(m[2])])],
+  [/^#\/compare\/(\d+)\/(\d+)$/, m => renderCompare(Number(m[1]), Number(m[2]))],
+  [/^#\/stats$/, () => renderStats(ctx)],
+  [/^#\/quiz$/, () => renderQuiz(ctx)],
+  [/^#\/listen$/, () => renderListen()],
+  [/^#\/scan$/, () => renderScan()],
 ];
 let lastRoute = '';
 function render() {
   const hash = location.hash || '#/dex';
   if (state.map && !hash.startsWith('#/map')) { state.map.remove(); state.map = null; }
+  state.cleanup?.(); state.cleanup = null;
   for (const [re, fn] of routes) {
     const m = hash.match(re);
     if (m) { fn(m); break; }
   }
   const tab = hash.split('/')[1] || 'dex';
-  const tabFor = { bird: 'dex', dex: 'dex', lists: 'lists', list: 'lists', patch: 'lists', targets: 'lists', outing: 'lists', log: 'lists', map: 'map', badges: 'badges', settings: 'badges' }[tab] || 'dex';
+  const tabFor = { bird: 'dex', dex: 'dex', compare: 'dex', listen: 'dex', scan: 'dex', lists: 'lists', list: 'lists', patch: 'lists', targets: 'lists', outing: 'lists', log: 'lists', stats: 'lists', map: 'map', badges: 'badges', settings: 'badges', quiz: 'badges' }[tab] || 'dex';
   $$('.tabbar a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === tabFor ? 'page' : 'false'));
   renderOutingBar();
   if (hash !== lastRoute) { if (!hash.startsWith('#/dex') || !lastRoute.startsWith('#/bird')) window.scrollTo(0, 0); lastRoute = hash; }
@@ -507,50 +546,105 @@ function renderOutingBar() {
 }
 
 // Dex
+function dexFilter(seen) {
+  const f = state.dex;
+  const q = f.q.trim().toLowerCase();
+  const month = new Date().getMonth() + 1;
+  return SPECIES.filter(s =>
+    (!q || `${s.name} ${s.sci} ${dexNo(s.id)} ${GROUPS[s.group]}`.toLowerCase().includes(q)) &&
+    (f.show === 'all' || (f.show === 'seen') === seen.has(s.id)) &&
+    (!f.group || s.group === f.group) && (!f.habitat || s.habitats.includes(f.habitat)) &&
+    (!f.rarity || s.rarity === Number(f.rarity)) &&
+    (!f.season || (relRate(s.id, month) ?? (inSeason(s, month) ? 1 : 0)) >= 0.35));
+}
+function lastSeenOf(id) { const h = sightingsOf(id); return h[0] ? h[0].date + (h[0].time || '') : ''; }
+
+function birdOfDay(seen) {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  let pool = targets({ seen, month, ...targetOpts() }).slice(0, 40);
+  if (!pool.length) pool = SPECIES.slice();
+  const key = Number(todayStr(now).replace(/-/g, ''));
+  const sp = pool[(key * 2654435761 >>> 0) % pool.length];
+  const spot = spotsFor(sp.id, 1)[0];
+  const why = seen.has(sp.id) ? 'One of yours. Say hello again today.'
+    : `${relRate(sp.id, month) >= 0.8 ? 'Often reported right now' : 'Around this month'}${spot ? `. Try ${spot.h.name}.` : '.'}`;
+  return `<a class="botd" href="#/bird/${sp.id}">
+    <span class="botd-img">${birdImg(sp, 'large')}</span>
+    <span class="botd-txt"><span class="botd-k">Bird of the day</span><strong>${esc(sp.name)}</strong><span class="small muted">${esc(why)}</span></span></a>`;
+}
+
 function renderDex() {
   const seen = seenSet();
   const f = state.dex;
-  const q = f.q.trim().toLowerCase();
-  const list = SPECIES.filter(s =>
-    (!q || `${s.name} ${s.sci} ${dexNo(s.id)}`.toLowerCase().includes(q)) &&
-    (f.show === 'all' || (f.show === 'seen') === seen.has(s.id)) &&
-    (!f.group || s.group === f.group) && (!f.habitat || s.habitats.includes(f.habitat)));
-  const byGroup = {};
-  list.forEach(s => (byGroup[s.group] ||= []).push(s));
+  const list = dexFilter(seen);
   const pct = Math.round(seen.size / SPECIES.length * 100);
+  const filtersOn = f.habitat || f.group || f.rarity || f.season || f.show !== 'all';
+  const tile = s => `<li><a class="tile ${seen.has(s.id) ? 'tile--seen' : ''}" href="#/bird/${s.id}" data-tile="${s.id}">
+      <span class="tile-img">${birdImg(s)}</span>
+      ${band(s.id, seen.has(s.id))}
+      <span class="tile-name">${esc(s.name)}</span></a></li>`;
+  const row = s => `<li><a class="row row--sp" href="#/bird/${s.id}" data-tile="${s.id}"><span class="row-thumb ${seen.has(s.id) ? '' : 'row-thumb--dim'}">${birdImg(s)}</span>
+      <span class="row-main"><strong>${esc(s.name)}</strong><span class="muted small">${GROUPS[s.group]}</span></span>${pips(s.rarity)} ${band(s.id, seen.has(s.id))}</a></li>`;
+  const block = items => state.dex.layout === 'list' ? `<ul class="rows pad-x">${items.map(row).join('')}</ul>` : `<ul class="dex-grid">${items.map(tile).join('')}</ul>`;
+  let body;
+  if (!list.length) body = `<div class="empty"><p>No birds match those filters.</p><button class="btn" data-reset>Clear filters</button></div>`;
+  else if (f.sort === 'dex') {
+    const byGroup = {};
+    list.forEach(s => (byGroup[s.group] ||= []).push(s));
+    body = Object.keys(GROUPS).filter(g => byGroup[g]).map(g => {
+      const all = SPECIES.filter(s => s.group === g);
+      const got = all.filter(s => seen.has(s.id)).length;
+      return `<section class="dex-group"><h2 class="dex-group-h"><span>${GROUPS[g]}</span><span class="dex-group-n">${got}/${all.length}</span></h2>${block(byGroup[g])}</section>`;
+    }).join('');
+  } else {
+    const sorted = list.slice().sort(
+      f.sort === 'name' ? (a, b) => a.name.localeCompare(b.name)
+      : f.sort === 'rarity' ? (a, b) => b.rarity - a.rarity || a.id - b.id
+      : (a, b) => lastSeenOf(b.id).localeCompare(lastSeenOf(a.id)) || a.id - b.id);
+    body = `<section class="dex-group">${block(sorted)}</section>`;
+  }
   view.innerHTML = `
     <header class="dex-head">
       <div class="dex-head-top">
-        <h1 class="wordmark">Birddex <span>South East Queensland</span></h1>
-        <a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a>
+        <h1 class="wordmark">Sarah's BirdyDex <span>South East Queensland</span></h1>
+        <div class="head-actions">
+          ${state.installPrompt ? '<button class="chip chip--install" data-install>Install</button>' : ''}
+          <button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button>
+          <a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a>
+        </div>
       </div>
       <div class="tally" aria-label="${seen.size} of ${SPECIES.length} species seen">
         <span class="tally-band"><b>${seen.size}</b><i>/${SPECIES.length}</i></span>
         <div class="tally-meta"><span>species seen</span>
           <div class="meter" style="--p:${pct}%"><span></span></div></div>
       </div>
-      <div class="searchbox">${icon.search}<input type="search" placeholder="Search ${SPECIES.length} birds" value="${esc(f.q)}" data-q aria-label="Search birds"></div>
-      <div class="chips chips--scroll" role="group" aria-label="Filter">
-        ${[['all', 'All'], ['seen', 'Seen'], ['unseen', 'Not seen yet']].map(([v, l]) => `<button class="chip ${f.show === v ? 'chip--on' : ''}" data-show="${v}" aria-pressed="${f.show === v}">${l}</button>`).join('')}
-        <select class="chip chip--select ${f.habitat ? 'chip--on' : ''}" data-habitat aria-label="Habitat">
-          <option value="">Any habitat</option>${Object.entries(HABITATS).map(([k, v]) => `<option value="${k}" ${f.habitat === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
-        <select class="chip chip--select ${f.group ? 'chip--on' : ''}" data-group aria-label="Bird group">
-          <option value="">All groups</option>${Object.entries(GROUPS).map(([k, v]) => `<option value="${k}" ${f.group === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+      <div class="id-buttons">
+        <a class="idbtn" href="#/listen">${icon.mic}<span><strong>Listen</strong><em>ID by call</em></span></a>
+        <a class="idbtn" href="#/scan">${icon.scan}<span><strong>Scan</strong><em>ID from a photo</em></span></a>
       </div>
+      ${birdOfDay(seen)}
     </header>
-    <div class="dex ${state.settings.colourUnseen ? 'dex--colour' : ''}">
-      ${Object.keys(GROUPS).filter(g => byGroup[g]).map(g => {
-        const all = SPECIES.filter(s => s.group === g);
-        const got = all.filter(s => seen.has(s.id)).length;
-        return `<section class="dex-group">
-          <h2 class="dex-group-h"><span>${GROUPS[g]}</span><span class="dex-group-n">${got}/${all.length}</span></h2>
-          <ul class="dex-grid">${byGroup[g].map(s => `<li><a class="tile ${seen.has(s.id) ? 'tile--seen' : ''}" href="#/bird/${s.id}">
-            <span class="tile-img">${birdImg(s)}</span>
-            ${band(s.id, seen.has(s.id))}
-            <span class="tile-name">${esc(s.name)}</span></a></li>`).join('')}</ul>
-        </section>`;
-      }).join('') || `<div class="empty"><p>No birds match those filters.</p><button class="btn" data-reset>Clear filters</button></div>`}
-    </div>`;
+    <div class="dex-tools">
+      <div class="searchbox searchbox--dex">${icon.search}<input type="search" placeholder="Filter ${SPECIES.length} birds" value="${esc(f.q)}" data-q aria-label="Filter birds by name"></div>
+      <button class="iconbtn iconbtn--tool" data-layout aria-label="${f.layout === 'list' ? 'Show as grid' : 'Show as list'}">${f.layout === 'list' ? icon.grid : icon.list}</button>
+    </div>
+    <div class="chips chips--scroll chips--dex" role="group" aria-label="Filter and sort">
+      ${[['all', 'All'], ['seen', 'Seen'], ['unseen', 'Not seen']].map(([v, l]) => `<button class="chip ${f.show === v ? 'chip--on' : ''}" data-show="${v}" aria-pressed="${f.show === v}">${l}</button>`).join('')}
+      <button class="chip ${f.season ? 'chip--on' : ''}" data-season aria-pressed="${f.season}">In season now</button>
+      <select class="chip chip--select ${f.sort !== 'dex' ? 'chip--on' : ''}" data-sort aria-label="Sort">
+        ${[['dex', 'Dex order'], ['name', 'Name A–Z'], ['rarity', 'Rarest first'], ['recent', 'Recently seen']].map(([v, l]) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <select class="chip chip--select ${f.rarity ? 'chip--on' : ''}" data-rarity aria-label="Rarity">
+        <option value="">Any rarity</option>${Object.entries(RARITY).map(([k, v]) => `<option value="${k}" ${String(f.rarity) === k ? 'selected' : ''}>${v.label}</option>`).join('')}</select>
+      <select class="chip chip--select ${f.habitat ? 'chip--on' : ''}" data-habitat aria-label="Habitat">
+        <option value="">Any habitat</option>${Object.entries(HABITATS).map(([k, v]) => `<option value="${k}" ${f.habitat === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+      <select class="chip chip--select ${f.group ? 'chip--on' : ''}" data-group aria-label="Bird group">
+        <option value="">All groups</option>${Object.entries(GROUPS).map(([k, v]) => `<option value="${k}" ${f.group === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+      ${filtersOn ? '<button class="chip" data-reset>Clear</button>' : ''}
+    </div>
+    ${f.q || filtersOn ? `<p class="list-count"><b>${list.length}</b> ${list.length === 1 ? 'bird' : 'birds'}</p>` : ''}
+    <div class="dex ${state.settings.colourUnseen ? 'dex--colour' : ''}">${body}</div>
+    <p class="small muted pad dex-tip">Tip: press and hold any bird to log it quickly.</p>`;
   const qi = $('[data-q]', view);
   qi.addEventListener('input', () => {
     state.dex.q = qi.value;
@@ -559,17 +653,63 @@ function renderDex() {
     const n = $('[data-q]', view); n.focus(); n.setSelectionRange(pos, pos);
   });
   view.onclick = e => {
+    if (state.suppressClick && e.target.closest('[data-tile]')) { state.suppressClick = false; e.preventDefault(); return; }
     const sh = e.target.closest('[data-show]');
     if (sh) { state.dex.show = sh.dataset.show; renderDex(); }
-    if (e.target.closest('[data-reset]')) { state.dex = { q: '', show: 'all', group: '', habitat: '' }; renderDex(); }
+    if (e.target.closest('[data-season]')) { state.dex.season = !state.dex.season; renderDex(); }
+    if (e.target.closest('[data-layout]')) { state.dex.layout = state.dex.layout === 'list' ? 'grid' : 'list'; renderDex(); }
+    if (e.target.closest('[data-reset]')) { state.dex = { ...state.dex, q: '', show: 'all', group: '', habitat: '', rarity: '', season: false }; renderDex(); }
+    if (e.target.closest('[data-search]')) openSearch();
+    if (e.target.closest('[data-install]')) promptInstall();
   };
   view.onchange = e => {
-    if (e.target.matches('[data-habitat]')) { state.dex.habitat = e.target.value; renderDex(); }
-    if (e.target.matches('[data-group]')) { state.dex.group = e.target.value; renderDex(); }
+    if (e.target.matches('[data-habitat]')) state.dex.habitat = e.target.value;
+    if (e.target.matches('[data-group]')) state.dex.group = e.target.value;
+    if (e.target.matches('[data-rarity]')) state.dex.rarity = e.target.value;
+    if (e.target.matches('[data-sort]')) state.dex.sort = e.target.value;
+    renderDex();
   };
+  wireLongPress(view);
 }
 
+// Press and hold a bird to log it fast (with GPS filled in).
+function wireLongPress(root) {
+  let timer = null, startX = 0, startY = 0;
+  root.onpointerdown = e => {
+    const t = e.target.closest('[data-tile]');
+    if (!t) return;
+    startX = e.clientX; startY = e.clientY;
+    timer = setTimeout(() => {
+      state.suppressClick = true;
+      setTimeout(() => { state.suppressClick = false; }, 800);
+      navigator.vibrate?.(25);
+      openSightingSheet({ speciesId: Number(t.dataset.tile), autoGps: true });
+    }, 520);
+  };
+  const cancel = e => { if (timer && (!e || e.type !== 'pointermove' || Math.hypot(e.clientX - startX, e.clientY - startY) > 10)) { clearTimeout(timer); timer = null; } };
+  root.onpointerup = root.onpointercancel = () => cancel();
+  root.onpointermove = cancel;
+  root.oncontextmenu = e => { if (e.target.closest('[data-tile]')) e.preventDefault(); };
+}
+
+// Calls: Atlas of Living Australia recordings first, then Wikimedia Commons.
+async function getCalls(sp) {
+  const ala = (seq()?.species?.[sp.id]?.calls || []).map(c => ({
+    ...c, title: `${c.from === 'iNaturalist Australia' ? 'iNaturalist' : c.from} recording`,
+  }));
+  let commons = [];
+  try { commons = await calls(sp); } catch (_) {}
+  return [...ala, ...commons].slice(0, 4);
+}
+const hasCalls = id => !!seq()?.species?.[id]?.calls?.length;
+
 // Species detail
+function similarBirds(sp) {
+  return SPECIES.filter(s => s.id !== sp.id && s.group === sp.group)
+    .map(s => ({ s, d: Math.abs(Math.log(s.size / sp.size)) }))
+    .sort((a, b) => a.d - b.d).slice(0, 4).map(x => x.s);
+}
+
 function renderBird(id) {
   const sp = byId.get(id);
   if (!sp) { location.hash = '#/dex'; return; }
@@ -578,18 +718,29 @@ function renderBird(id) {
   const seen = hist.length > 0;
   const prev = byId.get(id - 1), next = byId.get(id + 1);
   const seasonText = sp.season === 's' ? 'Mostly September to April' : sp.season === 'w' ? 'Mostly April to September' : 'All year';
+  const cardInfo = { seen, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
+  const sim = similarBirds(sp);
   view.innerHTML = `
     <article class="bird">
-      <div class="bird-hero">
-        ${birdImg(sp, 'large', 'bird-photo')}
-        <a class="iconbtn iconbtn--float" href="#/dex" data-back aria-label="Back to the dex">${icon.back}</a>
-        <p class="credit" data-credit></p>
+      <div class="bird-hero" data-hero-box>
+        <div class="hero-photo">${birdImg(sp, 'large', 'bird-photo')}<p class="credit" data-credit></p></div>
+        <div class="hero-model hidden" data-model aria-label="3D model of a ${esc(sp.name)}. Drag to turn it."></div>
+        <a class="iconbtn iconbtn--float" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
+        <button class="iconbtn iconbtn--float iconbtn--right" data-search aria-label="Search everything">${icon.search}</button>
+        <div class="hero-tabs" role="tablist" aria-label="View">
+          <button role="tab" aria-selected="true" data-hero="photo">Photo</button>
+          <button role="tab" aria-selected="false" data-hero="model">3D model</button>
+          <button role="tab" aria-selected="false" data-hero="card">Card</button>
+        </div>
       </div>
       <div class="bird-body">
         <div class="bird-id">${band(sp.id, seen)} ${pips(sp.rarity)} <span class="muted small">${RARITY[sp.rarity].label} in SEQ</span></div>
         <h1 class="bird-name">${esc(sp.name)}</h1>
         <p class="sci">${esc(sp.sci)}</p>
-        <button class="btn btn--primary btn--block" data-log>${seen ? 'Log another sighting' : 'Log a sighting'}</button>
+        <div class="bird-actions">
+          <button class="btn btn--primary btn--grow" data-log>${seen ? 'Log another sighting' : 'Log a sighting'}</button>
+          ${seen ? `<button class="btn" data-sharecard aria-label="Share card">${icon.share}</button>` : ''}
+        </div>
         ${seen ? `<p class="seen-line">Seen ${plural(hist.length, 'time')}. First on ${fmtDate(first.date)}${first.place ? ` at ${esc(first.place)}` : ''}.</p>` : ''}
 
         <section class="call" data-calls aria-live="polite"><p class="muted small">Looking for recordings…</p></section>
@@ -601,6 +752,9 @@ function renderBird(id) {
           <div><dt>Group</dt><dd><a href="#/dex" data-filter-group="${sp.group}">${GROUPS[sp.group]}</a></dd></div>
           <div><dt>Look in</dt><dd>${sp.habitats.map(h => HABITATS[h]).join(', ')}${sp.nocturnal ? '. Active at night.' : ''}</dd></div>
         </dl>
+
+        ${sim.length ? `<section><h2 class="h2">Similar birds</h2><p class="small muted">Easy to mix up. Tap Compare to see them side by side.</p>
+          <ul class="rows">${sim.map(s => `<li class="sim-row"><a class="row row--sp" href="#/bird/${s.id}"><span class="row-thumb">${birdImg(s)}</span><span class="row-main"><strong>${esc(s.name)}</strong><span class="muted small">${s.size} cm</span></span></a><a class="btn btn--small" href="#/compare/${sp.id}/${s.id}">Compare</a></li>`).join('')}</ul></section>` : ''}
 
         ${whereSection(sp)}
 
@@ -625,13 +779,34 @@ function renderBird(id) {
         </nav>
       </div>
     </article>`;
+  let disposeModel = null;
+  const showHero = async which => {
+    $$('[data-hero]', view).forEach(b => b.setAttribute('aria-selected', String(b.dataset.hero === which)));
+    if (which === 'card') { openCard(sp, cardInfo); $$('[data-hero]', view).forEach(b => b.setAttribute('aria-selected', String(b.dataset.hero === (disposeModel ? 'model' : 'photo')))); return; }
+    const box = $('[data-model]', view);
+    $('.hero-photo', view).classList.toggle('hidden', which !== 'photo');
+    box.classList.toggle('hidden', which !== 'model');
+    if (which === 'model' && !disposeModel) {
+      box.innerHTML = '<p class="model-loading">Building the model…</p>';
+      try {
+        const { mountBird } = await import('./model3d.js');
+        box.innerHTML = '<p class="model-hint">Drag to turn</p>';
+        disposeModel = mountBird(box, sp);
+      } catch (err) { box.innerHTML = '<p class="model-loading">3D needs a newer browser.</p>'; }
+    }
+  };
+  const audioStops = [];
+  state.cleanup = () => { disposeModel?.(); audioStops.forEach(f => f()); };
   view.onclick = e => {
     if (e.target.closest('[data-log]')) openSightingSheet({ speciesId: id });
     const ed = e.target.closest('[data-edit]');
     if (ed) openSightingSheet({ sightingId: Number(ed.dataset.edit) });
     const fg = e.target.closest('[data-filter-group]');
-    if (fg) { state.dex = { q: '', show: 'all', group: fg.dataset.filterGroup, habitat: '' }; }
-    if (e.target.closest('[data-back]') && history.length > 1 && document.referrer !== '' ) { /* default link is fine */ }
+    if (fg) state.dex = { ...state.dex, q: '', show: 'all', group: fg.dataset.filterGroup, habitat: '', rarity: '', season: false, sort: 'dex' };
+    const h = e.target.closest('[data-hero]');
+    if (h) showHero(h.dataset.hero);
+    if (e.target.closest('[data-sharecard]')) shareCard(sp, cardInfo);
+    if (e.target.closest('[data-search]')) openSearch();
   };
   view.onchange = null;
   // Wikipedia text and photo credit
@@ -642,37 +817,102 @@ function renderBird(id) {
     const w = $('[data-wiki]', view);
     if (d?.extract && w) w.innerHTML = `<h2 class="h2">About</h2><p>${esc(d.extract)}</p><p class="small muted">From <a href="${esc(d.url)}" target="_blank" rel="noopener">Wikipedia</a>, CC BY-SA 4.0.</p>`;
   }).catch(() => {});
-  calls(sp).then(list => {
+  getCalls(sp).then(list => {
     if (location.hash !== `#/bird/${id}`) return;
     const box = $('[data-calls]', view);
     if (!box) return;
     if (!list.length) { box.innerHTML = `<p class="muted small">No free recording found for this bird. Try the xeno-canto link below.</p>`; return; }
-    box.innerHTML = `<h2 class="h2">Calls</h2>` + list.map((c, i) => `<div class="call-row">
+    box.innerHTML = `<h2 class="h2">Calls</h2><canvas class="viz" data-viz aria-hidden="true"></canvas>` + list.map((c, i) => `<div class="call-row">
       <button class="playbtn" data-play="${i}" aria-label="Play recording ${i + 1}">${icon.play}</button>
       <div class="call-meta"><span class="call-title">${esc(c.title.slice(0, 70))}</span>
-      <span class="small muted">Recording by <a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.artist.slice(0, 50))}</a>${c.license ? `, ${esc(c.license)}` : ''}</span>
+      <span class="small muted">By <a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.artist.slice(0, 50))}</a>${c.license ? `, ${esc(c.license)}` : ''}</span>
       <span class="call-progress"><span></span></span></div></div>`).join('');
     const audio = new Audio();
-    let playing = -1;
+    let playing = -1, actx = null, analyser = null, raf = null, srcNode = null;
+    const canvas = $('[data-viz]', box);
+    const draw = () => {
+      const g = canvas.getContext('2d');
+      const W = canvas.width = canvas.clientWidth * devicePixelRatio, H = canvas.height = canvas.clientHeight * devicePixelRatio;
+      const bins = new Uint8Array(analyser.frequencyBinCount);
+      const accent = getComputedStyle(document.documentElement).getPropertyValue('--azure').trim();
+      const sun = getComputedStyle(document.documentElement).getPropertyValue('--sun').trim();
+      const tick = () => {
+        analyser.getByteFrequencyData(bins);
+        g.clearRect(0, 0, W, H);
+        const n = 48, bw = W / n;
+        for (let i = 0; i < n; i++) {
+          const v = bins[Math.floor(i * bins.length * 0.5 / n)] / 255;
+          g.fillStyle = v > 0.7 ? sun : accent;
+          const h = Math.max(2, v * H);
+          g.fillRect(i * bw + 1, H - h, bw - 2, h);
+        }
+        raf = requestAnimationFrame(tick);
+      };
+      cancelAnimationFrame(raf); tick();
+    };
     const setIcons = () => $$('[data-play]', box).forEach(b => { const on = Number(b.dataset.play) === playing && !audio.paused; b.innerHTML = on ? icon.pause : icon.play; b.setAttribute('aria-label', on ? 'Pause' : `Play recording ${Number(b.dataset.play) + 1}`); });
     audio.addEventListener('timeupdate', () => {
       const bar = $$('.call-progress span', box)[playing];
       if (bar && audio.duration) bar.style.width = `${audio.currentTime / audio.duration * 100}%`;
     });
     ['play', 'pause', 'ended'].forEach(ev => audio.addEventListener(ev, setIcons));
-    audio.addEventListener('error', () => toast('That recording would not play. Try another.'));
+    audio.addEventListener('play', () => canvas.classList.add('on'));
+    audio.addEventListener('ended', () => { canvas.classList.remove('on'); cancelAnimationFrame(raf); });
+    let stopped = false;
+    audio.addEventListener('error', () => { if (!stopped && audio.src) toast('That recording would not play. Try another.'); });
     box.addEventListener('click', async e => {
       const b = e.target.closest('[data-play]');
       if (!b) return;
       const i = Number(b.dataset.play);
       if (i === playing) { audio.paused ? audio.play() : audio.pause(); return; }
       playing = i; b.classList.add('loading');
-      audio.src = await audioUrl(list[i].src);
+      const url = await audioUrl(list[i].src);
       b.classList.remove('loading');
+      // The visualiser can only read audio we downloaded ourselves (blob URLs).
+      if (url.startsWith('blob:')) {
+        try {
+          if (!actx) { actx = new AudioContext(); analyser = actx.createAnalyser(); analyser.fftSize = 256; srcNode = actx.createMediaElementSource(audio); srcNode.connect(analyser); analyser.connect(actx.destination); }
+          actx.resume(); draw();
+        } catch (_) {}
+      } else if (actx) { canvas.classList.remove('on'); }
+      audio.src = url;
       audio.play().catch(() => {});
     });
-    window.addEventListener('hashchange', () => { audio.pause(); audio.src = ''; }, { once: true });
+    audioStops.push(() => { stopped = true; audio.pause(); audio.removeAttribute('src'); cancelAnimationFrame(raf); actx?.close(); });
   }).catch(() => { const box = $('[data-calls]', view); if (box) box.innerHTML = '<p class="muted small">Calls need an internet connection the first time.</p>'; });
+}
+
+function renderCompare(a, b) {
+  const A = byId.get(a), B = byId.get(b);
+  if (!A || !B) { location.hash = '#/dex'; return; }
+  const seen = seenSet();
+  const col = sp => {
+    const m = monthRates(sp.id);
+    return `<div class="cmp-col">
+      <a href="#/bird/${sp.id}" class="cmp-img">${birdImg(sp, 'large')}</a>
+      <div class="cmp-id">${band(sp.id, seen.has(sp.id))}${pips(sp.rarity)}</div>
+      <h2>${esc(sp.name)}</h2>
+      <p class="sci small">${esc(sp.sci)}</p>
+      <dl class="cmp-facts"><dt>Size</dt><dd>${sp.size} cm</dd><dt>Look in</dt><dd>${sp.habitats.map(h => HABITATS[h]).join(', ')}</dd></dl>
+      ${m ? `<div class="season season--mini">${m.rel.map(v => `<i style="height:${Math.max(3, v * 100)}%"></i>`).join('')}</div><div class="season-labels">${[...'JFMAMJJASOND'].map(c => `<span>${c}</span>`).join('')}</div>` : ''}
+      <p class="small">${esc(sp.notes)}</p>
+      <button class="btn btn--small" data-cplay="${sp.id}">${icon.play} Call</button>
+    </div>`;
+  };
+  view.innerHTML = `
+    <header class="page-head page-head--back"><a class="iconbtn" href="#/bird/${A.id}" aria-label="Back">${icon.back}</a><h1>Compare</h1></header>
+    <div class="cmp">${col(A)}${col(B)}</div>`;
+  let audio = null;
+  view.onclick = async e => {
+    const p = e.target.closest('[data-cplay]');
+    if (!p) return;
+    audio?.pause();
+    const list = await getCalls(byId.get(Number(p.dataset.cplay)));
+    if (!list.length) { toast('No recording for this bird yet.'); return; }
+    audio = new Audio(await audioUrl(list[0].src)); audio.play().catch(() => toast('That recording would not play.'));
+  };
+  view.onchange = null;
+  state.cleanup = () => audio?.pause();
 }
 
 function whereSection(sp) {
@@ -703,7 +943,8 @@ function renderLists() {
   const outings = state.outings.slice().sort((a, b) => b.startedAt - a.startedAt);
   const years = yearTotals(state.sightings).filter(y => y.year !== String(now.getFullYear()));
   view.innerHTML = `
-    <header class="page-head"><h1>Lists</h1></header>
+    <header class="page-head"><h1>Lists</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button></div></header>
+    <div class="quicklinks pad-x"><a class="btn" href="#/stats">${icon.chart} Stats</a><a class="btn" href="#/quiz">${icon.quiz} Guess the bird</a></div>
     <div class="totals">
       <a href="#/list/life"><b>${t.life}</b><span>Life list</span></a>
       <a href="#/list/year"><b>${t.year}</b><span>${now.getFullYear()} list</span></a>
@@ -739,6 +980,7 @@ function renderLists() {
     ${years.length ? `<section class="block"><h2 class="h2">Past years</h2><ul class="rows">${years.map(y => `<li><a class="row" href="#/list/${y.year}"><span class="row-main"><strong>${y.year}</strong></span><span class="row-n">${y.count}</span></a></li>`).join('')}</ul></section>` : ''}
   `;
   view.onclick = e => {
+    if (e.target.closest('[data-search]')) openSearch();
     if (e.target.closest('[data-newpatch]')) state.mapMode = 'patch';
     if (e.target.closest('[data-near]')) { (state.targetF ||= { month: now.getMonth() + 1, habitat: '', scope: 'life' }).scope = 'near'; }
   };
@@ -910,7 +1152,7 @@ function loadLeaflet() {
     const s = document.createElement('script'); s.src = 'vendor/leaflet/leaflet.js'; s.onload = res; s.onerror = rej; document.head.append(s);
   });
 }
-async function renderMap(spId = null) {
+async function renderMap(spId = null, at = null) {
   const mode = state.mapMode; state.mapMode = null;
   const f = state.mapF ||= { show: 'all', hot: true, hotFocus: false };
   const focus = spId ? byId.get(spId) : null;
@@ -926,6 +1168,7 @@ async function renderMap(spId = null) {
         <button class="chip ${f.show === 'photos' ? 'chip--on' : ''}" data-mshow="photos">With photos</button>
         <button class="chip ${f.show === 'none' ? 'chip--on' : ''}" data-mshow="none">Hide mine</button>
         <button class="chip" data-locate>${icon.pin} Me</button>
+        <button class="chip" data-search>${icon.search} Search</button>
       </div>
       <button class="btn btn--primary map-patch" data-patch>New patch here</button>
       <div class="map-cross hidden" aria-hidden="true"></div>
@@ -977,7 +1220,8 @@ async function renderMap(spId = null) {
     L.circleMarker([s0.lat, s0.lng], { radius: Math.min(14, 6 + names.length), color: '#fff', weight: 2, fillColor: accent, fillOpacity: 0.95 })
       .addTo(map).bindPopup(`<strong>${esc(s0.place || 'Sighting')}</strong><br>${names.slice(0, 12).map(sp => `<a href="#/bird/${sp.id}">${esc(sp.name)}</a>`).join('<br>')}${names.length > 12 ? `<br>and ${names.length - 12} more` : ''}`);
   }
-  if (!state.mapView && !focus && pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 });
+  if (at) map.setView(at, 15);
+  else if (!state.mapView && !focus && pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 });
   const startPatch = async () => {
     $('.map-cross').classList.remove('hidden');
     let circle = L.circle(map.getCenter(), { radius: 1000, color: ink, weight: 2, fillOpacity: 0.1 }).addTo(map);
@@ -1009,6 +1253,7 @@ async function renderMap(spId = null) {
   view.onclick = async e => {
     const ms = e.target.closest('[data-mshow]');
     if (ms) { f.show = ms.dataset.mshow; renderMap(spId); }
+    if (e.target.closest('[data-search]')) openSearch();
     if (e.target.closest('[data-hot]')) { if (focus) f.hotFocus = !f.hotFocus; else f.hot = !f.hot; renderMap(spId); }
     if (e.target.closest('[data-patch]')) startPatch();
     if (e.target.closest('[data-locate]')) {
@@ -1029,7 +1274,8 @@ function renderBadges() {
   const earned = list.filter(b => b.done).length;
   const sections = [['milestone', 'Milestones'], ['rarity', 'Rarities'], ['habit', 'Habits'], ['habitat', 'Habitats'], ['group', 'Complete a group']];
   view.innerHTML = `
-    <header class="page-head"><h1>Badges</h1><a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a></header>
+    <header class="page-head"><h1>Badges</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button><a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a></div></header>
+    <div class="quicklinks pad-x"><a class="btn" href="#/quiz">${icon.quiz} Guess the bird</a><a class="btn" href="#/stats">${icon.chart} Stats</a></div>
     <p class="list-count"><b>${earned}</b> of ${list.length} earned</p>
     ${sections.map(([k, title]) => `<section class="block"><h2 class="h2">${title}</h2><ul class="badges">${list.filter(b => b.kind === k).map(b => `
       <li class="badge ${b.done ? 'badge--done' : ''} badge--${k}">
@@ -1037,7 +1283,7 @@ function renderBadges() {
         <span class="badge-txt"><strong>${esc(b.name)}</strong><span class="small muted">${esc(b.desc)}</span>
         ${b.done ? '' : `<span class="meter meter--thin" style="--p:${Math.round(b.have / b.need * 100)}%"><span></span></span><span class="small muted">${b.have} of ${b.need}</span>`}</span>
       </li>`).join('')}</ul></section>`).join('')}`;
-  view.onclick = null; view.onchange = null;
+  view.onclick = e => { if (e.target.closest('[data-search]')) openSearch(); }; view.onchange = null;
 }
 
 // Settings
@@ -1049,6 +1295,9 @@ async function renderSettings() {
     <header class="page-head page-head--back"><a class="iconbtn" href="#/badges" aria-label="Back">${icon.back}</a><h1>Settings</h1></header>
     <section class="block">
       <label class="check check--card"><input type="checkbox" data-colour ${state.settings.colourUnseen ? 'checked' : ''}><span>Show unseen birds in colour in the dex</span></label>
+      <label class="field"><span>Theme</span><select data-theme>${[['auto', 'Match my phone'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => `<option value="${v}" ${state.settings.theme === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      ${state.installPrompt ? '<button class="btn btn--primary" data-install>Install app on this phone</button>' : `<p class="small muted">${matchMedia('(display-mode: standalone)').matches ? "Installed on this phone." : 'To install: open the browser menu, then Add to Home screen.'}</p>`}
+      <button class="btn btn--quiet" data-welcome>Show the welcome screen</button>
     </section>
     <section class="block">
       <h2 class="h2">Use it offline</h2>
@@ -1069,7 +1318,7 @@ async function renderSettings() {
     <section class="block">
       <h2 class="h2">About</h2>
       <p class="small">Bird photos and descriptions come from Wikipedia and Wikimedia Commons, and calls from Wikimedia Commons. Each is credited on the bird's page. Maps &copy; OpenStreetMap contributors. Rarity and season labels are a rough guide for SEQ, not official records.</p>
-      <p class="small muted">Version 1.0</p>
+      <p class="small muted">Version 2.0</p>
     </section>
     <section class="block">
       <h2 class="h2">Start over</h2>
@@ -1077,6 +1326,7 @@ async function renderSettings() {
     </section>`;
   view.onchange = async e => {
     if (e.target.matches('[data-colour]')) { state.settings.colourUnseen = e.target.checked; await db.kvSet('settings', state.settings); }
+    if (e.target.matches('[data-theme]')) { state.settings.theme = e.target.value; applyTheme(); await db.kvSet('settings', state.settings); }
     if (e.target.matches('[data-restore]')) {
       const file = e.target.files?.[0]; if (!file) return;
       try {
@@ -1093,10 +1343,12 @@ async function renderSettings() {
         await loadData();
         toast('Backup restored');
         location.hash = '#/dex';
-      } catch (_) { toast('That file is not a Birddex backup.'); }
+      } catch (_) { toast('That file is not a BirdyDex backup.'); }
     }
   };
   view.onclick = async e => {
+    if (e.target.closest('[data-install]')) promptInstall();
+    if (e.target.closest('[data-welcome]')) showWelcome();
     if (e.target.closest('[data-dl]')) {
       const st = $('[data-dlstatus]', view);
       st.textContent = 'Starting…';
@@ -1127,17 +1379,242 @@ function download(name, blob) {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
+// ---------- global search ----------
+function openSearch() {
+  const ov = document.createElement('div');
+  ov.className = 'search-ov';
+  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Search');
+  ov.innerHTML = `<div class="search-bar">${icon.search}<input type="search" placeholder="Birds, places, hotspots, your sightings" aria-label="Search everything" autocomplete="off"><button class="iconbtn" data-x aria-label="Close search">${icon.close}</button></div>
+    <div class="search-res" aria-live="polite"><p class="muted pad">Try "kingfisher", "Oxley", "lorikeet" or "wetlands".</p></div>`;
+  document.body.append(ov);
+  document.body.classList.add('has-sheet');
+  const input = $('input', ov), res = $('.search-res', ov);
+  const close = () => { ov.remove(); document.body.classList.remove('has-sheet'); };
+  const seen = seenSet();
+  const run = () => {
+    const q = input.value.trim().toLowerCase();
+    if (!q) { res.innerHTML = '<p class="muted pad">Try "kingfisher", "Oxley", "lorikeet" or "wetlands".</p>'; return; }
+    const words = q.split(/\s+/);
+    const hit = txt => words.every(w => txt.toLowerCase().includes(w));
+    const birds = SPECIES.filter(s => hit(`${s.name} ${s.sci} ${dexNo(s.id)} ${GROUPS[s.group]} ${s.habitats.map(h => HABITATS[h]).join(' ')}`))
+      .sort((a, b) => (a.name.toLowerCase().includes(q) ? 0 : 1) - (b.name.toLowerCase().includes(q) ? 0 : 1) || a.id - b.id).slice(0, 12);
+    const hs = hotspots().filter(h => hit(h.name)).slice(0, 6);
+    const pats = state.patches.filter(p => hit(p.name));
+    const mine = state.sightings.filter(s => hit(`${s.place || ''} ${s.notes || ''} ${byId.get(s.speciesId)?.name || ''}`))
+      .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)).slice(0, 8);
+    const sec = (title, items) => items ? `<h2 class="h2 pad-x">${title}</h2><ul class="rows pad-x">${items}</ul>` : '';
+    res.innerHTML = [
+      sec('Birds', birds.map(s => `<li><a class="row row--sp" href="#/bird/${s.id}"><span class="row-thumb ${seen.has(s.id) ? '' : 'row-thumb--dim'}">${birdImg(s)}</span><span class="row-main"><strong>${esc(s.name)}</strong><span class="small muted">${GROUPS[s.group]}</span></span>${band(s.id, seen.has(s.id))}</a></li>`).join('')),
+      sec('Hotspots', hs.map(h => `<li><a class="row" href="#/map/at/${h.lat},${h.lng}"><span class="row-main"><strong>${esc(h.name)}</strong><span class="small muted">${h.rich} dex species recorded</span></span></a></li>`).join('')),
+      sec('Your patches', pats.map(p => `<li><a class="row" href="#/patch/${p.id}"><span class="row-main"><strong>${esc(p.name)}</strong></span></a></li>`).join('')),
+      sec('Your sightings', mine.map(s => `<li><a class="row" href="#/bird/${s.speciesId}"><span class="row-main"><strong>${esc(byId.get(s.speciesId)?.name)}</strong><span class="small muted">${fmtDate(s.date)}${s.place ? `, ${esc(s.place)}` : ''}</span></span></a></li>`).join('')),
+    ].join('') || '<p class="muted pad">Nothing found. Check the spelling, or try part of a name.</p>';
+  };
+  input.addEventListener('input', run);
+  ov.addEventListener('click', e => { if (e.target.closest('[data-x]') || e.target.closest('a')) close(); });
+  ov.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  input.focus();
+}
+
+// ---------- Listen (BirdNET) ----------
+async function renderListen() {
+  const L = state.listen;
+  view.innerHTML = `
+    <header class="page-head page-head--back"><a class="iconbtn" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
+      <div><h1>Listen</h1><p class="muted small">BirdNET names birds from their calls, right on your phone.</p></div></header>
+    <div class="listen pad-x">
+      <canvas class="spectro" width="600" height="220" aria-label="Live sound picture"></canvas>
+      <div class="listen-ctl">
+        <button class="micbtn" data-mic aria-pressed="false">${icon.mic}<span>Start listening</span></button>
+        <p class="small muted" data-lstatus>Point your phone towards the birds and keep still. The first time, the sound model downloads (about 60 MB).</p>
+        <div class="meter meter--thin hidden" data-lprog style="--p:0%"><span></span></div>
+      </div>
+      <div class="block-h"><h2 class="h2">Heard</h2>${L.hits.size ? '<button class="btn btn--small btn--quiet" data-clear>Clear</button>' : ''}</div>
+      <ul class="rows" data-hits></ul>
+      <p class="small muted">BirdNET by the K. Lisa Yang Center for Conservation Bioacoustics and Chemnitz University of Technology (model CC BY-SA 4.0). Suggestions can be wrong, so check before you log.</p>
+    </div>`;
+  const hitsEl = $('[data-hits]', view), status = $('[data-lstatus]', view), prog = $('[data-lprog]', view), btn = $('[data-mic]', view);
+  const seen = seenSet();
+  const drawHits = () => {
+    const arr = [...L.hits.values()].sort((a, b) => b.last - a.last);
+    hitsEl.innerHTML = arr.map(h => {
+      const sp = h.dexId ? byId.get(h.dexId) : null;
+      const ago = Math.round((Date.now() - h.last) / 1000);
+      return `<li class="hit ${Date.now() - h.last < 4000 ? 'hit--live' : ''}">
+        <span class="row-thumb">${sp ? birdImg(sp) : `<span class="img-missing"></span>`}</span>
+        <span class="row-main"><strong>${esc(sp ? sp.name : h.name)}</strong>
+          <span class="small muted">${Math.round(h.best * 100)}% sure, ${ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)} min ago`}${sp ? (seen.has(sp.id) ? '' : '. New for your dex!') : '. Not in the dex'}</span>
+          <span class="meter meter--thin" style="--p:${Math.round(h.best * 100)}%"><span></span></span></span>
+        ${sp ? `<button class="btn btn--small" data-loghit="${sp.id}">Log it</button>` : ''}</li>`;
+    }).join('') || '<li class="muted pad">Nothing yet. Calls show up here as they are recognised.</li>';
+  };
+  drawHits();
+  let mod = null;
+  const stop = () => { mod?.stopListening(); btn.setAttribute('aria-pressed', 'false'); btn.querySelector('span').textContent = 'Start listening'; btn.classList.remove('on'); };
+  state.cleanup = () => { stop(); clearInterval(L.tickT); };
+  L.tickT = setInterval(drawHits, 2000);
+  view.onclick = async e => {
+    const lh = e.target.closest('[data-loghit]');
+    if (lh) openSightingSheet({ speciesId: Number(lh.dataset.loghit), autoGps: true, notes: 'Identified by call with BirdNET.' });
+    if (e.target.closest('[data-clear]')) { L.hits.clear(); drawHits(); }
+    if (!e.target.closest('[data-mic]')) return;
+    if (btn.classList.contains('on')) { stop(); status.textContent = 'Stopped.'; return; }
+    try {
+      mod = await import('./listen.js');
+      btn.classList.add('on'); btn.setAttribute('aria-pressed', 'true'); btn.querySelector('span').textContent = 'Stop';
+      prog.classList.remove('hidden');
+      const loading = mod.loadListenModel((p, t) => { prog.style.setProperty('--p', `${p}%`); status.textContent = `${t}… ${p}%`; });
+      await mod.startListening({
+        canvas: $('.spectro', view),
+        onDetections: hits => {
+          for (const h of hits) {
+            const prev = L.hits.get(h.index);
+            const isNewHit = !prev;
+            L.hits.set(h.index, { ...h, best: Math.max(prev?.best || 0, h.confidence), last: Date.now() });
+            if (isNewHit && h.dexId && !seen.has(h.dexId)) navigator.vibrate?.(40);
+          }
+          if (hits.length) drawHits();
+        },
+      });
+      await loading;
+      prog.classList.add('hidden');
+      status.textContent = 'Listening. Keep still and let the birds call.';
+      const pos = state.lastPos || await getPosition().catch(() => null);
+      mod.setLocation(pos?.lat ?? -27.47, pos?.lng ?? 153.02);
+    } catch (err) {
+      stop();
+      status.textContent = /denied|NotAllowed/i.test(String(err?.name || err?.message)) ? 'Microphone permission was denied. Allow it in your browser settings and try again.' : `Couldn't start listening: ${err.message || err}`;
+    }
+  };
+}
+
+// ---------- Scan (photo ID) ----------
+function renderScan() {
+  view.innerHTML = `
+    <header class="page-head page-head--back"><a class="iconbtn" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
+      <div><h1>Scan a bird</h1><p class="muted small">Take a photo or pick one, and BioCLIP suggests which dex bird it is.</p></div></header>
+    <div class="scan pad-x">
+      <label class="scan-drop" data-drop>
+        <input type="file" accept="image/*" data-file hidden>
+        <span class="scan-preview" data-preview>${icon.scan}<strong>Take or choose a photo</strong><em>Best when the bird fills a good part of the frame</em></span>
+      </label>
+      <p class="small muted" data-sstatus></p>
+      <div class="meter meter--thin hidden" data-sprog style="--p:0%"><span></span></div>
+      <ul class="rows" data-results></ul>
+      <p class="small muted">Photo ID uses BioCLIP (Imageomics Institute, MIT licence) running on your phone. The first scan downloads the model (about 90 MB). Suggestions can be wrong, so compare with the photos before you log.</p>
+    </div>`;
+  let blob = null;
+  const status = $('[data-sstatus]', view), prog = $('[data-sprog]', view), out = $('[data-results]', view);
+  view.onchange = async e => {
+    if (!e.target.matches('[data-file]')) return;
+    const f = e.target.files?.[0]; if (!f) return;
+    blob = await resizeImage(f, 1600);
+    $('[data-preview]', view).innerHTML = `<img src="${URL.createObjectURL(blob)}" alt="Your photo">`;
+    out.innerHTML = '';
+    try {
+      const mod = await import('./photoid.js');
+      prog.classList.remove('hidden');
+      status.textContent = 'Loading the photo model…';
+      await mod.loadPhotoModel(p => { const pct = Math.round(p * 100); prog.style.setProperty('--p', `${pct}%`); status.textContent = `Downloading the photo model… ${pct}%`; });
+      prog.classList.add('hidden');
+      status.textContent = 'Looking closely…';
+      const res = await mod.identifyPhoto(blob);
+      const top = res[0];
+      status.textContent = top.score >= 0.5 ? 'Best match first.' : top.score >= 0.2 ? 'Not certain. Compare the photos below.' : 'Not sure. It might not be one of the dex birds, or try a closer, sharper photo.';
+      const seen = seenSet();
+      out.innerHTML = res.map(r => { const sp = byId.get(r.id); return `<li class="hit">
+        <a class="row-thumb" href="#/bird/${sp.id}">${birdImg(sp)}</a>
+        <span class="row-main"><strong>${esc(sp.name)}</strong><span class="small muted">${Math.round(r.score * 100)}% match${seen.has(sp.id) ? '' : '. New for your dex!'}</span>
+        <span class="meter meter--thin" style="--p:${Math.round(r.score * 100)}%"><span></span></span></span>
+        <button class="btn btn--small" data-logscan="${sp.id}">Log it</button></li>`; }).join('');
+      hydratePhotos(view);
+    } catch (err) {
+      prog.classList.add('hidden');
+      status.textContent = `Photo ID couldn't run here: ${err.message || err}`;
+    }
+  };
+  view.onclick = e => {
+    const l = e.target.closest('[data-logscan]');
+    if (l) openSightingSheet({ speciesId: Number(l.dataset.logscan), autoGps: true, photoBlob: blob });
+  };
+}
+
+// ---------- theme, install, updates, welcome ----------
+function applyTheme() {
+  const t = state.settings.theme || 'auto';
+  if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+}
+async function promptInstall() {
+  const p = state.installPrompt;
+  if (!p) { toast('Use your browser menu, then Add to Home screen.'); return; }
+  p.prompt();
+  const r = await p.userChoice.catch(() => null);
+  state.installPrompt = null;
+  if (r?.outcome === 'accepted') toast("Installed. Find Sarah's BirdyDex on your home screen.");
+  render();
+}
+function showUpdateBanner() {
+  if ($('.update-bar')) return;
+  const b = document.createElement('div');
+  b.className = 'update-bar'; b.setAttribute('role', 'status');
+  b.innerHTML = `<span>A new version is ready.</span><button class="btn btn--small btn--primary">Reload</button>`;
+  b.querySelector('button').onclick = () => location.reload();
+  document.body.append(b);
+}
+async function showWelcome() {
+  const ov = document.createElement('div');
+  ov.className = 'welcome';
+  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Welcome');
+  ov.innerHTML = `<div class="welcome-card">
+    <div class="welcome-model" data-wm></div>
+    <h1>Hi Sarah</h1>
+    <p>This is your BirdyDex: ${SPECIES.length} South East Queensland birds to find, starting with this Eastern Yellow Robin.</p>
+    <ul class="welcome-list">
+      <li><strong>Log</strong> a bird with the + button, or press and hold any bird in the dex.</li>
+      <li><strong>Listen</strong> and <strong>Scan</strong> name birds from a call or a photo.</li>
+      <li><strong>Hotspots, targets and badges</strong> show where to go next.</li>
+    </ul>
+    <div class="row-center">${state.installPrompt ? '<button class="btn" data-winstall>Install app</button>' : ''}<button class="btn btn--primary" data-wgo>Start birding</button></div>
+  </div>`;
+  document.body.append(ov);
+  let dispose = null;
+  try { const { mountBird } = await import('./model3d.js'); dispose = mountBird($('[data-wm]', ov), byId.get(165)); } catch (_) {}
+  ov.addEventListener('click', async e => {
+    if (e.target.closest('[data-winstall]')) await promptInstall();
+    if (e.target.closest('[data-wgo]')) { dispose?.(); ov.remove(); db.kvSet('welcomed', true); }
+  });
+}
+
 // ---------- boot ----------
+const ctx = {
+  state, view, $, $$, esc, icon, birdImg, band, pips, toast, fmtDate, plural, GROUPS,
+  seenSet, sightingsOf, openSightingSheet, getCalls, hasCalls, audioUrl,
+};
+
 async function boot() {
   await Promise.all([loadData(), loadSeq()]);
+  applyTheme();
   $('#plus').addEventListener('click', e => { e.preventDefault(); openPlusSheet(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeSheet();
+    if (e.key === '/' && !e.target.closest('input, textarea, select')) { e.preventDefault(); openSearch(); }
+  });
   window.addEventListener('hashchange', () => { closeSheet(); render(); });
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); state.installPrompt = e; if ((location.hash || '#/dex').startsWith('#/dex')) renderDex(); });
   render();
-  onMediaReady(() => { if (!$('.sheet-wrap')) render(); });
+  // Photos arriving only change the dex/list pages; don't interrupt Listen or a playing call.
+  onMediaReady(() => { if (!$('.sheet-wrap') && /^(#\/?(dex)?|#\/lists?.*|#\/targets|#\/badges)?$/.test(location.hash)) render(); });
   loadIndex();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.update();
+      setInterval(() => reg.update(), 30 * 60 * 1000);
+    }).catch(() => {});
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) showUpdateBanner(); });
+  }
   setInterval(() => { if (activeOuting()) renderOutingBar(); }, 60000);
+  if (!(await db.kvGet('welcomed'))) showWelcome();
 }
 boot();
 

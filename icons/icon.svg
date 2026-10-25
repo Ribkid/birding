@@ -3,17 +3,17 @@
     <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#F2F4F5"/><stop offset=".3" stop-color="#DCE0E3"/><stop offset=".62" stop-color="#AEB7BC"/><stop offset="1" stop-color="#DCE0E3"/>
     </linearGradient>
+    <clipPath id="body"><path d="M150 300 C150 225 205 180 270 182 C300 150 350 150 372 182 L404 194 L372 210 C376 290 320 335 250 338 L186 352 L120 404 L142 340 C146 326 150 314 150 300 Z"/></clipPath>
   </defs>
   <rect width="512" height="512" fill="#1A5FCC"/>
-  <!-- branch -->
   <path d="M70 392 Q256 372 442 392" stroke="#142E29" stroke-width="22" stroke-linecap="round" fill="none"/>
-  <!-- bird -->
-  <g fill="#FFFFFF">
-    <path d="M150 300 C150 225 205 180 270 182 C300 150 350 150 372 182 L414 196 L372 214 C376 290 320 335 250 338 L186 352 L120 404 L142 340 C146 326 150 314 150 300 Z"/>
+  <g clip-path="url(#body)">
+    <rect x="100" y="140" width="320" height="300" fill="#8A8F96"/>
+    <path d="M160 250 C200 225 300 215 380 222 L380 400 L140 400 Z" fill="#F5C518"/>
+    <path d="M330 205 C350 214 368 214 380 210 L380 232 C360 238 340 232 330 224 Z" fill="#EDEFF0"/>
   </g>
-  <circle cx="338" cy="196" r="11" fill="#142E29"/>
-  <path d="M206 236 C236 214 286 216 314 246 C282 262 236 266 206 236 Z" fill="#E4531C"/>
-  <!-- legs with band -->
+  <path d="M182 262 C220 236 282 238 318 262 C278 286 220 290 182 262 Z" fill="#6E737A"/>
+  <circle cx="340" cy="192" r="11" fill="#142E29"/>
   <path d="M248 336 L244 384 M282 332 L286 384" stroke="#142E29" stroke-width="10" stroke-linecap="round"/>
   <rect x="270" y="346" width="32" height="20" rx="4" fill="url(#band)" stroke="#142E29" stroke-width="3"/>
 </svg>

@@ -1,13 +1,17 @@
-// Birddex service worker: app shell offline, plus cached bird photos and map tiles.
-const VERSION = 'v2';
+// Sarah's BirdyDex service worker.
+// App files: network first (so updates arrive straight away), cache when offline.
+// Bird photos, map tiles and the ID models: cache first, so they work in the bush.
+const VERSION = 'v3';
 const SHELL = `birddex-shell-${VERSION}`;
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
+const MODELS = 'birddex-models';
 const ASSETS = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
   'js/app.js', 'js/db.js', 'js/media.js', 'js/species.js', 'js/stats.js', 'js/ebird.js', 'js/seqdata.js',
-  'data/seq.json',
-  'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css',
+  'js/card3d.js', 'js/quiz.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js',
+  'data/seq.json', 'data/birdnet-map.json',
+  'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/three/three.module.min.js',
   'fonts/schibsted-grotesk-latin-400-normal.woff2', 'fonts/schibsted-grotesk-latin-400-italic.woff2',
   'fonts/schibsted-grotesk-latin-500-normal.woff2', 'fonts/schibsted-grotesk-latin-700-normal.woff2',
   'fonts/big-shoulders-display-latin-600-normal.woff2', 'fonts/big-shoulders-display-latin-800-normal.woff2',
@@ -15,7 +19,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(SHELL).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(SHELL).then(c => c.addAll(ASSETS.map(a => new Request(a, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
@@ -36,7 +40,7 @@ async function cacheFirst(req, cacheName, { cors = false, limit = 0 } = {}) {
     }
     return res;
   } catch (err) {
-    if (cors) return fetch(req); // fall back to a plain request
+    if (cors) return fetch(req);
     throw err;
   }
 }
@@ -44,6 +48,22 @@ async function trim(name, max) {
   const c = await caches.open(name);
   const keys = await c.keys();
   for (let i = 0; i < keys.length - max; i++) await c.delete(keys[i]);
+}
+async function networkFirst(req) {
+  const cache = await caches.open(SHELL);
+  try {
+    const res = await Promise.race([
+      fetch(req),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('slow')), 4000)),
+    ]);
+    if (res.ok && req.method === 'GET') cache.put(req, res.clone());
+    return res;
+  } catch (_) {
+    const hit = await cache.match(req, { ignoreSearch: true });
+    if (hit) return hit;
+    if (req.mode === 'navigate') return cache.match('index.html');
+    return fetch(req);
+  }
 }
 
 self.addEventListener('fetch', e => {
@@ -59,16 +79,11 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.origin === location.origin) {
-    if (req.mode === 'navigate') {
-      e.respondWith(fetch(req).catch(() => caches.match('index.html')));
+    if (url.pathname.includes('/models/') || url.pathname.includes('/vendor/')) {
+      e.respondWith(cacheFirst(req, MODELS));
       return;
     }
-    // stale-while-revalidate for app files
-    e.respondWith((async () => {
-      const cache = await caches.open(SHELL);
-      const hit = await cache.match(req, { ignoreSearch: true });
-      const net = fetch(req).then(res => { if (res.ok) cache.put(req, res.clone()); return res; }).catch(() => hit);
-      return hit || net;
-    })());
+    if (url.search.includes('nocache')) return;
+    e.respondWith(networkFirst(req));
   }
 });

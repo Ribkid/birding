@@ -35,6 +35,8 @@ SYNONYMS = {
     'Cincloramphus timoriensis': ['Megalurus timoriensis'],
     'Stizoptera bichenovii': ['Taeniopygia bichenovii'],
     'Spilopelia chinensis': ['Streptopelia chinensis'],
+    'Cyclopsitta diophthalma': ['Opopsitta diophthalma'],
+    'Chrysococcyx lucidus': ['Chalcites lucidus'],
     'Microcarbo melanoleucos': ['Phalacrocorax melanoleucos'],
     'Thalasseus bergii': ['Sterna bergii'],
     'Hydroprogne caspia': ['Sterna caspia'],
@@ -74,20 +76,51 @@ def get(url, params):
     raise RuntimeError(f'failed {full}')
 
 def resolve(sci, name):
-    for cand in [sci] + SYNONYMS.get(sci, []):
+    """Try every candidate name; keep the taxon with the most SEQ records."""
+    found = {}
+    for cand in [sci] + SYNONYMS.get(sci, []) + [' '.join(sci.split()[:2])]:
         d = get(f'{NM}/search', {'q': cand})
         if d.get('success') and d.get('classs') == 'Aves' and d.get('rank') in ('species', 'subspecies'):
-            return d['taxonConceptID'], d['scientificName'], d['rank']
+            found[d['taxonConceptID']] = d
+            if d.get('rank') == 'subspecies' and d.get('speciesID'):
+                found[d['speciesID']] = {**d, 'taxonConceptID': d['speciesID'], 'scientificName': d.get('species', d['scientificName']), 'rank': 'species'}
     d = get(f'{NM}/searchByVernacularName', {'vernacularName': name})
     if d.get('success') and d.get('classs') == 'Aves':
-        return d['taxonConceptID'], d['scientificName'], d['rank']
-    return None, None, None
+        found[d['taxonConceptID']] = d
+    best = None
+    for lsid, d in found.items():
+        total, _ = facets(f'lsid:"{lsid}"', fields=('month',), flimit=1)
+        if not best or total > best[0]:
+            best = (total, lsid, d['scientificName'], d['rank'])
+    return (best[1], best[2], best[3]) if best else (None, None, None)
 
 def facets(q, extra_fq=(), fields=('point-0.01', 'month'), flimit=1000):
     d = get(BIO, {'q': q, 'fq': BBOX + [YEARS] + list(extra_fq), 'pageSize': 0,
                   'facets': list(fields), 'flimit': flimit})
     out = {f['fieldName']: [(x['label'], x['count']) for x in f['fieldResult']] for f in d.get('facetResults', [])}
     return d.get('totalRecords', 0), out
+
+IMG = 'https://images.ala.org.au'
+AUDIO_PREF = {'audio/mpeg': 0, 'audio/mp3': 0, 'audio/mp4': 1, 'audio/x-m4a': 1, 'audio/aac': 1, 'audio/ogg': 2, 'audio/vnd.wave': 3, 'audio/wav': 3, 'audio/x-wav': 3}
+
+def sounds(lsid, want=3):
+    """Openly licensed recordings (mostly iNaturalist) attached to ALA records, Australia-wide."""
+    d = get(BIO, {'q': f'lsid:"{lsid}"', 'fq': ['multimedia:Sound'], 'pageSize': 25, 'sort': 'eventDate', 'dir': 'desc'})
+    cands = []
+    for o in d.get('occurrences', []):
+        for sid in (o.get('sounds') or [])[:1]:
+            m = get(f'{IMG}/ws/image/{sid}', {})
+            lic = (m.get('recognisedLicence') or {}).get('acronym')
+            mime = m.get('mimeType') or ''
+            if not lic or not mime.startswith('audio') or mime not in AUDIO_PREF:
+                continue
+            cands.append({'src': f'{IMG}/image/proxyImage?imageId={sid}', 'mime': mime, 'artist': m.get('creator') or 'Unknown',
+                          'license': lic, 'page': f'https://biocache.ala.org.au/occurrences/{o.get("uuid")}',
+                          'from': o.get('dataResourceName') or 'Atlas of Living Australia', 'size': m.get('fileSize') or 0})
+        if len([c for c in cands if AUDIO_PREF[c['mime']] < 3]) >= want:
+            break
+    cands.sort(key=lambda c: AUDIO_PREF[c['mime']])
+    return [{k: v for k, v in c.items() if k != 'size'} for c in cands[:want]]
 
 MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
@@ -117,7 +150,8 @@ def main():
         for label, c in pts:
             cells[label][s['id']] = c
         sp_out[s['id']] = {'ala': accepted, 'lsid': lsid, 'n': total, 'm': month_vec(f.get('month', [])),
-                           'pts': [[float(l.split(',')[0]), float(l.split(',')[1]), c] for l, c in pts[:40]]}
+                           'pts': [[float(l.split(',')[0]), float(l.split(',')[1]), c] for l, c in pts[:40]],
+                           'calls': sounds(lsid)}
         print(f"{s['id']:3} {s['name']:32} {accepted:40} {total:7}", file=sys.stderr)
     json.dump(cache, open(CACHE, 'w'))
 
@@ -155,7 +189,7 @@ def main():
     print('unresolved:', unresolved, file=sys.stderr)
     print('hotspots:', len(merged), file=sys.stderr)
 
-PRIVATE = re.compile(r'^AU-|house|home|yard|residence|property|my |our |street|st\.? ?$|\d+ [a-z]+ (st|rd|ct|ave)', re.I)
+PRIVATE = re.compile(r'^\d|^AU-|house|home|yard|residence|property|my |our |street|st\.? ?$|\d+ [a-z]+ (st|rd|ct|ave)', re.I)
 
 def usable(l):
     return bool(l) and l.lower() not in ('not supplied', 'unknown') and not PRIVATE.search(l) and len(l) > 3
@@ -165,6 +199,7 @@ def clean(s):
     s = re.sub(r',?\s*AU-QLD.*$', '', s)
     s = re.sub(r'\s*-?\d{2}\.\d+,\s*\d{3}\.\d+.*$', '', s)
     s = re.sub(r'\s*--\s*', ': ', s)
+    s = re.sub(r'\s+(at|near|off)$', '', s, flags=re.I)
     s = re.sub(r'\s*\((?:general area|general)\)\s*$', '', s, flags=re.I)
     return s[:80]
 

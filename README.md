@@ -9,3 +9,9 @@ A collectable field guide for the birds of South East Queensland. It's an instal
 - Badges, offline mode, backup and restore, and export to eBird Record Format
 
 Sightings are stored only on the device (IndexedDB). Use **Settings → Save backup** now and then.
+
+## Credits
+- Sound ID: [BirdNET](https://github.com/birdnet-team/real-time-pwa) (code MIT, models CC BY-SA 4.0), run with TensorFlow.js
+- Photo ID: [BioCLIP](https://huggingface.co/imageomics/bioclip) (MIT), run with ONNX Runtime Web
+- 3D models: three.js (MIT)
+- Recordings: Atlas of Living Australia / iNaturalist contributors and Wikimedia Commons (licences shown in the app)
