@@ -555,3 +555,8 @@ span.bird-photo { display: block; }
 .plus-opt--id { text-decoration: none; color: var(--ink); }
 .plus-opt--id svg { width: 28px; height: 28px; color: var(--azure); }
 .plus-opt--id span { font-size: .85rem; }
+
+.crop { display: grid; gap: 8px; }
+.crop-stage { position: relative; border-radius: 14px; overflow: hidden; background: var(--dim); cursor: crosshair; }
+.crop-stage img { width: 100%; display: block; }
+.crop-box { position: absolute; border: 3px solid var(--sun); border-radius: 6px; box-shadow: 0 0 0 9999px rgba(8, 20, 18, .45); pointer-events: none; transition: all .15s; }

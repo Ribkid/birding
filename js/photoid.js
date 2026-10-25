@@ -4,7 +4,9 @@
 //
 // API:
 //   loadPhotoModel(onProgress?: (fraction 0..1, label) => void) -> Promise<void>
-//   identifyPhoto(blob | File | ImageBitmap | HTMLImageElement | HTMLCanvasElement) -> Promise<[{ id, score }]> (top 5)
+//   identifyPhoto(blob | File | ImageBitmap | HTMLImageElement | HTMLCanvasElement, { crop?, topK? })
+//     -> Promise<[{ id, score }]> (top 5). crop = { x, y, w, h } as fractions of the image (0..1),
+//     e.g. from a crop box drawn around the bird; distant birds are identified far better when cropped.
 //   isPhotoModelCached() -> Promise<boolean>
 //   PHOTO_MODEL_MB  (approx first download size, MB)
 
@@ -208,9 +210,16 @@ function OffscreenCanvasOr(w, h) {
   const c = document.createElement('canvas'); c.width = w; c.height = h; return c;
 }
 
-export async function identifyPhoto(src, topK = 5) {
+export async function identifyPhoto(src, opts = {}) {
+  const { crop = null, topK = 5 } = typeof opts === 'number' ? { topK: opts } : opts;
   await loadPhotoModel();
-  const bmp = await toBitmap(src);
+  let bmp = await toBitmap(src);
+  if (crop) {
+    const sx = Math.max(0, Math.round(crop.x * bmp.width)), sy = Math.max(0, Math.round(crop.y * bmp.height));
+    const sw = Math.max(8, Math.min(bmp.width - sx, Math.round(crop.w * bmp.width)));
+    const sh = Math.max(8, Math.min(bmp.height - sy, Math.round(crop.h * bmp.height)));
+    bmp = await createImageBitmap(bmp, sx, sy, sw, sh);
+  }
   const input = new ort.Tensor('float32', preprocess(bmp), [1, 3, SIZE, SIZE]);
   const out = await session.run({ [manifest.input.name]: input });
   const feat = out[Object.keys(out)[0]].data;
