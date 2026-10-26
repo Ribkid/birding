@@ -151,7 +151,7 @@ function renderTrivia(ctx) {
     <header class="page-head page-head--back"><button class="iconbtn" data-quit aria-label="Quit trivia">${icon.back}</button>
       <div><h1>Question ${game.i + 1}</h1><p class="muted small">${q.type}. ${game.score} correct so far</p></div></header>
     <div class="quiz-q">
-      ${q.img && sized(q.img, 'large') ? `<div class="quiz-photo quiz-photo--short"><img src="${esc(sized(q.img, 'large'))}" alt="${esc(byId.get(q.img)?.name || '')}"></div>` : ''}
+      ${q.img && sized(q.img, 'large') ? `<div class="quiz-photo quiz-photo--short"><span class="whole"><img class="whole-bg" src="${esc(sized(q.img, 'large'))}" alt="" aria-hidden="true"><img class="whole-fg" src="${esc(sized(q.img, 'large'))}" alt="${esc(byId.get(q.img)?.name || '')}"></span></div>` : ''}
       <p class="trivia-q">${esc(q.prompt)}</p>
       <div class="quiz-options">${q.options.map(o => {
         const cls = !answered ? '' : o.key === q.answer ? 'right' : o.key === q.picked ? 'wrong' : 'dim';
