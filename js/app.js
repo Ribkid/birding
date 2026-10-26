@@ -9,6 +9,7 @@ import { openCard, confetti, shareCard } from './card3d.js';
 import { renderQuiz } from './quiz.js';
 import { renderStats } from './statsview.js';
 import { describeArea } from './mapinfo.js';
+import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
 
 const relRate = (id, month) => { const m = monthRates(id); return m ? m.rel[month - 1] : null; };
 const targetOpts = () => seq()?.hotspots?.length ? { score: likelihood, rel: relRate } : {};
@@ -60,7 +61,7 @@ async function photoUrl(id) {
   if (!id) return null;
   if (photoUrls.has(id)) return photoUrls.get(id);
   const rec = await db.get('photos', id);
-  if (!rec) return null;
+  if (!rec?.blob) return null; // a synced photo still downloading
   const url = URL.createObjectURL(rec.blob);
   photoUrls.set(id, url);
   return url;
@@ -675,6 +676,7 @@ const routes = [
   [/^#\/map$/, () => renderMap()],
   [/^#\/map\/sp\/(\d+)$/, m => renderMap(Number(m[1]))],
   [/^#\/badges$/, () => renderBadges()],
+  [/^#\/leaderboard$/, () => renderLeaderboard()],
   [/^#\/settings$/, () => renderSettings()],
   [/^#\/map\/at\/(-?[\d.]+),(-?[\d.]+)$/, m => renderMap(null, [Number(m[1]), Number(m[2])])],
   [/^#\/compare\/(\d+)\/(\d+)$/, m => renderCompare(Number(m[1]), Number(m[2]))],
@@ -787,6 +789,7 @@ function renderDex() {
         <h1 class="wordmark"><img class="logo" src="icons/logo.svg" alt="" width="52" height="52"><span class="wordmark-txt">Sarah's BirdyDex<small>South East Queensland</small></span></h1>
         <div class="head-actions">
           ${state.installPrompt ? '<button class="chip chip--install" data-install>Install</button>' : ''}
+          ${accountChip()}
           <button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button>
           <a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a>
         </div>
@@ -1625,7 +1628,7 @@ function renderBadges() {
   const sections = [['milestone', 'Milestones'], ['rarity', 'Rarities'], ['habit', 'Habits'], ['habitat', 'Habitats'], ['group', 'Complete a group']];
   view.innerHTML = `
     <header class="page-head"><h1>Badges</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button><a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a></div></header>
-    <div class="quicklinks pad-x"><a class="btn" href="#/quiz">${icon.quiz} Guess the bird</a><a class="btn" href="#/stats">${icon.chart} Stats</a></div>
+    <div class="quicklinks pad-x"><a class="btn" href="#/quiz">${icon.quiz} Guess the bird</a><a class="btn" href="#/stats">${icon.chart} Stats</a>${leaderboardLink()}</div>
     <p class="list-count"><b>${earned}</b> of ${list.length} earned</p>
     ${sections.map(([k, title]) => `<section class="block"><h2 class="h2">${title}</h2><ul class="badges">${list.filter(b => b.kind === k).map(b => `
       <li class="badge ${b.done ? 'badge--done' : ''} badge--${k}">
@@ -1643,6 +1646,7 @@ async function renderSettings() {
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/badges" aria-label="Back">${icon.back}</a><h1>Settings</h1></header>
+    <section class="block" data-account></section>
     <section class="block">
       <label class="field"><span>Theme</span><select data-theme>${[['auto', 'Match my phone'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => `<option value="${v}" ${state.settings.theme === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${state.installPrompt ? '<button class="btn btn--primary" data-install>Install app on this phone</button>' : `<p class="small muted">${matchMedia('(display-mode: standalone)').matches ? "Installed on this phone." : 'To install: open the browser menu, then Add to Home screen.'}</p>`}
@@ -1674,6 +1678,7 @@ async function renderSettings() {
       <h2 class="h2">Start over</h2>
       <button class="btn btn--danger btn--quiet" data-wipe>Delete all my sightings</button>
     </section>`;
+  renderAccountSection($('[data-account]', view));
   view.onchange = async e => {
     if (e.target.matches('[data-colour]')) { state.settings.colourUnseen = e.target.checked; await db.kvSet('settings', state.settings); }
     if (e.target.matches('[data-theme]')) { state.settings.theme = e.target.value; applyTheme(); await db.kvSet('settings', state.settings); }
@@ -1712,11 +1717,11 @@ async function renderSettings() {
     }
     if (e.target.closest('[data-backup]')) {
       const photos = [];
-      for (const p of await db.all('photos')) photos.push({ id: p.id, at: p.at, data: await blobToDataUrl(p.blob) });
+      for (const p of await db.all('photos')) if (p.blob) photos.push({ id: p.id, at: p.at, data: await blobToDataUrl(p.blob) });
       const data = { app: 'birddex', version: 1, savedAt: new Date().toISOString(), sightings: state.sightings, outings: state.outings, patches: state.patches, settings: state.settings, photos };
       download(`birddex-backup-${todayStr()}.json`, new Blob([JSON.stringify(data)], { type: 'application/json' }));
     }
-    if (e.target.closest('[data-wipe]') && await confirmSheet('Delete all sightings?', 'Every sighting, outing, patch and photo will be erased from this phone. Save a backup first if you might want them back.', 'Delete everything', true)) {
+    if (e.target.closest('[data-wipe]') && await confirmSheet('Delete all sightings?', 'Every sighting, outing, patch and photo will be erased from this phone, and from your account if you are signed in. Save a backup first if you might want them back.', 'Delete everything', true)) {
       for (const s of ['sightings', 'outings', 'patches', 'photos']) await db.clear(s);
       await db.kvSet('activeOuting', null);
       await loadData(); toast('All sightings deleted'); location.hash = '#/dex';
@@ -1977,7 +1982,16 @@ async function showWelcome() {
 const ctx = {
   state, view, $, $$, esc, icon, birdImg, band, pips, toast, fmtDate, plural, GROUPS,
   seenSet, sightingsOf, openSightingSheet, getCalls, hasCalls, audioUrl,
+  openSheet, closeSheet, confirmSheet, refresh: refreshFromSync,
 };
+
+// Data changed under us (cloud sync, sign in or out): reload, and redraw unless that would interrupt something.
+async function refreshFromSync({ force = false } = {}) {
+  await loadData();
+  applyTheme();
+  const busy = $('.sheet-wrap') || document.activeElement?.matches('input, textarea') || /^#\/(listen|scan|quiz)/.test(location.hash);
+  if (force ? !$('.sheet-wrap') : !busy) render();
+}
 
 async function boot() {
   await Promise.all([loadData(), loadSeq(), loadExtras()]);
@@ -1990,6 +2004,7 @@ async function boot() {
   window.addEventListener('hashchange', () => { closeSheet(); render(); });
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); state.installPrompt = e; if ((location.hash || '#/dex').startsWith('#/dex')) renderDex(); });
   render();
+  initAccount(ctx).catch(() => {});
   // Photos arriving only change the dex/list pages; don't interrupt Listen or a playing call.
   onMediaReady(() => { if (!$('.sheet-wrap') && /^(#\/?(dex)?|#\/lists?.*|#\/targets|#\/badges|#\/bird\/\d+|#\/compare\/.*)?$/.test(location.hash)) render(); });
   loadIndex();
