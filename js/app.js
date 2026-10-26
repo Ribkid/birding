@@ -7,6 +7,7 @@ import { loadSeq, seq, monthRates, likelihood, recordCount, spotsFor, pointsFor,
 import { openCard, confetti, shareCard } from './card3d.js';
 import { renderQuiz } from './quiz.js';
 import { renderStats } from './statsview.js';
+import { describeArea } from './mapinfo.js';
 
 const relRate = (id, month) => { const m = monthRates(id); return m ? m.rel[month - 1] : null; };
 const targetOpts = () => seq()?.hotspots?.length ? { score: likelihood, rel: relRate } : {};
@@ -1351,14 +1352,14 @@ async function renderMap(spId = null, at = null) {
   const css = getComputedStyle(document.documentElement);
   const accent = css.getPropertyValue('--azure').trim(), ink = css.getPropertyValue('--lori').trim();
   for (const p of state.patches) {
-    L.circle([p.lat, p.lng], { radius: p.radiusKm * 1000, color: ink, weight: 2, fillOpacity: 0.06, dashArray: '6 6' })
+    L.circle([p.lat, p.lng], { radius: p.radiusKm * 1000, color: ink, weight: 2, fillOpacity: 0.06, dashArray: '6 6', bubblingMouseEvents: false })
       .addTo(map).bindPopup(`<strong>${esc(p.name)}</strong><br><a href="#/patch/${p.id}">Open patch list</a>`);
   }
   const seen = seenSet();
   if (focus) {
     const pts = pointsFor(focus.id);
     const max = Math.max(1, ...pts.map(p => p[2]));
-    pts.forEach(([la, ln, c]) => L.circle([la, ln], { radius: 450 + 900 * Math.sqrt(c / max), stroke: false, fillColor: ink, fillOpacity: 0.25 + 0.45 * Math.sqrt(c / max) })
+    pts.forEach(([la, ln, c]) => L.circle([la, ln], { bubblingMouseEvents: false, radius: 450 + 900 * Math.sqrt(c / max), stroke: false, fillColor: ink, fillOpacity: 0.25 + 0.45 * Math.sqrt(c / max) })
       .addTo(map).bindPopup(`<strong>${esc(focus.name)}</strong><br>${c.toLocaleString('en-AU')} records in this 1 km square since 2016`));
     if (pts.length && !state.mapView) map.fitBounds(pts.map(p => [p[0], p[1]]), { padding: [40, 40], maxZoom: 12 });
   }
@@ -1374,13 +1375,18 @@ async function renderMap(spId = null, at = null) {
       const need = needAll.slice(0, 6).map(([id]) => byId.get(id)).filter(Boolean);
       const t = needAll.length / maxNeed;
       const style = f.need && !focus
-        ? { radius: 3 + 11 * t, color: '#3A2A00', weight: 1.5, fillColor: t > 0.66 ? ink : gold, fillOpacity: 0.35 + 0.6 * t }
-        : { radius: 4 + Math.min(6, h.rich / 30), color: '#3A2A00', weight: 1.5, fillColor: gold, fillOpacity: 0.9 };
+        ? { radius: 3 + 11 * t, color: '#3A2A00', weight: 1.5, fillColor: t > 0.66 ? ink : gold, fillOpacity: 0.35 + 0.6 * t, bubblingMouseEvents: false }
+        : { radius: 4 + Math.min(6, h.rich / 30), color: '#3A2A00', weight: 1.5, fillColor: gold, fillOpacity: 0.9, bubblingMouseEvents: false };
       const mk = L.circleMarker([h.lat, h.lng], style);
       hotMarkers.push({ h, mk });
-      mk.addTo(map).bindPopup(`<span class="pop-h">${esc(h.name)}</span>${h.rich} dex species recorded here. You have seen ${got}.
-          ${need.length ? `<br>Still to find (${needAll.length}):<ul class="pop-need">${need.map(sp => `<li><a href="#/bird/${sp.id}">${esc(sp.name)}</a></li>`).join('')}</ul>` : ''}
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${h.lat},${h.lng}" target="_blank" rel="noopener">Directions</a>`);
+      mk.addTo(map).bindPopup(`<div data-desc><span class="pop-h">${esc(h.name)}</span>${h.rich} dex species recorded here. You have seen ${got}.<p class="pop-src">Looking up this place…</p></div>
+          ${need.length ? `Still to find (${needAll.length}):<ul class="pop-need">${need.map(sp => `<li><a href="#/bird/${sp.id}">${esc(sp.name)}</a></li>`).join('')}</ul>` : ''}
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${h.lat},${h.lng}" target="_blank" rel="noopener">Directions</a>`, { maxWidth: 260 });
+      mk.on('popupopen', async ev => {
+        const html = await describeArea(h.lat, h.lng, { hotspot: h, seen }).catch(() => null);
+        const box = ev.popup.getElement()?.querySelector('[data-desc]');
+        if (html && box) { box.innerHTML = html; ev.popup.update(); }
+      });
     }
   }
   const groups = {};
@@ -1392,7 +1398,7 @@ async function renderMap(spId = null, at = null) {
     const s0 = items[0];
     pts.push([s0.lat, s0.lng]);
     const names = [...new Set(items.map(s => s.speciesId))].map(id => byId.get(id));
-    L.circleMarker([s0.lat, s0.lng], { radius: Math.min(14, 6 + names.length), color: '#fff', weight: 2, fillColor: accent, fillOpacity: 0.95 })
+    L.circleMarker([s0.lat, s0.lng], { radius: Math.min(14, 6 + names.length), color: '#fff', weight: 2, fillColor: accent, fillOpacity: 0.95, bubblingMouseEvents: false })
       .addTo(map).bindPopup(`<strong>${esc(s0.place || 'Sighting')}</strong><br>${names.slice(0, 12).map(sp => `<a href="#/bird/${sp.id}">${esc(sp.name)}</a>`).join('<br>')}${names.length > 12 ? `<br>and ${names.length - 12} more` : ''}`);
   }
   if (at) {
@@ -1468,7 +1474,15 @@ async function renderMap(spId = null, at = null) {
   mq.addEventListener('focus', () => showRes(localResults(mq.value.trim())));
   mq.addEventListener('input', () => { mqx.classList.toggle('hidden', !mq.value); clearTimeout(mtimer); showRes(localResults(mq.value.trim())); mtimer = setTimeout(runSearch, 700); });
   mq.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(mtimer); runSearch(); } if (e.key === 'Escape') { mres.classList.add('hidden'); mq.blur(); } });
-  map.on('click', () => mres.classList.add('hidden'));
+  // Tap anywhere on the map for a short description of that spot.
+  map.on('click', async e => {
+    if (!mres.classList.contains('hidden')) { mres.classList.add('hidden'); return; }
+    if ($('.sheet-wrap')) return;
+    const { lat, lng } = e.latlng;
+    const pop = L.popup({ maxWidth: 260 }).setLatLng(e.latlng).setContent('<p class="pop-src">Looking up this spot…</p>').openOn(map);
+    const html = await describeArea(lat, lng, { seen }).catch(() => '<p class="pop-desc">Couldn\'t look this spot up. Check the internet connection.</p>');
+    if (map.hasLayer(pop)) pop.setContent(`${html}<a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" rel="noopener">Directions</a>`);
+  });
   view.onclick = async e => {
     const ri = e.target.closest('[data-ri]');
     if (ri) { goTo(results[Number(ri.dataset.ri)]); return; }
