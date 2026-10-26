@@ -148,7 +148,7 @@ export async function cardImage(sp, info) {
   g.font = '500 36px "Schibsted Grotesk", sans-serif'; g.fillStyle = '#142E29';
   g.fillText(`Seen ${info.firstSeen || ''}${info.place ? ` at ${info.place}` : ''}`.slice(0, 52), x + 40, y + h - 70);
   g.fillStyle = '#F5C518'; g.font = '800 44px "Big Shoulders", sans-serif'; g.textAlign = 'right';
-  g.fillText("SARAH'S BIRDYDEX", W - 80, H - 36);
+  g.fillText(String(info.appName || 'BirdyDex').toUpperCase(), W - 80, H - 36);
   return new Promise(r => c.toBlob(r, 'image/png'));
 }
 
@@ -156,7 +156,7 @@ export async function shareCard(sp, info) {
   const blob = await cardImage(sp, info);
   const file = new File([blob], `${sp.name.replace(/\W+/g, '-')}.png`, { type: 'image/png' });
   if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: sp.name, text: `${sp.name}: number ${sp.id} in Sarah's BirdyDex` }); return; } catch (_) { return; }
+    try { await navigator.share({ files: [file], title: sp.name, text: `${sp.name}: number ${sp.id} in ${info.appName || 'BirdyDex'}` }); return; } catch (_) { return; }
   }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
 }
