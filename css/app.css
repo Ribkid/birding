@@ -592,3 +592,50 @@ span.bird-photo { display: block; }
 .pop-sub { display: block; font-size: .8rem; color: #5a6b66; margin-bottom: 4px; }
 .pop-desc { margin: 6px 0; font-size: .85rem; line-height: 1.45; }
 .pop-src { margin: 4px 0 6px; font-size: .72rem; color: #6b7a76; }
+
+/* ---------- v2.1 field usability & accessibility ---------- */
+[hidden] { display: none !important; }
+button:disabled { opacity: .55; cursor: wait; }
+button.tally { width: 100%; padding: 0; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; }
+.tally-meta > span:first-child { display: flex; align-items: center; gap: 6px; }
+.tally-meta svg { width: 16px; height: 16px; color: var(--ink-2); }
+.dex-tools .searchbox, .dex-tools .searchbox input { min-width: 0; }
+.searchbox input { padding-right: 46px; }
+.search-clear { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-2); cursor: pointer; }
+.search-clear svg, .searchbox .search-clear svg { position: static; transform: none; width: 18px; height: 18px; pointer-events: none; }
+.group-jump { flex: none; width: 126px; min-height: 46px; padding: 8px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
+.dex-group { scroll-margin-top: 62px; }
+.tile-wrap { position: relative; min-width: 0; }
+.quick-log { position: absolute; z-index: 2; top: 6px; right: 6px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid rgba(255,255,255,.65); border-radius: 50%; background: rgba(20,46,41,.88); color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2); cursor: pointer; }
+.quick-log svg { width: 21px; height: 21px; }
+.quick-log:hover { background: var(--azure); color: var(--azure-ink); }
+.row-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
+.row-wrap .row { flex: 1; min-width: 0; padding-right: 52px; }
+.row-wrap .quick-log { top: 50%; right: 0; transform: translateY(-50%); background: var(--surface); color: var(--ink); border-color: var(--line); box-shadow: none; }
+.bird-actions { flex-wrap: wrap; }
+.btn--wished { background: var(--sun); border-color: var(--sun); color: #2A2000; }
+.btn--wished svg { fill: currentColor; }
+.bird-secondary { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
+.bird-secondary .btn { padding-left: 0; padding-right: 0; }
+.log-tools { display: flex; gap: 8px; align-items: center; padding: 8px 16px 4px; }
+.log-tools .searchbox { flex: 1; min-width: 0; margin: 0; }
+.log-tools .searchbox input { min-width: 0; }
+.log-tools > select { flex: none; }
+.settings-grid { display: grid; gap: 12px; }
+.settings-grid .h2 { margin-bottom: 0; }
+.backup-status { display: inline-block; margin: 8px 0; padding: 7px 10px; border-radius: 9px; background: color-mix(in srgb, var(--azure) 10%, transparent); font-size: .9rem; font-weight: 600; }
+.backup-status--due { background: color-mix(in srgb, var(--sun) 25%, transparent); color: var(--ink); }
+.storage-ok { color: #2F7D5B; font-weight: 600; }
+[data-dlmeter] { margin-top: 12px; }
+[data-dlstatus] { margin-bottom: 0; }
+.connection { position: fixed; z-index: 45; left: 50%; bottom: calc(var(--tabbar-h) + 12px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 28px); padding: 9px 14px; border-radius: 999px; background: var(--ink); color: var(--paper); box-shadow: 0 5px 18px rgba(0,0,0,.25); font-size: .85rem; font-weight: 600; text-align: center; }
+.connection--online { background: #2F7D5B; color: #fff; }
+html[data-text-size="large"] { font-size: 112.5%; }
+html[data-text-size="larger"] { font-size: 125%; }
+body { font-size: 1rem; }
+html[data-reduce-motion="true"] *, html[data-reduce-motion="true"] *::before, html[data-reduce-motion="true"] *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+@media (max-width: 380px) {
+  .group-jump { width: 104px; }
+  .dex-tools { gap: 4px; padding-left: 10px; padding-right: 10px; }
+  .chips--dex { padding-left: 10px; padding-right: 10px; }
+}
