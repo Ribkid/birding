@@ -15,9 +15,11 @@ const targetOpts = () => seq()?.hotspots?.length ? { score: likelihood, rel: rel
 // ---------- state ----------
 const state = {
   sightings: [], outings: [], patches: [],
-  settings: { colourUnseen: false, theme: 'auto' },
+  settings: { colourUnseen: false, theme: 'auto', name: 'Sarah', textSize: 'default', reduceMotion: false },
   activeOutingId: null,
   dex: { q: '', show: 'all', group: '', habitat: '', rarity: '', season: false, sort: 'dex', layout: 'grid' },
+  log: { q: '', year: 'all' },
+  wishlist: new Set(),
   listen: { hits: new Map() },
   installPrompt: null,
   listSort: 'dex',
@@ -39,12 +41,50 @@ const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
 // ---------- data ----------
 async function loadData() {
-  const [sightings, outings, patches, settings, active] = await Promise.all([
+  const [sightings, outings, patches, settings, active, dexPrefs, wishlist] = await Promise.all([
     db.all('sightings'), db.all('outings'), db.all('patches'), db.kvGet('settings'), db.kvGet('activeOuting'),
+    db.kvGet('dexPrefs'), db.kvGet('wishlist'),
   ]);
   Object.assign(state, { sightings, outings, patches });
   if (settings) Object.assign(state.settings, settings);
+  if (dexPrefs) Object.assign(state.dex, dexPrefs, { q: '' });
+  state.wishlist = new Set(Array.isArray(wishlist) ? wishlist : []);
   state.activeOutingId = active && outings.find(o => o.id === active && !o.endedAt) ? active : null;
+}
+let dexSaveTimer;
+function saveDexPrefs() {
+  clearTimeout(dexSaveTimer);
+  dexSaveTimer = setTimeout(() => {
+    const { q, ...prefs } = state.dex;
+    db.kvSet('dexPrefs', prefs);
+  }, 180);
+}
+const birderName = () => String(state.settings.name || 'Birder').trim() || 'Birder';
+const appTitle = () => `${birderName()}'s BirdyDex`;
+const isWished = id => state.wishlist.has(id);
+async function toggleWishlist(id) {
+  if (state.wishlist.has(id)) state.wishlist.delete(id); else state.wishlist.add(id);
+  await db.kvSet('wishlist', [...state.wishlist]);
+  toast(isWished(id) ? 'Added to Want to see' : 'Removed from Want to see');
+}
+async function shareOrCopy(title, text, url) {
+  try {
+    if (navigator.share) { await navigator.share({ title, text, url }); return; }
+    throw new Error('share unavailable');
+  } catch (err) {
+    if (err?.name === 'AbortError') return;
+    try {
+      await navigator.clipboard.writeText(`${text}${url ? `\n${url}` : ''}`);
+      toast('Copied to clipboard');
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = `${text}${url ? `\n${url}` : ''}`;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.append(ta); ta.select();
+      const ok = document.execCommand('copy'); ta.remove();
+      toast(ok ? 'Copied to clipboard' : 'Copy is not available in this browser');
+    }
+  }
 }
 const seenSet = () => new Set(state.sightings.map(s => s.speciesId));
 const sightingsOf = id => state.sightings.filter(s => s.speciesId === id)
@@ -103,6 +143,8 @@ const icon = {
   grid: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   list: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  bookmark: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-6-4-6 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
   quiz: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9a3 3 0 1 1 4 2.8c-.8.3-1.2 1-1.2 1.8V15M12 18.5v.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   chart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
 };
@@ -116,8 +158,10 @@ function toast(msg) {
 }
 
 // ---------- sheets (modal) ----------
+let sheetReturnFocus = null;
 function openSheet(html, { onOpen, wide } = {}) {
-  closeSheet();
+  closeSheet(false);
+  sheetReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const wrap = document.createElement('div');
   wrap.className = 'sheet-wrap';
   wrap.innerHTML = `<div class="sheet-scrim" data-close></div>
@@ -125,19 +169,35 @@ function openSheet(html, { onOpen, wide } = {}) {
       <div class="sheet-grip" aria-hidden="true"></div>${html}</div>`;
   document.body.append(wrap);
   document.body.classList.add('has-sheet');
+  const sheet = $('.sheet', wrap);
+  const heading = $('h1, h2', sheet);
+  if (heading) { heading.id = `sheet-title-${Date.now()}`; sheet.setAttribute('aria-labelledby', heading.id); }
+  else sheet.setAttribute('aria-label', 'Dialog');
   wrap.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeSheet(); });
+  wrap.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const items = $$('a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])', sheet)
+      .filter(el => el.getClientRects().length);
+    if (!items.length) { e.preventDefault(); sheet.focus(); return; }
+    const firstItem = items[0], lastItem = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === firstItem) { e.preventDefault(); lastItem.focus(); }
+    else if (!e.shiftKey && document.activeElement === lastItem) { e.preventDefault(); firstItem.focus(); }
+  });
+  sheet.tabIndex = -1;
   requestAnimationFrame(() => wrap.classList.add('open'));
-  const first = $('input:not([type=hidden]):not([type=file]), select, textarea, button', $('.sheet', wrap));
-  onOpen?.($('.sheet', wrap));
+  const first = $('input:not([type=hidden]):not([type=file]), select, textarea, button', sheet);
+  onOpen?.(sheet);
   if (first && !first.matches('[data-noautofocus]')) setTimeout(() => first.focus({ preventScroll: true }), 50);
-  return $('.sheet', wrap);
+  return sheet;
 }
-function closeSheet() {
+function closeSheet(restoreFocus = true) {
   const w = $('.sheet-wrap');
   if (!w) return;
   w.remove();
   document.body.classList.remove('has-sheet');
   state.onSheetClose?.(); state.onSheetClose = null;
+  if (restoreFocus && sheetReturnFocus?.isConnected) sheetReturnFocus.focus({ preventScroll: true });
+  sheetReturnFocus = null;
 }
 function confirmSheet(title, body, okLabel, danger = false) {
   return new Promise(resolve => {
@@ -310,8 +370,8 @@ async function deleteSighting(id) {
 }
 
 function celebrate(sp, newBadges) {
-  navigator.vibrate?.([60, 40, 120]);
-  confetti();
+  const calm = state.settings.reduceMotion || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!calm) { navigator.vibrate?.([60, 40, 120]); confetti(); }
   const hist = sightingsOf(sp.id);
   const first = hist[hist.length - 1];
   const el = document.createElement('div');
@@ -326,7 +386,7 @@ function celebrate(sp, newBadges) {
     <div class="row-center"><button class="btn" data-share>${icon.share} Share</button><button class="btn" data-card>See card</button><button class="btn btn--primary" data-dismiss>Nice</button></div></div>`;
   document.body.append(el);
   const done = () => { el.classList.add('celebrate--out'); setTimeout(() => el.remove(), 250); };
-  const info = { seen: true, isNew: true, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
+  const info = { seen: true, isNew: true, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length, appName: appTitle() };
   el.addEventListener('click', e => {
     if (e.target.closest('[data-share]')) { shareCard(sp, info); return; }
     if (e.target.closest('[data-card]')) { done(); openCard(sp, info); return; }
@@ -486,11 +546,19 @@ async function openSightingSheet({ speciesId = null, sightingId = null, autoGps 
     $('[data-photo-label]', sheet).textContent = 'Replace photo';
     $('[data-photo-remove]', sheet).classList.remove('hidden');
   });
+  form.addEventListener('input', () => {
+    if (form.dataset.duplicateAck) {
+      delete form.dataset.duplicateAck;
+      $('[data-error]', form).textContent = '';
+      $('button[type=submit]', form).textContent = existing ? 'Save changes' : 'Save sighting';
+    }
+  });
   form.addEventListener('submit', async e => {
     e.preventDefault();
     const id = Number(form.speciesId.value);
     if (!id) { $('[data-error]', form).textContent = 'Choose which bird you saw.'; return; }
     if (!form.date.value) { $('[data-error]', form).textContent = 'Add the date of the sighting.'; return; }
+    if (form.date.value > todayStr()) { $('[data-error]', form).textContent = 'The sighting date cannot be in the future.'; form.date.focus(); return; }
     rec.speciesId = id;
     rec.count = form.count.value ? Math.max(1, parseInt(form.count.value, 10) || 1) : null;
     rec.heard = form.heard.checked;
@@ -500,6 +568,14 @@ async function openSightingSheet({ speciesId = null, sightingId = null, autoGps 
     if (toOuting?.checked) {
       rec.outingId = outing.id;
       Object.assign(rec, { lat: outing.lat, lng: outing.lng, place: outing.place });
+    }
+    const duplicate = !existing && state.sightings.some(s => s.speciesId === rec.speciesId && s.date === rec.date &&
+      (rec.outingId && s.outingId === rec.outingId || !rec.outingId && !s.outingId && (s.place || '').trim().toLowerCase() === rec.place.toLowerCase()));
+    if (duplicate && form.dataset.duplicateAck !== 'true') {
+      form.dataset.duplicateAck = 'true';
+      $('[data-error]', form).textContent = `You already logged ${byId.get(id).name} on this date${rec.place ? ` at ${rec.place}` : ''}. Tap “Save anyway” to keep both records.`;
+      $('button[type=submit]', form).textContent = 'Save anyway';
+      return;
     }
     if (removePhoto && rec.photoId) { await db.del('photos', rec.photoId); rec.photoId = null; }
     if (newPhoto) {
@@ -713,7 +789,7 @@ function dexFilter(seen) {
   const month = new Date().getMonth() + 1;
   return SPECIES.filter(s =>
     (!q || `${s.name} ${s.sci} ${dexNo(s.id)} ${GROUPS[s.group]}`.toLowerCase().includes(q)) &&
-    (f.show === 'all' || (f.show === 'seen') === seen.has(s.id)) &&
+    (f.show === 'all' || f.show === 'seen' && seen.has(s.id) || f.show === 'unseen' && !seen.has(s.id) || f.show === 'wishlist' && isWished(s.id)) &&
     (!f.group || s.group === f.group) && (!f.habitat || s.habitats.includes(f.habitat)) &&
     (!f.rarity || s.rarity === Number(f.rarity)) &&
     (!f.season || (relRate(s.id, month) ?? (inSeason(s, month) ? 1 : 0)) >= 0.35));
@@ -741,12 +817,13 @@ function renderDex() {
   const list = dexFilter(seen);
   const pct = Math.round(seen.size / SPECIES.length * 100);
   const filtersOn = f.habitat || f.group || f.rarity || f.season || f.show !== 'all';
-  const tile = s => `<li><a class="tile ${seen.has(s.id) ? 'tile--seen' : ''}" href="#/bird/${s.id}" data-tile="${s.id}">
+  const quickLog = s => `<button type="button" class="quick-log" data-quicklog="${s.id}" aria-label="Quick log ${esc(s.name)}" title="Quick log">${icon.plus}</button>`;
+  const tile = s => `<li class="tile-wrap"><a class="tile ${seen.has(s.id) ? 'tile--seen' : ''}" href="#/bird/${s.id}" data-tile="${s.id}">
       <span class="tile-img">${birdImg(s)}</span>
       ${band(s.id, seen.has(s.id))}
-      <span class="tile-name">${esc(s.name)}</span></a></li>`;
-  const row = s => `<li><a class="row row--sp" href="#/bird/${s.id}" data-tile="${s.id}"><span class="row-thumb ${seen.has(s.id) ? '' : 'row-thumb--dim'}">${birdImg(s)}</span>
-      <span class="row-main"><strong>${esc(s.name)}</strong><span class="muted small">${GROUPS[s.group]}</span></span>${pips(s.rarity)} ${band(s.id, seen.has(s.id))}</a></li>`;
+      <span class="tile-name">${esc(s.name)}</span></a>${quickLog(s)}</li>`;
+  const row = s => `<li class="row-wrap"><a class="row row--sp" href="#/bird/${s.id}" data-tile="${s.id}"><span class="row-thumb ${seen.has(s.id) ? '' : 'row-thumb--dim'}">${birdImg(s)}</span>
+      <span class="row-main"><strong>${esc(s.name)}</strong><span class="muted small">${GROUPS[s.group]}</span></span>${pips(s.rarity)} ${band(s.id, seen.has(s.id))}</a>${quickLog(s)}</li>`;
   const block = items => state.dex.layout === 'list' ? `<ul class="rows pad-x">${items.map(row).join('')}</ul>` : `<ul class="dex-grid">${items.map(tile).join('')}</ul>`;
   let body;
   if (!list.length) body = `<div class="empty"><p>No birds match those filters.</p><button class="btn" data-reset>Clear filters</button></div>`;
@@ -756,7 +833,7 @@ function renderDex() {
     body = Object.keys(GROUPS).filter(g => byGroup[g]).map(g => {
       const all = SPECIES.filter(s => s.group === g);
       const got = all.filter(s => seen.has(s.id)).length;
-      return `<section class="dex-group"><h2 class="dex-group-h"><span>${GROUPS[g]}</span><span class="dex-group-n">${got}/${all.length}</span></h2>${block(byGroup[g])}</section>`;
+      return `<section class="dex-group" data-group-section="${g}"><h2 class="dex-group-h"><span>${GROUPS[g]}</span><span class="dex-group-n">${got}/${all.length}</span></h2>${block(byGroup[g])}</section>`;
     }).join('');
   } else {
     const sorted = list.slice().sort(
@@ -768,18 +845,18 @@ function renderDex() {
   view.innerHTML = `
     <header class="dex-head">
       <div class="dex-head-top">
-        <h1 class="wordmark">Sarah's BirdyDex <span>South East Queensland</span></h1>
+        <h1 class="wordmark">${esc(appTitle())} <span>South East Queensland</span></h1>
         <div class="head-actions">
           ${state.installPrompt ? '<button class="chip chip--install" data-install>Install</button>' : ''}
           <button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button>
           <a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a>
         </div>
       </div>
-      <div class="tally" aria-label="${seen.size} of ${SPECIES.length} species seen">
+      <button type="button" class="tally" data-share-progress aria-label="Share progress: ${seen.size} of ${SPECIES.length} species seen" title="Share life-list progress">
         <span class="tally-band"><b>${seen.size}</b><i>/${SPECIES.length}</i></span>
-        <div class="tally-meta"><span>species seen</span>
-          <div class="meter" style="--p:${pct}%"><span></span></div></div>
-      </div>
+        <span class="tally-meta"><span>species seen ${icon.share}</span>
+          <span class="meter" style="--p:${pct}%"><span></span></span></span>
+      </button>
       <div class="id-buttons">
         <a class="idbtn" href="#/listen">${icon.mic}<span><strong>Listen</strong><em>ID by call</em></span></a>
         <a class="idbtn" href="#/scan">${icon.scan}<span><strong>Scan</strong><em>ID from a photo</em></span></a>
@@ -787,11 +864,13 @@ function renderDex() {
       ${birdOfDay(seen)}
     </header>
     <div class="dex-tools">
-      <div class="searchbox searchbox--dex">${icon.search}<input type="search" placeholder="Filter ${SPECIES.length} birds" value="${esc(f.q)}" data-q aria-label="Filter birds by name"></div>
+      <div class="searchbox searchbox--dex">${icon.search}<input type="search" placeholder="Filter ${SPECIES.length} birds" value="${esc(f.q)}" data-q aria-label="Filter birds by name">
+        ${f.q ? `<button type="button" class="search-clear" data-clear-q aria-label="Clear bird search">${icon.close}</button>` : ''}</div>
+      ${f.sort === 'dex' ? `<select class="group-jump" data-jump aria-label="Jump to a bird group"><option value="">Jump to group</option>${Object.entries(GROUPS).map(([g, label]) => `<option value="${g}">${label}</option>`).join('')}</select>` : ''}
       <button class="iconbtn iconbtn--tool" data-layout aria-label="${f.layout === 'list' ? 'Show as grid' : 'Show as list'}">${f.layout === 'list' ? icon.grid : icon.list}</button>
     </div>
     <div class="chips chips--scroll chips--dex" role="group" aria-label="Filter and sort">
-      ${[['all', 'All'], ['seen', 'Seen'], ['unseen', 'Not seen']].map(([v, l]) => `<button class="chip ${f.show === v ? 'chip--on' : ''}" data-show="${v}" aria-pressed="${f.show === v}">${l}</button>`).join('')}
+      ${[['all', 'All'], ['seen', 'Seen'], ['unseen', 'Not seen'], ['wishlist', `Want to see${state.wishlist.size ? ` (${state.wishlist.size})` : ''}`]].map(([v, l]) => `<button class="chip ${f.show === v ? 'chip--on' : ''}" data-show="${v}" aria-pressed="${f.show === v}">${l}</button>`).join('')}
       <button class="chip ${f.season ? 'chip--on' : ''}" data-season aria-pressed="${f.season}">In season now</button>
       <select class="chip chip--select ${f.sort !== 'dex' ? 'chip--on' : ''}" data-sort aria-label="Sort">
         ${[['dex', 'Dex order'], ['name', 'Name A–Z'], ['rarity', 'Rarest first'], ['recent', 'Recently seen']].map(([v, l]) => `<option value="${v}" ${f.sort === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
@@ -803,9 +882,10 @@ function renderDex() {
         <option value="">All groups</option>${Object.entries(GROUPS).map(([k, v]) => `<option value="${k}" ${f.group === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
       ${filtersOn ? '<button class="chip" data-reset>Clear</button>' : ''}
     </div>
-    ${f.q || filtersOn ? `<p class="list-count"><b>${list.length}</b> ${list.length === 1 ? 'bird' : 'birds'}</p>` : ''}
+    ${f.q || filtersOn ? `<p class="list-count" role="status"><b>${list.length}</b> of ${SPECIES.length} ${list.length === 1 ? 'bird' : 'birds'}${f.show === 'wishlist' ? ' on your wishlist' : ''}</p>` : ''}
     <div class="dex ${state.settings.colourUnseen ? 'dex--colour' : ''}">${body}</div>
-    <p class="small muted pad dex-tip">Tip: press and hold any bird to log it quickly.</p>`;
+    <p class="small muted pad dex-tip">Tip: tap + on any bird to quick-log it, or press and hold its photo.</p>`;
+  saveDexPrefs();
   const qi = $('[data-q]', view);
   qi.addEventListener('input', () => {
     state.dex.q = qi.value;
@@ -814,6 +894,13 @@ function renderDex() {
     const n = $('[data-q]', view); n.focus(); n.setSelectionRange(pos, pos);
   });
   view.onclick = e => {
+    const quick = e.target.closest('[data-quicklog]');
+    if (quick) { e.preventDefault(); openSightingSheet({ speciesId: Number(quick.dataset.quicklog), autoGps: true }); return; }
+    if (e.target.closest('[data-clear-q]')) { state.dex.q = ''; renderDex(); $('[data-q]', view)?.focus(); return; }
+    if (e.target.closest('[data-share-progress]')) {
+      shareOrCopy(`${appTitle()} progress`, `${birderName()} has seen ${seen.size} of ${SPECIES.length} South East Queensland birds (${pct}%).`, location.href);
+      return;
+    }
     if (state.suppressClick && e.target.closest('[data-tile]')) { state.suppressClick = false; e.preventDefault(); return; }
     const sh = e.target.closest('[data-show]');
     if (sh) { state.dex.show = sh.dataset.show; renderDex(); }
@@ -824,6 +911,12 @@ function renderDex() {
     if (e.target.closest('[data-install]')) promptInstall();
   };
   view.onchange = e => {
+    if (e.target.matches('[data-jump]')) {
+      const target = $(`[data-group-section="${e.target.value}"]`, view);
+      target?.scrollIntoView({ behavior: state.settings.reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      e.target.value = '';
+      return;
+    }
     if (e.target.matches('[data-habitat]')) state.dex.habitat = e.target.value;
     if (e.target.matches('[data-group]')) state.dex.group = e.target.value;
     if (e.target.matches('[data-rarity]')) state.dex.rarity = e.target.value;
@@ -843,7 +936,7 @@ function wireLongPress(root) {
     timer = setTimeout(() => {
       state.suppressClick = true;
       setTimeout(() => { state.suppressClick = false; }, 800);
-      navigator.vibrate?.(25);
+      if (!state.settings.reduceMotion && !matchMedia('(prefers-reduced-motion: reduce)').matches) navigator.vibrate?.(25);
       openSightingSheet({ speciesId: Number(t.dataset.tile), autoGps: true });
     }, 520);
   };
@@ -879,7 +972,7 @@ function renderBird(id) {
   const seen = hist.length > 0;
   const prev = byId.get(id - 1), next = byId.get(id + 1);
   const seasonText = sp.season === 's' ? 'Mostly September to April' : sp.season === 'w' ? 'Mostly April to September' : 'All year';
-  const cardInfo = { seen, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
+  const cardInfo = { seen, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length, appName: appTitle() };
   const sim = similarBirds(sp);
   view.innerHTML = `
     <article class="bird">
@@ -900,8 +993,10 @@ function renderBird(id) {
         <p class="sci">${esc(sp.sci)}</p>
         <div class="bird-actions">
           <button class="btn btn--primary btn--grow" data-log>${seen ? 'Log another sighting' : 'Log a sighting'}</button>
-          ${seen ? `<button class="btn" data-sharecard aria-label="Share card">${icon.share}</button>` : ''}
+          <button class="btn ${isWished(id) ? 'btn--wished' : ''}" data-wish aria-pressed="${isWished(id)}">${icon.bookmark}<span>${isWished(id) ? 'Wanted' : 'Want to see'}</span></button>
         </div>
+        <div class="bird-secondary"><button class="btn btn--quiet" data-sharebird>${icon.share} Share bird</button>
+          ${seen ? `<button class="btn btn--quiet" data-sharecard>${icon.share} Share my card</button>` : ''}</div>
         ${seen ? `<p class="seen-line">Seen ${plural(hist.length, 'time')}. First on ${fmtDate(first.date)}${first.place ? ` at ${esc(first.place)}` : ''}.</p>` : ''}
 
         <section class="call" data-calls aria-live="polite"><p class="muted small">Looking for recordings…</p></section>
@@ -958,7 +1053,7 @@ function renderBird(id) {
   };
   const audioStops = [];
   state.cleanup = () => { disposeModel?.(); audioStops.forEach(f => f()); };
-  view.onclick = e => {
+  view.onclick = async e => {
     if (e.target.closest('[data-log]')) openSightingSheet({ speciesId: id });
     const ed = e.target.closest('[data-edit]');
     if (ed) openSightingSheet({ sightingId: Number(ed.dataset.edit) });
@@ -966,6 +1061,17 @@ function renderBird(id) {
     if (fg) state.dex = { ...state.dex, q: '', show: 'all', group: fg.dataset.filterGroup, habitat: '', rarity: '', season: false, sort: 'dex' };
     const h = e.target.closest('[data-hero]');
     if (h) showHero(h.dataset.hero);
+    if (e.target.closest('[data-wish]')) {
+      await toggleWishlist(id);
+      const b = $('[data-wish]', view);
+      b.classList.toggle('btn--wished', isWished(id));
+      b.setAttribute('aria-pressed', String(isWished(id)));
+      $('span', b).textContent = isWished(id) ? 'Wanted' : 'Want to see';
+    }
+    if (e.target.closest('[data-sharebird]')) {
+      const summary = `${sp.name} (${sp.sci})\n${sp.notes}\nSize: ${sp.size} cm. When: ${seasonText}.\nLook in: ${sp.habitats.map(h => HABITATS[h]).join(', ')}.`;
+      shareOrCopy(`${sp.name} — ${appTitle()}`, summary, `${location.origin}${location.pathname}#/bird/${id}`);
+    }
     if (e.target.closest('[data-sharecard]')) shareCard(sp, cardInfo);
     if (e.target.closest('[data-search]')) openSearch();
   };
@@ -1293,18 +1399,42 @@ function renderOuting(id) {
 }
 
 function renderLog() {
-  const list = state.sightings.slice().sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  const f = state.log;
+  const years = [...new Set(state.sightings.map(s => s.date.slice(0, 4)))].sort().reverse();
+  const words = f.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const list = state.sightings.filter(s => {
+    const sp = byId.get(s.speciesId);
+    const hay = `${sp?.name || ''} ${sp?.sci || ''} ${s.place || ''} ${s.notes || ''}`.toLowerCase();
+    return (f.year === 'all' || s.date.startsWith(f.year)) && words.every(w => hay.includes(w));
+  }).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
   const byDate = {};
   list.forEach(s => (byDate[s.date] ||= []).push(s));
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/lists" aria-label="Back to lists">${icon.back}</a><h1>All sightings</h1></header>
+    <div class="log-tools">
+      <div class="searchbox">${icon.search}<input type="search" value="${esc(f.q)}" placeholder="Bird, place or notes" data-log-q aria-label="Filter sightings">
+        ${f.q ? `<button type="button" class="search-clear" data-log-clear aria-label="Clear sighting search">${icon.close}</button>` : ''}</div>
+      <select class="chip chip--select" data-log-year aria-label="Filter sightings by year"><option value="all">All years</option>${years.map(y => `<option value="${y}" ${f.year === y ? 'selected' : ''}>${y}</option>`).join('')}</select>
+    </div>
+    <p class="list-count" role="status"><b>${list.length}</b> of ${state.sightings.length} ${state.sightings.length === 1 ? 'sighting' : 'sightings'}</p>
     ${Object.entries(byDate).map(([d, items]) => `<section class="block"><h2 class="h2">${fmtDate(d)}</h2><ul class="rows">${items.map(s => {
       const sp = byId.get(s.speciesId);
       return `<li><button class="row row--sp" data-edit="${s.id}"><span class="row-thumb">${s.photoId ? `<img data-photo="${s.photoId}" alt="">` : birdImg(sp)}</span>
         <span class="row-main"><strong>${esc(sp?.name)}</strong><span class="muted small">${s.time || ''} ${esc(s.place || '')}</span></span><span class="row-n">${s.count ?? 'X'}</span></button></li>`;
-    }).join('')}</ul></section>`).join('') || '<div class="empty"><p>No sightings yet. Tap + to log your first bird.</p></div>'}`;
-  view.onclick = e => { const ed = e.target.closest('[data-edit]'); if (ed) openSightingSheet({ sightingId: Number(ed.dataset.edit) }); };
-  view.onchange = null;
+    }).join('')}</ul></section>`).join('') || `<div class="empty"><p>${state.sightings.length ? 'No sightings match those filters.' : 'No sightings yet. Tap + to log your first bird.'}</p>${state.sightings.length ? '<button class="btn" data-log-reset>Clear filters</button>' : ''}</div>`}`;
+  const input = $('[data-log-q]', view);
+  input.addEventListener('input', () => {
+    state.log.q = input.value;
+    const pos = input.selectionStart;
+    renderLog();
+    const next = $('[data-log-q]', view); next.focus(); next.setSelectionRange(pos, pos);
+  });
+  view.onclick = e => {
+    const ed = e.target.closest('[data-edit]'); if (ed) openSightingSheet({ sightingId: Number(ed.dataset.edit) });
+    if (e.target.closest('[data-log-clear]')) { state.log.q = ''; renderLog(); $('[data-log-q]', view)?.focus(); }
+    if (e.target.closest('[data-log-reset]')) { state.log = { q: '', year: 'all' }; renderLog(); }
+  };
+  view.onchange = e => { if (e.target.matches('[data-log-year]')) { state.log.year = e.target.value; renderLog(); } };
 }
 
 // Map
@@ -1524,21 +1654,35 @@ function renderBadges() {
 
 // Settings
 async function renderSettings() {
-  let usage = '';
-  try { const est = await navigator.storage.estimate(); usage = `${(est.usage / 1e6).toFixed(1)} MB used on this phone`; } catch (_) {}
-  const persisted = await navigator.storage?.persisted?.().catch(() => false);
+  let usage = '', persisted = false;
+  try { const est = await navigator.storage.estimate(); usage = `${((est.usage || 0) / 1e6).toFixed(1)} MB used on this device`; } catch (_) {}
+  try { persisted = await navigator.storage?.persisted?.() || false; } catch (_) {}
+  const backupAt = await db.kvGet('lastBackupAt');
+  const backupDays = backupAt ? Math.max(0, Math.floor((Date.now() - new Date(backupAt).getTime()) / 864e5)) : null;
+  const backupDue = backupDays == null || backupDays > 30;
+  const backupText = backupDays == null ? 'No backup has been recorded on this device.'
+    : backupDays === 0 ? 'Last backup saved today.'
+    : `Last backup saved ${plural(backupDays, 'day')} ago.${backupDue ? ' Time for a fresh one.' : ''}`;
+  let dlController = null;
+  state.cleanup = () => dlController?.abort();
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/badges" aria-label="Back">${icon.back}</a><h1>Settings</h1></header>
-    <section class="block">
+    <section class="block settings-grid">
+      <h2 class="h2">Make it yours</h2>
+      <label class="field"><span>Your name</span><input data-name value="${esc(state.settings.name)}" maxlength="40" autocomplete="name" placeholder="Birder"></label>
+      <label class="field"><span>Theme</span><select data-theme>${[['auto', 'Match my device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => `<option value="${v}" ${state.settings.theme === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="field"><span>Text size</span><select data-text-size>${[['default', 'Default'], ['large', 'Large'], ['larger', 'Extra large']].map(([v, l]) => `<option value="${v}" ${state.settings.textSize === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="check check--card"><input type="checkbox" data-motion ${state.settings.reduceMotion ? 'checked' : ''}><span>Reduce motion and celebrations</span></label>
       <label class="check check--card"><input type="checkbox" data-colour ${state.settings.colourUnseen ? 'checked' : ''}><span>Show unseen birds in colour in the dex</span></label>
-      <label class="field"><span>Theme</span><select data-theme>${[['auto', 'Match my phone'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => `<option value="${v}" ${state.settings.theme === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      ${state.installPrompt ? '<button class="btn btn--primary" data-install>Install app on this phone</button>' : `<p class="small muted">${matchMedia('(display-mode: standalone)').matches ? "Installed on this phone." : 'To install: open the browser menu, then Add to Home screen.'}</p>`}
+      ${state.installPrompt ? '<button class="btn btn--primary" data-install>Install app on this device</button>' : `<p class="small muted">${matchMedia('(display-mode: standalone)').matches ? 'Installed on this device.' : 'To install: open the browser menu, then Add to Home screen.'}</p>`}
       <button class="btn btn--quiet" data-welcome>Show the welcome screen</button>
     </section>
     <section class="block">
       <h2 class="h2">Use it offline</h2>
       <p class="muted small">Download every bird photo and description so the dex works with no signal. Takes about 30 MB. Calls are saved each time you play one.</p>
-      <button class="btn" data-dl>Download for offline</button> <span class="small muted" data-dlstatus></span>
+      <div class="row-start"><button class="btn" data-dl>Download for offline</button><button class="btn btn--quiet" data-dlcancel hidden>Cancel download</button></div>
+      <div class="meter meter--thin hidden" data-dlmeter style="--p:0%"><span></span></div>
+      <p class="small muted" data-dlstatus role="status"></p>
     </section>
     <section class="block">
       <h2 class="h2">Send to eBird</h2>
@@ -1546,52 +1690,80 @@ async function renderSettings() {
       <button class="btn" data-ebird>Export for eBird</button>
     </section>
     <section class="block">
-      <h2 class="h2">Backup</h2>
-      <p class="muted small">Your sightings and photos live only on this phone${persisted ? '' : ', and clearing the browser\'s site data would erase them'}. Save a backup now and then. ${usage}</p>
-      <div class="row-start"><button class="btn" data-backup>Save backup</button>
+      <h2 class="h2">Backup & storage</h2>
+      <p class="muted small">Your sightings and photos live only on this device. A backup is the safest way to move or recover them. ${usage}</p>
+      <p class="backup-status ${backupDue ? 'backup-status--due' : ''}" data-backup-age>${backupText}</p>
+      <div class="row-start"><button class="btn btn--primary" data-backup>Save backup</button>
       <label class="btn">Restore backup<input type="file" accept=".json,application/json" data-restore hidden></label></div>
+      ${persisted ? '<p class="small storage-ok">Persistent storage is enabled. Browser cleanup is less likely to remove your records.</p>' : '<button class="btn btn--quiet" data-persist>Ask browser to protect my storage</button><p class="small muted">This reduces the chance of automatic cleanup, but does not replace backups.</p>'}
     </section>
     <section class="block">
       <h2 class="h2">About</h2>
       <p class="small">Bird photos and descriptions come from Wikipedia and Wikimedia Commons, and calls from Wikimedia Commons. Each is credited on the bird's page. Maps &copy; OpenStreetMap contributors. Hotspots, seasons and rarity come from Atlas of Living Australia records for SEQ since 2016 (including eBird and BirdLife Australia data): 40,000+ records is Common, 15,000+ Fairly common, 4,000+ Uncommon, 800+ Scarce and fewer is Rare. Record counts lean towards easy-to-see birds and popular spots, so treat rarity as a guide.</p>
-      <p class="small muted">Version 2.0</p>
+      <p class="small muted">Version 2.1</p>
     </section>
     <section class="block">
       <h2 class="h2">Start over</h2>
       <button class="btn btn--danger btn--quiet" data-wipe>Delete all my sightings</button>
     </section>`;
+  let nameTimer;
+  $('[data-name]', view).addEventListener('input', e => {
+    state.settings.name = e.target.value;
+    document.title = appTitle();
+    clearTimeout(nameTimer);
+    nameTimer = setTimeout(() => db.kvSet('settings', state.settings), 250);
+  });
   view.onchange = async e => {
     if (e.target.matches('[data-colour]')) { state.settings.colourUnseen = e.target.checked; await db.kvSet('settings', state.settings); }
     if (e.target.matches('[data-theme]')) { state.settings.theme = e.target.value; applyTheme(); await db.kvSet('settings', state.settings); }
+    if (e.target.matches('[data-text-size]')) { state.settings.textSize = e.target.value; applyPreferences(); await db.kvSet('settings', state.settings); }
+    if (e.target.matches('[data-motion]')) { state.settings.reduceMotion = e.target.checked; applyPreferences(); await db.kvSet('settings', state.settings); }
     if (e.target.matches('[data-restore]')) {
       const file = e.target.files?.[0]; if (!file) return;
       try {
         const data = JSON.parse(await file.text());
-        if (data.app !== 'birddex') throw new Error();
-        if (!await confirmSheet('Restore this backup?', `It replaces everything on this phone with ${plural(data.sightings.length, 'sighting')} from ${fmtDate(data.savedAt?.slice(0, 10))}.`, 'Restore')) return;
+        if (data.app !== 'birddex' || !Array.isArray(data.sightings) || !Array.isArray(data.photos)) throw new Error();
+        if (!await confirmSheet('Restore this backup?', `It replaces everything on this device with ${plural(data.sightings.length, 'sighting')} from ${fmtDate(data.savedAt?.slice(0, 10))}.`, 'Restore')) return;
         for (const s of ['sightings', 'outings', 'patches', 'photos']) await db.clear(s);
         for (const p of data.photos) { const blob = await (await fetch(p.data)).blob(); await db.put('photos', { id: p.id, blob, at: p.at }); }
         for (const s of data.sightings) await db.put('sightings', s);
-        for (const o of data.outings) await db.put('outings', o);
-        for (const p of data.patches) await db.put('patches', p);
+        for (const o of data.outings || []) await db.put('outings', o);
+        for (const p of data.patches || []) await db.put('patches', p);
         if (data.settings) await db.kvSet('settings', data.settings);
-        photoUrls.clear();
-        await loadData();
-        toast('Backup restored');
-        location.hash = '#/dex';
-      } catch (_) { toast('That file is not a BirdyDex backup.'); }
+        if (data.dexPrefs) await db.kvSet('dexPrefs', data.dexPrefs);
+        if (Array.isArray(data.wishlist)) await db.kvSet('wishlist', data.wishlist);
+        await db.kvSet('lastBackupAt', data.savedAt || null);
+        photoUrls.forEach(url => URL.revokeObjectURL(url)); photoUrls.clear();
+        await loadData(); applyTheme(); applyPreferences();
+        toast('Backup restored'); location.hash = '#/dex';
+      } catch (_) { toast('That file is not a valid BirdyDex backup.'); }
     }
   };
   view.onclick = async e => {
     if (e.target.closest('[data-install]')) promptInstall();
     if (e.target.closest('[data-welcome]')) showWelcome();
-    if (e.target.closest('[data-dl]')) {
-      const st = $('[data-dlstatus]', view);
-      st.textContent = 'Starting…';
-      await downloadAll((d, t) => { st.textContent = `${d} of ${t}`; });
-      st.textContent = 'All set for offline use.';
-      navigator.storage?.persist?.();
+    if (e.target.closest('[data-persist]')) {
+      try { const ok = await navigator.storage?.persist?.(); toast(ok ? 'Persistent storage enabled.' : 'The browser did not grant persistent storage. Keep regular backups.'); }
+      catch (_) { toast('This browser cannot change storage protection. Keep regular backups.'); }
+      renderSettings(); return;
     }
+    if (e.target.closest('[data-dl]')) {
+      if (!navigator.onLine) { $('[data-dlstatus]', view).textContent = 'You are offline. Reconnect before downloading media.'; return; }
+      const st = $('[data-dlstatus]', view), meter = $('[data-dlmeter]', view);
+      const btn = $('[data-dl]', view), cancel = $('[data-dlcancel]', view);
+      dlController = new AbortController(); btn.disabled = true; cancel.hidden = false; meter.classList.remove('hidden');
+      st.textContent = 'Starting…';
+      try {
+        const result = await downloadAll((d, t, failed) => {
+          st.textContent = `${d} of ${t} birds${failed ? `, ${failed} need another try` : ''}`;
+          meter.style.setProperty('--p', `${t ? Math.round(d / t * 100) : 0}%`);
+        }, { signal: dlController.signal });
+        st.textContent = result.cancelled ? `Download stopped after ${result.completed} of ${result.total} birds.`
+          : result.failed ? `Finished with ${result.failed} birds not fully downloaded. Reconnect and try again to fill the gaps.` : 'All set for offline use.';
+      } catch (err) { st.textContent = err?.name === 'AbortError' ? 'Download stopped.' : (err.message || 'Download failed. Check your connection and try again.'); }
+      finally { btn.disabled = false; cancel.hidden = true; dlController = null; }
+    }
+    if (e.target.closest('[data-dlcancel]')) { dlController?.abort(); $('[data-dlstatus]', view).textContent = 'Stopping…'; }
     if (e.target.closest('[data-ebird]')) {
       if (!state.sightings.length) { toast('Log a sighting first.'); return; }
       download(`birddex-ebird-${todayStr()}.csv`, new Blob([toEbirdCsv(state.sightings, state.outings)], { type: 'text/csv' }));
@@ -1599,10 +1771,15 @@ async function renderSettings() {
     if (e.target.closest('[data-backup]')) {
       const photos = [];
       for (const p of await db.all('photos')) photos.push({ id: p.id, at: p.at, data: await blobToDataUrl(p.blob) });
-      const data = { app: 'birddex', version: 1, savedAt: new Date().toISOString(), sightings: state.sightings, outings: state.outings, patches: state.patches, settings: state.settings, photos };
+      const { q, ...dexPrefs } = state.dex;
+      const data = { app: 'birddex', version: 2, savedAt: new Date().toISOString(), sightings: state.sightings, outings: state.outings, patches: state.patches, settings: state.settings, dexPrefs, wishlist: [...state.wishlist], photos };
+      await db.kvSet('lastBackupAt', data.savedAt);
       download(`birddex-backup-${todayStr()}.json`, new Blob([JSON.stringify(data)], { type: 'application/json' }));
+      $('[data-backup-age]', view).textContent = 'Last backup saved today.';
+      $('[data-backup-age]', view).classList.remove('backup-status--due');
+      toast('Backup saved. Keep the file somewhere safe.');
     }
-    if (e.target.closest('[data-wipe]') && await confirmSheet('Delete all sightings?', 'Every sighting, outing, patch and photo will be erased from this phone. Save a backup first if you might want them back.', 'Delete everything', true)) {
+    if (e.target.closest('[data-wipe]') && await confirmSheet('Delete all sightings?', 'Every sighting, outing, patch and photo will be erased from this device. Save a backup first if you might want them back.', 'Delete everything', true)) {
       for (const s of ['sightings', 'outings', 'patches', 'photos']) await db.clear(s);
       await db.kvSet('activeOuting', null);
       await loadData(); toast('All sightings deleted'); location.hash = '#/dex';
@@ -1617,19 +1794,24 @@ function download(name, blob) {
 
 // ---------- global search ----------
 function openSearch() {
+  if ($('.search-ov')) { $('.search-ov input')?.focus(); return; }
+  const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const ov = document.createElement('div');
   ov.className = 'search-ov';
-  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Search');
+  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Search everything');
   ov.innerHTML = `<div class="search-bar">${icon.search}<input type="search" placeholder="Birds, places, hotspots, your sightings" aria-label="Search everything" autocomplete="off"><button class="iconbtn" data-x aria-label="Close search">${icon.close}</button></div>
-    <div class="search-res" aria-live="polite"><p class="muted pad">Try "kingfisher", "Oxley", "lorikeet" or "wetlands".</p></div>`;
+    <div class="search-res" aria-live="polite"><p class="muted pad">Try "kingfisher", "Oxley", "lorikeet" or "wetlands". Shortcut: Ctrl/⌘ K.</p></div>`;
   document.body.append(ov);
   document.body.classList.add('has-sheet');
   const input = $('input', ov), res = $('.search-res', ov);
-  const close = () => { ov.remove(); document.body.classList.remove('has-sheet'); };
+  const close = () => {
+    ov.remove(); document.body.classList.remove('has-sheet');
+    if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+  };
   const seen = seenSet();
   const run = () => {
     const q = input.value.trim().toLowerCase();
-    if (!q) { res.innerHTML = '<p class="muted pad">Try "kingfisher", "Oxley", "lorikeet" or "wetlands".</p>'; return; }
+    if (!q) { res.innerHTML = '<p class="muted pad">Try "kingfisher", "Oxley", "lorikeet" or "wetlands". Shortcut: Ctrl/⌘ K.</p>'; return; }
     const words = q.split(/\s+/);
     const hit = txt => words.every(w => txt.toLowerCase().includes(w));
     const birds = SPECIES.filter(s => hit(`${s.name} ${s.sci} ${dexNo(s.id)} ${GROUPS[s.group]} ${s.habitats.map(h => HABITATS[h]).join(' ')}`))
@@ -1648,7 +1830,15 @@ function openSearch() {
   };
   input.addEventListener('input', run);
   ov.addEventListener('click', e => { if (e.target.closest('[data-x]') || e.target.closest('a')) close(); });
-  ov.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  ov.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); close(); }
+    if (e.key === 'Tab') {
+      const items = $$('a[href], button:not([disabled]), input:not([disabled])', ov).filter(el => el.getClientRects().length);
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    }
+  });
   input.focus();
 }
 
@@ -1818,13 +2008,20 @@ function applyTheme() {
   const t = state.settings.theme || 'auto';
   if (t === 'auto') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
 }
+function applyPreferences() {
+  const root = document.documentElement;
+  if (state.settings.textSize && state.settings.textSize !== 'default') root.dataset.textSize = state.settings.textSize;
+  else delete document.documentElement.dataset.textSize;
+  root.dataset.reduceMotion = String(!!state.settings.reduceMotion);
+  document.title = appTitle();
+}
 async function promptInstall() {
   const p = state.installPrompt;
   if (!p) { toast('Use your browser menu, then Add to Home screen.'); return; }
   p.prompt();
   const r = await p.userChoice.catch(() => null);
   state.installPrompt = null;
-  if (r?.outcome === 'accepted') toast("Installed. Find Sarah's BirdyDex on your home screen.");
+  if (r?.outcome === 'accepted') toast(`Installed. Find ${appTitle()} on your home screen.`);
   render();
 }
 function showUpdateBanner() {
@@ -1841,7 +2038,7 @@ async function showWelcome() {
   ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Welcome');
   ov.innerHTML = `<div class="welcome-card">
     <div class="welcome-model" data-wm></div>
-    <h1>Hi Sarah</h1>
+    <h1>Hi ${esc(birderName())}</h1>
     <p>This is your BirdyDex: ${SPECIES.length} South East Queensland birds to find, starting with this Eastern Yellow Robin.</p>
     <ul class="welcome-list">
       <li><strong>Log</strong> a bird with the + button, or press and hold any bird in the dex.</li>
@@ -1852,11 +2049,12 @@ async function showWelcome() {
   </div>`;
   document.body.append(ov);
   let dispose = null;
-  try { const { mountBird } = await import('./model3d.js'); dispose = mountBird($('[data-wm]', ov), byId.get(165)); } catch (_) {}
   ov.addEventListener('click', async e => {
     if (e.target.closest('[data-winstall]')) await promptInstall();
     if (e.target.closest('[data-wgo]')) { dispose?.(); ov.remove(); db.kvSet('welcomed', true); }
   });
+  $('[data-wgo]', ov).focus();
+  try { const { mountBird } = await import('./model3d.js'); dispose = mountBird($('[data-wm]', ov), byId.get(165)); } catch (_) {}
 }
 
 // ---------- boot ----------
@@ -1865,12 +2063,24 @@ const ctx = {
   seenSet, sightingsOf, openSightingSheet, getCalls, hasCalls, audioUrl,
 };
 
+let connectionTimer;
+function updateConnection(announce = false) {
+  const el = $('#connection-status'), online = navigator.onLine;
+  clearTimeout(connectionTimer);
+  el.textContent = online ? 'Back online' : 'Offline — your saved records are still available';
+  el.classList.toggle('connection--online', online);
+  el.hidden = online && !announce;
+  if (online) connectionTimer = setTimeout(() => { el.hidden = true; }, 3000);
+}
 async function boot() {
   await Promise.all([loadData(), loadSeq()]);
-  applyTheme();
+  applyTheme(); applyPreferences(); updateConnection();
+  window.addEventListener('online', () => updateConnection(true));
+  window.addEventListener('offline', () => updateConnection(true));
   $('#plus').addEventListener('click', e => { e.preventDefault(); openPlusSheet(); });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeSheet();
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch(); }
     if (e.key === '/' && !e.target.closest('input, textarea, select')) { e.preventDefault(); openSearch(); }
   });
   window.addEventListener('hashchange', () => { closeSheet(); render(); });
