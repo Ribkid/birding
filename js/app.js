@@ -78,7 +78,7 @@ async function resizeImage(file, max = 1600) {
 
 // ---------- small UI pieces ----------
 const band = (id, seen) => `<span class="band ${seen ? 'band--on' : ''}" aria-label="Dex number ${id}">${dexNo(id)}</span>`;
-const pips = r => `<span class="pips pips--${r}" title="${RARITY[r].label}">${[1, 2, 3, 4].map(i => `<i class="${i <= r ? 'on' : ''}"></i>`).join('')}</span>`;
+const pips = r => `<span class="pips pips--${r}" title="${RARITY[r].label}">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= r ? 'on' : ''}"></i>`).join('')}</span>`;
 function birdImg(sp, size = 'small', cls = '') {
   const url = sized(sp.id, size);
   return url
@@ -174,6 +174,109 @@ async function reverseGeocode(pos) {
     return [local, area].filter(Boolean).join(', ');
   } catch (_) { return ''; }
 }
+// Places: hotspots, patches and places from past sightings, plus an address search (OpenStreetMap).
+function myPlaces() {
+  const m = new Map();
+  for (const s of state.sightings) if (s.lat != null && s.place && !m.has(s.place)) m.set(s.place, { name: s.place, lat: s.lat, lng: s.lng, kind: 'Your place' });
+  for (const o of state.outings) if (o.lat != null && o.place && !m.has(o.place)) m.set(o.place, { name: o.place, lat: o.lat, lng: o.lng, kind: 'Your place' });
+  return [...m.values()];
+}
+function localPlaceMatches(q, limit = 8) {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const hit = t => words.every(w => t.toLowerCase().includes(w));
+  return [
+    ...state.patches.filter(p => hit(p.name)).map(p => ({ name: p.name, lat: p.lat, lng: p.lng, kind: 'Your patch' })),
+    ...myPlaces().filter(p => hit(p.name)),
+    ...hotspots().filter(h => hit(h.name)).map(h => ({ name: h.name, lat: h.lat, lng: h.lng, kind: `Hotspot, ${h.rich} species` })),
+  ].slice(0, limit);
+}
+let lastGeocode = 0;
+async function searchAddress(q) {
+  // OpenStreetMap's Nominatim asks for at most one search a second.
+  const wait = 1100 - (Date.now() - lastGeocode);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  lastGeocode = Date.now();
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=au&viewbox=151.6,-25.6,153.7,-28.5&q=${encodeURIComponent(q)}`;
+  const r = await fetch(url, { headers: { 'Accept-Language': 'en-AU' } });
+  if (!r.ok) throw new Error('Place search is busy. Try again in a moment.');
+  return (await r.json()).map(x => ({
+    name: x.name || x.display_name.split(',')[0],
+    lat: Number(x.lat), lng: Number(x.lon),
+    kind: x.display_name.split(',').slice(1, 3).join(',').trim() || 'Place',
+  }));
+}
+const placeRow = (p, i) => `<li><button type="button" class="row" data-placeidx="${i}"><span class="row-main"><strong>${esc(p.name)}</strong><span class="small muted">${esc(p.kind)}</span></span></button></li>`;
+
+// Full-screen map to pick a spot by searching or moving the map. Resolves {lat, lng, place} or null.
+function openLocationPicker(init = {}) {
+  return new Promise(async resolve => {
+    const ov = document.createElement('div');
+    ov.className = 'locpick';
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Choose a place');
+    ov.innerHTML = `
+      <div class="locpick-top">
+        <div class="search-bar search-bar--map">${icon.search}<input type="search" placeholder="Search a park, suburb, address or hotspot" aria-label="Search for a place" autocomplete="off" data-lq>
+          <button type="button" class="iconbtn" data-lclose aria-label="Cancel">${icon.close}</button></div>
+        <ul class="rows locpick-res hidden" data-lres></ul>
+      </div>
+      <div class="locpick-mapwrap"><div class="locpick-map" data-lmap></div><div class="locpick-pin" aria-hidden="true">${icon.pin}</div></div>
+      <div class="locpick-bottom">
+        <p class="small muted">Move the map so the pin sits on the spot, or search above.</p>
+        <label class="field"><span>Place name</span><input data-lname value="${esc(init.place || '')}" placeholder="e.g. Oxley Creek Common" autocomplete="off"></label>
+        <div class="row-end"><button type="button" class="btn" data-lclose>Cancel</button><button type="button" class="btn btn--primary" data-luse>Use this place</button></div>
+      </div>`;
+    document.body.append(ov);
+    const close = val => { map?.remove(); ov.remove(); resolve(val); };
+    let map;
+    try { await loadLeaflet(); } catch (_) { toast('The map needs an internet connection the first time.'); close(null); return; }
+    const L = window.L;
+    const start = init.lat != null ? [init.lat, init.lng] : state.lastPos ? [state.lastPos.lat, state.lastPos.lng] : [-27.47, 153.02];
+    map = L.map($('[data-lmap]', ov), { zoomControl: false }).setView(start, init.lat != null || state.lastPos ? 15 : 10);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+    setTimeout(() => map.invalidateSize(), 50);
+    const q = $('[data-lq]', ov), res = $('[data-lres]', ov), name = $('[data-lname]', ov);
+    let found = [], timer = null, nameTouched = !!init.place;
+    name.addEventListener('input', () => { nameTouched = true; });
+    const show = (list, more = '') => {
+      found = list;
+      res.innerHTML = list.map(placeRow).join('') + more;
+      res.classList.toggle('hidden', !list.length && !more);
+    };
+    const run = async () => {
+      const text = q.value.trim();
+      const local = localPlaceMatches(text);
+      if (text.length < 3) { show(local); return; }
+      show(local, '<li class="small muted pad">Searching places…</li>');
+      try {
+        const remote = await searchAddress(text);
+        if (q.value.trim() !== text) return;
+        show([...local, ...remote], remote.length || local.length ? '' : '<li class="small muted pad">No places found. Try a suburb or park name.</li>');
+      } catch (err) { show(local, `<li class="small muted pad">${esc(err.message)}</li>`); }
+    };
+    q.addEventListener('input', () => { clearTimeout(timer); show(localPlaceMatches(q.value.trim())); timer = setTimeout(run, 700); });
+    q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); run(); } });
+    ov.addEventListener('click', async e => {
+      const b = e.target.closest('[data-placeidx]');
+      if (b) {
+        const p = found[Number(b.dataset.placeidx)];
+        map.setView([p.lat, p.lng], 16);
+        name.value = p.name; nameTouched = true;
+        res.classList.add('hidden'); q.blur();
+      }
+      if (e.target.closest('[data-lclose]')) close(null);
+      if (e.target.closest('[data-luse]')) {
+        const c = map.getCenter();
+        let place = name.value.trim();
+        if (!place || !nameTouched) place = nearestPlaceName({ lat: c.lat, lng: c.lng }) || await reverseGeocode({ lat: c.lat, lng: c.lng }) || place;
+        close({ lat: c.lat, lng: c.lng, place });
+      }
+    });
+    q.focus();
+  });
+}
+
 const recentPlaces = () => [...new Set(state.sightings.slice().sort((a, b) => b.createdAt - a.createdAt).map(s => s.place).filter(Boolean))].slice(0, 6);
 
 // ---------- saving sightings ----------
@@ -304,7 +407,8 @@ async function openSightingSheet({ speciesId = null, sightingId = null, autoGps 
       ${outing ? `<label class="check check--card"><input type="checkbox" name="toOuting" checked><span>Add to current outing at ${esc(outing.place || 'this spot')}</span></label>` : ''}
       <fieldset class="loc" ${outing ? 'data-outing-hides' : ''}>
         <legend>Where</legend>
-        <div class="loc-row"><button type="button" class="btn" data-gps>${icon.pin} Use my location</button><span class="muted small" data-gps-status>${rec.lat != null ? `${rec.lat.toFixed(4)}, ${rec.lng.toFixed(4)}` : 'Not set'}</span></div>
+        <div class="loc-row"><button type="button" class="btn" data-gps>${icon.pin} Use my location</button><button type="button" class="btn" data-pickmap>${icon.search} Choose on map</button></div>
+        <span class="muted small" data-gps-status>${rec.lat != null ? `${rec.lat.toFixed(4)}, ${rec.lng.toFixed(4)}` : 'No location yet'}</span>
         <label class="field"><span>Place name</span><input name="place" value="${esc(rec.place)}" placeholder="e.g. Oxley Creek Common" autocomplete="off"></label>
         <div class="chips chips--scroll" data-recent>${recentPlaces().map(p => `<button type="button" class="chip" data-place="${esc(p)}">${esc(p)}</button>`).join('')}</div>
       </fieldset>
@@ -338,7 +442,15 @@ async function openSightingSheet({ speciesId = null, sightingId = null, autoGps 
     const step = e.target.closest('[data-step]');
     if (step) { const inp = form.count; inp.value = Math.max(1, (Number(inp.value) || 0) + Number(step.dataset.step)); }
     const pl = e.target.closest('[data-place]');
-    if (pl) form.place.value = pl.dataset.place;
+    if (pl) {
+      form.place.value = pl.dataset.place;
+      const known = [...state.patches, ...myPlaces()].find(p => p.name === pl.dataset.place);
+      if (known) { Object.assign(rec, { lat: known.lat, lng: known.lng, acc: null }); status.textContent = `${known.lat.toFixed(4)}, ${known.lng.toFixed(4)}`; }
+    }
+    if (e.target.closest('[data-pickmap]')) {
+      const r = await openLocationPicker({ lat: rec.lat, lng: rec.lng, place: form.place.value });
+      if (r) { Object.assign(rec, { lat: r.lat, lng: r.lng, acc: null }); status.textContent = `${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}`; form.place.value = r.place || form.place.value; }
+    }
     if (e.target.closest('[data-gps]')) {
       status.textContent = 'Finding you…';
       try {
@@ -408,7 +520,7 @@ function openPlusSheet() {
       </div>
       <button class="plus-opt" data-one><strong>Log one bird</strong><span>A single sighting with photo, place and notes.</span></button>
       ${o ? `<button class="plus-opt" data-resume><strong>Back to your outing</strong><span>${esc(o.place || 'Current outing')}, started ${o.time}</span></button>`
-          : `<button class="plus-opt" data-outing><strong>Start an outing</strong><span>Tally every bird at one place, like an eBird checklist.</span></button>`}
+          : `<button class="plus-opt" data-outing><strong>Start or add an outing</strong><span>Tally every bird at one place, like an eBird checklist. Works for earlier outings too.</span></button>`}
     </div>`);
   s.addEventListener('click', e => {
     if (e.target.closest('[data-one]')) openSightingSheet();
@@ -418,14 +530,30 @@ function openPlusSheet() {
 }
 function openStartOuting() {
   const pos = {};
-  const s = openSheet(`<h2 class="sheet-title">Start an outing</h2>
-    <form class="form" data-form>
-      <div class="loc-row"><button type="button" class="btn" data-gps>${icon.pin} Use my location</button><span class="muted small" data-gps-status>Not set</span></div>
-      <label class="field"><span>Place name</span><input name="place" placeholder="e.g. Sandy Camp Road Wetlands" autocomplete="off"></label>
-      <div class="chips chips--scroll">${[...new Set([...state.patches.map(p => p.name), ...recentPlaces()])].slice(0, 8).map(p => `<button type="button" class="chip" data-place="${esc(p)}">${esc(p)}</button>`).join('')}</div>
-      <div class="row-end"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn--primary">Start outing</button></div>
+  const now = new Date();
+  const s = openSheet(`<h2 class="sheet-title">Start or add an outing</h2>
+    <form class="form" data-form novalidate>
+      <div class="grid2">
+        <label class="field"><span>Date</span><input type="date" name="date" value="${todayStr(now)}" max="${todayStr(now)}"></label>
+        <label class="field"><span>Start time</span><input type="time" name="time" value="${timeStr(now)}"></label>
+      </div>
+      <p class="small muted">For an outing earlier today or on another day, change the date and start time.</p>
+      <fieldset class="loc"><legend>Where</legend>
+        <div class="loc-row"><button type="button" class="btn" data-gps>${icon.pin} Use my location</button><button type="button" class="btn" data-pickmap>${icon.search} Choose on map</button></div>
+        <span class="muted small" data-gps-status>No location yet</span>
+        <label class="field"><span>Place name</span><input name="place" placeholder="e.g. Sandy Camp Road Wetlands" autocomplete="off"></label>
+        <div class="chips chips--scroll">${[...new Set([...state.patches.map(p => p.name), ...recentPlaces()])].slice(0, 8).map(p => `<button type="button" class="chip" data-place="${esc(p)}">${esc(p)}</button>`).join('')}</div>
+      </fieldset>
+      <p class="form-error" data-error role="alert"></p>
+      <div class="row-end"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn--primary" data-go>Start outing</button></div>
     </form>`);
   const form = $('[data-form]', s), status = $('[data-gps-status]', s);
+  const isPast = () => {
+    const t = new Date(`${form.date.value}T${form.time.value || '00:00'}`).getTime();
+    return Date.now() - t > 20 * 60 * 1000;
+  };
+  const syncLabel = () => { $('[data-go]', s).textContent = isPast() ? 'Add outing' : 'Start outing'; };
+  form.date.addEventListener('change', syncLabel); form.time.addEventListener('change', syncLabel);
   const locate = async () => {
     status.textContent = 'Finding you…';
     try {
@@ -434,26 +562,34 @@ function openStartOuting() {
       if (!form.place.value) form.place.value = nearestPlaceName(pos) || await reverseGeocode(pos);
     } catch (err) { status.textContent = err.message; }
   };
-  locate();
-  s.addEventListener('click', e => {
+  s.addEventListener('click', async e => {
     if (e.target.closest('[data-gps]')) locate();
+    if (e.target.closest('[data-pickmap]')) {
+      const r = await openLocationPicker({ lat: pos.lat, lng: pos.lng, place: form.place.value });
+      if (r) { Object.assign(pos, { lat: r.lat, lng: r.lng }); status.textContent = `${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}`; form.place.value = r.place || form.place.value; }
+    }
     const pl = e.target.closest('[data-place]');
     if (pl) {
       form.place.value = pl.dataset.place;
-      const patch = state.patches.find(p => p.name === pl.dataset.place);
-      if (patch && pos.lat == null) Object.assign(pos, { lat: patch.lat, lng: patch.lng });
+      const known = [...state.patches, ...myPlaces()].find(p => p.name === pl.dataset.place);
+      if (known) { Object.assign(pos, { lat: known.lat, lng: known.lng }); status.textContent = `${known.lat.toFixed(4)}, ${known.lng.toFixed(4)}`; }
     }
   });
   form.addEventListener('submit', async e => {
     e.preventDefault();
-    const now = new Date();
-    const o = { date: todayStr(now), time: timeStr(now), startedAt: now.getTime(), place: form.place.value.trim(),
+    const err = $('[data-error]', form);
+    const startAt = new Date(`${form.date.value}T${form.time.value || '00:00'}`);
+    if (!form.date.value || isNaN(startAt)) { err.textContent = 'Add the date of the outing.'; return; }
+    if (startAt.getTime() > Date.now() + 5 * 60 * 1000) { err.textContent = 'The start time is in the future. Pick a time that has already happened.'; return; }
+    const past = isPast();
+    const o = { date: form.date.value, time: form.time.value || '00:00', startedAt: startAt.getTime(), past, place: form.place.value.trim(),
       lat: pos.lat ?? null, lng: pos.lng ?? null, endedAt: null, complete: false, distanceKm: null, durationMin: null, notes: '' };
     o.id = await db.add('outings', o);
     state.outings.push(o);
     state.activeOutingId = o.id;
     await db.kvSet('activeOuting', o.id);
     closeSheet();
+    if (past) toast('Outing added. Tally the birds you saw, then tap Finish.');
     location.hash = `#/outing/${o.id}`;
   });
 }
@@ -465,30 +601,51 @@ async function tally(outing, speciesId, delta) {
     rec.count = next;
     await db.put('sightings', rec);
   } else if (delta > 0) {
-    await saveSighting({ speciesId, count: 1, heard: false, date: outing.date, time: timeStr(), lat: outing.lat, lng: outing.lng,
+    await saveSighting({ speciesId, count: 1, heard: false, date: outing.date, time: outing.past || outing.endedAt ? outing.time : timeStr(), lat: outing.lat, lng: outing.lng,
       acc: null, place: outing.place, notes: '', photoId: null, outingId: outing.id });
   }
 }
 function openFinishOuting(o) {
-  const mins = Math.max(1, Math.round((Date.now() - o.startedAt) / 60000));
+  const mins = o.past ? 60 : Math.max(1, Math.round((Date.now() - o.startedAt) / 60000));
   const n = state.sightings.filter(s => s.outingId === o.id).length;
-  const s = openSheet(`<h2 class="sheet-title">Finish outing</h2>
-    <p class="muted">${plural(n, 'species', 'species')} at ${esc(o.place || 'this spot')}.</p>
+  const loc = { lat: o.lat, lng: o.lng };
+  const s = openSheet(`<h2 class="sheet-title">${o.endedAt ? 'Outing details' : 'Finish outing'}</h2>
+    <p class="muted">${plural(n, 'species', 'species')} so far.</p>
     <form class="form" data-form>
+      <label class="field"><span>Place name</span><input name="place" value="${esc(o.place || '')}" autocomplete="off"></label>
+      <div class="loc-row"><button type="button" class="btn btn--small" data-pickmap>${icon.search} ${o.lat != null ? 'Move on map' : 'Choose on map'}</button><span class="small muted" data-gps-status>${o.lat != null ? `${o.lat.toFixed(4)}, ${o.lng.toFixed(4)}` : 'No location yet'}</span></div>
+      <div class="grid2">
+        <label class="field"><span>Date</span><input type="date" name="date" value="${o.date}" max="${todayStr()}"></label>
+        <label class="field"><span>Start time</span><input type="time" name="time" value="${o.time}"></label>
+      </div>
       <div class="grid2">
         <label class="field"><span>Duration (minutes)</span><input name="dur" inputmode="numeric" value="${o.durationMin || mins}"></label>
         <label class="field"><span>Distance walked (km)</span><input name="km" inputmode="decimal" placeholder="0 if you stayed put" value="${o.distanceKm ?? ''}"></label>
       </div>
       <label class="check check--card"><input type="checkbox" name="complete" ${o.complete || !o.endedAt ? 'checked' : ''}><span>I logged every bird I could identify. eBird calls this a complete checklist.</span></label>
       <label class="field"><span>Notes</span><textarea name="notes" rows="2" placeholder="Weather, tide, company…">${esc(o.notes)}</textarea></label>
-      <div class="row-end"><button type="button" class="btn" data-close>Keep going</button><button class="btn btn--primary">Finish outing</button></div>
+      <div class="row-end"><button type="button" class="btn" data-close>${o.endedAt ? 'Cancel' : 'Keep going'}</button><button class="btn btn--primary">${o.endedAt ? 'Save details' : 'Finish outing'}</button></div>
     </form>`);
+  s.addEventListener('click', async e => {
+    if (!e.target.closest('[data-pickmap]')) return;
+    const r = await openLocationPicker({ lat: loc.lat, lng: loc.lng, place: $('[name=place]', s).value });
+    if (r) { Object.assign(loc, { lat: r.lat, lng: r.lng }); $('[data-gps-status]', s).textContent = `${r.lat.toFixed(4)}, ${r.lng.toFixed(4)}`; if (r.place) $('[name=place]', s).value = r.place; }
+  });
   $('[data-form]', s).addEventListener('submit', async e => {
     e.preventDefault();
     const f = e.target;
+    const startAt = new Date(`${f.date.value}T${f.time.value || '00:00'}`);
     Object.assign(o, { endedAt: o.endedAt || Date.now(), durationMin: parseInt(f.dur.value, 10) || mins,
-      distanceKm: parseFloat(f.km.value) || 0, complete: f.complete.checked, notes: f.notes.value.trim() });
+      distanceKm: parseFloat(f.km.value) || 0, complete: f.complete.checked, notes: f.notes.value.trim(),
+      place: f.place.value.trim(), date: f.date.value || o.date, time: f.time.value || o.time,
+      startedAt: isNaN(startAt) ? o.startedAt : startAt.getTime(), lat: loc.lat, lng: loc.lng });
     await db.put('outings', o);
+    // keep the outing's birds in step with its place and date
+    for (const r of state.sightings.filter(x => x.outingId === o.id)) {
+      Object.assign(r, { date: o.date, place: o.place, lat: o.lat, lng: o.lng });
+      if (o.past) r.time = o.time;
+      await db.put('sightings', r);
+    }
     if (state.activeOutingId === o.id) { state.activeOutingId = null; await db.kvSet('activeOuting', null); }
     closeSheet();
     toast('Outing finished');
@@ -734,7 +891,7 @@ function renderBird(id) {
         </div>
       </div>
       <div class="bird-body">
-        <div class="bird-id">${band(sp.id, seen)} ${pips(sp.rarity)} <span class="muted small">${RARITY[sp.rarity].label} in SEQ</span></div>
+        <div class="bird-id">${band(sp.id, seen)} ${pips(sp.rarity)} <span class="muted small">${RARITY[sp.rarity].label} in SEQ${recordCount(sp.id) ? `: ${recordCount(sp.id).toLocaleString('en-AU')} records since 2016` : ''}</span></div>
         <h1 class="bird-name">${esc(sp.name)}</h1>
         <p class="sci">${esc(sp.sci)}</p>
         <div class="bird-actions">
@@ -1075,6 +1232,7 @@ function renderOuting(id) {
   const o = state.outings.find(x => x.id === id);
   if (!o) { location.hash = '#/lists'; return; }
   const live = !o.endedAt;
+  const editing = live || state.editOuting === id;
   const recs = state.sightings.filter(s => s.outingId === id);
   const counts = new Map(recs.map(r => [r.speciesId, r]));
   const q = state.tallyQ || '';
@@ -1085,7 +1243,7 @@ function renderOuting(id) {
     const r = counts.get(sp.id);
     return `<li class="tally-row ${r ? 'tally-row--on' : ''}">
       <a class="tally-sp" href="#/bird/${sp.id}"><span class="row-thumb">${birdImg(sp)}</span><span><strong>${esc(sp.name)}</strong>${!seenSetCache.has(sp.id) || (r && isFirstEver(r)) ? '<span class="lifer">New for your dex</span>' : ''}</span></a>
-      ${live ? `<div class="tally-ctl">${r ? `<button data-dec="${sp.id}" aria-label="One fewer ${esc(sp.name)}">−</button><span class="tally-n">${r.count ?? 'X'}</span>` : ''}<button data-inc="${sp.id}" class="tally-inc" aria-label="Add ${esc(sp.name)}">+</button></div>`
+      ${editing ? `<div class="tally-ctl">${r ? `<button data-dec="${sp.id}" aria-label="One fewer ${esc(sp.name)}">−</button><span class="tally-n">${r.count ?? 'X'}</span>` : ''}<button data-inc="${sp.id}" class="tally-inc" aria-label="Add ${esc(sp.name)}">+</button></div>`
         : `<span class="tally-n">${r?.count ?? 'X'}</span>`}</li>`;
   };
   const seenSetCache = new Set(state.sightings.filter(s => s.outingId !== id).map(s => s.speciesId));
@@ -1094,13 +1252,13 @@ function renderOuting(id) {
     <header class="page-head page-head--back"><a class="iconbtn" href="#/lists" aria-label="Back to lists">${icon.back}</a>
       <div><h1>${esc(o.place || 'Outing')}</h1><p class="muted small">${fmtDate(o.date)}, started ${o.time}${mins != null ? `, ${mins} min` : ''}${!live ? (o.complete ? '. Complete checklist.' : '.') : ''}</p></div></header>
     <p class="list-count"><b>${recs.length}</b> species${!live && o.distanceKm ? `, ${o.distanceKm} km` : ''}</p>
-    ${live ? `<div class="searchbox searchbox--sticky">${icon.search}<input type="search" placeholder="Add a bird: type a name" value="${esc(q)}" data-tq aria-label="Find a bird to add"></div>
+    ${editing ? `<div class="searchbox searchbox--sticky">${icon.search}<input type="search" placeholder="Add a bird: type a name" value="${esc(q)}" data-tq aria-label="Find a bird to add"></div>
       ${q ? `<ul class="tally-list">${results.map(tallyRow).join('') || '<li class="muted pad">No bird by that name in the dex.</li>'}</ul><hr class="rule">` : ''}` : ''}
-    <ul class="tally-list">${ordered.map(tallyRow).join('') || (live ? '<li class="muted pad">Search above to add the first bird. Tap + again each time you count another.</li>' : '')}</ul>
+    <ul class="tally-list">${ordered.map(tallyRow).join('') || (editing ? '<li class="muted pad">Search above to add the first bird. Tap + again each time you count another.</li>' : '')}</ul>
     ${o.notes ? `<p class="pad-x">${esc(o.notes)}</p>` : ''}
     <div class="row-end pad">
       ${live ? `<button class="btn btn--danger btn--quiet" data-cancel>Discard</button><span class="spacer"></span><button class="btn btn--primary" data-finish>Finish outing</button>`
-             : `<button class="btn btn--danger btn--quiet" data-cancel>Delete outing</button><span class="spacer"></span><button class="btn" data-finish>Edit details</button>`}
+             : `<button class="btn btn--danger btn--quiet" data-cancel>Delete outing</button><span class="spacer"></span><button class="btn" data-editbirds>${editing ? 'Done editing birds' : 'Edit birds'}</button><button class="btn" data-finish>Edit details</button>`}
     </div>`;
   const tq = $('[data-tq]', view);
   tq?.addEventListener('input', () => {
@@ -1118,6 +1276,7 @@ function renderOuting(id) {
       renderOuting(id);
     }
     if (e.target.closest('[data-finish]')) openFinishOuting(o);
+    if (e.target.closest('[data-editbirds]')) { state.editOuting = editing ? null : id; state.tallyQ = ''; renderOuting(id); }
     if (e.target.closest('[data-cancel]') && await confirmSheet(live ? 'Discard this outing?' : 'Delete this outing?', `This removes the outing and its ${plural(recs.length, 'sighting')}. This cannot be undone.`, live ? 'Discard' : 'Delete', true)) {
       for (const r of recs) await deleteSighting(r.id);
       await db.del('outings', id);
@@ -1154,21 +1313,26 @@ function loadLeaflet() {
 }
 async function renderMap(spId = null, at = null) {
   const mode = state.mapMode; state.mapMode = null;
-  const f = state.mapF ||= { show: 'all', hot: true, hotFocus: false };
+  const f = state.mapF ||= { show: 'all', hot: true, hotFocus: false, need: false };
   const focus = spId ? byId.get(spId) : null;
   const hotOn = focus ? f.hotFocus : f.hot;
   if (state.map) { state.map.remove(); state.map = null; }
   view.innerHTML = `
     <div class="mapwrap">
       <div id="map" aria-label="Map of your sightings and SEQ birding hotspots"></div>
+      <div class="map-top">
+        <div class="search-bar search-bar--map">${icon.search}<input type="search" placeholder="Search birds, hotspots, suburbs, parks" aria-label="Search the map" autocomplete="off" data-mq>
+          <button type="button" class="iconbtn hidden" data-mqx aria-label="Clear search">${icon.close}</button></div>
+        <ul class="rows map-res hidden" data-mres></ul>
+      </div>
       <div class="map-ctl chips">
         ${focus ? `<a class="chip chip--on" href="#/map" aria-label="Stop showing ${esc(focus.name)}">${esc(focus.name)} ✕</a>` : ''}
         <button class="chip ${hotOn ? 'chip--on' : ''}" data-hot aria-pressed="${hotOn}">Hotspots</button>
+        ${!focus ? `<button class="chip ${f.need ? 'chip--on' : ''}" data-need aria-pressed="${f.need}">Birds I need</button>` : ''}
         <button class="chip ${f.show === 'all' ? 'chip--on' : ''}" data-mshow="all">My sightings</button>
         <button class="chip ${f.show === 'photos' ? 'chip--on' : ''}" data-mshow="photos">With photos</button>
         <button class="chip ${f.show === 'none' ? 'chip--on' : ''}" data-mshow="none">Hide mine</button>
         <button class="chip" data-locate>${icon.pin} Me</button>
-        <button class="chip" data-search>${icon.search} Search</button>
       </div>
       <button class="btn btn--primary map-patch" data-patch>New patch here</button>
       <div class="map-cross hidden" aria-hidden="true"></div>
@@ -1195,16 +1359,24 @@ async function renderMap(spId = null, at = null) {
       .addTo(map).bindPopup(`<strong>${esc(focus.name)}</strong><br>${c.toLocaleString('en-AU')} records in this 1 km square since 2016`));
     if (pts.length && !state.mapView) map.fitBounds(pts.map(p => [p[0], p[1]]), { padding: [40, 40], maxZoom: 12 });
   }
+  const hotMarkers = [];
   if (hotOn) {
     const gold = css.getPropertyValue('--gold').trim();
+    const maxNeed = Math.max(1, ...hotspots().map(h => h.sp.filter(([id]) => !seen.has(id)).length));
     for (const h of hotspots()) {
       const has = focus ? h.sp.find(([id]) => id === focus.id) : true;
       if (focus && !has) continue;
       const got = h.sp.filter(([id]) => seen.has(id)).length;
-      const need = h.sp.filter(([id]) => !seen.has(id)).slice(0, 6).map(([id]) => byId.get(id)).filter(Boolean);
-      L.circleMarker([h.lat, h.lng], { radius: 4 + Math.min(6, h.rich / 30), color: '#3A2A00', weight: 1.5, fillColor: gold, fillOpacity: 0.9 })
-        .addTo(map).bindPopup(`<span class="pop-h">${esc(h.name)}</span>${h.rich} dex species recorded here. You have seen ${got}.
-          ${need.length ? `<br>Still to find:<ul class="pop-need">${need.map(sp => `<li><a href="#/bird/${sp.id}">${esc(sp.name)}</a></li>`).join('')}</ul>` : ''}
+      const needAll = h.sp.filter(([id]) => !seen.has(id));
+      const need = needAll.slice(0, 6).map(([id]) => byId.get(id)).filter(Boolean);
+      const t = needAll.length / maxNeed;
+      const style = f.need && !focus
+        ? { radius: 3 + 11 * t, color: '#3A2A00', weight: 1.5, fillColor: t > 0.66 ? ink : gold, fillOpacity: 0.35 + 0.6 * t }
+        : { radius: 4 + Math.min(6, h.rich / 30), color: '#3A2A00', weight: 1.5, fillColor: gold, fillOpacity: 0.9 };
+      const mk = L.circleMarker([h.lat, h.lng], style);
+      hotMarkers.push({ h, mk });
+      mk.addTo(map).bindPopup(`<span class="pop-h">${esc(h.name)}</span>${h.rich} dex species recorded here. You have seen ${got}.
+          ${need.length ? `<br>Still to find (${needAll.length}):<ul class="pop-need">${need.map(sp => `<li><a href="#/bird/${sp.id}">${esc(sp.name)}</a></li>`).join('')}</ul>` : ''}
           <a href="https://www.google.com/maps/dir/?api=1&destination=${h.lat},${h.lng}" target="_blank" rel="noopener">Directions</a>`);
     }
   }
@@ -1220,7 +1392,11 @@ async function renderMap(spId = null, at = null) {
     L.circleMarker([s0.lat, s0.lng], { radius: Math.min(14, 6 + names.length), color: '#fff', weight: 2, fillColor: accent, fillOpacity: 0.95 })
       .addTo(map).bindPopup(`<strong>${esc(s0.place || 'Sighting')}</strong><br>${names.slice(0, 12).map(sp => `<a href="#/bird/${sp.id}">${esc(sp.name)}</a>`).join('<br>')}${names.length > 12 ? `<br>and ${names.length - 12} more` : ''}`);
   }
-  if (at) map.setView(at, 15);
+  if (at) {
+    map.setView(at, 15);
+    const near = hotMarkers.find(({ h }) => Math.abs(h.lat - at[0]) < 0.002 && Math.abs(h.lng - at[1]) < 0.002);
+    if (near) setTimeout(() => near.mk.openPopup(), 300);
+  }
   else if (!state.mapView && !focus && pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 14 });
   const startPatch = async () => {
     $('.map-cross').classList.remove('hidden');
@@ -1250,10 +1426,53 @@ async function renderMap(spId = null, at = null) {
       location.hash = `#/patch/${p.id}`;
     });
   };
+  // ---- map search ----
+  const mq = $('[data-mq]', view), mres = $('[data-mres]', view), mqx = $('[data-mqx]', view);
+  let results = [], mtimer = null, tempMarker = null;
+  const goTo = r => {
+    mres.classList.add('hidden'); mq.blur();
+    if (r.bird) { location.hash = `#/map/sp/${r.bird}`; return; }
+    map.setView([r.lat, r.lng], r.zoom || 15);
+    const hm = hotMarkers.find(({ h }) => Math.abs(h.lat - r.lat) < 0.0005 && Math.abs(h.lng - r.lng) < 0.0005);
+    if (hm) { setTimeout(() => hm.mk.openPopup(), 250); return; }
+    tempMarker?.remove();
+    tempMarker = L.marker([r.lat, r.lng]).addTo(map).bindPopup(`<span class="pop-h">${esc(r.name)}</span>${esc(r.kind || '')}`);
+    setTimeout(() => tempMarker.openPopup(), 250);
+  };
+  const resRow = (r, i) => `<li><button type="button" class="row" data-ri="${i}">${r.bird ? `<span class="row-thumb">${birdImg(byId.get(r.bird))}</span>` : ''}<span class="row-main"><strong>${esc(r.name)}</strong><span class="small muted">${esc(r.kind)}</span></span></button></li>`;
+  const showRes = (list, extra = '') => { results = list; mres.innerHTML = list.map(resRow).join('') + extra; mres.classList.toggle('hidden', !list.length && !extra); hydratePhotos(mres); };
+  const localResults = text => {
+    if (!text) {
+      // Nothing typed: suggest the hotspots with the most birds she still needs.
+      const best = hotspots().map(h => ({ h, n: h.sp.filter(([id]) => !seen.has(id)).length })).sort((a, b) => b.n - a.n).slice(0, 5)
+        .map(({ h, n }) => ({ name: h.name, lat: h.lat, lng: h.lng, kind: `Hotspot: ${n} birds you still need` }));
+      return [...state.patches.map(p => ({ name: p.name, lat: p.lat, lng: p.lng, kind: 'Your patch', zoom: 14 })), ...best];
+    }
+    const birds = matchSpecies(text, 4).map(sp => ({ bird: sp.id, name: sp.name, kind: 'Show where it is reported' }));
+    return [...birds, ...localPlaceMatches(text, 8)];
+  };
+  const runSearch = async () => {
+    const text = mq.value.trim();
+    const local = localResults(text);
+    if (text.length < 3) { showRes(local); return; }
+    showRes(local, '<li class="small muted pad">Searching places…</li>');
+    try {
+      const remote = await searchAddress(text);
+      if (mq.value.trim() !== text) return;
+      showRes([...local, ...remote.map(r => ({ ...r, zoom: 14 }))], remote.length || local.length ? '' : '<li class="small muted pad">Nothing found. Try a suburb, park or bird name.</li>');
+    } catch (err) { showRes(local, `<li class="small muted pad">${esc(err.message)}</li>`); }
+  };
+  mq.addEventListener('focus', () => showRes(localResults(mq.value.trim())));
+  mq.addEventListener('input', () => { mqx.classList.toggle('hidden', !mq.value); clearTimeout(mtimer); showRes(localResults(mq.value.trim())); mtimer = setTimeout(runSearch, 700); });
+  mq.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(mtimer); runSearch(); } if (e.key === 'Escape') { mres.classList.add('hidden'); mq.blur(); } });
+  map.on('click', () => mres.classList.add('hidden'));
   view.onclick = async e => {
+    const ri = e.target.closest('[data-ri]');
+    if (ri) { goTo(results[Number(ri.dataset.ri)]); return; }
+    if (e.target.closest('[data-mqx]')) { mq.value = ''; mqx.classList.add('hidden'); tempMarker?.remove(); mq.focus(); showRes(localResults('')); return; }
+    if (e.target.closest('[data-need]')) { f.need = !f.need; renderMap(spId); return; }
     const ms = e.target.closest('[data-mshow]');
     if (ms) { f.show = ms.dataset.mshow; renderMap(spId); }
-    if (e.target.closest('[data-search]')) openSearch();
     if (e.target.closest('[data-hot]')) { if (focus) f.hotFocus = !f.hotFocus; else f.hot = !f.hot; renderMap(spId); }
     if (e.target.closest('[data-patch]')) startPatch();
     if (e.target.closest('[data-locate]')) {
@@ -1317,7 +1536,7 @@ async function renderSettings() {
     </section>
     <section class="block">
       <h2 class="h2">About</h2>
-      <p class="small">Bird photos and descriptions come from Wikipedia and Wikimedia Commons, and calls from Wikimedia Commons. Each is credited on the bird's page. Maps &copy; OpenStreetMap contributors. Rarity and season labels are a rough guide for SEQ, not official records.</p>
+      <p class="small">Bird photos and descriptions come from Wikipedia and Wikimedia Commons, and calls from Wikimedia Commons. Each is credited on the bird's page. Maps &copy; OpenStreetMap contributors. Hotspots, seasons and rarity come from Atlas of Living Australia records for SEQ since 2016 (including eBird and BirdLife Australia data): 40,000+ records is Common, 15,000+ Fairly common, 4,000+ Uncommon, 800+ Scarce and fewer is Rare. Record counts lean towards easy-to-see birds and popular spots, so treat rarity as a guide.</p>
       <p class="small muted">Version 2.0</p>
     </section>
     <section class="block">

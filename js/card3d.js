@@ -6,7 +6,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const pad = n => String(n).padStart(3, '0');
 
 export function cardHTML(sp, { seen, firstSeen, count, place } = {}) {
-  const foil = seen && sp.rarity >= 3 ? `card--foil card--foil-${sp.rarity}` : '';
+  const foil = seen && sp.rarity >= 4 ? `card--foil card--foil-${sp.rarity}` : '';
   const img = sized(sp.id, 'large');
   return `<div class="card3d ${seen ? 'card--seen' : 'card--unseen'} ${foil}" data-card>
     <div class="card-inner">

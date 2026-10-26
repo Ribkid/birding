@@ -105,9 +105,9 @@ export function badges(sightings, outings) {
   add('bigday40', 'Monster day', 'See 40 species in a single day', bestDay, 40);
 
   // Rarity
-  add('scarce', 'Lucky find', 'See a scarce species', count(s => s.rarity >= 3), 1, 'rarity');
-  add('rare', 'Rare bird', 'See a rare species', count(s => s.rarity === 4), 1, 'rarity');
-  add('hunter', 'Rarity hunter', 'See 10 scarce or rare species', count(s => s.rarity >= 3), 10, 'rarity');
+  add('scarce', 'Lucky find', 'See a scarce species', count(s => s.rarity >= 4), 1, 'rarity');
+  add('rare', 'Rare bird', 'See a rare species', count(s => s.rarity === 5), 1, 'rarity');
+  add('hunter', 'Rarity hunter', 'See 10 scarce or rare species', count(s => s.rarity >= 4), 10, 'rarity');
 
   // Habits
   add('photo', 'Snapshot', 'Add a photo to a sighting', photoSpecies.size, 1, 'habit');
