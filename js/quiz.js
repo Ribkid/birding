@@ -1,6 +1,7 @@
-// "Guess the bird": photo or call questions.
+// "Guess the bird": photo, call and trivia questions.
 import { SPECIES, byId } from './species.js';
 import { sized } from './media.js';
+import { buildTrivia } from './trivia.js';
 
 const ROUND = 10;
 let game = null;
@@ -16,6 +17,13 @@ function pickOptions(answer) {
 
 export function renderQuiz(ctx, opts = {}) {
   const { view, esc, icon } = ctx;
+  if (opts.start && opts.mode === 'trivia') {
+    const pool = game?.scope === 'seen' ? SPECIES.filter(s => ctx.seenSet().has(s.id)) : SPECIES;
+    if (pool.length < 8) { ctx.toast('See at least 8 birds first, or play with all birds.'); return renderQuiz(ctx); }
+    game = { mode: 'trivia', scope: game?.scope || 'all', qs: buildTrivia(pool, ROUND), i: 0, score: 0 };
+    return renderTrivia(ctx);
+  }
+  if (game?.mode === 'trivia' && game.qs) return renderTrivia(ctx);
   if (opts.start) {
     const pool = SPECIES.filter(s => (game?.scope === 'seen' ? ctx.seenSet().has(s.id) : true)
       && (opts.mode === 'call' ? ctx.hasCalls(s.id) : !!sized(s.id)));
@@ -35,6 +43,7 @@ export function renderQuiz(ctx, opts = {}) {
           <button class="chip ${game.scope === 'seen' ? 'chip--on' : ''}" data-scope="seen">Only birds I've seen</button>
         </div>
         <button class="quiz-mode" data-mode="photo"><strong>From a photo</strong><span>Name the bird in the picture.${best.photo != null ? ` Best: ${best.photo}/${ROUND}` : ''}</span></button>
+        <button class="quiz-mode quiz-mode--trivia" data-mode="trivia"><strong>Bird trivia</strong><span>Seasons, rarity, best spots, names and more, with the source for every answer.${best.trivia != null ? ` Best: ${best.trivia}/${ROUND}` : ''}</span></button>
         <button class="quiz-mode" data-mode="call"><strong>From its call</strong><span>Listen, then pick the bird.${best.call != null ? ` Best: ${best.call}/${ROUND}` : ''}</span></button>
       </div>`;
     view.onclick = e => {
@@ -105,3 +114,65 @@ export function renderQuiz(ctx, opts = {}) {
 
 function localStorageGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
 function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
+
+// ---------- trivia rounds ----------
+function renderTrivia(ctx) {
+  const { view, esc, icon } = ctx;
+  const n = game.qs.length;
+  const q = game.qs[game.i];
+  if (!q) {
+    const best = JSON.parse(localStorageGet('quizBest') || '{}');
+    const isBest = best.trivia == null || game.score > best.trivia;
+    if (isBest) { best.trivia = game.score; localStorageSet('quizBest', JSON.stringify(best)); }
+    view.innerHTML = `
+      <header class="page-head"><h1>Bird trivia</h1></header>
+      <div class="quiz-done pad-x">
+        <p class="quiz-score"><b>${game.score}</b>/${n}</p>
+        <p>${game.score === n ? 'Perfect round. You really know your SEQ birds.' : game.score >= 7 ? 'Great knowledge.' : 'Every round teaches something new.'}${isBest ? ' New personal best.' : ''}</p>
+        <ul class="rows">${game.qs.map(x => {
+          const ok = x.picked === x.answer;
+          const sp = byId.get(x.focus);
+          return `<li><a class="row" href="#/bird/${x.focus}"><span class="row-main"><strong>${esc(x.prompt)}</strong><span class="small muted">Answer: ${esc(x.options.find(o => o.key === x.answer)?.label || '')}${sp && sp.name !== x.options.find(o => o.key === x.answer)?.label && !x.prompt.includes(sp.name) ? ` (${esc(sp.name)})` : ''}</span></span><span class="quiz-mark ${ok ? 'ok' : 'no'}">${ok ? '✓' : '✗'}</span></a></li>`;
+        }).join('')}</ul>
+        <div class="row-start"><button class="btn btn--primary" data-again>Play again</button><button class="btn" data-menu>Change mode</button></div>
+      </div>`;
+    view.onclick = e => {
+      if (e.target.closest('[data-again]')) renderQuiz(ctx, { start: true, mode: 'trivia' });
+      if (e.target.closest('[data-menu]')) { game = { scope: game.scope }; renderQuiz(ctx); }
+    };
+    return;
+  }
+  const answered = q.picked != null;
+  const right = q.options.find(o => o.key === q.answer);
+  const src = q.source.url
+    ? `Source: <a href="${esc(q.source.url)}" target="_blank" rel="noopener">${esc(q.source.title)}</a>`
+    : `Source: ${esc(q.source.title)}`;
+  view.innerHTML = `
+    <header class="page-head page-head--back"><button class="iconbtn" data-quit aria-label="Quit trivia">${icon.back}</button>
+      <div><h1>Question ${game.i + 1}</h1><p class="muted small">${q.type}. ${game.score} correct so far</p></div></header>
+    <div class="quiz-q">
+      ${q.img && sized(q.img, 'large') ? `<div class="quiz-photo quiz-photo--short"><img src="${esc(sized(q.img, 'large'))}" alt="${esc(byId.get(q.img)?.name || '')}"></div>` : ''}
+      <p class="trivia-q">${esc(q.prompt)}</p>
+      <div class="quiz-options">${q.options.map(o => {
+        const cls = !answered ? '' : o.key === q.answer ? 'right' : o.key === q.picked ? 'wrong' : 'dim';
+        return `<button class="quiz-opt ${cls} ${q.italic ? 'quiz-opt--sci' : ''}" data-tpick="${esc(o.key)}" ${answered ? 'disabled' : ''}>${esc(o.label)}</button>`;
+      }).join('')}</div>
+      ${answered ? `<div class="trivia-fb">
+          <p><strong>${q.picked === q.answer ? 'Correct.' : `Not quite. It's ${esc(right?.label || '')}.`}</strong> ${esc(q.explain)}</p>
+          <p class="small muted">${src}</p>
+          <a class="small" href="#/bird/${q.focus}">Open the ${esc(byId.get(q.focus)?.name || 'bird')} page</a>
+        </div>
+        <button class="btn btn--primary btn--block" data-next>${game.i + 1 === n ? 'See score' : 'Next question'}</button>` : ''}
+    </div>`;
+  view.onclick = e => {
+    if (e.target.closest('[data-quit]')) { game = { scope: game.scope }; renderQuiz(ctx); return; }
+    const p = e.target.closest('[data-tpick]');
+    if (p && !answered) {
+      q.picked = p.dataset.tpick;
+      if (q.picked === q.answer) { game.score++; navigator.vibrate?.(30); } else navigator.vibrate?.([40, 60, 40]);
+      renderTrivia(ctx);
+    }
+    if (e.target.closest('[data-next]')) { game.i++; renderTrivia(ctx); window.scrollTo(0, 0); }
+  };
+  view.onchange = null;
+}

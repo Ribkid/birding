@@ -578,3 +578,11 @@ span.bird-photo { display: block; }
 .locpick-pin svg path { fill: var(--surface); }
 .locpick-bottom { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--paper); display: grid; gap: 8px; }
 .locpick-bottom p { margin: 0; }
+
+/* trivia */
+.quiz-mode--trivia { border-color: var(--sun); background: color-mix(in srgb, var(--sun) 12%, var(--surface)); }
+.trivia-q { font-size: 1.2rem; font-weight: 700; line-height: 1.3; margin: 4px 0; }
+.quiz-photo--short { aspect-ratio: 16 / 9; }
+.quiz-opt--sci { font-style: italic; }
+.trivia-fb { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1.5px solid var(--line); }
+.trivia-fb p { margin: 0; }
