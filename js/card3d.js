@@ -12,7 +12,7 @@ export function cardHTML(sp, { seen, firstSeen, count, place } = {}) {
     <div class="card-inner">
       <div class="card-face">
         <div class="card-top"><span class="band ${seen ? 'band--on' : ''}">${pad(sp.id)}</span><span class="card-rarity">${RARITY[sp.rarity].label}</span></div>
-        <div class="card-photo">${img ? `<img src="${esc(img)}" alt="" crossorigin="anonymous">` : ''}</div>
+        <div class="card-photo">${img ? `<span class="whole"><img class="whole-bg" src="${esc(img)}" alt="" aria-hidden="true"><img class="whole-fg" src="${esc(img)}" alt=""></span>` : ''}</div>
         <h3 class="card-name">${esc(sp.name)}</h3>
         <p class="card-sci">${esc(sp.sci)}</p>
         <div class="card-stats">
