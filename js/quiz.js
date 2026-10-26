@@ -78,7 +78,7 @@ export function renderQuiz(ctx, opts = {}) {
       <div><h1>Question ${game.i + 1}</h1><p class="muted small">${game.score} correct so far</p></div></header>
     <div class="quiz-q">
       ${game.mode === 'photo'
-        ? `<div class="quiz-photo"><img src="${esc(sized(q.sp.id, 'large'))}" alt="Mystery bird"></div>`
+        ? `<div class="quiz-photo"><span class="whole"><img class="whole-bg" src="${esc(sized(q.sp.id, 'large'))}" alt="" aria-hidden="true"><img class="whole-fg" src="${esc(sized(q.sp.id, 'large'))}" alt="Mystery bird"></span></div>`
         : `<div class="quiz-call"><button class="playbtn playbtn--big" data-qplay aria-label="Play the call">${icon.play}</button><p class="muted small" data-qstatus>Tap to listen</p></div>`}
       <div class="quiz-options">${q.options.map(o => {
         const cls = !answered ? '' : o.id === q.sp.id ? 'right' : o.id === q.picked ? 'wrong' : 'dim';

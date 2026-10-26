@@ -1,7 +1,7 @@
 // Sarah's BirdyDex service worker.
 // App files: network first (so updates arrive straight away), cache when offline.
 // Bird photos, map tiles and the ID models: cache first, so they work in the bush.
-const VERSION = 'v5-trivia';
+const VERSION = 'v5-1-trivia';
 const SHELL = `birddex-shell-${VERSION}`;
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
@@ -71,7 +71,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.hostname === 'upload.wikimedia.org' && req.destination !== 'audio') {
+  if ((url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org') && req.destination !== 'audio') {
     e.respondWith(cacheFirst(req, IMAGES, { cors: true }));
     return;
   }

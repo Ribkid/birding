@@ -79,12 +79,15 @@ async function resizeImage(file, max = 1600) {
 // ---------- small UI pieces ----------
 const band = (id, seen) => `<span class="band ${seen ? 'band--on' : ''}" aria-label="Dex number ${id}">${dexNo(id)}</span>`;
 const pips = r => `<span class="pips pips--${r}" title="${RARITY[r].label}">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= r ? 'on' : ''}"></i>`).join('')}</span>`;
-function birdImg(sp, size = 'small', cls = '') {
+// whole: show the entire photo (no cropping) over a soft blurred copy, for big views.
+function birdImg(sp, size = 'small', cls = '', { whole = false } = {}) {
   const url = sized(sp.id, size);
+  if (url && whole) return wholeImg(url, sp.name, cls);
   return url
     ? `<img class="${cls}" src="${esc(url)}" alt="${esc(sp.name)}" loading="lazy" decoding="async" onerror="this.classList.add('img-missing')">`
     : `<span class="${cls} img-missing" role="img" aria-label="${esc(sp.name)}"></span>`;
 }
+const wholeImg = (url, alt, cls = '') => `<span class="whole ${cls}"><img class="whole-bg" src="${esc(url)}" alt="" aria-hidden="true" decoding="async"><img class="whole-fg" src="${esc(url)}" alt="${esc(alt)}" decoding="async" onerror="this.closest('.whole').classList.add('img-missing')"></span>`;
 const icon = {
   back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
@@ -314,7 +317,7 @@ function celebrate(sp, newBadges) {
   el.className = 'celebrate';
   el.setAttribute('role', 'status');
   el.innerHTML = `<div class="celebrate-card">
-    <div class="celebrate-photo">${birdImg(sp, 'large')}<span class="band band--on band--big band--clamp">${dexNo(sp.id)}</span></div>
+    <div class="celebrate-photo">${birdImg(sp, 'large', '', { whole: true })}<span class="band band--on band--big band--clamp">${dexNo(sp.id)}</span></div>
     <p class="celebrate-kicker">New for your dex</p>
     <h2>${esc(sp.name)}</h2>
     <p class="muted">${seenSet().size} of ${SPECIES.length} species seen</p>
@@ -880,7 +883,7 @@ function renderBird(id) {
   view.innerHTML = `
     <article class="bird">
       <div class="bird-hero" data-hero-box>
-        <div class="hero-photo">${birdImg(sp, 'large', 'bird-photo')}<p class="credit" data-credit></p></div>
+        <div class="hero-photo">${birdImg(sp, 'large', 'bird-photo', { whole: true })}<p class="credit" data-credit></p></div>
         <div class="hero-model hidden" data-model aria-label="3D model of a ${esc(sp.name)}. Drag to turn it."></div>
         <a class="iconbtn iconbtn--float" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
         <button class="iconbtn iconbtn--float iconbtn--right" data-search aria-label="Search everything">${icon.search}</button>
@@ -1046,7 +1049,7 @@ function renderCompare(a, b) {
   const col = sp => {
     const m = monthRates(sp.id);
     return `<div class="cmp-col">
-      <a href="#/bird/${sp.id}" class="cmp-img">${birdImg(sp, 'large')}</a>
+      <a href="#/bird/${sp.id}" class="cmp-img">${birdImg(sp, 'large', '', { whole: true })}</a>
       <div class="cmp-id">${band(sp.id, seen.has(sp.id))}${pips(sp.rarity)}</div>
       <h2>${esc(sp.name)}</h2>
       <p class="sci small">${esc(sp.sci)}</p>
@@ -1860,7 +1863,7 @@ async function boot() {
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); state.installPrompt = e; if ((location.hash || '#/dex').startsWith('#/dex')) renderDex(); });
   render();
   // Photos arriving only change the dex/list pages; don't interrupt Listen or a playing call.
-  onMediaReady(() => { if (!$('.sheet-wrap') && /^(#\/?(dex)?|#\/lists?.*|#\/targets|#\/badges)?$/.test(location.hash)) render(); });
+  onMediaReady(() => { if (!$('.sheet-wrap') && /^(#\/?(dex)?|#\/lists?.*|#\/targets|#\/badges|#\/bird\/\d+|#\/compare\/.*)?$/.test(location.hash)) render(); });
   loadIndex();
   if ('serviceWorker' in navigator) {
     const hadController = !!navigator.serviceWorker.controller;
