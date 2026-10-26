@@ -229,22 +229,39 @@ export async function audioUrl(src) {
 }
 
 // Pre-download every photo (and descriptions) for offline use in the field.
-export async function downloadAll(onProgress) {
+// Failed requests are reported instead of being mistaken for a successful download.
+export async function downloadAll(onProgress, { signal } = {}) {
+  if (!navigator.onLine) throw new Error('Connect to the internet to download field media.');
   await loadIndex();
-  let done = 0;
+  signal?.throwIfAborted();
+  let done = 0, failed = 0;
   const list = SPECIES.filter(s => photoFor(s.id));
   for (const part of chunk(list, 4)) {
-    await new Promise(r => setTimeout(r, 250));
+    if (signal?.aborted) break;
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, 150);
+      signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+    }).catch(err => { if (err.name !== 'AbortError') throw err; });
+    if (signal?.aborted) break;
     await Promise.all(part.map(async s => {
+      let ok = true;
+      const get = async url => {
+        const res = await fetch(url, { mode: 'cors', signal });
+        if (!res.ok) throw new Error(`Media returned ${res.status}`);
+        // Reading the body ensures the service worker receives a complete response.
+        await res.blob();
+      };
       try {
-        await Promise.all([
-          fetch(sized(s.id, 'small'), { mode: 'cors' }).catch(() => {}),
-          fetch(sized(s.id, 'large'), { mode: 'cors' }).catch(() => {}),
-          details(s),
-        ]);
-      } catch (_) {}
+        await Promise.all([get(sized(s.id, 'small')), get(sized(s.id, 'large')), details(s)]);
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+        ok = false;
+      }
+      if (signal?.aborted) return;
       done++;
-      onProgress?.(done, list.length);
+      if (!ok) failed++;
+      onProgress?.(done, list.length, failed);
     }));
   }
+  return { total: list.length, completed: done, failed, cancelled: !!signal?.aborted };
 }
