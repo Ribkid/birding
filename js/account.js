@@ -78,7 +78,8 @@ export async function renderAccountSection(el) {
         <label class="field"><span>Code from the email</span><input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="123456"></label>
         <div class="row-start"><button class="btn btn--primary">Sign in</button><button type="button" class="btn btn--quiet" data-restart>Use a different email</button></div>
       </form>
-      <p class="form-error" data-acct-error role="alert"></p>`;
+      <p class="form-error" data-acct-error role="alert"></p>
+      <p class="small muted">By signing in you agree to the <a href="terms.html">terms</a>. See <a href="privacy.html">privacy</a> for what is kept.</p>`;
     let email = '';
     const err = el.querySelector('[data-acct-error]');
     const fail = e => { err.textContent = friendly(e); };
