@@ -2,6 +2,7 @@
 @font-face { font-family: 'Schibsted Grotesk'; font-weight: 400; font-style: italic; font-display: swap; src: url(../fonts/schibsted-grotesk-latin-400-italic.woff2) format('woff2'); }
 @font-face { font-family: 'Schibsted Grotesk'; font-weight: 500; font-display: swap; src: url(../fonts/schibsted-grotesk-latin-500-normal.woff2) format('woff2'); }
 @font-face { font-family: 'Schibsted Grotesk'; font-weight: 700; font-display: swap; src: url(../fonts/schibsted-grotesk-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Caprasimo'; font-weight: 400; font-display: swap; src: url(../fonts/caprasimo-latin-400-normal.woff2) format('woff2'); }
 @font-face { font-family: 'Big Shoulders'; font-weight: 600; font-display: swap; src: url(../fonts/big-shoulders-display-latin-600-normal.woff2) format('woff2'); }
 @font-face { font-family: 'Big Shoulders'; font-weight: 800; font-display: swap; src: url(../fonts/big-shoulders-display-latin-800-normal.woff2) format('woff2'); }
 
@@ -16,6 +17,9 @@
   --lori: #E4531C;       /* lorikeet chest: new birds, earned */
   --gold: #D9A21B;       /* rosella: rare */
   --sun: #F5C518;        /* eastern yellow robin: new birds, progress */
+  --display: 'Caprasimo', 'Big Shoulders', Georgia, serif;
+  /* kinds */
+  --k-bird: #1A5FCC; --k-mammal: #8B4A2B; --k-reptile: #9A5F00; --k-frog: #0B7A80; --k-butterfly: #9C3FB3; --k-plant: #2F7D3A;
   --sun-ink: #8A6400;
   --dim: #2A403B;        /* unseen tile wash */
   --band-hi: #F2F4F5; --band-mid: #B4BCC1; --band-lo: #DCE0E3;
@@ -31,6 +35,7 @@
     --paper: #0F1E1B; --surface: #172A26; --ink: #E3EBE7; --ink-2: #97ACA5; --line: #2A433D;
     --azure: #78A8F7; --azure-ink: #0B1B33; --lori: #FF7C4A; --gold: #F0C04A; --dim: #0A1513;
     --sun: #F5C518; --sun-ink: #F5C518;
+    --k-bird: #78A8F7; --k-mammal: #E19A7A; --k-reptile: #F2B04C; --k-frog: #5ED0D6; --k-butterfly: #D592EA; --k-plant: #7BC77F;
     --band-hi: #DCE1E4; --band-mid: #8E979D; --band-lo: #B9C0C4; --danger: #FF8A80;
     color-scheme: dark;
   }
@@ -39,6 +44,7 @@
     --paper: #0F1E1B; --surface: #172A26; --ink: #E3EBE7; --ink-2: #97ACA5; --line: #2A433D;
     --azure: #78A8F7; --azure-ink: #0B1B33; --lori: #FF7C4A; --gold: #F0C04A; --dim: #0A1513;
     --sun: #F5C518; --sun-ink: #F5C518;
+    --k-bird: #78A8F7; --k-mammal: #E19A7A; --k-reptile: #F2B04C; --k-frog: #5ED0D6; --k-butterfly: #D592EA; --k-plant: #7BC77F;
     --band-hi: #DCE1E4; --band-mid: #8E979D; --band-lo: #B9C0C4; --danger: #FF8A80;
     color-scheme: dark;
 }
@@ -592,3 +598,61 @@ span.bird-photo { display: block; }
 .pop-sub { display: block; font-size: .8rem; color: #5a6b66; margin-bottom: 4px; }
 .pop-desc { margin: 6px 0; font-size: .85rem; line-height: 1.45; }
 .pop-src { margin: 4px 0 6px; font-size: .72rem; color: #6b7a76; }
+/* ---------- kinds (v3) ---------- */
+.kind--bird { --kc: var(--k-bird); }
+.kind--mammal { --kc: var(--k-mammal); }
+.kind--reptile { --kc: var(--k-reptile); }
+.kind--frog { --kc: var(--k-frog); }
+.kind--butterfly { --kc: var(--k-butterfly); }
+.kind--plant { --kc: var(--k-plant); }
+.band--mammal, .band--reptile, .band--frog, .band--butterfly, .band--plant { border-color: color-mix(in srgb, var(--kc, var(--line)) 60%, transparent); color: var(--kc, var(--ink-2)); }
+.band--mammal { --kc: var(--k-mammal); } .band--reptile { --kc: var(--k-reptile); } .band--frog { --kc: var(--k-frog); }
+.band--butterfly { --kc: var(--k-butterfly); } .band--plant { --kc: var(--k-plant); }
+.band--on.band--mammal, .band--on.band--reptile, .band--on.band--frog, .band--on.band--butterfly, .band--on.band--plant {
+  color: #fff; background: linear-gradient(180deg, color-mix(in srgb, var(--kc) 70%, #fff) 0%, var(--kc) 45%, color-mix(in srgb, var(--kc) 80%, #000) 100%);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.4);
+}
+.tile:not(.kind--bird) .tile-img::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: var(--kc); }
+.row--sp:not(.kind--bird) .row-thumb { box-shadow: 0 0 0 2px var(--kc); }
+.kindtag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .78rem; font-weight: 700; color: #fff; background: var(--kc); text-transform: capitalize; }
+.dex-group:not(.kind--bird) .dex-group-h span:first-child::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--kc); margin-right: 8px; vertical-align: 1px; }
+.kind-tabs { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 10px -16px 0; padding: 2px 16px 4px; }
+.kind-tabs::-webkit-scrollbar { display: none; }
+.kind-tab { flex: none; display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 6px; padding: 8px 12px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; text-align: left; }
+.kind-tab i { width: 10px; height: 10px; border-radius: 50%; background: var(--kc); grid-row: span 2; }
+.kind-tab span { font-weight: 700; font-size: .9rem; }
+.kind-tab em { font-style: normal; font: 600 .95rem/1 var(--stamp); color: var(--ink-2); grid-column: 2; }
+.kind-tab:not(:has(i)) em { grid-column: 1; }
+.kind-tab.on { border-color: var(--kc, var(--ink)); background: color-mix(in srgb, var(--kc, var(--ink)) 12%, var(--surface)); box-shadow: inset 0 0 0 1px var(--kc, var(--ink)); }
+.kind-tab--quiet { border-style: dashed; margin-left: 6px; }
+.chip--kind.chip--on { background: var(--kc); border-color: var(--kc); color: #fff; }
+.card3d:not(.kind--bird) .card-face { box-shadow: 0 24px 50px rgba(0,0,0,.45), inset 0 0 0 6px var(--kc), inset 0 0 0 8px #142E29; }
+
+/* species page gallery + sources */
+.gallery { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.gallery::-webkit-scrollbar { display: none; }
+.gallery:focus-visible { outline-offset: -4px; }
+.slide { flex: 0 0 100%; margin: 0; scroll-snap-align: center; background: var(--dim); }
+.slide img, .slide .img-missing { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+.slide--bad { display: none; }
+.dots { position: absolute; left: 0; right: 0; bottom: 92px; display: flex; justify-content: center; gap: 6px; pointer-events: none; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.55); box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+.dots i.on { background: #fff; width: 18px; border-radius: 4px; }
+.credit-from { opacity: .8; }
+.status { margin: 6px 0; font-size: .95rem; }
+.sources { margin-top: 6px; line-height: 1.6; }
+.sources a { word-break: break-word; }
+
+/* wordmark + logo */
+.wordmark { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 400; font-size: 1.7rem; line-height: 1; letter-spacing: 0; }
+.wordmark .logo { width: 52px; height: 52px; flex: none; border-radius: 16px; }
+.wordmark .wordmark-txt { display: grid; gap: 5px; margin: 0; font: inherit; font-family: var(--display); color: var(--ink); }
+.wordmark .wordmark-txt small { font: 500 0.8rem/1.3 var(--font); color: var(--ink-2); letter-spacing: 0; }
+.welcome-card h1 { font-family: var(--display); font-weight: 400; font-size: 2.3rem; }
+
+/* map style toggle */
+.layer-toggle { position: absolute; right: 10px; bottom: 104px; z-index: 510; display: flex; padding: 3px; border-radius: 12px; background: var(--surface); box-shadow: 0 3px 12px rgba(0,0,0,.2); }
+.layer-toggle button { border: 0; background: none; color: var(--ink); font-weight: 600; font-size: .85rem; padding: 7px 11px; border-radius: 9px; cursor: pointer; }
+.layer-toggle button[aria-pressed=true] { background: var(--ink); color: var(--paper); }
+.locpick-mapwrap .layer-toggle { bottom: 12px; right: 56px; }
+.map--sat .leaflet-control-attribution { background: rgba(255,255,255,.75); }

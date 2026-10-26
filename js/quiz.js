@@ -1,5 +1,5 @@
 // "Guess the bird": photo or call questions.
-import { SPECIES, byId } from './species.js';
+import { SPECIES, ANIMALS, byId, kindsPresent } from './species.js';
 import { sized } from './media.js';
 
 const ROUND = 10;
@@ -10,14 +10,14 @@ function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = (Math.r
 function pickOptions(answer) {
   // Mix in look-alikes from the same group so it's not too easy.
   const same = shuffle(SPECIES.filter(s => s.group === answer.group && s.id !== answer.id)).slice(0, 2);
-  const rest = shuffle(SPECIES.filter(s => s.id !== answer.id && !same.includes(s))).slice(0, 3 - same.length);
+  const rest = shuffle(SPECIES.filter(s => s.kind === answer.kind && s.id !== answer.id && !same.includes(s))).slice(0, 3 - same.length);
   return shuffle([answer, ...same, ...rest]);
 }
 
 export function renderQuiz(ctx, opts = {}) {
   const { view, esc, icon } = ctx;
   if (opts.start) {
-    const pool = SPECIES.filter(s => (game?.scope === 'seen' ? ctx.seenSet().has(s.id) : true)
+    const pool = ANIMALS.filter(s => (game?.scope === 'seen' ? ctx.seenSet().has(s.id) : true)
       && (opts.mode === 'call' ? ctx.hasCalls(s.id) : !!sized(s.id)));
     if (pool.length < 4) { ctx.toast('See a few more birds first, or play with all birds.'); return renderQuiz(ctx); }
     const qs = shuffle(pool.slice()).slice(0, ROUND).map(sp => ({ sp, options: pickOptions(sp), picked: null }));
@@ -31,11 +31,11 @@ export function renderQuiz(ctx, opts = {}) {
       <div class="pad-x quiz-intro">
         <p class="muted">${ROUND} quick questions. Practise your ID before you head out.</p>
         <div class="chips chips--flush" role="group" aria-label="Which birds">
-          <button class="chip ${game.scope === 'all' ? 'chip--on' : ''}" data-scope="all">All ${SPECIES.length} birds</button>
+          <button class="chip ${game.scope === 'all' ? 'chip--on' : ''}" data-scope="all">All ${ANIMALS.length} ${kindsPresent.length > 1 ? 'animals' : 'birds'}</button>
           <button class="chip ${game.scope === 'seen' ? 'chip--on' : ''}" data-scope="seen">Only birds I've seen</button>
         </div>
-        <button class="quiz-mode" data-mode="photo"><strong>From a photo</strong><span>Name the bird in the picture.${best.photo != null ? ` Best: ${best.photo}/${ROUND}` : ''}</span></button>
-        <button class="quiz-mode" data-mode="call"><strong>From its call</strong><span>Listen, then pick the bird.${best.call != null ? ` Best: ${best.call}/${ROUND}` : ''}</span></button>
+        <button class="quiz-mode" data-mode="photo"><strong>From a photo</strong><span>Name the ${kindsPresent.length > 1 ? 'animal' : 'bird'} in the picture.${best.photo != null ? ` Best: ${best.photo}/${ROUND}` : ''}</span></button>
+        <button class="quiz-mode" data-mode="call"><strong>From its call</strong><span>Listen, then pick the ${kindsPresent.includes('frog') ? 'bird or frog' : 'bird'}.${best.call != null ? ` Best: ${best.call}/${ROUND}` : ''}</span></button>
       </div>`;
     view.onclick = e => {
       const sc = e.target.closest('[data-scope]'); if (sc) { game.scope = sc.dataset.scope; renderQuiz(ctx); }

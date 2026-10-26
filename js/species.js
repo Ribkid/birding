@@ -446,13 +446,27 @@ const RAW = [
     notes: 'Streaky brown ground bird that runs over bare paddocks and pumps its tail.' },
 ];
 
-export const SPECIES = RAW.map((b, i) => ({
+// ---------- kinds ----------
+// Birds are the core of the dex; other native animals and plants come from data/species-new.json.
+export const KINDS = {
+  bird:      { label: 'Birds',       one: 'bird',      prefix: '',  digits: 3 },
+  mammal:    { label: 'Mammals',     one: 'mammal',    prefix: 'M', digits: 2 },
+  reptile:   { label: 'Reptiles',    one: 'reptile',   prefix: 'R', digits: 2 },
+  frog:      { label: 'Frogs',       one: 'frog',      prefix: 'F', digits: 2 },
+  butterfly: { label: 'Butterflies', one: 'butterfly', prefix: 'B', digits: 2 },
+  plant:     { label: 'Plants',      one: 'plant',     prefix: 'P', digits: 2 },
+};
+export const ANIMAL_KINDS = ['bird', 'mammal', 'reptile', 'frog', 'butterfly'];
+
+const BIRDS_ = RAW.map((b, i) => ({
   id: i + 1,
+  kind: 'bird',
   name: b.name,
   sci: b.sci,
   group: b.g,
   habitats: b.h.split(''),
   size: b.size,
+  sizeText: `${b.size} cm`,
   rarity: b.r,
   season: b.s || null,
   nocturnal: !!b.n,
@@ -460,4 +474,56 @@ export const SPECIES = RAW.map((b, i) => ({
   wiki: b.wiki || null,
 }));
 
+async function loadExtra() {
+  try {
+    const base = new URL('../data/', import.meta.url);
+    const [list, tiers] = await Promise.all([
+      fetch(new URL('species-new.json', base)).then(r => (r.ok ? r.json() : [])).catch(() => []),
+      fetch(new URL('tiers.json', base)).then(r => (r.ok ? r.json() : {})).catch(() => ({})),
+    ]);
+    return { list: Array.isArray(list) ? list : [], tiers };
+  } catch (_) { return { list: [], tiers: {} }; }
+}
+// In the browser, wait for the extra species before anyone uses the list (top-level await).
+// Node scripts (data builders) only see the birds; they read species-new.json themselves.
+const extra = typeof window !== 'undefined' ? await loadExtra() : { list: [], tiers: {} };
+
+const firstNumber = t => { const m = String(t ?? '').match(/\d+(\.\d+)?/); return m ? Number(m[0]) : null; };
+const OTHERS = extra.list
+  .filter(x => x && x.id > 181 && KINDS[x.kind] && x.kind !== 'bird' && x.name && x.sci)
+  .sort((a, b) => a.id - b.id)
+  .map(x => {
+    const g = `${x.kind}:${x.group || 'other'}`;
+    if (!GROUPS[g]) GROUPS[g] = x.groupLabel || x.group || KINDS[x.kind].label;
+    return {
+      id: x.id,
+      kind: x.kind,
+      name: x.name,
+      sci: x.sci,
+      group: g,
+      habitats: String(x.h || '').split('').filter(c => HABITATS[c]),
+      size: firstNumber(x.size),
+      sizeText: x.size ? String(x.size) : '',
+      rarity: Number(extra.tiers?.[x.id]) || x.rarity || 3,
+      season: x.season || null,
+      nocturnal: !!x.nocturnal,
+      notes: x.notes || '',
+      wiki: x.wiki || null,
+      alaLsid: x.ala?.lsid || null,
+    };
+  });
+
+export const SPECIES = [...BIRDS_, ...OTHERS];
+export const BIRDS = BIRDS_;
+export const ANIMALS = SPECIES.filter(s => s.kind !== 'plant');
+export const ofKind = k => SPECIES.filter(s => s.kind === k);
 export const byId = new Map(SPECIES.map(s => [s.id, s]));
+export const kindsPresent = Object.keys(KINDS).filter(k => SPECIES.some(s => s.kind === k));
+
+// Dex number shown on bands: birds 001–181, others per kind (M01, R01, F01, B01, P01…).
+const codeById = new Map();
+for (const k of Object.keys(KINDS)) {
+  const list = ofKind(k);
+  list.forEach((s, i) => codeById.set(s.id, KINDS[k].prefix + String(i + 1).padStart(k === 'bird' ? 3 : Math.max(2, String(list.length).length), '0')));
+}
+export const dexCode = id => codeById.get(id) || String(id).padStart(3, '0');

@@ -2,6 +2,7 @@
 // Everything fetched is cached in IndexedDB so the dex works offline afterwards.
 import { db } from './db.js';
 import { SPECIES } from './species.js';
+import { galleryCover, galleryFor, loadExtras } from './gallery.js';
 
 const WP = 'https://en.wikipedia.org/w/api.php';
 const CM = 'https://commons.wikimedia.org/w/api.php';
@@ -49,9 +50,9 @@ async function lookup(titles) {
   return out;
 }
 
-async function buildIndex() {
+async function buildIndex(list = SPECIES) {
   const result = {};
-  let todo = SPECIES.slice();
+  let todo = list.slice();
   const attempts = [
     s => s.wiki,
     s => s.sci,
@@ -86,6 +87,18 @@ export async function loadIndex({ force = false } = {}) {
     if (cached && !force) {
       index = cached.data;
       if (Date.now() - cached.at > MAX_AGE && navigator.onLine) refresh();
+      else if (navigator.onLine) {
+        // Species added since the index was built (new animals and plants): look up just those.
+        const tried = new Set(cached.tried || []);
+        const missing = SPECIES.filter(s => !index[s.id] && !tried.has(s.id));
+        if (missing.length) {
+          try {
+            const more = await buildIndex(missing);
+            index = { ...index, ...more };
+            await db.kvSet(INDEX_KEY, { at: cached.at, data: index, tried: [...tried, ...missing.map(s => s.id)] });
+          } catch (_) {}
+        }
+      }
       return index;
     }
     if (!navigator.onLine) return (index = cached?.data || {});
@@ -117,7 +130,7 @@ export function photoFor(id) { return index?.[id] || null; }
 // Wikimedia only serves a set of standard thumbnail widths to other sites.
 export function sized(id, size = 'small') {
   const p = photoFor(id);
-  if (!p) return null;
+  if (!p) return galleryCover(id, size);
   const px = size === 'large' ? 960 : 330;
   if (!/\/\d+px-/.test(p.thumb) || (p.w && p.w < px)) return p.thumb;
   return p.thumb.replace(/\/(\d+)px-/, `/${px}px-`);
@@ -230,17 +243,20 @@ export async function audioUrl(src) {
 
 // Pre-download every photo (and descriptions) for offline use in the field.
 export async function downloadAll(onProgress) {
-  await loadIndex();
+  await Promise.all([loadIndex(), loadExtras()]);
   let done = 0;
-  const list = SPECIES.filter(s => photoFor(s.id));
+  const list = SPECIES.filter(s => photoFor(s.id) || galleryFor(s.id).length);
   for (const part of chunk(list, 4)) {
     await new Promise(r => setTimeout(r, 250));
     await Promise.all(part.map(async s => {
       try {
         await Promise.all([
-          fetch(sized(s.id, 'small'), { mode: 'cors' }).catch(() => {}),
-          fetch(sized(s.id, 'large'), { mode: 'cors' }).catch(() => {}),
-          details(s),
+          photoFor(s.id) && fetch(sized(s.id, 'small'), { mode: 'cors' }).catch(() => {}),
+          photoFor(s.id) && fetch(sized(s.id, 'large'), { mode: 'cors' }).catch(() => {}),
+          photoFor(s.id) && details(s),
+          // Gallery photos can't go in Cache Storage (no CORS), but they're served with a one-year
+          // cache lifetime, so fetching them once keeps them in the browser's own cache for offline use.
+          ...galleryFor(s.id).slice(0, 4).map(g => fetch(g.src, { mode: 'no-cors' }).catch(() => {})),
         ]);
       } catch (_) {}
       done++;

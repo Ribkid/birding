@@ -1,7 +1,7 @@
 // Sarah's BirdyDex service worker.
 // App files: network first (so updates arrive straight away), cache when offline.
 // Bird photos, map tiles and the ID models: cache first, so they work in the bush.
-const VERSION = 'v5-2';
+const VERSION = 'v6';
 const SHELL = `birddex-shell-${VERSION}`;
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
@@ -9,18 +9,20 @@ const MODELS = 'birddex-models';
 const ASSETS = [
   './', 'index.html', 'css/app.css', 'manifest.webmanifest',
   'js/app.js', 'js/db.js', 'js/media.js', 'js/species.js', 'js/stats.js', 'js/ebird.js', 'js/seqdata.js',
-  'js/card3d.js', 'js/quiz.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js',
-  'data/bioclip-text.json',
+  'js/card3d.js', 'js/quiz.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js', 'js/gallery.js',
+  'data/bioclip-text.json', 'data/species-new.json', 'data/tiers.json', 'data/info.json', 'data/gallery.json',
   'data/seq.json', 'data/birdnet-map.json',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/three/three.module.min.js',
   'fonts/schibsted-grotesk-latin-400-normal.woff2', 'fonts/schibsted-grotesk-latin-400-italic.woff2',
   'fonts/schibsted-grotesk-latin-500-normal.woff2', 'fonts/schibsted-grotesk-latin-700-normal.woff2',
-  'fonts/big-shoulders-display-latin-600-normal.woff2', 'fonts/big-shoulders-display-latin-800-normal.woff2',
-  'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
+  'fonts/big-shoulders-display-latin-600-normal.woff2', 'fonts/big-shoulders-display-latin-800-normal.woff2', 'fonts/caprasimo-latin-400-normal.woff2',
+  'icons/icon.svg', 'icons/logo.svg', 'icons/icon-32.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(SHELL).then(c => c.addAll(ASSETS.map(a => new Request(a, { cache: 'reload' })))).then(() => self.skipWaiting()));
+  // Add files one by one so a missing optional data file can't stop the update.
+  e.waitUntil(caches.open(SHELL).then(c => Promise.all(ASSETS.map(a => c.add(new Request(a, { cache: 'reload' })).catch(() => {}))))
+    .then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', e => {
   e.waitUntil((async () => {
@@ -75,7 +77,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(cacheFirst(req, IMAGES, { cors: true }));
     return;
   }
-  if (url.hostname.endsWith('tile.openstreetmap.org')) {
+  if (url.hostname.endsWith('tile.openstreetmap.org') || url.hostname === 'server.arcgisonline.com') {
     e.respondWith(cacheFirst(req, TILES, { limit: 3000 }));
     return;
   }

@@ -1,0 +1,2774 @@
+[
+ {
+  "id": 182,
+  "kind": "mammal",
+  "name": "Short-beaked Echidna",
+  "sci": "Tachyglossus aculeatus",
+  "group": "monotremes",
+  "groupLabel": "Echidna & Platypus",
+  "h": "fo",
+  "size": "30–45 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Spiny ball with a long snout that digs for ants and termites. Often seen trundling across bush tracks on warm days.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/0d4c9c0c-51d3-44e0-a365-fe0f8b791c66",
+   "acceptedName": "Tachyglossus aculeatus",
+   "vernacular": "Short-beaked Echidna"
+  }
+ },
+ {
+  "id": 183,
+  "kind": "mammal",
+  "name": "Platypus",
+  "sci": "Ornithorhynchus anatinus",
+  "group": "monotremes",
+  "groupLabel": "Echidna & Platypus",
+  "h": "w",
+  "size": "40–50 cm",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Look for rings spreading on still creek pools at dawn and dusk. Dives for a minute or so, then pops up again nearby.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ac61fd14-4950-4566-b384-304bd99ca75f",
+   "acceptedName": "Ornithorhynchus anatinus",
+   "vernacular": "Platypus"
+  }
+ },
+ {
+  "id": 184,
+  "kind": "mammal",
+  "name": "Koala",
+  "sci": "Phascolarctos cinereus",
+  "group": "koala",
+  "groupLabel": "Koala",
+  "h": "fg",
+  "size": "65–80 cm",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Grey, round-eared marsupial wedged in a eucalypt fork. Look for droppings under trees and listen for the male's deep snoring bellow.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/e9d6fbbd-1505-4073-990a-dc66c930dad6",
+   "acceptedName": "Phascolarctos cinereus",
+   "vernacular": "Koala"
+  }
+ },
+ {
+  "id": 185,
+  "kind": "mammal",
+  "name": "Eastern Grey Kangaroo",
+  "sci": "Macropus giganteus",
+  "group": "macropods",
+  "groupLabel": "Kangaroos & wallabies",
+  "h": "of",
+  "size": "1–2 m with tail",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Big grey kangaroo that grazes in mobs on open grassland and golf courses, mostly early and late in the day.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/f2f43ef9-89fd-4f89-8b06-0842e86cfe06",
+   "acceptedName": "Macropus giganteus",
+   "vernacular": "Eastern Grey Kangaroo"
+  }
+ },
+ {
+  "id": 186,
+  "kind": "mammal",
+  "name": "Common Wallaroo",
+  "sci": "Osphranter robustus",
+  "group": "macropods",
+  "groupLabel": "Kangaroos & wallabies",
+  "h": "o",
+  "size": "1–1.5 m with tail",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Stocky, shaggy-coated kangaroo of rocky hills. Dark muzzle with bare black nose; often alone on steep slopes.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/e29ab738-af2b-438a-80cf-675a37616ba9",
+   "acceptedName": "Osphranter robustus",
+   "vernacular": "Common Wallaroo"
+  }
+ },
+ {
+  "id": 187,
+  "kind": "mammal",
+  "name": "Whiptail Wallaby",
+  "sci": "Notamacropus parryi",
+  "group": "macropods",
+  "groupLabel": "Kangaroos & wallabies",
+  "h": "of",
+  "size": "1.4–1.8 m with tail",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Elegant pale grey wallaby with a white cheek stripe and a very long tail. Groups graze on open hillsides.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/26ee8da8-be3e-46f9-93a3-74ba3543ac8d",
+   "acceptedName": "Notamacropus parryi",
+   "vernacular": "Whiptail Wallaby"
+  }
+ },
+ {
+  "id": 188,
+  "kind": "mammal",
+  "name": "Red-necked Wallaby",
+  "sci": "Notamacropus rufogriseus",
+  "group": "macropods",
+  "groupLabel": "Kangaroos & wallabies",
+  "h": "fo",
+  "size": "1.2–1.6 m with tail",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Grey wallaby with a rusty neck and shoulders and a white upper-lip stripe. Feeds at forest edges.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/c4dfafef-5192-4a3d-815c-040c393e9bca",
+   "acceptedName": "Notamacropus rufogriseus",
+   "vernacular": "Red-necked Wallaby"
+  }
+ },
+ {
+  "id": 189,
+  "kind": "mammal",
+  "name": "Swamp Wallaby",
+  "sci": "Wallabia bicolor",
+  "group": "macropods",
+  "groupLabel": "Kangaroos & wallabies",
+  "h": "fr",
+  "size": "1.2–1.6 m with tail",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Dark, shaggy wallaby with a yellow-orange belly. Moves with its head held low through thick undergrowth.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/c28d755d-229c-47d7-a6ea-7920f636f531",
+   "acceptedName": "Wallabia bicolor",
+   "vernacular": "Swamp Wallaby"
+  }
+ },
+ {
+  "id": 190,
+  "kind": "mammal",
+  "name": "Red-necked Pademelon",
+  "sci": "Thylogale thetis",
+  "group": "macropods",
+  "groupLabel": "Kangaroos & wallabies",
+  "h": "rf",
+  "size": "80–110 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Small, compact rainforest wallaby with a reddish neck and short tail. Grazes on lawns beside rainforest at dusk.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/df1715cb-c51a-4bad-9d32-16a98ba8ada6",
+   "acceptedName": "Thylogale thetis",
+   "vernacular": "Red-necked Pademelon"
+  }
+ },
+ {
+  "id": 191,
+  "kind": "mammal",
+  "name": "Red-legged Pademelon",
+  "sci": "Thylogale stigmatica",
+  "group": "macropods",
+  "groupLabel": "Kangaroos & wallabies",
+  "h": "r",
+  "size": "80–110 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Shy rainforest pademelon with rusty legs and cheeks. Thumps the ground in alarm before bolting into cover.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/feec341c-18c4-40fa-b496-5755793fe9a6",
+   "acceptedName": "Thylogale stigmatica",
+   "vernacular": "Red-legged Pademelon"
+  }
+ },
+ {
+  "id": 192,
+  "kind": "mammal",
+  "name": "Rufous Bettong",
+  "sci": "Aepyprymnus rufescens",
+  "group": "macropods",
+  "groupLabel": "Kangaroos & wallabies",
+  "h": "fo",
+  "size": "70–80 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Rabbit-sized, rat-kangaroo with a grizzled coat. Hops across grassy woodland at night; builds grass nests.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ae83d1b1-9f65-4c94-9787-a1b50a3fa8a4",
+   "acceptedName": "Aepyprymnus rufescens",
+   "vernacular": "Rufous Bettong"
+  }
+ },
+ {
+  "id": 193,
+  "kind": "mammal",
+  "name": "Common Brushtail Possum",
+  "sci": "Trichosurus vulpecula",
+  "group": "possums",
+  "groupLabel": "Possums & gliders",
+  "h": "gf",
+  "size": "70–90 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Grey possum with big pointed ears and a bushy black tail. Often lives in roofs and raids fruit trees.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ee2cb6a9-e17c-4ca7-8aef-76d69eb969ed",
+   "acceptedName": "Trichosurus vulpecula",
+   "vernacular": "Common Brushtail Possum"
+  }
+ },
+ {
+  "id": 194,
+  "kind": "mammal",
+  "name": "Short-eared Possum",
+  "sci": "Trichosurus caninus",
+  "group": "possums",
+  "groupLabel": "Possums & gliders",
+  "h": "rf",
+  "size": "70–90 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Dark, glossy brushtail with short rounded ears, found in wet forest and rainforest of the ranges.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/48d36bfa-6bc6-4363-9310-2220c9732c65",
+   "acceptedName": "Trichosurus caninus",
+   "vernacular": "Short-eared Brush-tailed Possum"
+  }
+ },
+ {
+  "id": 195,
+  "kind": "mammal",
+  "name": "Common Ringtail Possum",
+  "sci": "Pseudocheirus peregrinus",
+  "group": "possums",
+  "groupLabel": "Possums & gliders",
+  "h": "gf",
+  "size": "60–70 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Small possum whose white-tipped tail curls like a spring. Builds ball-shaped nests (dreys) in dense shrubs.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/003decd6-ec3d-468e-909d-da396a6dd1f6",
+   "acceptedName": "Pseudocheirus peregrinus",
+   "vernacular": "Common Ringtail Possum"
+  }
+ },
+ {
+  "id": 196,
+  "kind": "mammal",
+  "name": "Krefft's Glider",
+  "sci": "Petaurus notatus",
+  "group": "possums",
+  "groupLabel": "Possums & gliders",
+  "h": "fg",
+  "size": "35–40 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Small grey glider with a dark stripe down the back. Glides between trees and licks sap and nectar. Was called the Sugar Glider here.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/3ad1d5b5-61a8-4634-ba8e-a573bb3f05e3",
+   "acceptedName": "Petaurus notatus",
+   "vernacular": "Krefft's Glider"
+  }
+ },
+ {
+  "id": 197,
+  "kind": "mammal",
+  "name": "Squirrel Glider",
+  "sci": "Petaurus norfolcensis",
+  "group": "possums",
+  "groupLabel": "Possums & gliders",
+  "h": "f",
+  "size": "40–48 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Like a large Krefft's Glider with a fluffier, broader tail. Lives in old hollow-bearing woodland.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/2c8ae25f-5e6e-4a8e-8980-33cfc58ad7c8",
+   "acceptedName": "Petaurus norfolcensis",
+   "vernacular": "Squirrel Glider"
+  }
+ },
+ {
+  "id": 198,
+  "kind": "mammal",
+  "name": "Greater Glider",
+  "sci": "Petauroides volans",
+  "group": "possums",
+  "groupLabel": "Possums & gliders",
+  "h": "f",
+  "size": "80–100 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Big fluffy glider with large furry ears. Its eyes shine brightly in spotlight beams high in tall eucalypts.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/5e2dc7c9-4cff-485b-9f71-5ed99c0c8d3e",
+   "acceptedName": "Petauroides volans",
+   "vernacular": "Southern Greater Glider"
+  }
+ },
+ {
+  "id": 199,
+  "kind": "mammal",
+  "name": "Feathertail Glider",
+  "sci": "Acrobates pygmaeus",
+  "group": "possums",
+  "groupLabel": "Possums & gliders",
+  "h": "fg",
+  "size": "13–16 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Mouse-sized glider with a feather-like flattened tail. The world's smallest gliding mammal.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/e7c4b52e-71e2-4634-90b3-24254636557a",
+   "acceptedName": "Acrobates pygmaeus",
+   "vernacular": "Feathertail Glider"
+  }
+ },
+ {
+  "id": 200,
+  "kind": "mammal",
+  "name": "Northern Brown Bandicoot",
+  "sci": "Isoodon macrourus",
+  "group": "small-marsupials",
+  "groupLabel": "Bandicoots & small marsupials",
+  "h": "gf",
+  "size": "45–60 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Coarse-furred bandicoot that leaves cone-shaped digging holes in lawns. Common in leafy suburbs at night.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/80e0f126-dba0-45dc-a072-d7f907cf3ee0",
+   "acceptedName": "Isoodon macrourus",
+   "vernacular": "Northern Brown Bandicoot"
+  }
+ },
+ {
+  "id": 201,
+  "kind": "mammal",
+  "name": "Long-nosed Bandicoot",
+  "sci": "Perameles nasuta",
+  "group": "small-marsupials",
+  "groupLabel": "Bandicoots & small marsupials",
+  "h": "fr",
+  "size": "45–55 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Grey-brown bandicoot with a very long, pointed snout. Prefers moist forest edges.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ff90b63a-00eb-479a-803e-cde04b4c05b0",
+   "acceptedName": "Perameles nasuta",
+   "vernacular": "Long-nosed Bandicoot"
+  }
+ },
+ {
+  "id": 202,
+  "kind": "mammal",
+  "name": "Yellow-footed Antechinus",
+  "sci": "Antechinus flavipes",
+  "group": "small-marsupials",
+  "groupLabel": "Bandicoots & small marsupials",
+  "h": "f",
+  "size": "16–25 cm with tail",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Small marsupial \"mouse\" with orange-yellow feet and rump. Busy and bold, even by day in winter.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/23218001-d7ee-473f-af5f-fca96693e06b",
+   "acceptedName": "Antechinus flavipes",
+   "vernacular": "Yellow-footed Antechinus"
+  }
+ },
+ {
+  "id": 203,
+  "kind": "mammal",
+  "name": "Spotted-tailed Quoll",
+  "sci": "Dasyurus maculatus",
+  "group": "small-marsupials",
+  "groupLabel": "Bandicoots & small marsupials",
+  "h": "rf",
+  "size": "70–130 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Cat-sized carnivorous marsupial with white spots that run down the tail. Rare and prized in the ranges.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/73c23669-c491-42d0-83b3-6fd84a03689a",
+   "acceptedName": "Dasyurus maculatus",
+   "vernacular": "Bindjulang"
+  }
+ },
+ {
+  "id": 204,
+  "kind": "mammal",
+  "name": "Grey-headed Flying-fox",
+  "sci": "Pteropus poliocephalus",
+  "group": "bats",
+  "groupLabel": "Bats & flying-foxes",
+  "h": "gf",
+  "size": "Wingspan to 1 m",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Large fruit bat with a grey head and rusty collar. Streams out of camps at dusk to feed on blossom.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/77bcae99-0037-44c6-9769-957a93215eba",
+   "acceptedName": "Pteropus poliocephalus",
+   "vernacular": "Grey-headed Flying-fox"
+  }
+ },
+ {
+  "id": 205,
+  "kind": "mammal",
+  "name": "Black Flying-fox",
+  "sci": "Pteropus alecto",
+  "group": "bats",
+  "groupLabel": "Bats & flying-foxes",
+  "h": "gf",
+  "size": "Wingspan to 1 m",
+  "nocturnal": true,
+  "season": null,
+  "notes": "All-dark flying-fox, often with a reddish collar. Roosts in noisy riverside camps.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/436a63cc-d6db-4447-ae25-94ac104a9732",
+   "acceptedName": "Pteropus alecto",
+   "vernacular": "Black Flying-fox"
+  }
+ },
+ {
+  "id": 206,
+  "kind": "mammal",
+  "name": "Little Red Flying-fox",
+  "sci": "Pteropus scapulatus",
+  "group": "bats",
+  "groupLabel": "Bats & flying-foxes",
+  "h": "f",
+  "size": "Wingspan to 80 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Small reddish flying-fox that arrives in huge, nomadic camps to feed on flowering eucalypts.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/678970bb-c8a3-4283-b39a-f91bf302aaec",
+   "acceptedName": "Pteropus scapulatus",
+   "vernacular": "Little Red Flying-fox"
+  }
+ },
+ {
+  "id": 207,
+  "kind": "mammal",
+  "name": "Gould's Wattled Bat",
+  "sci": "Chalinolobus gouldii",
+  "group": "bats",
+  "groupLabel": "Bats & flying-foxes",
+  "h": "gf",
+  "size": "10–12 cm body",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Small insect-eating bat with a dark head and shoulders. One of the first to hunt at dusk, often around streetlights.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/a81efb3f-d451-422d-ab56-470256022261",
+   "acceptedName": "Chalinolobus gouldii",
+   "vernacular": "Gould's Wattled Bat"
+  }
+ },
+ {
+  "id": 208,
+  "kind": "mammal",
+  "name": "White-striped Free-tailed Bat",
+  "sci": "Austronomus australis",
+  "group": "bats",
+  "groupLabel": "Bats & flying-foxes",
+  "h": "of",
+  "size": "14–16 cm body",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Big microbat whose loud \"tik-tik\" calls can be heard by people. Hunts high over open country.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/56720da5-179b-47fa-bf5c-30d87d8384ed",
+   "acceptedName": "Austronomus australis",
+   "vernacular": "White-striped Freetail-bat"
+  }
+ },
+ {
+  "id": 209,
+  "kind": "mammal",
+  "name": "Rakali",
+  "sci": "Hydromys chrysogaster",
+  "group": "rodents",
+  "groupLabel": "Native rodents",
+  "h": "wc",
+  "size": "45–65 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Native water-rat with a white-tipped tail and waterproof fur. Hunts crayfish and mussels along creeks and wetlands.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/7f791f55-1d6f-4448-91a0-996daa72081c",
+   "acceptedName": "Hydromys chrysogaster",
+   "vernacular": "Water-rat"
+  }
+ },
+ {
+  "id": 210,
+  "kind": "mammal",
+  "name": "Bush Rat",
+  "sci": "Rattus fuscipes",
+  "group": "rodents",
+  "groupLabel": "Native rodents",
+  "h": "rf",
+  "size": "25–35 cm with tail",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Native rat with soft fur and rounded ears. Shy; lives in dense rainforest and forest undergrowth.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/e522d60c-f64e-499e-82ac-2d5b4d8ed27a",
+   "acceptedName": "Rattus fuscipes",
+   "vernacular": "Bush Rat"
+  }
+ },
+ {
+  "id": 211,
+  "kind": "mammal",
+  "name": "Dugong",
+  "sci": "Dugong dugon",
+  "group": "marine",
+  "groupLabel": "Marine mammals",
+  "h": "c",
+  "size": "2.5–3 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Plump sea mammal that grazes on seagrass in Moreton Bay. Look for a broad back and fluke tail breaking the surface.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/dfa14228-4f24-48be-b5e6-f91db5ddbbe1",
+   "acceptedName": "Dugong dugon",
+   "vernacular": "Dugong"
+  }
+ },
+ {
+  "id": 212,
+  "kind": "mammal",
+  "name": "Indo-Pacific Bottlenose Dolphin",
+  "sci": "Tursiops aduncus",
+  "group": "marine",
+  "groupLabel": "Marine mammals",
+  "h": "c",
+  "size": "2–2.7 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Grey dolphin often seen in Moreton Bay and around Pumicestone Passage. Older adults have spotted bellies.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/46b0789b-9609-4424-8e7f-96b6b39f3b86",
+   "acceptedName": "Tursiops aduncus",
+   "vernacular": "Long-beaked Bottle-nosed Dolphin"
+  }
+ },
+ {
+  "id": 213,
+  "kind": "mammal",
+  "name": "Humpback Whale",
+  "sci": "Megaptera novaeangliae",
+  "group": "marine",
+  "groupLabel": "Marine mammals",
+  "h": "c",
+  "size": "12–16 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Migrates past the SEQ coast from June to November. Watch for blows, breaches and tail slaps off headlands.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/5295f399-684a-47b9-95b8-ebc35119e338",
+   "acceptedName": "Megaptera novaeangliae",
+   "vernacular": "Humpback Whale"
+  }
+ },
+ {
+  "id": 214,
+  "kind": "reptile",
+  "name": "Eastern Long-necked Turtle",
+  "sci": "Chelodina longicollis",
+  "group": "turtles",
+  "groupLabel": "Turtles",
+  "h": "w",
+  "size": "to 25 cm shell",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Freshwater turtle with a neck nearly as long as its shell. Basks on logs and wanders between dams after rain.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/68eba403-5689-4a10-8c58-e3e6e4151cb4",
+   "acceptedName": "Chelodina (Chelodina) longicollis",
+   "vernacular": "Snake-necked Turtle"
+  }
+ },
+ {
+  "id": 215,
+  "kind": "reptile",
+  "name": "Saw-shelled Turtle",
+  "sci": "Myuchelys latisternum",
+  "group": "turtles",
+  "groupLabel": "Turtles",
+  "h": "w",
+  "size": "to 28 cm shell",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Creek turtle with a serrated rear shell edge and spiky neck. Common in clear streams.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/28b98229-4470-45be-888b-33d1e651b5ce",
+   "acceptedName": "Myuchelys latisternum",
+   "vernacular": "Saw-shelled Turtle"
+  }
+ },
+ {
+  "id": 216,
+  "kind": "reptile",
+  "name": "Krefft's River Turtle",
+  "sci": "Emydura macquarii krefftii",
+  "group": "turtles",
+  "groupLabel": "Turtles",
+  "h": "wg",
+  "size": "to 30 cm shell",
+  "nocturnal": false,
+  "season": null,
+  "notes": "The turtle of Brisbane park lakes, with a pale yellow stripe behind the eye.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/9379c61b-207f-41aa-a48a-2492d897f951",
+   "acceptedName": "Emydura macquarii",
+   "vernacular": "Macquarie River Turtle"
+  }
+ },
+ {
+  "id": 217,
+  "kind": "reptile",
+  "name": "Green Turtle",
+  "sci": "Chelonia mydas",
+  "group": "turtles",
+  "groupLabel": "Turtles",
+  "h": "c",
+  "size": "to 1.2 m shell",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Large sea turtle that grazes on seagrass in Moreton Bay. Pops its head up for a breath every few minutes.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/2d605472-979b-49b4-aed3-03a384e9f706",
+   "acceptedName": "Chelonia mydas",
+   "vernacular": "Green Turtle"
+  }
+ },
+ {
+  "id": 218,
+  "kind": "reptile",
+  "name": "Loggerhead Turtle",
+  "sci": "Caretta caretta",
+  "group": "turtles",
+  "groupLabel": "Turtles",
+  "h": "c",
+  "size": "to 1 m shell",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Big-headed sea turtle that nests on Sunshine Coast and Bundaberg beaches in summer. Endangered.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/910b27e8-19c3-4194-b55a-fd95a80ccdf9",
+   "acceptedName": "Caretta caretta",
+   "vernacular": "Loggerhead Turtle"
+  }
+ },
+ {
+  "id": 219,
+  "kind": "reptile",
+  "name": "Eastern Water Dragon",
+  "sci": "Intellagama lesueurii",
+  "group": "dragons",
+  "groupLabel": "Dragons & monitors",
+  "h": "wg",
+  "size": "to 90 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Large dragon with a banded tail that basks beside creeks and leaps into the water if disturbed. Very common in city parks.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/22edfe15-9efa-47e4-a826-2b6d1b942df5",
+   "acceptedName": "Intellagama lesueurii",
+   "vernacular": "Water Dragon"
+  }
+ },
+ {
+  "id": 220,
+  "kind": "reptile",
+  "name": "Eastern Bearded Dragon",
+  "sci": "Pogona barbata",
+  "group": "dragons",
+  "groupLabel": "Dragons & monitors",
+  "h": "fo",
+  "size": "to 55 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Spiky grey dragon that perches on posts and logs. Puffs out its dark \"beard\" when threatened.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/0bb0f362-67a1-4038-bf7c-163c43015243",
+   "acceptedName": "Pogona barbata",
+   "vernacular": "Common Bearded Dragon"
+  }
+ },
+ {
+  "id": 221,
+  "kind": "reptile",
+  "name": "Jacky Lashtail",
+  "sci": "Amphibolurus muricatus",
+  "group": "dragons",
+  "groupLabel": "Dragons & monitors",
+  "h": "f",
+  "size": "to 35 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Small, rough-scaled grey-brown dragon with a yellow mouth lining. Basks on logs in dry forest.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/4aa3487e-39d9-4119-9d3e-4771d3434ae0",
+   "acceptedName": "Amphibolurus muricatus",
+   "vernacular": "Jacky Lizard"
+  }
+ },
+ {
+  "id": 222,
+  "kind": "reptile",
+  "name": "Southern Angle-headed Dragon",
+  "sci": "Lophosaurus spinipes",
+  "group": "dragons",
+  "groupLabel": "Dragons & monitors",
+  "h": "r",
+  "size": "to 30 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Well-camouflaged rainforest dragon that clings motionless to trunks. Has a spiky crest behind the head.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/3440c213-ac92-44b7-85ff-3011bf114793",
+   "acceptedName": "Lophosaurus spinipes",
+   "vernacular": "Southern Angle-headed Dragon"
+  }
+ },
+ {
+  "id": 223,
+  "kind": "reptile",
+  "name": "Lace Monitor",
+  "sci": "Varanus varius",
+  "group": "dragons",
+  "groupLabel": "Dragons & monitors",
+  "h": "fr",
+  "size": "to 2 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Huge goanna, dark with pale bands, that climbs trees and raids picnic grounds. Give it plenty of room.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/47750a6d-5fb8-4da2-97ce-df8a2e51eb00",
+   "acceptedName": "Varanus varius",
+   "vernacular": "Lace Monitor"
+  }
+ },
+ {
+  "id": 224,
+  "kind": "reptile",
+  "name": "Eastern Blue-tongue",
+  "sci": "Tiliqua scincoides",
+  "group": "skinks",
+  "groupLabel": "Skinks, geckos & legless lizards",
+  "h": "gf",
+  "size": "to 60 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Chunky banded lizard that flashes a bright blue tongue when threatened. A gardener's friend that eats snails.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/1735279c-f968-470a-94f1-215c91f89e8c",
+   "acceptedName": "Tiliqua scincoides",
+   "vernacular": "Eastern Blue-tongue"
+  }
+ },
+ {
+  "id": 225,
+  "kind": "reptile",
+  "name": "Land Mullet",
+  "sci": "Bellatorias major",
+  "group": "skinks",
+  "groupLabel": "Skinks, geckos & legless lizards",
+  "h": "r",
+  "size": "to 60 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Big glossy black skink that basks at the edges of rainforest. Crashes noisily into leaf litter when disturbed.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/f2139bd6-0cea-495e-b595-91c453565659",
+   "acceptedName": "Bellatorias major",
+   "vernacular": "Land Mullet"
+  }
+ },
+ {
+  "id": 226,
+  "kind": "reptile",
+  "name": "Major Skink",
+  "sci": "Bellatorias frerei",
+  "group": "skinks",
+  "groupLabel": "Skinks, geckos & legless lizards",
+  "h": "fr",
+  "size": "to 45 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Large brown skink with dark flecks that lives in family groups in hollow logs and rock piles.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/adfcd5d7-b8a0-4e72-97e7-7addc30fb9e3",
+   "acceptedName": "Bellatorias frerei",
+   "vernacular": "Major Skink"
+  }
+ },
+ {
+  "id": 227,
+  "kind": "reptile",
+  "name": "Eastern Water Skink",
+  "sci": "Eulamprus quoyii",
+  "group": "skinks",
+  "groupLabel": "Skinks, geckos & legless lizards",
+  "h": "wg",
+  "size": "to 30 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Golden-striped skink that basks on rocks beside creeks and dives into water when chased.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/c429780e-324c-4ce9-922d-424d9c461d2c",
+   "acceptedName": "Eulamprus quoyii",
+   "vernacular": "Eastern Water-skink"
+  }
+ },
+ {
+  "id": 228,
+  "kind": "reptile",
+  "name": "Garden Sunskink",
+  "sci": "Lampropholis delicata",
+  "group": "skinks",
+  "groupLabel": "Skinks, geckos & legless lizards",
+  "h": "g",
+  "size": "to 10 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Tiny bronze skink that scuttles through every SEQ garden. Often with a pale stripe along each side.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/db6a90c9-c476-4d3f-b738-d3a5b367c6f0",
+   "acceptedName": "Lampropholis delicata",
+   "vernacular": "Dark-flecked Garden Sunskink"
+  }
+ },
+ {
+  "id": 229,
+  "kind": "reptile",
+  "name": "Weasel Skink",
+  "sci": "Saproscincus mustelinus",
+  "group": "skinks",
+  "groupLabel": "Skinks, geckos & legless lizards",
+  "h": "rg",
+  "size": "to 13 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Small brown skink of shady, moist gardens and rainforest with a white mark behind the eye.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/dcf72cf4-08cd-4dc4-894c-af73d08e3046",
+   "acceptedName": "Saproscincus mustelinus",
+   "vernacular": "Weasel Skink"
+  }
+ },
+ {
+  "id": 230,
+  "kind": "reptile",
+  "name": "Robust Velvet Gecko",
+  "sci": "Amalosia robusta",
+  "group": "skinks",
+  "groupLabel": "Skinks, geckos & legless lizards",
+  "h": "gf",
+  "size": "to 20 cm",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Big velvety native gecko with a pale zigzag pattern. Hunts insects on tree trunks and house walls at night.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/df082bc6-d2dc-4bf7-ad53-0c3f29ec21c2",
+   "acceptedName": "Amalosia robusta",
+   "vernacular": "Robust Velvet Gecko"
+  }
+ },
+ {
+  "id": 231,
+  "kind": "reptile",
+  "name": "Burton's Legless Lizard",
+  "sci": "Lialis burtonis",
+  "group": "skinks",
+  "groupLabel": "Skinks, geckos & legless lizards",
+  "h": "fo",
+  "size": "to 60 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Snake-like lizard with a wedge-shaped snout and visible ear holes. Hunts skinks; harmless to people.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/59fbdf78-251a-48f0-ae86-45e8f19fe03f",
+   "acceptedName": "Lialis burtonis",
+   "vernacular": "Burton's Snake-lizard"
+  }
+ },
+ {
+  "id": 232,
+  "kind": "reptile",
+  "name": "Carpet Python",
+  "sci": "Morelia spilota",
+  "group": "snakes",
+  "groupLabel": "Snakes",
+  "h": "gf",
+  "size": "to 3 m",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Non-venomous python with a variable blotched pattern. Often found in roofs and backyard trees, where it eats rats.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/59c009c4-cb53-4c18-add4-c5048848ab14",
+   "acceptedName": "Morelia spilota",
+   "vernacular": "Carpet Python"
+  }
+ },
+ {
+  "id": 233,
+  "kind": "reptile",
+  "name": "Common Tree Snake",
+  "sci": "Dendrelaphis punctulatus",
+  "group": "snakes",
+  "groupLabel": "Snakes",
+  "h": "gf",
+  "size": "to 1.5 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Slender green, blue or black snake with a yellow belly. Climbs fast and is not dangerous to people.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/8cc9dda5-1346-4e5f-8cb2-27d0d0fd53b8",
+   "acceptedName": "Dendrelaphis punctulatus",
+   "vernacular": "Green Tree Snake"
+  }
+ },
+ {
+  "id": 234,
+  "kind": "reptile",
+  "name": "Keelback",
+  "sci": "Tropidonophis mairii",
+  "group": "snakes",
+  "groupLabel": "Snakes",
+  "h": "w",
+  "size": "to 80 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Olive-brown snake with keeled scales that hunts frogs near water, including cane toads. Not dangerous.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/e8aa0fdd-d4d6-418c-bfd1-e8554103dc0f",
+   "acceptedName": "Tropidonophis mairii",
+   "vernacular": "Keelback"
+  }
+ },
+ {
+  "id": 235,
+  "kind": "reptile",
+  "name": "Red-bellied Black Snake",
+  "sci": "Pseudechis porphyriacus",
+  "group": "snakes",
+  "groupLabel": "Snakes",
+  "h": "w",
+  "size": "to 1.5 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Glossy black snake with a red-pink belly edge, often near water. Venomous: watch from a distance.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/1ce80e2d-9b3f-43d2-8e69-2183f862e4cc",
+   "acceptedName": "Pseudechis porphyriacus",
+   "vernacular": "Red-bellied Black Snake"
+  }
+ },
+ {
+  "id": 236,
+  "kind": "reptile",
+  "name": "Eastern Brown Snake",
+  "sci": "Pseudonaja textilis",
+  "group": "snakes",
+  "groupLabel": "Snakes",
+  "h": "og",
+  "size": "to 2 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Fast, plain brown snake of paddocks and suburbs. Highly venomous: keep well away and never try to catch it.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/821b6941-2041-4e3c-bd68-1d0a56b03f19",
+   "acceptedName": "Pseudonaja textilis",
+   "vernacular": "Common Brown Snake"
+  }
+ },
+ {
+  "id": 237,
+  "kind": "reptile",
+  "name": "Yellow-faced Whipsnake",
+  "sci": "Demansia psammophis",
+  "group": "snakes",
+  "groupLabel": "Snakes",
+  "h": "fo",
+  "size": "to 1 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Slender grey snake with a pale ring around large eyes. Hunts skinks by day. Venomous: watch from a distance.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ab27b9bd-f096-4056-a28b-3b714a2c804e",
+   "acceptedName": "Demansia psammophis",
+   "vernacular": "Yellow-faced Whip Snake"
+  }
+ },
+ {
+  "id": 238,
+  "kind": "reptile",
+  "name": "Eastern Small-eyed Snake",
+  "sci": "Cryptophis nigrescens",
+  "group": "snakes",
+  "groupLabel": "Snakes",
+  "h": "fr",
+  "size": "to 80 cm",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Shiny black snake with a pinkish belly that hides under logs by day. Venomous: don't handle.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ea5796f7-2ee9-4ee7-9f59-2661a474a933",
+   "acceptedName": "Cryptophis nigrescens",
+   "vernacular": "Eastern Small-eyed Snake"
+  }
+ },
+ {
+  "id": 239,
+  "kind": "reptile",
+  "name": "Brown Tree Snake",
+  "sci": "Boiga irregularis",
+  "group": "snakes",
+  "groupLabel": "Snakes",
+  "h": "fg",
+  "size": "to 2 m",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Banded rear-fanged snake with large eyes that hunts birds at night. Mildly venomous; not considered dangerous.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/908d6eb5-819b-4aa6-a632-fcae682da08c",
+   "acceptedName": "Boiga irregularis",
+   "vernacular": "Night Tiger"
+  }
+ },
+ {
+  "id": 240,
+  "kind": "frog",
+  "name": "Green Tree Frog",
+  "sci": "Litoria caerulea",
+  "group": "tree-frogs",
+  "groupLabel": "Tree frogs",
+  "h": "gw",
+  "size": "to 10 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Plump green frog that lives in downpipes and water tanks. Calls a deep \"crawk crawk\" after summer rain.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ca1bc739-bf91-41ab-bd82-6156b0ab1399",
+   "acceptedName": "Litoria caerulea",
+   "vernacular": "Green Tree Frog"
+  }
+ },
+ {
+  "id": 241,
+  "kind": "frog",
+  "name": "Eastern Dwarf Tree Frog",
+  "sci": "Litoria fallax",
+  "group": "tree-frogs",
+  "groupLabel": "Tree frogs",
+  "h": "wg",
+  "size": "to 2.5 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Tiny green or brown frog of reeds and lily pads. Its insect-like \"wreek, pip-pip\" fills wetlands on warm nights.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/bf04e1fd-79ca-4185-abfd-7fd2cc439d6b",
+   "acceptedName": "Litoria fallax",
+   "vernacular": "Eastern Dwarf Tree Frog"
+  }
+ },
+ {
+  "id": 242,
+  "kind": "frog",
+  "name": "Graceful Tree Frog",
+  "sci": "Litoria gracilenta",
+  "group": "tree-frogs",
+  "groupLabel": "Tree frogs",
+  "h": "wg",
+  "size": "to 4.5 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Slim bright-green frog with orange thighs and a golden eye. Calls a long, drawn-out \"aaarrk\" from shrubs near water.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/55ffacf8-fe33-4260-8a0b-2ab280c12da4",
+   "acceptedName": "Litoria gracilenta",
+   "vernacular": "Dainty Green Tree Frog"
+  }
+ },
+ {
+  "id": 243,
+  "kind": "frog",
+  "name": "Bleating Tree Frog",
+  "sci": "Litoria dentata",
+  "group": "tree-frogs",
+  "groupLabel": "Tree frogs",
+  "h": "wg",
+  "size": "to 4.5 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Fawn frog with a dark stripe down each side. Its piercing bleat is one of the loudest frog calls after rain.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/7fb0efd1-5059-4b80-8019-87c267f13f8e",
+   "acceptedName": "Litoria dentata",
+   "vernacular": "Keferstein's Tree Frog"
+  }
+ },
+ {
+  "id": 244,
+  "kind": "frog",
+  "name": "Leaf-green Tree Frog",
+  "sci": "Litoria phyllochroa",
+  "group": "tree-frogs",
+  "groupLabel": "Tree frogs",
+  "h": "rw",
+  "size": "to 4 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Slender green frog with a gold-edged dark stripe through the eye. Calls a soft \"rrrrk\" beside rainforest creeks.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/22287219-9e4d-4670-aa1b-685502e8271f",
+   "acceptedName": "Litoria phyllochroa",
+   "vernacular": "Leaf Green Tree Frog"
+  }
+ },
+ {
+  "id": 245,
+  "kind": "frog",
+  "name": "Naked Tree Frog",
+  "sci": "Litoria rubella",
+  "group": "tree-frogs",
+  "groupLabel": "Tree frogs",
+  "h": "wo",
+  "size": "to 4 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Plain fawn-grey frog with a dark band through the eye. Long, grating trill in open woodland after rain.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/0914f9c4-eecd-43ee-9a47-f4afbc9df092",
+   "acceptedName": "Litoria rubella",
+   "vernacular": "Little Red Tree Frog"
+  }
+ },
+ {
+  "id": 246,
+  "kind": "frog",
+  "name": "Emerald-spotted Tree Frog",
+  "sci": "Litoria peronii",
+  "group": "tree-frogs",
+  "groupLabel": "Tree frogs",
+  "h": "wg",
+  "size": "to 6.5 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Grey-brown frog with tiny emerald flecks and a cross-shaped pupil. Its call sounds like a maniacal cackle.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/d96fed14-5dd7-45f3-8b91-d2f86e5ab2f5",
+   "acceptedName": "Litoria peronii",
+   "vernacular": "Emerald-spotted Tree Frog"
+  }
+ },
+ {
+  "id": 247,
+  "kind": "frog",
+  "name": "Stony Creek Frog",
+  "sci": "Litoria wilcoxii",
+  "group": "tree-frogs",
+  "groupLabel": "Tree frogs",
+  "h": "wr",
+  "size": "to 7 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Creek-side frog with a dark stripe through the eye. Breeding males turn lemon-yellow.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/8acdd8e3-3356-4d61-955c-d0af998d972c",
+   "acceptedName": "Litoria wilcoxii",
+   "vernacular": "Eastern Stony-creek Frog"
+  }
+ },
+ {
+  "id": 248,
+  "kind": "frog",
+  "name": "Rocket Frog",
+  "sci": "Litoria nasuta",
+  "group": "tree-frogs",
+  "groupLabel": "Tree frogs",
+  "h": "wo",
+  "size": "to 5.5 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Long-legged, pointy-nosed frog that leaps huge distances. Calls a rapid \"wick-wick-wick\" from grassy swamps.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/e2fca9fe-dcf3-4df3-a227-850bc0724350",
+   "acceptedName": "Litoria nasuta",
+   "vernacular": "Rocket Frog"
+  }
+ },
+ {
+  "id": 249,
+  "kind": "frog",
+  "name": "Cascade Tree Frog",
+  "sci": "Litoria pearsoniana",
+  "group": "tree-frogs",
+  "groupLabel": "Tree frogs",
+  "h": "r",
+  "size": "to 4 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Small, variable rainforest frog of fast rocky streams in the ranges. Listed as a species of concern.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/92917739-1287-4895-90c9-cd097dd8a17e",
+   "acceptedName": "Litoria pearsoniana",
+   "vernacular": "Cascade Tree Frog"
+  }
+ },
+ {
+  "id": 250,
+  "kind": "frog",
+  "name": "Striped Marsh Frog",
+  "sci": "Limnodynastes peronii",
+  "group": "ground-frogs",
+  "groupLabel": "Ground frogs & froglets",
+  "h": "wg",
+  "size": "to 6.5 cm",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Brown frog with dark stripes and a pale mid-back line. Its single \"tok\" call is heard from garden ponds all year.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/655a5efa-d7a7-4ffb-a002-a4943b494ae3",
+   "acceptedName": "Limnodynastes peronii",
+   "vernacular": "Striped Marsh Frog"
+  }
+ },
+ {
+  "id": 251,
+  "kind": "frog",
+  "name": "Spotted Grass Frog",
+  "sci": "Limnodynastes tasmaniensis",
+  "group": "ground-frogs",
+  "groupLabel": "Ground frogs & froglets",
+  "h": "wo",
+  "size": "to 4.5 cm",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Spotted grey-green frog that calls a rapid machine-gun \"uk-uk-uk\" from flooded grass.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/6843d971-1517-43c8-b67e-816e4281fc60",
+   "acceptedName": "Limnodynastes tasmaniensis",
+   "vernacular": "Spotted Marsh Frog"
+  }
+ },
+ {
+  "id": 252,
+  "kind": "frog",
+  "name": "Scarlet-sided Pobblebonk",
+  "sci": "Limnodynastes terraereginae",
+  "group": "ground-frogs",
+  "groupLabel": "Ground frogs & froglets",
+  "h": "wo",
+  "size": "to 8 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Big burrowing frog with red patches on its sides. Calls a resonant \"bonk\" after heavy summer rain.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/79a078fe-aa25-4764-8c80-43898a935074",
+   "acceptedName": "Limnodynastes terraereginae",
+   "vernacular": "Scarlet-sided Banjo Frog"
+  }
+ },
+ {
+  "id": 253,
+  "kind": "frog",
+  "name": "Salmon-striped Frog",
+  "sci": "Limnodynastes salmini",
+  "group": "ground-frogs",
+  "groupLabel": "Ground frogs & froglets",
+  "h": "wo",
+  "size": "to 7.5 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Striking frog with salmon-pink stripes on a brown back. Lives in grassland and floodplain swamps.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ee9107f0-5f57-4a97-8b2e-9c6cb3c86d2e",
+   "acceptedName": "Limnodynastes salmini",
+   "vernacular": "Salmon Striped Frog"
+  }
+ },
+ {
+  "id": 254,
+  "kind": "frog",
+  "name": "Ornate Burrowing Frog",
+  "sci": "Platyplectrum ornatum",
+  "group": "ground-frogs",
+  "groupLabel": "Ground frogs & froglets",
+  "h": "o",
+  "size": "to 5 cm",
+  "nocturnal": true,
+  "season": "s",
+  "notes": "Squat, patterned frog that stays buried in sandy soil until storms. Calls a short \"unk\" from temporary pools.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ab08e730-2a78-4b01-9629-9056332cad56",
+   "acceptedName": "Platyplectrum ornatum",
+   "vernacular": "Ornate Burrowing Frog"
+  }
+ },
+ {
+  "id": 255,
+  "kind": "frog",
+  "name": "Tusked Frog",
+  "sci": "Adelotus brevis",
+  "group": "ground-frogs",
+  "groupLabel": "Ground frogs & froglets",
+  "h": "wr",
+  "size": "to 5 cm",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Warty brown frog with a red-and-black marbled belly. Males have two small tusks in the lower jaw.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/90782d3f-729d-4d6c-a2eb-9219afb3bcff",
+   "acceptedName": "Adelotus brevis",
+   "vernacular": "Tusked Frog"
+  }
+ },
+ {
+  "id": 256,
+  "kind": "frog",
+  "name": "Great Barred Frog",
+  "sci": "Mixophyes fasciolatus",
+  "group": "ground-frogs",
+  "groupLabel": "Ground frogs & froglets",
+  "h": "rw",
+  "size": "to 8 cm",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Big, long-legged frog with barred legs that hunts on rainforest floors. Calls a deep \"wark\".",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/d82c59db-9a98-48ac-8ce5-0ac27a7cc3e0",
+   "acceptedName": "Mixophyes fasciolatus",
+   "vernacular": "Great Barred Frog"
+  }
+ },
+ {
+  "id": 257,
+  "kind": "frog",
+  "name": "Beeping Froglet",
+  "sci": "Crinia parinsignifera",
+  "group": "ground-frogs",
+  "groupLabel": "Ground frogs & froglets",
+  "h": "wo",
+  "size": "to 2 cm",
+  "nocturnal": true,
+  "season": "w",
+  "notes": "Tiny froglet with a sheep-like \"eeeek\" call from shallow pools, mostly in the cooler months.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/e1364d68-64f9-4744-a2e0-681b7f1e13ce",
+   "acceptedName": "Crinia parinsignifera",
+   "vernacular": "Eastern Sign-bearing Froglet"
+  }
+ },
+ {
+  "id": 258,
+  "kind": "frog",
+  "name": "Common Eastern Froglet",
+  "sci": "Crinia signifera",
+  "group": "ground-frogs",
+  "groupLabel": "Ground frogs & froglets",
+  "h": "wg",
+  "size": "to 3 cm",
+  "nocturnal": true,
+  "season": "w",
+  "notes": "Tiny, variable froglet. A chorus of its \"crick-crick-crick\" calls comes from wet ditches in winter.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/8444824e-c5da-41d5-a017-9903c2bf4251",
+   "acceptedName": "Crinia signifera",
+   "vernacular": "Common Eastern Froglet"
+  }
+ },
+ {
+  "id": 259,
+  "kind": "frog",
+  "name": "Wallum Froglet",
+  "sci": "Crinia tinnula",
+  "group": "ground-frogs",
+  "groupLabel": "Ground frogs & froglets",
+  "h": "w",
+  "size": "to 2 cm",
+  "nocturnal": true,
+  "season": "w",
+  "notes": "Tiny froglet of acid wallum swamps on the coastal lowlands. Vulnerable; calls a tinkling \"tching\".",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/198c5763-8d9c-4b8b-8101-da0a00536d02",
+   "acceptedName": "Crinia tinnula",
+   "vernacular": "Wallum Froglet"
+  }
+ },
+ {
+  "id": 260,
+  "kind": "butterfly",
+  "name": "Richmond Birdwing",
+  "sci": "Ornithoptera richmondia",
+  "group": "swallowtails",
+  "groupLabel": "Swallowtails & birdwings",
+  "h": "r",
+  "size": "Wingspan to 16 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Huge black-and-green birdwing of lowland rainforest. Breeds only on native birdwing vine. Vulnerable.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/0e48565a-03b6-4105-9197-9789791d4120",
+   "acceptedName": "Ornithoptera richmondia",
+   "vernacular": "Richmond Birdwing Butterfly"
+  }
+ },
+ {
+  "id": 261,
+  "kind": "butterfly",
+  "name": "Orchard Swallowtail",
+  "sci": "Papilio aegeus",
+  "group": "swallowtails",
+  "groupLabel": "Swallowtails & birdwings",
+  "h": "g",
+  "size": "Wingspan to 14 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Large black-and-white swallowtail; females have red and blue spots. Lays eggs on citrus trees.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/6541b2eb-ada5-4e54-bf40-8f7e07a8a58a",
+   "acceptedName": "Papilio (Princeps) aegeus",
+   "vernacular": "Large Citrus Butterfly"
+  }
+ },
+ {
+  "id": 262,
+  "kind": "butterfly",
+  "name": "Blue Triangle",
+  "sci": "Graphium anthedon choredon",
+  "group": "swallowtails",
+  "groupLabel": "Swallowtails & birdwings",
+  "h": "gr",
+  "size": "Wingspan to 7 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Fast black butterfly with a band of electric-blue triangles. Rarely settles except to sip from flowers.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/7a796301-8b59-439f-9940-49071c1c5f05",
+   "acceptedName": "Graphium anthedon choredon",
+   "vernacular": "Blue Triangle"
+  }
+ },
+ {
+  "id": 263,
+  "kind": "butterfly",
+  "name": "Macleay's Swallowtail",
+  "sci": "Graphium macleayanum",
+  "group": "swallowtails",
+  "groupLabel": "Swallowtails & birdwings",
+  "h": "r",
+  "size": "Wingspan to 6.5 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Green-and-black swallowtail with long tails, mostly seen in mountain rainforest.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ba4b730e-619d-4fb8-b93a-7c3c95bb2836",
+   "acceptedName": "Graphium macleayanum",
+   "vernacular": "Macleay's Swallowtail"
+  }
+ },
+ {
+  "id": 264,
+  "kind": "butterfly",
+  "name": "Pale Triangle",
+  "sci": "Graphium eurypylus",
+  "group": "swallowtails",
+  "groupLabel": "Swallowtails & birdwings",
+  "h": "gr",
+  "size": "Wingspan to 7 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Black butterfly with rows of pale green triangles. Often drinks at damp ground with other butterflies.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/d65b3f1b-3cdd-4bea-80b6-aea175458cd0",
+   "acceptedName": "Graphium eurypylus",
+   "vernacular": "Pale-blue Triangle"
+  }
+ },
+ {
+  "id": 265,
+  "kind": "butterfly",
+  "name": "Chequered Swallowtail",
+  "sci": "Papilio demoleus",
+  "group": "swallowtails",
+  "groupLabel": "Swallowtails & birdwings",
+  "h": "o",
+  "size": "Wingspan to 9 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Tailless swallowtail with a chequered black-and-cream pattern. Breeds on native citrus-family herbs inland.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/345a9663-0926-45de-80eb-6d5d6adada61",
+   "acceptedName": "Papilio (Princeps) demoleus",
+   "vernacular": "Chequered Swallowtail"
+  }
+ },
+ {
+  "id": 266,
+  "kind": "butterfly",
+  "name": "Clearwing Swallowtail",
+  "sci": "Cressida cressida",
+  "group": "swallowtails",
+  "groupLabel": "Swallowtails & birdwings",
+  "h": "fo",
+  "size": "Wingspan to 9 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Males have clear, glassy wings with red and black spots. Flies slowly over open woodland.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/d8c31141-a13d-422d-9f1a-26a709b54de6",
+   "acceptedName": "Cressida cressida",
+   "vernacular": null
+  }
+ },
+ {
+  "id": 267,
+  "kind": "butterfly",
+  "name": "Caper White",
+  "sci": "Belenois java",
+  "group": "whites",
+  "groupLabel": "Whites, yellows & jezebels",
+  "h": "go",
+  "size": "Wingspan to 6 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "White butterfly with heavy black edges. Huge migrating swarms pass through in spring and summer.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/1d6ad2ac-5383-4748-9037-ff765ae2d4e0",
+   "acceptedName": "Belenois java",
+   "vernacular": "Caper White"
+  }
+ },
+ {
+  "id": 268,
+  "kind": "butterfly",
+  "name": "Common Grass Yellow",
+  "sci": "Eurema hecabe",
+  "group": "whites",
+  "groupLabel": "Whites, yellows & jezebels",
+  "h": "gf",
+  "size": "Wingspan to 4 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Small lemon-yellow butterfly with black wing edges that flutters low over lawns and grass.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/c1d4b7bc-6e39-4ece-b985-cc5bc5d405b5",
+   "acceptedName": "Eurema hecabe",
+   "vernacular": "Common Grass-yellow"
+  }
+ },
+ {
+  "id": 269,
+  "kind": "butterfly",
+  "name": "Lemon Migrant",
+  "sci": "Catopsilia pomona",
+  "group": "whites",
+  "groupLabel": "Whites, yellows & jezebels",
+  "h": "g",
+  "size": "Wingspan to 6.5 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Fast pale lemon or white butterfly. Big numbers migrate through gardens in summer and autumn.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/dee40474-4508-4cd5-a046-26320e4b04b1",
+   "acceptedName": "Catopsilia pomona",
+   "vernacular": "Lemon Migrant"
+  }
+ },
+ {
+  "id": 270,
+  "kind": "butterfly",
+  "name": "Black Jezebel",
+  "sci": "Delias nigrina",
+  "group": "whites",
+  "groupLabel": "Whites, yellows & jezebels",
+  "h": "gf",
+  "size": "Wingspan to 6 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Black-and-white jezebel with red and yellow spots underneath. Larvae feed on mistletoe.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/800bb367-2c5f-4495-b5a4-9961cd21b00b",
+   "acceptedName": "Delias nigrina",
+   "vernacular": "Common Jezabel"
+  }
+ },
+ {
+  "id": 271,
+  "kind": "butterfly",
+  "name": "Scarlet Jezebel",
+  "sci": "Delias argenthona",
+  "group": "whites",
+  "groupLabel": "Whites, yellows & jezebels",
+  "h": "gf",
+  "size": "Wingspan to 7 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Underwings have a bright scarlet band and yellow spots. Feeds high in flowering trees.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/e80335ce-067f-4999-ba43-9c60adf4bd35",
+   "acceptedName": "Delias argenthona",
+   "vernacular": "Northern Jezabel"
+  }
+ },
+ {
+  "id": 272,
+  "kind": "butterfly",
+  "name": "Imperial Jezebel",
+  "sci": "Delias harpalyce",
+  "group": "whites",
+  "groupLabel": "Whites, yellows & jezebels",
+  "h": "f",
+  "size": "Wingspan to 7 cm",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Black-and-white with bright red patches underneath. Mostly seen in winter and spring.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/e921b325-aa0c-4028-a56d-91851a3f68f6",
+   "acceptedName": "Delias harpalyce",
+   "vernacular": "Imperial Jezebel"
+  }
+ },
+ {
+  "id": 273,
+  "kind": "butterfly",
+  "name": "Caper Gull",
+  "sci": "Cepora perimale",
+  "group": "whites",
+  "groupLabel": "Whites, yellows & jezebels",
+  "h": "g",
+  "size": "Wingspan to 5.5 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "White or yellowish butterfly with black borders that breeds on native caper trees.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/60288096-de03-451f-8039-4bf3fe776eac",
+   "acceptedName": "Cepora perimale",
+   "vernacular": "Caper Gull"
+  }
+ },
+ {
+  "id": 274,
+  "kind": "butterfly",
+  "name": "Lesser Wanderer",
+  "sci": "Danaus petilia",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "go",
+  "size": "Wingspan to 6 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Smaller orange cousin of the Monarch, with black veins and white spots on the wingtips.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/40cab58e-5d7d-41d6-862a-4f094ec2fca4",
+   "acceptedName": "Danaus petilia",
+   "vernacular": "Lesser Wanderer"
+  }
+ },
+ {
+  "id": 275,
+  "kind": "butterfly",
+  "name": "Blue Tiger",
+  "sci": "Tirumala hamata",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "gf",
+  "size": "Wingspan to 8 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Black butterfly with pale blue streaks and spots. Gathers in winter clusters in sheltered gullies.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/b5500534-9763-463d-88b3-1c23a8eb7402",
+   "acceptedName": "Tirumala hamata",
+   "vernacular": "Blue Tiger"
+  }
+ },
+ {
+  "id": 276,
+  "kind": "butterfly",
+  "name": "Common Crow",
+  "sci": "Euploea corinna",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "gf",
+  "size": "Wingspan to 8 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Dark brown butterfly with white spots on the edges. Slow, gliding flight; often in gardens.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/06351962-200a-4657-ada5-ffa1b1315e31",
+   "acceptedName": "Euploea corinna",
+   "vernacular": "Oleander Butterfly"
+  }
+ },
+ {
+  "id": 277,
+  "kind": "butterfly",
+  "name": "Varied Eggfly",
+  "sci": "Hypolimnas bolina",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "gf",
+  "size": "Wingspan to 8 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Males are velvet black with purple-ringed white spots; females are brown and variable.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ac4b60ed-4d89-497b-8351-d2dd3bddb946",
+   "acceptedName": "Hypolimnas bolina",
+   "vernacular": "Varied Eggfly"
+  }
+ },
+ {
+  "id": 278,
+  "kind": "butterfly",
+  "name": "Evening Brown",
+  "sci": "Melanitis leda",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "fr",
+  "size": "Wingspan to 7 cm",
+  "nocturnal": true,
+  "season": null,
+  "notes": "Leaf-brown butterfly with eyespots that flies at dusk and rests on the ground among leaf litter by day.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/f7ef1e75-30cb-454e-8840-f74d59e0792e",
+   "acceptedName": "Melanitis leda",
+   "vernacular": "Common Evening-brown"
+  }
+ },
+ {
+  "id": 279,
+  "kind": "butterfly",
+  "name": "Meadow Argus",
+  "sci": "Junonia villida",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "go",
+  "size": "Wingspan to 5 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Brown butterfly with big blue-and-orange eyespots. Basks on bare ground with wings open.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/fbb5820c-a1de-4ca0-8a20-149e5346089c",
+   "acceptedName": "Junonia villida",
+   "vernacular": "Meadow Argus"
+  }
+ },
+ {
+  "id": 280,
+  "kind": "butterfly",
+  "name": "Australian Painted Lady",
+  "sci": "Vanessa kershawi",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "go",
+  "size": "Wingspan to 5 cm",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Orange-and-black butterfly with blue-centred eyespots on the hindwings. Migrates in spring.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/a4ecf6b8-f2c3-48f5-a998-5c1021d63efd",
+   "acceptedName": "Vanessa kershawi",
+   "vernacular": "Australian Painted Lady"
+  }
+ },
+ {
+  "id": 281,
+  "kind": "butterfly",
+  "name": "Glasswing",
+  "sci": "Acraea andromacha",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "go",
+  "size": "Wingspan to 6 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Slow-flying butterfly with clear forewings and a cream hindwing edged with black spots.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/86294130-ca0d-4e27-81da-5a82a7cd4c87",
+   "acceptedName": "Acraea andromacha",
+   "vernacular": "Glasswing"
+  }
+ },
+ {
+  "id": 282,
+  "kind": "butterfly",
+  "name": "Dingy Bush-brown",
+  "sci": "Mycalesis perseus",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "fg",
+  "size": "Wingspan to 4.5 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Plain brown butterfly with small eyespots underneath that flits low through grassy forest edges.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/f421b813-7a07-4c6f-b699-1f897121616e",
+   "acceptedName": "Mycalesis perseus",
+   "vernacular": "Dingy Bush-brown"
+  }
+ },
+ {
+  "id": 283,
+  "kind": "butterfly",
+  "name": "Tailed Emperor",
+  "sci": "Charaxes sempronius",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "gf",
+  "size": "Wingspan to 9 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Powerful flier with twin tails on each hindwing. Attracted to fermenting fruit and sap.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/9b9e8d52-2d9f-42c3-8558-1a5602890b4f",
+   "acceptedName": "Charaxes sempronius",
+   "vernacular": "Tailed Emperor"
+  }
+ },
+ {
+  "id": 284,
+  "kind": "butterfly",
+  "name": "Australian Rustic",
+  "sci": "Cupha prosope",
+  "group": "brushfoots",
+  "groupLabel": "Brush-foots",
+  "h": "rg",
+  "size": "Wingspan to 5.5 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Orange-and-brown butterfly with a dark wingtip that glides around rainforest edges.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/bb7f5f23-22e8-44b5-9494-37794a2eba2f",
+   "acceptedName": "Cupha prosope",
+   "vernacular": "Bordered Rustic"
+  }
+ },
+ {
+  "id": 285,
+  "kind": "butterfly",
+  "name": "Common Grass-blue",
+  "sci": "Zizina otis",
+  "group": "blues",
+  "groupLabel": "Blues & jewels",
+  "h": "g",
+  "size": "Wingspan to 2.5 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Tiny lilac-blue butterfly that flutters just above lawns everywhere.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ca692134-65a4-4fcb-a32b-ff8025404853",
+   "acceptedName": "Zizina otis",
+   "vernacular": "Common Grass-blue"
+  }
+ },
+ {
+  "id": 286,
+  "kind": "butterfly",
+  "name": "Fiery Jewel",
+  "sci": "Hypochrysops ignitus",
+  "group": "blues",
+  "groupLabel": "Blues & jewels",
+  "h": "f",
+  "size": "Wingspan to 3 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Small butterfly with brilliant metallic orange-red and green patterns underneath. Tended by ants.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/99de38d7-cbe5-4309-874f-99dcaa0ec140",
+   "acceptedName": "Hypochrysops ignitus",
+   "vernacular": "Fiery Jewel"
+  }
+ },
+ {
+  "id": 287,
+  "kind": "butterfly",
+  "name": "Satin Azure",
+  "sci": "Ogyris amaryllis",
+  "group": "blues",
+  "groupLabel": "Blues & jewels",
+  "h": "f",
+  "size": "Wingspan to 4 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Shimmering blue butterfly whose larvae feed on mistletoe.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/76c5dc59-6880-45a2-86e0-7fe3866dcbe6",
+   "acceptedName": "Ogyris amaryllis",
+   "vernacular": "Satin Azure"
+  }
+ },
+ {
+  "id": 288,
+  "kind": "butterfly",
+  "name": "Long-tailed Pea-blue",
+  "sci": "Lampides boeticus",
+  "group": "blues",
+  "groupLabel": "Blues & jewels",
+  "h": "go",
+  "size": "Wingspan to 3.5 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Small brownish-blue butterfly with tiny tails and eyespots, often around flowering peas.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/f1736b57-3be8-4367-b444-e87708661ca1",
+   "acceptedName": "Lampides boeticus",
+   "vernacular": "Long-tailed Pea-blue"
+  }
+ },
+ {
+  "id": 289,
+  "kind": "butterfly",
+  "name": "Imperial Hairstreak",
+  "sci": "Jalmenus evagoras",
+  "group": "blues",
+  "groupLabel": "Blues & jewels",
+  "h": "f",
+  "size": "Wingspan to 4 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Pale blue butterfly with black-and-orange tails. Colonies cluster on young wattles, tended by ants.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/c0d6c981-52be-4ce4-a8c7-ed51f147c332",
+   "acceptedName": "Jalmenus evagoras",
+   "vernacular": "Common Imperial Blue"
+  }
+ },
+ {
+  "id": 290,
+  "kind": "butterfly",
+  "name": "Regent Skipper",
+  "sci": "Euschemon rafflesia",
+  "group": "skippers",
+  "groupLabel": "Skippers",
+  "h": "r",
+  "size": "Wingspan to 5.5 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "A stunning black-and-yellow skipper with a red body, found around rainforest margins.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/e6792116-9ebe-420a-b6f8-4d1d8d403e3b",
+   "acceptedName": "Euschemon rafflesia",
+   "vernacular": "Regent Skipper"
+  }
+ },
+ {
+  "id": 291,
+  "kind": "butterfly",
+  "name": "Orange Palm-dart",
+  "sci": "Cephrenes augiades",
+  "group": "skippers",
+  "groupLabel": "Skippers",
+  "h": "g",
+  "size": "Wingspan to 4.5 cm",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Darting orange skipper that breeds on palms in suburban gardens.",
+  "ala": {
+   "lsid": "https://biodiversity.org.au/afd/taxa/ebb85c3b-e07d-4329-8856-b2de7fe2117e",
+   "acceptedName": "Cephrenes augiades",
+   "vernacular": "Orange Palm-dart"
+  }
+ },
+ {
+  "id": 292,
+  "kind": "plant",
+  "name": "Spotted Gum",
+  "sci": "Corymbia citriodora",
+  "group": "gums",
+  "groupLabel": "Gums & bloodwoods",
+  "h": "f",
+  "size": "Tree to 45 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Tall gum with smooth, dimpled bark in patches of grey, cream and pink. Flowers in winter and feeds lorikeets.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2912509",
+   "acceptedName": "Corymbia citriodora",
+   "vernacular": "Lemon-scented Gum"
+  }
+ },
+ {
+  "id": 293,
+  "kind": "plant",
+  "name": "Scribbly Gum",
+  "sci": "Eucalyptus racemosa",
+  "group": "gums",
+  "groupLabel": "Gums & bloodwoods",
+  "h": "f",
+  "size": "Tree to 25 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Smooth white bark covered in squiggly \"scribbles\" made by moth larvae. Common on sandy soils.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2914136",
+   "acceptedName": "Eucalyptus racemosa",
+   "vernacular": "Narrow-leaved Scribbly Gum"
+  }
+ },
+ {
+  "id": 294,
+  "kind": "plant",
+  "name": "Forest Red Gum",
+  "sci": "Eucalyptus tereticornis",
+  "group": "gums",
+  "groupLabel": "Gums & bloodwoods",
+  "h": "fg",
+  "size": "Tree to 45 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Smooth blotched bark and long horn-shaped buds. A key koala food tree.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51440747",
+   "acceptedName": "Eucalyptus tereticornis",
+   "vernacular": "Forest Red Gum"
+  }
+ },
+ {
+  "id": 295,
+  "kind": "plant",
+  "name": "Grey Ironbark",
+  "sci": "Eucalyptus siderophloia",
+  "group": "gums",
+  "groupLabel": "Gums & bloodwoods",
+  "h": "f",
+  "size": "Tree to 40 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Hard, deeply furrowed dark grey bark. Its very dense timber was prized for bridges.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2914381",
+   "acceptedName": "Eucalyptus siderophloia",
+   "vernacular": "Grey Ironbark"
+  }
+ },
+ {
+  "id": 296,
+  "kind": "plant",
+  "name": "Pink Bloodwood",
+  "sci": "Corymbia intermedia",
+  "group": "gums",
+  "groupLabel": "Gums & bloodwoods",
+  "h": "f",
+  "size": "Tree to 35 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Rough, flaky bark and red sap that oozes from wounds. Masses of cream flowers in summer.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2915125",
+   "acceptedName": "Corymbia intermedia",
+   "vernacular": "Pink Bloodwood"
+  }
+ },
+ {
+  "id": 297,
+  "kind": "plant",
+  "name": "Tallowwood",
+  "sci": "Eucalyptus microcorys",
+  "group": "gums",
+  "groupLabel": "Gums & bloodwoods",
+  "h": "fr",
+  "size": "Tree to 50 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Soft, fibrous orange-brown bark. Leaves are a favourite koala food.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2895329",
+   "acceptedName": "Eucalyptus microcorys",
+   "vernacular": "Tallowwood"
+  }
+ },
+ {
+  "id": 298,
+  "kind": "plant",
+  "name": "Swamp Mahogany",
+  "sci": "Eucalyptus robusta",
+  "group": "gums",
+  "groupLabel": "Gums & bloodwoods",
+  "h": "w",
+  "size": "Tree to 30 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Spongy red-brown bark in coastal swamps. Winter nectar feeds flying-foxes and honeyeaters.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51439911",
+   "acceptedName": "Eucalyptus robusta",
+   "vernacular": "Swamp Mahogany"
+  }
+ },
+ {
+  "id": 299,
+  "kind": "plant",
+  "name": "Brush Box",
+  "sci": "Lophostemon confertus",
+  "group": "gums",
+  "groupLabel": "Gums & bloodwoods",
+  "h": "rg",
+  "size": "Tree to 40 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Smooth salmon-pink upper bark with rough lower trunk. Widely planted as a street tree.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2908951",
+   "acceptedName": "Lophostemon confertus",
+   "vernacular": "Brush Box"
+  }
+ },
+ {
+  "id": 300,
+  "kind": "plant",
+  "name": "Broad-leaved Paperbark",
+  "sci": "Melaleuca quinquenervia",
+  "group": "paperbarks",
+  "groupLabel": "Paperbarks, bottlebrushes & banksias",
+  "h": "wc",
+  "size": "Tree to 20 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Layered papery white bark and creamy bottlebrush flowers. Forms swamp forests.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51782419",
+   "acceptedName": "Melaleuca quinquenervia",
+   "vernacular": "Swamp Paperbark"
+  }
+ },
+ {
+  "id": 301,
+  "kind": "plant",
+  "name": "Weeping Bottlebrush",
+  "sci": "Callistemon viminalis",
+  "group": "paperbarks",
+  "groupLabel": "Paperbarks, bottlebrushes & banksias",
+  "h": "wg",
+  "size": "Tree to 10 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Drooping branches covered in red bottlebrush flowers that attract honeyeaters.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51781738",
+   "acceptedName": "Callistemon viminalis",
+   "vernacular": "Weeping Bottlebrush"
+  }
+ },
+ {
+  "id": 302,
+  "kind": "plant",
+  "name": "Coastal Banksia",
+  "sci": "Banksia integrifolia",
+  "group": "paperbarks",
+  "groupLabel": "Paperbarks, bottlebrushes & banksias",
+  "h": "cg",
+  "size": "Tree to 15 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Pale yellow flower spikes and leaves silvery underneath. Grows on dunes and headlands.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51732899",
+   "acceptedName": "Banksia integrifolia",
+   "vernacular": "Coast Banksia"
+  }
+ },
+ {
+  "id": 303,
+  "kind": "plant",
+  "name": "Wallum Banksia",
+  "sci": "Banksia aemula",
+  "group": "paperbarks",
+  "groupLabel": "Paperbarks, bottlebrushes & banksias",
+  "h": "c",
+  "size": "Shrub or tree to 8 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Thick serrated leaves and fat greenish-yellow cones. A wallum heath icon.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2902748",
+   "acceptedName": "Banksia aemula",
+   "vernacular": "Wallum Banksia"
+  }
+ },
+ {
+  "id": 304,
+  "kind": "plant",
+  "name": "Brisbane Wattle",
+  "sci": "Acacia fimbriata",
+  "group": "wattles",
+  "groupLabel": "Wattles",
+  "h": "fg",
+  "size": "Shrub to 6 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Soft, narrow leaves and masses of pale yellow ball flowers in late winter.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51770526",
+   "acceptedName": "Acacia fimbriata",
+   "vernacular": "Fringed Wattle"
+  }
+ },
+ {
+  "id": 305,
+  "kind": "plant",
+  "name": "Early Black Wattle",
+  "sci": "Acacia leiocalyx",
+  "group": "wattles",
+  "groupLabel": "Wattles",
+  "h": "f",
+  "size": "Tree to 10 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Golden flower spikes appear from mid-winter. Common in open forest.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2912133",
+   "acceptedName": "Acacia leiocalyx",
+   "vernacular": "Black Wattle"
+  }
+ },
+ {
+  "id": 306,
+  "kind": "plant",
+  "name": "Moreton Bay Fig",
+  "sci": "Ficus macrophylla",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "rg",
+  "size": "Tree to 50 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Huge spreading fig with buttress roots and large glossy leaves. Its figs feed many birds and flying-foxes.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2892956",
+   "acceptedName": "Ficus macrophylla",
+   "vernacular": "Figwood"
+  }
+ },
+ {
+  "id": 307,
+  "kind": "plant",
+  "name": "Hoop Pine",
+  "sci": "Araucaria cunninghamii",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "r",
+  "size": "Tree to 60 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Tall conifer with tufted branches poking above the rainforest canopy, and bark that peels in hoops.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2919129",
+   "acceptedName": "Araucaria cunninghamii",
+   "vernacular": "Hoop Pine"
+  }
+ },
+ {
+  "id": 308,
+  "kind": "plant",
+  "name": "Bunya Pine",
+  "sci": "Araucaria bidwillii",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "r",
+  "size": "Tree to 45 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Dome-shaped conifer with sharp leaves. Its huge cones fall in summer and were a traditional feast food.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2905852",
+   "acceptedName": "Araucaria bidwillii",
+   "vernacular": "Bunya Pine"
+  }
+ },
+ {
+  "id": 309,
+  "kind": "plant",
+  "name": "Macadamia",
+  "sci": "Macadamia integrifolia",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "r",
+  "size": "Tree to 15 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "The native Queensland nut tree, with spiky-edged leaves and dangling cream flower spikes.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2890419",
+   "acceptedName": "Macadamia integrifolia",
+   "vernacular": "Macadamia Nut"
+  }
+ },
+ {
+  "id": 310,
+  "kind": "plant",
+  "name": "Blue Lilly Pilly",
+  "sci": "Syzygium oleosum",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "rg",
+  "size": "Tree to 15 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Glossy leaves and fluffy cream flowers followed by purple-blue fruit that birds love.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2907316",
+   "acceptedName": "Syzygium oleosum",
+   "vernacular": "Blue Cherry"
+  }
+ },
+ {
+  "id": 311,
+  "kind": "plant",
+  "name": "Black Bean",
+  "sci": "Castanospermum australe",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "rw",
+  "size": "Tree to 35 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Bright red-and-orange pea flowers in summer, then large bean pods. Grows along rivers.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2894943",
+   "acceptedName": "Castanospermum australe",
+   "vernacular": "Black Bean"
+  }
+ },
+ {
+  "id": 312,
+  "kind": "plant",
+  "name": "Illawarra Flame Tree",
+  "sci": "Brachychiton acerifolius",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "rg",
+  "size": "Tree to 30 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Drops its leaves and covers itself in scarlet bell flowers in early summer.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2916722",
+   "acceptedName": "Brachychiton acerifolius",
+   "vernacular": "Illawarra Flame Tree"
+  }
+ },
+ {
+  "id": 313,
+  "kind": "plant",
+  "name": "Piccabeen Palm",
+  "sci": "Archontophoenix cunninghamiana",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "rw",
+  "size": "Palm to 20 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Graceful palm of wet gullies with lilac flowers and bright red fruit.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51310382",
+   "acceptedName": "Archontophoenix cunninghamiana",
+   "vernacular": "Bangalow Palm"
+  }
+ },
+ {
+  "id": 314,
+  "kind": "plant",
+  "name": "Cabbage Tree Palm",
+  "sci": "Livistona australis",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "rw",
+  "size": "Palm to 25 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Tall fan palm with round, deeply divided leaves on a slim trunk.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51266874",
+   "acceptedName": "Livistona australis",
+   "vernacular": "Cabbage Tree Palm"
+  }
+ },
+ {
+  "id": 315,
+  "kind": "plant",
+  "name": "Red Cedar",
+  "sci": "Toona ciliata",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "r",
+  "size": "Tree to 50 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Deciduous rainforest giant whose new spring leaves glow red-pink. Heavily logged last century.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2887026",
+   "acceptedName": "Toona ciliata",
+   "vernacular": "Red Cedar"
+  }
+ },
+ {
+  "id": 316,
+  "kind": "plant",
+  "name": "Firewheel Tree",
+  "sci": "Stenocarpus sinuatus",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "rg",
+  "size": "Tree to 30 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Red-and-orange flowers arranged like the spokes of a wheel. Loved by nectar-feeding birds.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2886064",
+   "acceptedName": "Stenocarpus sinuatus",
+   "vernacular": "Wheel Of Fire"
+  }
+ },
+ {
+  "id": 317,
+  "kind": "plant",
+  "name": "Native Frangipani",
+  "sci": "Hymenosporum flavum",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "rg",
+  "size": "Tree to 20 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Sweetly scented cream flowers that turn yellow as they age.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2912289",
+   "acceptedName": "Hymenosporum flavum",
+   "vernacular": "Native Frangipani"
+  }
+ },
+ {
+  "id": 318,
+  "kind": "plant",
+  "name": "Silky Oak",
+  "sci": "Grevillea robusta",
+  "group": "rainforest-trees",
+  "groupLabel": "Rainforest trees & palms",
+  "h": "rg",
+  "size": "Tree to 30 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Fern-like leaves and brilliant golden-orange flower combs in late spring.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2918082",
+   "acceptedName": "Grevillea robusta",
+   "vernacular": "Silky Oak"
+  }
+ },
+ {
+  "id": 319,
+  "kind": "plant",
+  "name": "Grey Mangrove",
+  "sci": "Avicennia marina",
+  "group": "coastal-plants",
+  "groupLabel": "Coastal plants",
+  "h": "c",
+  "size": "Tree to 10 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Mangrove with grey-green leaves and pencil-like breathing roots (pneumatophores) poking from the mud.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2899921",
+   "acceptedName": "Avicennia marina",
+   "vernacular": "White Mangrove"
+  }
+ },
+ {
+  "id": 320,
+  "kind": "plant",
+  "name": "Pandanus",
+  "sci": "Pandanus tectorius",
+  "group": "coastal-plants",
+  "groupLabel": "Coastal plants",
+  "h": "c",
+  "size": "Tree to 10 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Coastal screw pine with stilt roots, spiralling leaves and a pineapple-like fruit.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2891749",
+   "acceptedName": "Pandanus tectorius",
+   "vernacular": "Screw Pine"
+  }
+ },
+ {
+  "id": 321,
+  "kind": "plant",
+  "name": "Coastal She-oak",
+  "sci": "Casuarina equisetifolia",
+  "group": "coastal-plants",
+  "groupLabel": "Coastal plants",
+  "h": "c",
+  "size": "Tree to 20 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Drooping, needle-like branchlets that sigh in the sea breeze. Grows on dunes.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2911837",
+   "acceptedName": "Casuarina equisetifolia",
+   "vernacular": "Coastal She-oak"
+  }
+ },
+ {
+  "id": 322,
+  "kind": "plant",
+  "name": "Swamp She-oak",
+  "sci": "Casuarina glauca",
+  "group": "coastal-plants",
+  "groupLabel": "Coastal plants",
+  "h": "wc",
+  "size": "Tree to 20 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "She-oak of estuaries and tidal flats. Glossy black-cockatoos feed on its cones.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2893120",
+   "acceptedName": "Casuarina glauca",
+   "vernacular": "Swamp Oak"
+  }
+ },
+ {
+  "id": 323,
+  "kind": "plant",
+  "name": "Beach Spinifex",
+  "sci": "Spinifex sericeus",
+  "group": "coastal-plants",
+  "groupLabel": "Coastal plants",
+  "h": "c",
+  "size": "Grass to 30 cm",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Silvery grass that binds sand dunes. Its spiky seed heads roll along the beach in the wind.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2903600",
+   "acceptedName": "Spinifex sericeus",
+   "vernacular": "Beach Spinifex"
+  }
+ },
+ {
+  "id": 324,
+  "kind": "plant",
+  "name": "Cottonwood",
+  "sci": "Hibiscus tiliaceus",
+  "group": "coastal-plants",
+  "groupLabel": "Coastal plants",
+  "h": "c",
+  "size": "Tree to 10 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Coastal hibiscus with heart-shaped leaves and yellow flowers that turn red as they fade.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51288506",
+   "acceptedName": "Hibiscus tiliaceus",
+   "vernacular": "Cotton Tree"
+  }
+ },
+ {
+  "id": 325,
+  "kind": "plant",
+  "name": "Grass Tree",
+  "sci": "Xanthorrhoea johnsonii",
+  "group": "wildflowers",
+  "groupLabel": "Wildflowers & grasses",
+  "h": "f",
+  "size": "to 5 m",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Dark trunk topped with a skirt of fine grassy leaves and a tall flower spike after fire.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2888002",
+   "acceptedName": "Xanthorrhoea johnsonii",
+   "vernacular": "Johnson's Grass Tree"
+  }
+ },
+ {
+  "id": 326,
+  "kind": "plant",
+  "name": "Native Violet",
+  "sci": "Viola banksii",
+  "group": "wildflowers",
+  "groupLabel": "Wildflowers & grasses",
+  "h": "g",
+  "size": "Groundcover",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Low creeping plant with kidney-shaped leaves and small purple-and-white flowers.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/8009374",
+   "acceptedName": "Viola banksii",
+   "vernacular": "Banks' Violet"
+  }
+ },
+ {
+  "id": 327,
+  "kind": "plant",
+  "name": "Kangaroo Grass",
+  "sci": "Themeda triandra",
+  "group": "wildflowers",
+  "groupLabel": "Wildflowers & grasses",
+  "h": "o",
+  "size": "Grass to 1.5 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Tussock grass with rusty-red seed heads in summer. A key native pasture grass.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51291519",
+   "acceptedName": "Themeda triandra",
+   "vernacular": "Kangaroo Grass"
+  }
+ },
+ {
+  "id": 328,
+  "kind": "plant",
+  "name": "Blue Flax Lily",
+  "sci": "Dianella caerulea",
+  "group": "wildflowers",
+  "groupLabel": "Wildflowers & grasses",
+  "h": "fg",
+  "size": "to 1 m",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Strappy leaves with sprays of small blue star flowers, followed by shiny blue berries.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51437654",
+   "acceptedName": "Dianella caerulea",
+   "vernacular": "Paroo Lily"
+  }
+ },
+ {
+  "id": 329,
+  "kind": "plant",
+  "name": "Purple Coral Pea",
+  "sci": "Hardenbergia violacea",
+  "group": "wildflowers",
+  "groupLabel": "Wildflowers & grasses",
+  "h": "f",
+  "size": "Climber",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Twining vine covered in purple pea flowers in late winter.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2894403",
+   "acceptedName": "Hardenbergia violacea",
+   "vernacular": "Native Lilac"
+  }
+ },
+ {
+  "id": 330,
+  "kind": "plant",
+  "name": "Dusky Coral Pea",
+  "sci": "Kennedia rubicunda",
+  "group": "wildflowers",
+  "groupLabel": "Wildflowers & grasses",
+  "h": "f",
+  "size": "Climber",
+  "nocturnal": false,
+  "season": "s",
+  "notes": "Strong climber with large dark-red pea flowers.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2889383",
+   "acceptedName": "Kennedia rubicunda",
+   "vernacular": "Red Kennedy Pea"
+  }
+ },
+ {
+  "id": 331,
+  "kind": "plant",
+  "name": "Elkhorn Fern",
+  "sci": "Platycerium bifurcatum",
+  "group": "ferns-orchids",
+  "groupLabel": "Ferns & orchids",
+  "h": "rg",
+  "size": "Epiphyte",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Fern that grows on trees and rocks, with a shield of brown leaves and forked \"elkhorn\" fronds.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2902475",
+   "acceptedName": "Platycerium bifurcatum",
+   "vernacular": "Elkhorn Fern"
+  }
+ },
+ {
+  "id": 332,
+  "kind": "plant",
+  "name": "Rough Tree Fern",
+  "sci": "Cyathea australis",
+  "group": "ferns-orchids",
+  "groupLabel": "Ferns & orchids",
+  "h": "r",
+  "size": "to 12 m",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Tree fern with a rough, stubbly trunk and large lacy fronds, in wet gullies.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51434243",
+   "acceptedName": "Cyathea australis",
+   "vernacular": "Rough Tree-fern"
+  }
+ },
+ {
+  "id": 333,
+  "kind": "plant",
+  "name": "Bird's Nest Fern",
+  "sci": "Asplenium australasicum",
+  "group": "ferns-orchids",
+  "groupLabel": "Ferns & orchids",
+  "h": "r",
+  "size": "Epiphyte",
+  "nocturnal": false,
+  "season": null,
+  "notes": "Large glossy fronds arranged in a nest-shaped rosette high in rainforest trees.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/node/apni/2887780",
+   "acceptedName": "Asplenium australasicum",
+   "vernacular": "Bird's Nest Fern"
+  }
+ },
+ {
+  "id": 334,
+  "kind": "plant",
+  "name": "Pink Rock Orchid",
+  "sci": "Dendrobium kingianum",
+  "group": "ferns-orchids",
+  "groupLabel": "Ferns & orchids",
+  "h": "r",
+  "size": "Orchid",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Small orchid on rocks with sprays of fragrant pink-mauve flowers in late winter.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51441473",
+   "acceptedName": "Dendrobium kingianum",
+   "vernacular": "Pink Rock Orchid"
+  }
+ },
+ {
+  "id": 335,
+  "kind": "plant",
+  "name": "King Orchid",
+  "sci": "Dendrobium speciosum",
+  "group": "ferns-orchids",
+  "groupLabel": "Ferns & orchids",
+  "h": "r",
+  "size": "Orchid",
+  "nocturnal": false,
+  "season": "w",
+  "notes": "Large orchid on rocks and trees with long sprays of cream-yellow flowers.",
+  "ala": {
+   "lsid": "https://id.biodiversity.org.au/taxon/apni/51402816",
+   "acceptedName": "Dendrobium speciosum",
+   "vernacular": "Rock Lily"
+  }
+ }
+]

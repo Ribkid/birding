@@ -1,19 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>Sarah's BirdyDex</title>
   <defs>
-    <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#F2F4F5"/><stop offset=".3" stop-color="#DCE0E3"/><stop offset=".62" stop-color="#AEB7BC"/><stop offset="1" stop-color="#DCE0E3"/>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A8AE6"/><stop offset="1" stop-color="#1650B4"/>
     </linearGradient>
-    <clipPath id="body"><path d="M150 300 C150 225 205 180 270 182 C300 150 350 150 372 182 L404 194 L372 210 C376 290 320 335 250 338 L186 352 L120 404 L142 340 C146 326 150 314 150 300 Z"/></clipPath>
+    <linearGradient id="breast" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFD84A"/><stop offset="1" stop-color="#F2B90C"/>
+    </linearGradient>
+    <clipPath id="badge"><rect width="512" height="512" rx="116"/></clipPath>
+    <clipPath id="body"><path d="M196 312c0-78 64-136 140-130 64 5 106 52 104 112-2 74-66 128-142 126-58-2-102-44-102-108z"/></clipPath>
   </defs>
-  <rect width="512" height="512" fill="#1A5FCC"/>
-  <path d="M70 392 Q256 372 442 392" stroke="#142E29" stroke-width="22" stroke-linecap="round" fill="none"/>
-  <g clip-path="url(#body)">
-    <rect x="100" y="140" width="320" height="300" fill="#8A8F96"/>
-    <path d="M160 250 C200 225 300 215 380 222 L380 400 L140 400 Z" fill="#F5C518"/>
-    <path d="M330 205 C350 214 368 214 380 210 L380 232 C360 238 340 232 330 224 Z" fill="#EDEFF0"/>
+  <g clip-path="url(#badge)">
+    <rect width="512" height="512" fill="url(#sky)"/>
+    <circle cx="410" cy="96" r="150" fill="#ffffff" opacity=".08"/>
+    <!-- trunk -->
+    <path d="M58 -10h104l-8 540H50z" fill="#5B3D2A"/>
+    <path d="M86 20c-6 60 6 120-4 180M120 60c8 70-6 130 4 210M92 280c-8 60 8 120-2 230M130 330c6 50-4 110 2 180" stroke="#3E2A1C" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <!-- tail -->
+    <path d="M214 352l-62 92 22 12 70-82z" fill="#5F646B"/>
+    <!-- body: grey back, yellow breast -->
+    <g clip-path="url(#body)">
+      <rect x="180" y="170" width="280" height="260" fill="#8A8F96"/>
+      <path d="M270 222c66-10 138 4 186 40v190H250c-30-60-24-150 20-230z" fill="url(#breast)"/>
+      <path d="M216 360c10 20 26 34 46 42l-10 30h-60z" fill="#C9C42E"/>
+    </g>
+    <!-- wing -->
+    <path d="M206 300c18-52 70-84 120-74-18 50-60 92-112 112-10-10-12-24-8-38z" fill="#6A6F76"/>
+    <path d="M226 318c22-28 52-48 82-58" stroke="#565B62" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <!-- head -->
+    <circle cx="374" cy="196" r="64" fill="#8A8F96"/>
+    <path d="M412 226c10 6 20 6 28 2-6 10-16 16-28 14z" fill="#B9BDC1"/>
+    <path d="M434 192l40 10-40 12z" fill="#1A1A1A"/>
+    <circle cx="396" cy="186" r="11" fill="#141414"/>
+    <circle cx="400" cy="182" r="3.5" fill="#fff"/>
+    <!-- feet gripping the trunk -->
+    <path d="M262 382l-104 14M272 394l-112 34" stroke="#2B2B2B" stroke-width="9" stroke-linecap="round"/>
+    <!-- leg band -->
+    <rect x="200" y="380" width="30" height="18" rx="4" transform="rotate(-8 215 389)" fill="#DCE0E3" stroke="#2B2B2B" stroke-width="3"/>
   </g>
-  <path d="M182 262 C220 236 282 238 318 262 C278 286 220 290 182 262 Z" fill="#6E737A"/>
-  <circle cx="340" cy="192" r="11" fill="#142E29"/>
-  <path d="M248 336 L244 384 M282 332 L286 384" stroke="#142E29" stroke-width="10" stroke-linecap="round"/>
-  <rect x="270" y="346" width="32" height="20" rx="4" fill="url(#band)" stroke="#142E29" stroke-width="3"/>
+  <rect x="6" y="6" width="500" height="500" rx="110" fill="none" stroke="#ffffff" stroke-opacity=".25" stroke-width="6"/>
 </svg>

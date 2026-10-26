@@ -16,7 +16,9 @@ export const seq = () => data;
 export function monthRates(id) {
   const sp = data?.species?.[id];
   if (!sp || !sp.n) return null;
-  const rates = sp.m.map((c, i) => c / Math.max(1, data.effort[i]));
+  // Each kind is compared with records of its own kind (birds with birds, frogs with frogs…).
+  const effort = (sp.kind && data.effortByKind?.[sp.kind]) || data.effort;
+  const rates = sp.m.map((c, i) => c / Math.max(1, effort[i]));
   const max = Math.max(...rates);
   return { raw: rates, rel: rates.map(r => (max ? r / max : 0)) };
 }

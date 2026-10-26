@@ -13,7 +13,7 @@ export function toEbirdCsv(sightings, outings) {
   const rows = [];
   for (const s of sightings.slice().sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))) {
     const sp = byId.get(s.speciesId);
-    if (!sp) continue;
+    if (!sp || sp.kind !== 'bird') continue; // eBird only takes birds
     const [genus, ...rest] = sp.sci.split(' ');
     const o = s.outingId ? outingById.get(s.outingId) : null;
     const lat = o?.lat ?? s.lat, lng = o?.lng ?? s.lng;

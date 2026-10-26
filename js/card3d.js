@@ -1,6 +1,6 @@
 // 3D collector cards (tilt + holographic foil), feather confetti and shareable card images.
 import { sized } from './media.js';
-import { RARITY } from './species.js';
+import { RARITY, KINDS, dexCode } from './species.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pad = n => String(n).padStart(3, '0');
@@ -8,15 +8,15 @@ const pad = n => String(n).padStart(3, '0');
 export function cardHTML(sp, { seen, firstSeen, count, place } = {}) {
   const foil = seen && sp.rarity >= 4 ? `card--foil card--foil-${sp.rarity}` : '';
   const img = sized(sp.id, 'large');
-  return `<div class="card3d ${seen ? 'card--seen' : 'card--unseen'} ${foil}" data-card>
+  return `<div class="card3d kind--${sp.kind || 'bird'} ${seen ? 'card--seen' : 'card--unseen'} ${foil}" data-card>
     <div class="card-inner">
       <div class="card-face">
-        <div class="card-top"><span class="band ${seen ? 'band--on' : ''}">${pad(sp.id)}</span><span class="card-rarity">${RARITY[sp.rarity].label}</span></div>
+        <div class="card-top"><span class="band band--${sp.kind || 'bird'} ${seen ? 'band--on' : ''}">${dexCode(sp.id)}</span><span class="card-rarity">${sp.kind && sp.kind !== 'bird' ? `${esc(KINDS[sp.kind].one.replace(/^./, c => c.toUpperCase()))}, ${RARITY[sp.rarity].label.toLowerCase()}` : RARITY[sp.rarity].label}</span></div>
         <div class="card-photo">${img ? `<span class="whole"><img class="whole-bg" src="${esc(img)}" alt="" aria-hidden="true"><img class="whole-fg" src="${esc(img)}" alt=""></span>` : ''}</div>
         <h3 class="card-name">${esc(sp.name)}</h3>
         <p class="card-sci">${esc(sp.sci)}</p>
         <div class="card-stats">
-          <span><b>${sp.size}</b> cm</span>
+          <span>${sp.kind === 'bird' ? `<b>${sp.size}</b> cm` : esc(sp.sizeText || '')}</span>
           <span><b>${count || 0}</b> ${count === 1 ? 'sighting' : 'sightings'}</span>
         </div>
         <p class="card-foot">${seen ? `First seen ${esc(firstSeen || '')}${place ? `, ${esc(place)}` : ''}` : 'Not seen yet'}</p>
@@ -135,9 +135,9 @@ export async function cardImage(sp, info) {
   grad.addColorStop(0, '#F2F4F5'); grad.addColorStop(0.3, '#DCE0E3'); grad.addColorStop(0.62, '#B4BCC1'); grad.addColorStop(1, '#DCE0E3');
   g.fillStyle = grad; roundRect(g, x + 40, y + 40, 210, 72, 14); g.fill();
   g.fillStyle = '#1D2B29'; g.font = '800 58px "Big Shoulders", sans-serif'; g.textBaseline = 'middle';
-  g.fillText(pad(sp.id), x + 72, y + 78);
+  g.fillText(dexCode(sp.id), x + 72, y + 78);
   g.fillStyle = '#8A6400'; g.font = '700 38px "Schibsted Grotesk", sans-serif'; g.textAlign = 'right';
-  g.fillText(info.isNew ? 'New bird!' : RARITY[sp.rarity].label, x + w - 40, y + 78);
+  g.fillText(info.isNew ? `New ${sp.kind && sp.kind !== 'bird' ? KINDS[sp.kind].one : 'bird'}!` : RARITY[sp.rarity].label, x + w - 40, y + 78);
   g.textAlign = 'left';
   // text
   const ty = y + 140 + (w - 80) * 0.75 + 90;
