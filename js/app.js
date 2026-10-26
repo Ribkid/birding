@@ -1863,7 +1863,7 @@ async function boot() {
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); state.installPrompt = e; if ((location.hash || '#/dex').startsWith('#/dex')) renderDex(); });
   render();
   // Photos arriving only change the dex/list pages; don't interrupt Listen or a playing call.
-  onMediaReady(() => { if (!$('.sheet-wrap') && /^(#\/?(dex)?|#\/lists?.*|#\/targets|#\/badges)?$/.test(location.hash)) render(); });
+  onMediaReady(() => { if (!$('.sheet-wrap') && /^(#\/?(dex)?|#\/lists?.*|#\/targets|#\/badges|#\/bird\/\d+|#\/compare\/.*)?$/.test(location.hash)) render(); });
   loadIndex();
   if ('serviceWorker' in navigator) {
     const hadController = !!navigator.serviceWorker.controller;
