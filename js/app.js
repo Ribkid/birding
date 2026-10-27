@@ -2187,7 +2187,7 @@ function frogBoard(pack, month) {
     <ul class="frogboard-list">${frogs.map(({ sp }) => {
       const clips = pack[sp.id];
       return `<li class="frog-row kind--frog" data-frog="${sp.id}">
-        <a class="row-thumb" href="#/bird/${sp.id}" tabindex="-1" aria-hidden="true">${birdImg(sp)}</a>
+        <a class="row-thumb frog-photo" href="#/bird/${sp.id}" tabindex="-1" aria-hidden="true">${birdImg(sp)}</a>
         <div class="frog-main">
           <a class="frog-name" href="#/bird/${sp.id}">${esc(sp.name)}</a>
           <span class="frog-call small">${esc(callLine(sp))}</span>
@@ -2216,33 +2216,46 @@ async function renderListen() {
     <header class="page-head page-head--back"><a class="iconbtn" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
       <div><h1>Listen</h1><p class="muted small">BirdNET names birds from their calls, right on your phone.</p></div></header>
     <div class="listen pad-x">
-      <canvas class="spectro" width="600" height="220" aria-label="Live sound picture"></canvas>
-      <div class="listen-ctl">
+      <section class="listen-stage" aria-label="Sound picture">
+        <div class="listen-screen">
+          <canvas class="spectro" width="600" height="220" role="img" aria-label="Live sound picture"></canvas>
+          <span class="listen-idle" aria-hidden="true">${Array.from({ length: 30 }, (_, i) => `<i style="--h:${(0.16 + 0.7 * Math.abs(Math.sin(i * 0.5)) * (0.55 + 0.45 * Math.cos(i * 0.23))).toFixed(2)}"></i>`).join('')}</span>
+          <span class="listen-scale" aria-hidden="true"><span>12 kHz</span><span>6</span><span>0</span></span>
+          <span class="listen-live" aria-hidden="true"><i></i>Live</span>
+        </div>
         <button class="micbtn" data-mic aria-pressed="false">${icon.mic}<span>Start listening</span></button>
+      </section>
+      <div class="listen-ctl">
         <p class="small muted" data-lstatus role="status">Point your phone towards the birds and keep still. The first time, the sound model downloads (about 60 MB). After that, Listen works with no signal.</p>
         <div class="meter meter--thin hidden" data-lprog style="--p:0%"><span></span></div>
       </div>
       <div class="block-h"><h2 class="h2">Heard</h2>${L.hits.size ? '<button class="btn btn--small btn--quiet" data-clear>Clear</button>' : ''}</div>
-      <ul class="rows" data-hits></ul>
-      <p class="small muted">BirdNET by the K. Lisa Yang Center for Conservation Bioacoustics and Chemnitz University of Technology (model CC BY-SA 4.0). Suggestions can be wrong, so check before you log.</p>
+      <ul class="hits" data-hits></ul>
+      <p class="small muted listen-credit">BirdNET by the K. Lisa Yang Center for Conservation Bioacoustics and Chemnitz University of Technology (model CC BY-SA 4.0). Suggestions can be wrong, so check before you log.</p>
       ${frogBoard(pack, month)}
     </div>`;
   const hitsEl = $('[data-hits]', view), status = $('[data-lstatus]', view), prog = $('[data-lprog]', view), btn = $('[data-mic]', view);
   const seen = seenSet();
+  // Only a call heard while this screen is open slides in; the list redraws every 2 s and those must not replay.
+  const shown = new Set(L.hits.keys());
   const drawHits = () => {
-    const arr = [...L.hits.values()].sort((a, b) => b.last - a.last);
-    hitsEl.innerHTML = arr.map(h => {
+    const arr = [...L.hits.entries()].sort((a, b) => b[1].last - a[1].last);
+    let n = 0;
+    hitsEl.innerHTML = arr.map(([key, h]) => {
       const sp = h.dexId ? byId.get(h.dexId) : null;
       const ago = Math.round((Date.now() - h.last) / 1000);
-      return `<li class="hit ${Date.now() - h.last < 4000 ? 'hit--live' : ''}">
-        <span class="row-thumb">${sp ? birdImg(sp) : `<span class="img-missing"></span>`}</span>
-        <span class="row-main"><strong>${esc(sp ? sp.name : h.name)}</strong>
+      const fresh = !shown.has(key);
+      return `<li class="hit ${Date.now() - h.last < 4000 ? 'hit--live' : ''} ${fresh ? 'hit--in' : ''}"${fresh ? ` style="--i:${n++}"` : ''}>
+        <span class="hit-photo">${sp ? birdImg(sp) : `<span class="hit-nophoto">${icon.mic}</span>`}</span>
+        <span class="hit-main"><strong>${esc(sp ? sp.name : h.name)}</strong>
           <span class="small muted">${Math.round(h.best * 100)}% sure, ${ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)} min ago`}${sp ? (seen.has(sp.id) ? '' : '. New for your dex') : '. Not in the dex'}</span>
-          <span class="meter meter--thin" style="--p:${Math.round(h.best * 100)}%"><span></span></span></span>
-        ${sp ? `<button class="btn btn--small" data-loghit="${sp.id}">Log it</button>` : ''}</li>`;
-    }).join('') || '<li class="muted pad">Nothing yet. Calls show up here as they are recognised.</li>';
+          <span class="hit-bar" aria-hidden="true"><i style="--p:${Math.min(1, h.best).toFixed(3)}"></i></span></span>
+        ${sp ? `<button class="btn btn--small hit-log" data-loghit="${sp.id}">Log it</button>` : ''}</li>`;
+    }).join('') || '<li class="hits-empty">Nothing yet. Calls show up here as they are recognised.</li>';
+    arr.forEach(([key]) => shown.add(key));
   };
   drawHits();
+  stagger(view, '.frog-row', { key: 'listen-frogs', max: 10 });
   let mod = null;
   const stop = () => { mod?.stopListening(); btn.setAttribute('aria-pressed', 'false'); btn.querySelector('span').textContent = 'Start listening'; btn.classList.remove('on'); };
   const frogs = wireFrogBoard(pack, () => { if (btn.classList.contains('on')) { stop(); status.textContent = 'Stopped listening while the frog call plays, so BirdNET does not hear it.'; } });
@@ -2253,7 +2266,7 @@ async function renderListen() {
     if (fp) { frogs.play(fp); return; }
     const lh = e.target.closest('[data-loghit]');
     if (lh) openSightingSheet({ speciesId: Number(lh.dataset.loghit), autoGps: true, notes: 'Identified by call with BirdNET.' });
-    if (e.target.closest('[data-clear]')) { L.hits.clear(); drawHits(); }
+    if (e.target.closest('[data-clear]')) { L.hits.clear(); shown.clear(); drawHits(); }
     if (!e.target.closest('[data-mic]')) return;
     if (btn.classList.contains('on')) { stop(); status.textContent = 'Stopped.'; return; }
     frogs.stop();

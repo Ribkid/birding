@@ -1,59 +1,168 @@
-/* Calls: the frog call board on Listen, call credits on species pages, and "Save calls for offline" in Settings. */
+/* Calls: Listen (the live sound picture, what was heard, the frog call board), call credits on species pages,
+   and "Save calls for offline" in Settings. */
 
-/* ---------- frog call board ---------- */
+/* ---------- Listen: the sound picture ----------
+   A dark screen in a glass frame, like a field recorder. The record button sits in a notch on its bottom edge and
+   pulses while it records; idle, the screen shows a quiet trace of what it will draw. */
+.listen {
+  --rec: #07120F; --rec-ink: #F1F6F3; --rec-ink-2: #B5C5BF;
+  display: grid;
+}
+.listen-stage {
+  position: relative; display: grid; justify-items: center; margin-top: var(--sp-2);
+  padding: 8px 8px var(--sp-4); border-radius: 28px; background: var(--rec);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1), inset 0 1px 0 rgba(255, 255, 255, .14), var(--shadow-float);
+}
+.listen-screen { position: relative; width: 100%; height: clamp(190px, 30vh, 250px); border-radius: 21px; overflow: hidden; background: #0F1E1B; }
+.listen-screen .spectro { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; background: transparent; }
+/* frequency lines behind the picture */
+.listen-screen::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0 calc(25% - 1px), rgba(255, 255, 255, .06) calc(25% - 1px) 25%);
+}
+.listen-idle {
+  position: absolute; left: 16%; right: 16%; top: 18%; bottom: 30%; display: flex; align-items: center; justify-content: space-between;
+  pointer-events: none; transition: opacity var(--dur-3) var(--ease-out);
+}
+.listen-idle i { width: 3px; height: calc(var(--h) * 100%); border-radius: 2px; background: linear-gradient(#F5C518, #1A5FCC); opacity: .38; }
+.listen-stage:has(.micbtn.on) .listen-idle { opacity: 0; }
+.listen-scale {
+  position: absolute; left: 10px; top: 8px; bottom: 34px; display: flex; flex-direction: column; justify-content: space-between;
+  font: 600 .6875rem/1 var(--font); color: rgba(241, 246, 243, .72); pointer-events: none; text-shadow: 0 1px 2px rgba(0, 0, 0, .6);
+}
+.listen-live {
+  position: absolute; right: 10px; top: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px;
+  border-radius: var(--r-pill); background: rgba(6, 14, 12, .62); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
+  font: 700 var(--fs-1)/1.2 var(--font); color: var(--rec-ink);
+  opacity: 0; transform: translateY(-6px); transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-3) var(--ease-spring);
+}
+.listen-live i { width: 8px; height: 8px; border-radius: 50%; background: #FF5A4E; }
+.listen-stage:has(.micbtn.on) .listen-live { opacity: 1; transform: none; }
+
+/* The record button, in a notch cut into the bottom of the screen. */
+.listen-stage .micbtn {
+  position: relative; isolation: isolate; margin-top: -30px; min-height: 60px; padding: 0 26px 0 20px;
+  box-shadow: 0 0 0 7px var(--rec), 0 14px 28px -10px rgba(0, 0, 0, .7);
+  transition: scale var(--dur-3) var(--ease-spring), background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.listen-stage .micbtn:active { scale: .95; transition-duration: var(--dur-1); }
+.listen-stage .micbtn svg { flex: none; }
+.listen-stage .micbtn:focus-visible { outline-color: var(--rec-ink); outline-offset: 9px; }
+/* recording: the button goes red and a soft ring keeps leaving it */
+.listen-stage .micbtn.on { animation: none; background: var(--danger); color: var(--on-danger); box-shadow: 0 0 0 7px var(--rec), 0 14px 28px -10px rgba(0, 0, 0, .7); }
+.listen-stage .micbtn.on::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--danger);
+  animation: mic-pulse 1.6s var(--ease-out) infinite;
+}
+@keyframes mic-pulse { from { opacity: .6; transform: scale(1); } to { opacity: 0; transform: scale(1.22, 1.6); } }
+
+.listen-ctl { display: grid; justify-items: center; gap: var(--sp-2); margin: var(--sp-4) 0 var(--sp-2); text-align: center; }
+.listen-ctl p { margin: 0; max-width: 40ch; line-height: 1.45; }
+.listen-ctl .meter { width: min(100%, 280px); }
+
+/* ---------- what was heard: photo cards that slide in ---------- */
+.hits { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
+.hit {
+  display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3);
+  min-height: 84px; padding: 0 var(--sp-3) 0 0; border: 0; border-radius: var(--r-card);
+  background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden;
+  transition: box-shadow var(--dur-3) var(--ease-out);
+}
+.hit--live { background: var(--surface); box-shadow: 0 0 0 2.5px var(--sun), var(--shadow-card); }
+.hit-photo { align-self: stretch; position: relative; background: var(--surface-2); }
+.hit-photo img, .hit-photo .img-missing { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+.hit-nophoto { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-2); }
+.hit-nophoto svg { width: 26px; height: 26px; }
+.hit-main { display: grid; gap: 2px; min-width: 0; padding: var(--sp-3) 0; }
+.hit-main strong { font-weight: 800; line-height: 1.25; }
+.hit-main .small { line-height: 1.35; }
+.hit-bar { display: block; height: 6px; margin-top: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.hit-bar i { display: block; height: 100%; border-radius: inherit; background: var(--sun); box-shadow: inset 0 0 0 1px var(--sun-ink); transform: scaleX(var(--p, 0)); transform-origin: 0 50%; }
+.hit .hit-log { min-height: var(--tap); border-radius: var(--r-pill); background: var(--azure-soft); color: var(--azure); box-shadow: none; font-weight: 700; }
+.hit--in { animation: hit-in 600ms var(--ease-spring) both; animation-delay: calc(var(--i, 0) * 80ms); }
+.hit--in .hit-bar i { animation: hit-bar 800ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 80ms + 240ms); }
+@keyframes hit-in { from { opacity: 0; transform: translateX(-28px) scale(.97); } }
+@keyframes hit-bar { from { transform: scaleX(0); } }
+.hits-empty {
+  padding: var(--sp-4); border-radius: var(--r-card); text-align: center; font-size: var(--fs-2); color: var(--ink-2);
+  background: var(--surface-2);
+}
+.listen-credit { margin: var(--sp-3) 0 0; line-height: 1.45; }
+
+/* ---------- frog call board: photo cards with tinted play buttons ---------- */
 .frogboard { margin-top: var(--sp-6); }
 .frogboard .h2 { margin-bottom: var(--sp-1); }
 .frogboard > .muted { margin: 0 0 var(--sp-3); }
 .frogboard-save { margin: 0 0 var(--sp-3); color: var(--ink-2); }
-.frogboard-list { list-style: none; margin: 0; padding: 0 var(--sp-4); background: var(--surface); border-radius: var(--r-2); }
-.frog-row { display: grid; grid-template-columns: 56px 1fr; gap: var(--sp-3); padding: var(--sp-3) 0; }
-.frog-row + .frog-row { border-top: 1px solid var(--line); }
-.frog-row .row-thumb { width: 56px; height: 56px; box-shadow: 0 0 0 2px var(--kc); }
-.frog-main { display: grid; gap: 2px; min-width: 0; }
-.frog-name { color: var(--ink); font-weight: 700; text-decoration: none; justify-self: start; }
-.frog-name:hover { text-decoration: underline; }
-.frog-call { color: var(--ink-2); }
+.frogboard-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
+.frog-row {
+  --kc-soft: color-mix(in srgb, var(--kc) 13%, var(--surface));
+  display: grid; grid-template-columns: 108px minmax(0, 1fr); gap: var(--sp-4);
+  border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden;
+  transition: box-shadow var(--dur-3) var(--ease-out);
+}
+.frog-row.is-playing { box-shadow: 0 0 0 2.5px var(--kc), var(--shadow-card); }
+.frog-row .frog-photo { position: relative; width: auto; height: auto; min-height: 136px; border-radius: 0; box-shadow: none; }
+.frog-row .frog-photo img, .frog-row .frog-photo .img-missing { position: absolute; inset: 0; }
+.frog-main { display: grid; align-content: start; gap: 2px; min-width: 0; padding: var(--sp-3) var(--sp-3) var(--sp-3) 0; }
+.frog-name { color: var(--ink); font-weight: 800; font-size: 1.0625rem; line-height: 1.25; text-decoration: none; justify-self: start; }
+.frog-name:hover { text-decoration: underline; text-underline-offset: 3px; }
+.frog-call { color: var(--ink-2); line-height: 1.4; }
 .frog-plays { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
 
-/* Play pills: azure is for actions; the pressed (playing) state fills solid. Numerals use the stamp face. */
+/* Play pills take the kind colour; playing fills them. Numerals use the stamp face. */
 .fplay {
   display: inline-flex; align-items: center; gap: var(--sp-2);
-  min-height: var(--tap); padding: 0 var(--sp-4) 0 var(--sp-3);
+  min-height: var(--tap); padding: 0 var(--sp-4) 0 6px;
   border: 0; border-radius: var(--r-pill); cursor: pointer;
-  background: var(--azure-soft); color: var(--azure); font-weight: 700; font-size: var(--fs-2);
-  transition: transform var(--dur-1) var(--ease-out);
+  background: var(--kc-soft, var(--azure-soft)); color: var(--kc, var(--azure)); font-weight: 700; font-size: var(--fs-2);
+  transition: transform var(--dur-3) var(--ease-spring), background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
 }
-.fplay:active { transform: scale(.96); }
+.fplay:active { transform: scale(.94); transition-duration: var(--dur-1); }
 .fplay b { font-family: var(--stamp); font-weight: 800; font-size: 1.125rem; line-height: 1; }
-.fplay svg { width: 18px; height: 18px; display: block; }
-.fplay[aria-pressed="true"] { background: var(--azure); color: var(--on-azure); }
-:root[data-theme="outdoor"] .fplay:not([aria-pressed="true"]) { box-shadow: inset 0 0 0 1.5px var(--azure); background: var(--surface); }
+.fplay-ico { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--kc, var(--azure)); color: var(--on-kind); }
+.fplay svg { width: 16px; height: 16px; display: block; margin-left: 2px; }
+.fplay[aria-pressed="true"] { background: var(--kc, var(--azure)); color: var(--on-kind); padding-left: var(--sp-3); }
+:root[data-theme="outdoor"] .fplay:not([aria-pressed="true"]) { box-shadow: inset 0 0 0 1.5px var(--kc, var(--azure)); background: var(--surface); }
 
 /* While a clip plays, the play icon becomes three bars that move with it. */
-.fplay-eq { display: none; align-items: flex-end; gap: 2px; width: 18px; height: 16px; }
+.fplay-eq { display: none; align-items: flex-end; gap: 2px; width: 18px; height: 16px; margin-right: 4px; }
 .fplay-eq i { display: block; width: 4px; height: 100%; border-radius: 1px; background: currentColor; transform-origin: 50% 100%; animation: fplay-eq 900ms var(--ease-out) infinite alternate; }
 .fplay-eq i:nth-child(2) { animation-delay: -300ms; }
 .fplay-eq i:nth-child(3) { animation-delay: -600ms; }
 .fplay[aria-pressed="true"] .fplay-ico { display: none; }
 .fplay[aria-pressed="true"] .fplay-eq { display: inline-flex; }
 @keyframes fplay-eq { from { transform: scaleY(.25); } to { transform: scaleY(1); } }
+
+.frog-prog { display: block; height: 4px; margin-top: var(--sp-2); border-radius: 2px; background: var(--kc-soft, var(--surface-2)); overflow: hidden; visibility: hidden; }
+.frog-prog span { display: block; height: 100%; background: var(--kc, var(--azure)); transform: scaleX(0); transform-origin: 0 50%; }
+.frog-row.is-playing .frog-prog { visibility: visible; }
+.frog-credit { margin: var(--sp-1) 0 0; overflow-wrap: anywhere; }
+.frog-credit:empty { display: none; }
+
+.frog-credits { margin: var(--sp-3) 0 var(--sp-5); }
+.frog-credits summary { display: flex; align-items: center; min-height: var(--tap); cursor: pointer; color: var(--azure); font-weight: 600; }
+.frog-credits ul { margin: 0; padding: 0 0 0 var(--sp-4); display: grid; gap: var(--sp-1); }
+
+/* ---------- motion preferences and themes ---------- */
 @media (prefers-reduced-motion: reduce) {
+  .listen-idle, .listen-live, .hit, .frog-row { transition: none; }
+  .listen-stage .micbtn { transition: background-color var(--dur-2) linear; }
+  .listen-stage .micbtn:active { scale: 1; }
+  .listen-stage .micbtn.on::before { animation: none; display: none; }
+  .hit--in { animation: hit-fade var(--dur-2) linear both; animation-delay: 0ms; }
+  .hit--in .hit-bar i { animation: none; }
   .fplay { transition: none; }
   .fplay:active { transform: none; }
   .fplay-eq i { animation: none; }
   .fplay-eq i:nth-child(1) { transform: scaleY(.55); }
   .fplay-eq i:nth-child(3) { transform: scaleY(.75); }
 }
-
-.frog-prog { display: block; height: 3px; margin-top: var(--sp-2); border-radius: 2px; background: var(--surface-2); overflow: hidden; visibility: hidden; }
-.frog-prog span { display: block; height: 100%; background: var(--azure); transform: scaleX(0); transform-origin: 0 50%; }
-.frog-row.is-playing .frog-prog { visibility: visible; }
-.frog-credit { margin: var(--sp-1) 0 0; }
-.frog-credit:empty { display: none; }
-
-.frog-credits { margin: var(--sp-3) 0 var(--sp-5); }
-.frog-credits summary { display: flex; align-items: center; min-height: var(--tap); cursor: pointer; color: var(--azure); font-weight: 600; }
-.frog-credits ul { margin: 0; padding: 0 0 0 var(--sp-4); display: grid; gap: var(--sp-1); }
+@keyframes hit-fade { from { opacity: 0; } }
+:root[data-theme="outdoor"] .listen-stage { box-shadow: 0 0 0 2px var(--ink), var(--shadow-2); }
+:root[data-theme="outdoor"] .hit, :root[data-theme="outdoor"] .frog-row { box-shadow: var(--shadow-1); }
+:root[data-theme="outdoor"] .hit--live { box-shadow: 0 0 0 3px var(--sun-ink); }
+:root[data-theme="outdoor"] .frog-row.is-playing { box-shadow: 0 0 0 3px var(--kc); }
 
 /* ---------- species page ---------- */
 .call-credit { overflow-wrap: anywhere; }
