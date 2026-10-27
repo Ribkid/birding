@@ -115,9 +115,16 @@ async function callClip(req) {
 // from the cache too: one wait instead of one per file, and every file from the same release.
 const slowPages = new Set();
 const markSlow = id => { if (!id) return; if (slowPages.size > 30) slowPages.clear(); slowPages.add(id); };
-const savedCopy = async (cache, req) => await cache.match(req, { ignoreSearch: true })
-  || (req.mode === 'navigate' ? await cache.match('index.html') : null)
-  || await caches.match(req, { ignoreSearch: true });
+// The copy saved under this exact address first, then one saved without its query. A copy found by another
+// address is handed over as a new response, so the page or worker gets the address it asked for: Listen's worker
+// reads its settings from its own query string, and a precached copy would otherwise lose them.
+async function savedCopy(cache, req) {
+  const hit = await cache.match(req) || await cache.match(req, { ignoreSearch: true })
+    || (req.mode === 'navigate' ? await cache.match('index.html') : null)
+    || await caches.match(req, { ignoreSearch: true });
+  if (!hit || !hit.url || hit.url.split('#')[0] === req.url.split('#')[0]) return hit;
+  return new Response(hit.body, { status: hit.status, statusText: hit.statusText, headers: hit.headers });
+}
 
 async function networkFirst(req, clientId) {
   const cache = await caches.open(SHELL);

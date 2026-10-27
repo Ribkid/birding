@@ -2280,6 +2280,7 @@ async function renderListen() {
       btn.classList.add('on'); btn.setAttribute('aria-pressed', 'true'); btn.querySelector('span').textContent = 'Stop';
       prog.classList.remove('hidden');
       const loading = mod.loadListenModel((p, t) => { prog.style.setProperty('--p', `${p}%`); status.textContent = `${t}… ${p}%`; });
+      loading.catch(() => {}); // a failed load is reported below, once startListening is done
       await mod.startListening({
         canvas: $('.spectro', view),
         onDetections: hits => {
