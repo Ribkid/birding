@@ -279,7 +279,10 @@ export async function renderMe(sub) {
   animateIn(view, u ? 'in' : 'guest');
   ctx.stagger(view, '.me-sheet > *', { key: 'me-hub', max: 8 });
   const join = view.querySelector('.me-join');
-  if (join) ctx.applyTint(join, join.querySelector('img')?.currentSrc || join.querySelector('img')?.src || '');
+  if (join) {
+    ctx.applyTint(join, join.querySelector('.me-fan-card:nth-child(2) img')?.src || '');
+    if (!counted.has('fan')) { counted.add('fan'); join.classList.add('me-join--play'); }
+  }
   paintTab();
 
   if (sub) {
