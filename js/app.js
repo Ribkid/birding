@@ -1735,51 +1735,91 @@ function whereSection(sp) {
 }
 
 // Lists hub
+// How likely each target is this month, against the most likely one on the list (0..1), with words for it so the
+// bar never carries the meaning alone. Without the SEQ records, rarer species score lower.
+function targetChances(list, month) {
+  const opts = targetOpts();
+  const raw = s => opts.score ? opts.score(s.id, month) : 6 - s.rarity;
+  const top = Math.max(1e-9, ...list.map(raw));
+  return new Map(list.map(s => [s.id, Math.max(0.06, raw(s) / top)]));
+}
+const chanceWord = p => p >= 0.6 ? 'Good chance' : p >= 0.3 ? 'Fair chance' : 'Outside chance';
+const chanceBar = (p, cls = '', when = ' this month') => `<span class="chance ${cls}"><span class="chance-bar" style="--p:${Math.round(p * 100)}%"><i></i></span><span class="chance-txt">${chanceWord(p)}${when}</span></span>`;
+// Numbers count up the first time they show and whenever they change; otherwise they simply sit there.
+const counted = new Map();
+function countIn(root) {
+  for (const el of $$('[data-count-key]', root)) {
+    const k = el.dataset.countKey, to = Number(el.textContent) || 0;
+    countUp(el, counted.has(k) ? counted.get(k) : 0, to, { delay: 120 });
+    counted.set(k, to);
+  }
+}
+
 function renderLists() {
   const now = new Date();
   const t = totals(state.sightings, now);
   const seen = seenSet();
   const month = now.getMonth() + 1;
-  const tg = targets({ seen, month, ...targetOpts() }).slice(0, 5);
+  const tg = targets({ seen, month, ...targetOpts() }).slice(0, 8);
+  const chance = targetChances(tg, month);
   const outings = state.outings.slice().sort((a, b) => b.startedAt - a.startedAt);
   const years = yearTotals(state.sightings).filter(y => y.year !== String(now.getFullYear()));
+  // The life card shows her newest find.
+  const newest = [...speciesList(state.sightings).entries()].sort((a, b) => (b[1].first.date + (b[1].first.time || '')).localeCompare(a[1].first.date + (a[1].first.time || '')))[0];
+  const newSp = newest && byId.get(newest[0]);
+  const strip = o => {
+    const sp = state.sightings.filter(s => s.outingId === o.id).sort((a, b) => b.createdAt - a.createdAt).map(s => byId.get(s.speciesId)).filter(Boolean);
+    return { n: sp.length, html: sp.slice(0, 4).map(s => `<span class="ocard-ph">${birdImg(s, 'small', '', { alt: '' })}</span>`).join('') + (sp.length > 4 ? `<span class="ocard-more">+${sp.length - 4}</span>` : '') };
+  };
   view.innerHTML = `
     <header class="page-head"><h1>Lists</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button></div></header>
-    <div class="quicklinks pad-x"><a class="btn" href="#/stats">${icon.chart} Stats</a><a class="btn" href="#/learn">${icon.learn} Learn</a></div>
-    <div class="totals">
-      <a href="#/list/life"><b>${t.life}</b><span>Life list</span></a>
-      <a href="#/list/year"><b>${t.year}</b><span>${now.getFullYear()} list</span></a>
-      <a href="#/list/month"><b>${t.month}</b><span>${MONTHS[now.getMonth()]}</span></a>
+    <div class="lh-stats">
+      <a class="lh-stat lh-stat--life ${newSp ? 'lh-stat--photo' : ''}" href="#/list/life">
+        ${newSp ? `<span class="lh-stat-img">${birdImg(newSp, 'small', '', { alt: '' })}</span>` : ''}
+        <b data-count-key="life">${t.life}</b><span class="lh-stat-l">Life list</span>
+        ${newSp ? `<span class="lh-stat-new">Newest: ${esc(newSp.name)}</span>` : ''}</a>
+      <a class="lh-stat" href="#/list/year"><b data-count-key="year">${t.year}</b><span class="lh-stat-l">${now.getFullYear()} list</span></a>
+      <a class="lh-stat" href="#/list/month"><b data-count-key="month">${t.month}</b><span class="lh-stat-l">${MONTHS[now.getMonth()]}</span></a>
     </div>
+    <div class="lh-links"><a class="lh-link" href="#/stats">${icon.chart} Stats</a><a class="lh-link" href="#/learn">${icon.learn} Learn</a></div>
 
-    <section class="block">
+    <section class="block lh-sec">
       <div class="block-h"><h2 class="h2">Targets for ${MONTHS[now.getMonth()]}</h2><a href="#/targets">See all</a></div>
       <p class="muted small">Birds you haven't seen that are most often reported in SEQ this month.</p>
+      ${tg.length ? `<ul class="tcar" aria-label="Targets for ${MONTHS[now.getMonth()]}">${tg.map(s => `<li><a class="tcard kind--${s.kind}" href="#/bird/${s.id}">
+        <span class="row-thumb tcard-img">${birdImg(s, 'small', '', { alt: '' })}</span>
+        <span class="tcard-txt"><strong>${esc(s.name)}</strong><span class="tcard-r">${RARITY[s.rarity].label}</span>${chanceBar(chance.get(s.id), 'chance--on-photo', '')}</span></a></li>`).join('')}</ul>`
+        : '<p class="empty-inline">You have seen every likely bird for this month. Impressive.</p>'}
       <a class="btn btn--block near-btn" href="#/targets" data-near>${icon.pin} Find targets near me</a>
-      <ul class="rows">${tg.map(s => rowSpecies(s, `${RARITY[s.rarity].label}. ${s.habitats.map(h => HABITATS[h]).slice(0, 2).join(', ')}`)).join('') || '<li class="muted pad">You have seen every likely bird for this month. Impressive.</li>'}</ul>
     </section>
 
-    <section class="block">
+    <section class="block lh-sec">
       <div class="block-h"><h2 class="h2">Patches</h2><a href="#/map" data-newpatch>New patch</a></div>
       <p class="muted small">A patch is a place you visit often, like your yard or a local park. Any sighting inside its circle counts automatically.</p>
-      ${state.patches.length ? `<ul class="patches">${state.patches.map(p => {
-        const inside = state.sightings.filter(s => inPatch(s, p));
-        const pt = totals(inside, now);
-        return `<li><a href="#/patch/${p.id}"><strong>${esc(p.name)}</strong><span class="muted small">${p.radiusKm} km radius</span>
-          <span class="patch-nums"><span><b>${pt.life}</b> life</span><span><b>${pt.year}</b> ${now.getFullYear()}</span><span><b>${pt.month}</b> ${MONTHS[now.getMonth()].slice(0, 3)}</span></span></a></li>`;
+      ${state.patches.length ? `<ul class="lh-patches">${state.patches.map(p => {
+        const pt = totals(state.sightings.filter(s => inPatch(s, p)), now);
+        return `<li><a class="pcard" href="#/patch/${p.id}"><span class="pcard-ring" aria-hidden="true"></span>
+          <span class="pcard-main"><strong>${esc(p.name)}</strong><span class="muted small">${p.radiusKm} km radius</span></span>
+          <span class="pcard-nums"><span><b>${pt.life}</b> life</span><span><b>${pt.year}</b> ${now.getFullYear()}</span><span><b>${pt.month}</b> ${MONTHS[now.getMonth()].slice(0, 3)}</span></span></a></li>`;
       }).join('')}</ul>` : '<p class="empty-inline">No patches yet. Add your yard first: it is the most fun list to grow.</p>'}
     </section>
 
-    <section class="block">
+    <section class="block lh-sec">
       <div class="block-h"><h2 class="h2">Outings</h2><a href="#/log">All sightings</a></div>
-      ${outings.length ? `<ul class="rows">${outings.slice(0, 12).map(o => {
-        const n = state.sightings.filter(s => s.outingId === o.id).length;
-        return `<li><a class="row" href="#/outing/${o.id}"><span class="row-main"><strong>${esc(o.place || 'Unnamed place')}</strong><span class="muted small">${fmtDate(o.date)}, ${o.time}${o.endedAt ? (o.durationMin ? `, ${o.durationMin} min` : '') : ', in progress'}</span></span><span class="row-n">${n}</span></a></li>`;
+      ${outings.length ? `<ul class="lh-outings">${outings.slice(0, 12).map(o => {
+        const st = strip(o);
+        return `<li><a class="ocard" href="#/outing/${o.id}">
+          <span class="ocard-strip ${st.n ? '' : 'ocard-strip--empty'}" aria-hidden="true">${st.html || icon.outing}</span>
+          <span class="ocard-txt"><strong>${esc(o.place || 'Unnamed place')}</strong><span class="muted small">${fmtDate(o.date)}, ${o.time}${o.endedAt && o.durationMin ? `, ${o.durationMin} min` : ''}</span>
+            ${o.endedAt ? '' : '<span class="ocard-live">In progress</span>'}</span>
+          <span class="ocard-n"><b>${st.n}</b><span>species</span></span></a></li>`;
       }).join('')}</ul>` : '<p class="empty-inline">Start an outing with the + button to tally everything you see at one spot.</p>'}
     </section>
 
-    ${years.length ? `<section class="block"><h2 class="h2">Past years</h2><ul class="rows">${years.map(y => `<li><a class="row" href="#/list/${y.year}"><span class="row-main"><strong>${y.year}</strong></span><span class="row-n">${y.count}</span></a></li>`).join('')}</ul></section>` : ''}
+    ${years.length ? `<section class="block lh-sec"><h2 class="h2">Past years</h2><ul class="rows rows--card">${years.map(y => `<li><a class="row" href="#/list/${y.year}"><span class="row-main"><strong>${y.year}</strong></span><span class="row-n">${y.count}</span></a></li>`).join('')}</ul></section>` : ''}
   `;
+  countIn(view);
+  stagger(view, '.lh-stat, .tcard, .pcard, .ocard', { key: 'lists', max: 14 });
   view.onclick = e => {
     if (e.target.closest('[data-search]')) openSearch();
     if (e.target.closest('[data-newpatch]')) state.mapMode = 'patch';
@@ -1788,10 +1828,17 @@ function renderLists() {
   view.onchange = null;
 }
 
-function rowSpecies(s, sub, right = '') {
+function rowSpecies(s, sub, right = '', extra = '') {
   const seen = seenSet().has(s.id);
   return `<li><a class="row row--sp" href="#/bird/${s.id}"><span class="row-thumb ${seen ? 'row-thumb--seen' : ''}">${birdImg(s)}</span>
-    <span class="row-main"><strong>${esc(s.name)}</strong><span class="muted small">${sub}</span></span>${right || band(s.id, seen)}</a></li>`;
+    <span class="row-main"><strong>${esc(s.name)}</strong><span class="muted small">${sub}</span>${extra}</span>${right || band(s.id, seen)}</a></li>`;
+}
+// Rows under tidy section headers, in the order the groups first appear.
+function rowSections(entries, groupOf, rowOf, [one, many] = ['species', 'species']) {
+  const groups = new Map();
+  for (const e of entries) { const g = groupOf(e); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(e); }
+  return [...groups].map(([g, items]) => `<section class="lsec"><h2 class="lsec-h"><span>${esc(g)}</span><span class="lsec-n">${items.length}<span class="sr-only"> ${items.length === 1 ? one : many}</span></span></h2>
+    <ul class="rows rows--card">${items.map(rowOf).join('')}</ul></section>`).join('');
 }
 
 // A row of kind chips (shown only once other animals or plants are in the dex).
@@ -1810,26 +1857,30 @@ function renderList(period, patchId = null) {
   const map = speciesList(src.filter(periodFilter(period, now)));
   const lk = state.listKind || 'all';
   let entries = [...map.entries()].map(([id, e]) => ({ sp: byId.get(id), ...e })).filter(e => e.sp && (lk === 'all' || e.sp.kind === lk));
-  if (state.listSort === 'dex') entries.sort((a, b) => a.sp.id - b.sp.id);
+  const byDex = state.listSort === 'dex';
+  if (byDex) entries.sort((a, b) => a.sp.id - b.sp.id);
   else entries.sort((a, b) => (b.first.date + b.first.time).localeCompare(a.first.date + a.first.time));
   const label = period === 'life' ? 'Life list' : period === 'year' ? `${now.getFullYear()} list` : period === 'month' ? `${MONTHS[now.getMonth()]} ${now.getFullYear()}` : `${period} list`;
   const base = patch ? `#/patch/${patch.id}` : '#/list';
+  // Dex order groups by family (or kind); newest first groups by the month she first saw each one.
+  const groupOf = byDex ? e => GROUPS[e.sp.group] || KINDS[e.sp.kind].label : e => { const [y, m] = e.first.date.split('-').map(Number); return `${MONTHS[m - 1]} ${y}`; };
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/lists" aria-label="Back to lists">${icon.back}</a>
       <div><h1>${patch ? esc(patch.name) : label}</h1>${patch ? `<p class="muted small">${label}, within ${patch.radiusKm} km</p>` : ''}</div></header>
-    <div class="chips">
-      ${['life', 'year', 'month'].map(p => `<a class="chip ${period === p ? 'chip--on' : ''}" href="${patch ? `${base}/${p}` : `${base}/${p}`}">${p === 'life' ? 'Life' : p === 'year' ? now.getFullYear() : MONTHS[now.getMonth()]}</a>`).join('')}
-      <span class="spacer"></span>
-      <button class="chip" data-sort>${state.listSort === 'dex' ? 'Dex order' : 'Newest first'}</button>
+    <div class="lbar">
+      <nav class="lseg" aria-label="Which list">${['life', 'year', 'month'].map(p => `<a class="lseg-btn" href="${base}/${p}" ${period === p ? 'aria-current="page"' : ''}>${p === 'life' ? 'Life' : p === 'year' ? now.getFullYear() : MONTHS[now.getMonth()]}</a>`).join('')}</nav>
+      <button class="chip lsort" data-sort aria-label="Sort: ${byDex ? 'dex order' : 'newest first'}. Tap to change">${byDex ? 'Dex order' : 'Newest first'}</button>
     </div>
     ${kindChips(lk)}
-    <p class="list-count"><b>${entries.length}</b> ${entries.length === 1 ? 'species' : 'species'}</p>
-    <ul class="rows">${entries.map(e => rowSpecies(e.sp, `First ${fmtDate(e.first.date)}${e.count > 1 ? `, seen ${e.count} times` : ''}`)).join('') || '<li class="muted pad">Nothing on this list yet.</li>'}</ul>
+    <p class="list-count"><b data-count-key="${base}/${period}/${lk}">${entries.length}</b> species</p>
+    ${rowSections(entries, groupOf, e => rowSpecies(e.sp, `First ${fmtDate(e.first.date)}${e.count > 1 ? `, seen ${e.count} times` : ''}`)) || '<p class="empty-inline lempty">Nothing on this list yet.</p>'}
     ${patch ? `<div class="row-end pad"><button class="btn btn--danger btn--quiet" data-delpatch>Delete patch</button></div>` : ''}`;
+  countIn(view);
   view.onclick = async e => {
-    if (e.target.closest('[data-sort]')) { state.listSort = state.listSort === 'dex' ? 'date' : 'dex'; renderList(period, patchId); }
+    const redraw = () => flip(() => renderList(period, patchId), { selector: '.row--sp', key: el => el.getAttribute('href') });
+    if (e.target.closest('[data-sort]')) { state.listSort = state.listSort === 'dex' ? 'date' : 'dex'; keepFocus(redraw, { fallback: '[data-sort]' }); }
     const lkb = e.target.closest('[data-lk]');
-    if (lkb) { state.listKind = lkb.dataset.lk; renderList(period, patchId); }
+    if (lkb) { state.listKind = lkb.dataset.lk; keepFocus(redraw); }
     if (e.target.closest('[data-delpatch]') && await confirmSheet(`Delete ${patch.name}?`, 'Your sightings stay; only the patch list is removed.', 'Delete patch', true)) {
       await db.del('patches', patch.id); state.patches = state.patches.filter(p => p.id !== patch.id); location.hash = '#/lists';
     }
@@ -1865,7 +1916,7 @@ async function renderTargets() {
     renderTargets();
   };
   if (f.scope === 'near') {
-    view.innerHTML = head + `<p class="muted small pad-x" data-near-status>Finding you…</p><ul class="rows pad-x" data-near-list></ul>`;
+    view.innerHTML = head + `<p class="muted small pad-x" data-near-status role="status">Finding you…</p><div class="pad-x"><ul class="rows rows--card hidden" data-near-list></ul></div>`;
     let pos = state.lastPos;
     try { if (!pos || Date.now() - pos.at > 120000) { pos = { ...(await getPosition()), at: Date.now() }; state.lastPos = pos; } }
     catch (err) { $('[data-near-status]', view).textContent = err.message; return; }
@@ -1875,18 +1926,22 @@ async function renderTargets() {
     $('[data-near-status]', view).innerHTML = spots.length
       ? `Birds you haven't seen that are recorded at the ${plural(spots.length, 'hotspot')} within 15 km of you. Most often reported first.`
       : 'No hotspots within 15 km. Try the life list targets instead.';
-    $('[data-near-list]', view).innerHTML = filtered.slice(0, 60).map(x => {
+    const nl = $('[data-near-list]', view);
+    nl.innerHTML = filtered.slice(0, 60).map(x => {
       const sp = byId.get(x.id);
       return rowSpecies(sp, `Best spot: ${esc(x.best.h.name)} (${x.best.d.toFixed(1)} km)`, pips(sp.rarity));
     }).join('');
+    nl.classList.toggle('hidden', !filtered.length);
     hydratePhotos(view);
     return;
   }
   const list = targets({ seen, month: f.month, habitat: f.habitat, kinds: [f.kind], ...targetOpts() });
+  const chance = targetChances(list, f.month);
   view.innerHTML = head + `
     <p class="muted small pad-x">${KINDS[f.kind].label} you still need that are reported in SEQ in ${MONTHS[f.month - 1]}. The most often reported come first.</p>
-    <p class="list-count"><b>${list.length}</b> to find</p>
-    <ul class="rows pad-x">${list.map(s => rowSpecies(s, `${RARITY[s.rarity].label}. ${s.habitats.map(h => HABITATS[h]).join(', ')}`, pips(s.rarity))).join('')}</ul>`;
+    <p class="list-count"><b data-count-key="targets/${f.kind}/${f.scope}/${f.month}/${f.habitat}">${list.length}</b> to find</p>
+    <div class="pad-x">${list.length ? `<ul class="rows rows--card">${list.map(s => rowSpecies(s, `${RARITY[s.rarity].label}. ${s.habitats.map(h => HABITATS[h]).join(', ')}`, pips(s.rarity), chanceBar(chance.get(s.id), 'chance--grow', ` in ${MONTHS[f.month - 1]}`))).join('')}</ul>` : '<p class="empty-inline">Nothing left to find here. Try another month or habitat.</p>'}</div>`;
+  countIn(view);
 }
 
 function renderOuting(id) {
@@ -1904,7 +1959,7 @@ function renderOuting(id) {
     const r = counts.get(sp.id);
     return `<li class="tally-row ${r ? 'tally-row--on' : ''}">
       <a class="tally-sp" href="#/bird/${sp.id}"><span class="row-thumb">${birdImg(sp)}</span><span><strong>${esc(sp.name)}</strong>${!seenSetCache.has(sp.id) || (r && isFirstEver(r)) ? '<span class="lifer">New for your dex</span>' : ''}</span></a>
-      ${editing ? `<div class="tally-ctl">${r ? `<button data-dec="${sp.id}" aria-label="One fewer ${esc(sp.name)}">−</button><span class="tally-n">${r.count ?? 'X'}</span>` : ''}<button data-inc="${sp.id}" class="tally-inc" aria-label="Add ${esc(sp.name)}">+</button></div>`
+      ${editing ? `<div class="tally-ctl">${r ? `<button data-dec="${sp.id}" aria-label="One fewer ${esc(sp.name)}">−</button><span class="tally-n" data-n="${sp.id}">${r.count ?? 'X'}</span>` : ''}<button data-inc="${sp.id}" class="tally-inc" aria-label="Add ${esc(sp.name)}">+</button></div>`
         : `<span class="tally-n">${r?.count ?? 'X'}</span>`}</li>`;
   };
   const seenSetCache = new Set(state.sightings.filter(s => s.outingId !== id).map(s => s.speciesId));
@@ -1912,15 +1967,16 @@ function renderOuting(id) {
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/lists" aria-label="Back to lists">${icon.back}</a>
       <div><h1>${esc(o.place || 'Outing')}</h1><p class="muted small">${fmtDate(o.date)}, started ${o.time}${mins != null ? `, ${mins} min` : ''}${!live ? (o.complete ? '. Complete checklist.' : '.') : ''}</p></div></header>
-    <p class="list-count"><b>${recs.length}</b> species${!live && o.distanceKm ? `, ${o.distanceKm} km` : ''}</p>
-    ${editing ? `<div class="searchbox searchbox--sticky">${icon.search}<input type="search" placeholder="Add a species: type a name" value="${esc(q)}" data-tq aria-label="Find a species to add"></div>
-      ${q ? `<ul class="tally-list">${results.map(tallyRow).join('') || '<li class="muted pad">Nothing by that name in the dex.</li>'}</ul><hr class="rule">` : ''}` : ''}
-    <ul class="tally-list">${ordered.map(tallyRow).join('') || (editing ? '<li class="muted pad">Search above to add the first species. Tap + again each time you count another.</li>' : '')}</ul>
+    <div class="tally-sum"><p class="list-count"><b data-count-key="outing/${id}">${recs.length}</b> species${!live && o.distanceKm ? `, ${o.distanceKm} km` : ''}</p>${live ? '<span class="ocard-live">In progress</span>' : ''}</div>
+    ${editing ? `<div class="searchbox tally-search">${icon.search}<input type="search" placeholder="Add a species: type a name" value="${esc(q)}" data-tq aria-label="Find a species to add"></div>
+      ${q ? `<ul class="tally-list rows--card tally-list--found">${results.map(tallyRow).join('') || '<li class="muted pad">Nothing by that name in the dex.</li>'}</ul>` : ''}` : ''}
+    ${ordered.length ? `<ul class="tally-list rows--card">${ordered.map(tallyRow).join('')}</ul>` : editing ? '<p class="empty-inline tally-empty">Search above to add the first species. Tap + again each time you count another.</p>' : ''}
     ${o.notes ? `<p class="pad-x">${esc(o.notes)}</p>` : ''}
-    <div class="row-end pad">
+    <div class="tally-foot">
       ${live ? `<button class="btn btn--danger btn--quiet" data-cancel>Discard</button><span class="spacer"></span><button class="btn btn--primary" data-finish>Finish outing</button>`
              : `<button class="btn btn--danger btn--quiet" data-cancel>Delete outing</button><span class="spacer"></span><button class="btn" data-editbirds>${editing ? 'Done editing species' : 'Edit species'}</button><button class="btn" data-finish>Edit details</button>`}
     </div>`;
+  countIn(view);
   const tq = $('[data-tq]', view);
   tq?.addEventListener('input', () => {
     state.tallyQ = tq.value;
@@ -1932,9 +1988,15 @@ function renderOuting(id) {
     const inc = e.target.closest('[data-inc]'), dec = e.target.closest('[data-dec]');
     if (inc || dec) {
       e.preventDefault();
-      await tally(o, Number((inc || dec).dataset.inc || (inc || dec).dataset.dec), inc ? 1 : -1);
+      const spId = Number((inc || dec).dataset.inc || (inc || dec).dataset.dec);
+      const before = counts.get(spId)?.count ?? 0;
+      await tally(o, spId, inc ? 1 : -1);
       if (inc && state.tallyQ) state.tallyQ = '';
       keepFocus(() => renderOuting(id), { fallback: '[data-tq], #view h1' });
+      // The count stamps as it changes.
+      const after = state.sightings.find(s => s.outingId === id && s.speciesId === spId)?.count;
+      const n = $(`[data-n="${spId}"]`, view);
+      if (n && typeof after === 'number') countUp(n, before, after, { duration: 60 });
     }
     if (e.target.closest('[data-finish]')) openFinishOuting(o);
     if (e.target.closest('[data-editbirds]')) { state.editOuting = editing ? null : id; state.tallyQ = ''; renderOuting(id); }
@@ -1951,15 +2013,15 @@ function renderOuting(id) {
 
 function renderLog() {
   const list = state.sightings.slice().sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
-  const byDate = {};
-  list.forEach(s => (byDate[s.date] ||= []).push(s));
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/lists" aria-label="Back to lists">${icon.back}</a><h1>All sightings</h1></header>
-    ${Object.entries(byDate).map(([d, items]) => `<section class="block"><h2 class="h2">${fmtDate(d)}</h2><ul class="rows">${items.map(s => {
+    ${list.length ? `<p class="list-count"><b data-count-key="log">${list.length}</b> ${list.length === 1 ? 'sighting' : 'sightings'}</p>` : ''}
+    ${rowSections(list, s => fmtDate(s.date), s => {
       const sp = byId.get(s.speciesId);
       return `<li><button class="row row--sp" data-edit="${s.id}"><span class="row-thumb">${s.photoId ? `<img data-photo="${s.photoId}" alt="">` : birdImg(sp)}</span>
         <span class="row-main"><strong>${esc(sp?.name)}</strong><span class="muted small">${s.time || ''} ${esc(s.place || '')}</span></span><span class="row-n">${s.count ?? 'X'}</span></button></li>`;
-    }).join('')}</ul></section>`).join('') || '<div class="empty"><p>No sightings yet. Tap + to log your first sighting.</p></div>'}`;
+    }, ['sighting', 'sightings']) || '<div class="empty"><p>No sightings yet. Tap + to log your first sighting.</p></div>'}`;
+  countIn(view);
   view.onclick = e => { const ed = e.target.closest('[data-edit]'); if (ed) openSightingSheet({ sightingId: Number(ed.dataset.edit) }); };
   view.onchange = null;
 }
