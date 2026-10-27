@@ -1,18 +1,19 @@
 // Sarah's BirdyDex service worker.
 // App files: network first (so updates arrive straight away), cache when offline.
-// Bird photos, map tiles and the ID models: cache first, so they work in the bush.
-const VERSION = 'v7-l';
+// Bird photos, map tiles, the ID models and our call clips: cache first, so they work in the bush.
+const VERSION = 'v8-a';
 const SHELL = `birddex-shell-${VERSION}`;
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
 const MODELS = 'birddex-models';
+const CALLS = 'birddex-calls';
 const ASSETS = [
-  './', 'index.html', 'css/app.css', 'css/learn.css', 'manifest.webmanifest',
+  './', 'index.html', 'css/app.css', 'css/learn.css', 'css/calls.css', 'manifest.webmanifest',
   'js/app.js', 'js/db.js', 'js/media.js', 'js/species.js', 'js/stats.js', 'js/ebird.js', 'js/seqdata.js',
   'js/card3d.js', 'js/quiz.js', 'js/learn.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js', 'js/gallery.js',
   'js/config.js', 'js/cloud.js', 'js/sync.js', 'js/account.js', 'vendor/supabase/supabase.js',
   'data/bioclip-text.json', 'data/species-new.json', 'data/tiers.json', 'data/info.json', 'data/gallery.json',
-  'data/seq.json', 'data/birdnet-map.json', 'data/lookalikes.json',
+  'data/seq.json', 'data/birdnet-map.json', 'data/lookalikes.json', 'data/calls.json',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/three/three.module.min.js',
   'fonts/schibsted-grotesk-latin-400-normal.woff2', 'fonts/schibsted-grotesk-latin-400-italic.woff2',
   'fonts/schibsted-grotesk-latin-500-normal.woff2', 'fonts/schibsted-grotesk-latin-700-normal.woff2',
@@ -53,6 +54,27 @@ async function trim(name, max) {
   const keys = await c.keys();
   for (let i = 0; i < keys.length - max; i++) await c.delete(keys[i]);
 }
+// Call clips (data/calls/): cache first. Audio elements ask for byte ranges, so the whole file is fetched and kept,
+// and ranges are cut from it; Safari won't play media from a plain 200 answer to a range request.
+async function callClip(req) {
+  const cache = await caches.open(CALLS);
+  let res = await cache.match(req.url);
+  if (!res) {
+    res = await fetch(req.url);
+    if (!res.ok) return res;
+    await cache.put(req.url, res.clone());
+  }
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('range') || '');
+  if (!range) return res;
+  const buf = await res.arrayBuffer(), size = buf.byteLength;
+  let start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+  let end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+  if (start >= size || start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+  return new Response(buf.slice(start, end + 1), {
+    status: 206,
+    headers: { 'Content-Type': res.headers.get('Content-Type') || 'audio/mp4', 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': String(end - start + 1), 'Accept-Ranges': 'bytes' },
+  });
+}
 async function networkFirst(req) {
   const cache = await caches.open(SHELL);
   try {
@@ -87,6 +109,10 @@ self.addEventListener('fetch', e => {
     if (url.pathname.includes('/models/bioclip/')) return;
     if (url.pathname.includes('/models/') || url.pathname.includes('/vendor/')) {
       e.respondWith(cacheFirst(req, MODELS));
+      return;
+    }
+    if (url.pathname.includes('/data/calls/')) {
+      e.respondWith(callClip(req));
       return;
     }
     if (url.search.includes('nocache')) return;

@@ -1,7 +1,7 @@
 import { SPECIES, GROUPS, HABITATS, RARITY, byId, KINDS, ANIMAL_KINDS, ANIMALS, BIRDS, ofKind, dexCode, kindsPresent } from './species.js';
 import { loadExtras, galleryFor, infoFor } from './gallery.js';
 import { db } from './db.js';
-import { loadIndex, photoFor, sized, details, calls, audioUrl, downloadAll, onMediaReady } from './media.js';
+import { loadIndex, photoFor, sized, details, calls, audioUrl, downloadAll, onMediaReady, loadCallPack, localCalls, hasLocalCall, callPackStatus, saveCallPack } from './media.js';
 import { speciesList, periodFilter, totals, yearTotals, targets, badges, inPatch, haversineKm, MONTHS, inSeason } from './stats.js';
 import { toEbirdCsv } from './ebird.js';
 import { loadSeq, seq, monthRates, likelihood, recordCount, spotsFor, pointsFor, hotspots, nearbyTargets } from './seqdata.js';
@@ -882,16 +882,23 @@ function wireLongPress(root) {
   root.oncontextmenu = e => { if (e.target.closest('[data-tile]')) e.preventDefault(); };
 }
 
-// Calls: Atlas of Living Australia recordings first, then Wikimedia Commons.
+// Calls: our own clips first (they play offline), then the full Atlas of Living Australia recordings (streamed,
+// online only: that server can't be cached from here), then Wikimedia Commons. Commons is only searched when there
+// is no local clip, because its two searches take a couple of seconds on mobile data.
 async function getCalls(sp) {
-  const ala = (seq()?.species?.[sp.id]?.calls || []).map(c => ({
-    ...c, title: `${c.from === 'iNaturalist Australia' ? 'iNaturalist' : c.from} recording`,
-  }));
+  const local = await localCalls(sp.id);
+  const used = new Set(local.map(c => c.orig));
+  const ala = navigator.onLine ? (seq()?.species?.[sp.id]?.calls || []).filter(c => !used.has(c.src)).map(c => ({
+    ...c, title: `Full ${c.from === 'iNaturalist Australia' ? 'iNaturalist' : c.from} recording`,
+  })) : [];
   let commons = [];
-  try { commons = await calls(sp); } catch (_) {}
-  return [...ala, ...commons].slice(0, 4);
+  if (!local.length) try { commons = await calls(sp); } catch (_) {}
+  return [...local, ...ala, ...commons].slice(0, 4);
 }
-const hasCalls = id => !!seq()?.species?.[id]?.calls?.length;
+// Offline, only species with a local clip can be played.
+const hasCalls = id => hasLocalCall(id) || (navigator.onLine && !!seq()?.species?.[id]?.calls?.length);
+// Credit line for a recording. Our clips are cut down from the original, which the licence asks us to say.
+const callCredit = c => `By ${c.page ? `<a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(String(c.artist || 'Unknown').slice(0, 50))}</a>` : esc(String(c.artist || 'Unknown').slice(0, 50))}${c.license ? `, ${esc(c.license)}` : ''}.${c.local ? ` Trimmed from the ${c.from === 'iNaturalist Australia' ? 'iNaturalist' : 'original'} recording.` : ''}`;
 
 // Species detail
 function similarBirds(sp) {
@@ -1058,14 +1065,20 @@ function renderBird(id) {
     if (location.hash !== `#/bird/${id}`) return;
     const box = $('[data-calls]', view);
     if (!box) return;
-    if (!list.length) { box.innerHTML = isBird ? `<p class="muted small">No free recording found for this bird. Try the xeno-canto link below.</p>` : ''; return; }
+    if (!list.length) {
+      box.innerHTML = !navigator.onLine ? '<p class="muted small">Calls for this one need an internet connection.</p>'
+        : isBird ? '<p class="muted small">No free recording found for this bird. Try the xeno-canto link below.</p>' : '';
+      return;
+    }
     box.innerHTML = `<h2 class="h2">Calls</h2><canvas class="viz" data-viz aria-hidden="true"></canvas>` + list.map((c, i) => `<div class="call-row">
       <button class="playbtn" data-play="${i}" aria-label="Play recording ${i + 1}">${icon.play}</button>
       <div class="call-meta"><span class="call-title">${esc(c.title.slice(0, 70))}</span>
-      <span class="small muted">By <a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.artist.slice(0, 50))}</a>${c.license ? `, ${esc(c.license)}` : ''}</span>
+      <span class="small muted call-credit">${callCredit(c)}</span>
       <span class="call-progress"><span></span></span></div></div>`).join('');
-    const audio = new Audio();
-    let playing = -1, actx = null, analyser = null, raf = null, srcNode = null;
+    // Two players: our clips (and downloaded Commons files) can feed the visualiser; streamed ALA recordings can't,
+    // and an element wired to the visualiser plays them silent, so they get a plain one.
+    const fx = new Audio(), plain = new Audio();
+    let audio = fx, playing = -1, actx = null, analyser = null, raf = null, srcNode = null;
     const canvas = $('[data-viz]', box);
     const draw = () => {
       const g = canvas.getContext('2d');
@@ -1088,15 +1101,20 @@ function renderBird(id) {
       cancelAnimationFrame(raf); tick();
     };
     const setIcons = () => $$('[data-play]', box).forEach(b => { const on = Number(b.dataset.play) === playing && !audio.paused; b.innerHTML = on ? icon.pause : icon.play; b.setAttribute('aria-label', on ? 'Pause' : `Play recording ${Number(b.dataset.play) + 1}`); });
-    audio.addEventListener('timeupdate', () => {
-      const bar = $$('.call-progress span', box)[playing];
-      if (bar && audio.duration) bar.style.width = `${audio.currentTime / audio.duration * 100}%`;
-    });
-    ['play', 'pause', 'ended'].forEach(ev => audio.addEventListener(ev, setIcons));
-    audio.addEventListener('play', () => canvas.classList.add('on'));
-    audio.addEventListener('ended', () => { canvas.classList.remove('on'); cancelAnimationFrame(raf); });
     let stopped = false;
-    audio.addEventListener('error', () => { if (!stopped && audio.src) toast('That recording would not play. Try another.'); });
+    for (const el of [fx, plain]) {
+      el.addEventListener('timeupdate', () => {
+        const bar = $$('.call-progress span', box)[playing];
+        if (el === audio && bar && el.duration) bar.style.width = `${el.currentTime / el.duration * 100}%`;
+      });
+      ['play', 'pause', 'ended'].forEach(ev => el.addEventListener(ev, setIcons));
+      el.addEventListener('ended', () => { canvas.classList.remove('on'); cancelAnimationFrame(raf); });
+      el.addEventListener('error', () => {
+        if (stopped || el !== audio || !el.getAttribute('src')) return;
+        toast(navigator.onLine ? 'That recording would not play. Try another.' : 'That call is not saved on this phone yet. Save calls in Settings.');
+      });
+    }
+    fx.addEventListener('play', () => canvas.classList.add('on'));
     box.addEventListener('click', async e => {
       const b = e.target.closest('[data-play]');
       if (!b) return;
@@ -1105,17 +1123,23 @@ function renderBird(id) {
       playing = i; b.classList.add('loading');
       const url = await audioUrl(list[i].src);
       b.classList.remove('loading');
-      // The visualiser can only read audio we downloaded ourselves (blob URLs).
-      if (url.startsWith('blob:')) {
+      if (playing !== i) return;
+      // The visualiser can only read audio from this site or downloaded blobs.
+      const readable = url.startsWith('blob:') || list[i].local;
+      audio.pause();
+      audio = readable ? fx : plain;
+      if (readable) {
         try {
-          if (!actx) { actx = new AudioContext(); analyser = actx.createAnalyser(); analyser.fftSize = 256; srcNode = actx.createMediaElementSource(audio); srcNode.connect(analyser); analyser.connect(actx.destination); }
+          if (!actx) { actx = new AudioContext(); analyser = actx.createAnalyser(); analyser.fftSize = 256; srcNode = actx.createMediaElementSource(fx); srcNode.connect(analyser); analyser.connect(actx.destination); }
           actx.resume(); draw();
         } catch (_) {}
-      } else if (actx) { canvas.classList.remove('on'); }
+      } else { canvas.classList.remove('on'); cancelAnimationFrame(raf); }
+      $$('.call-progress span', box).forEach(x => { x.style.width = '0'; });
       audio.src = url;
       audio.play().catch(() => {});
+      setIcons();
     });
-    audioStops.push(() => { stopped = true; audio.pause(); audio.removeAttribute('src'); cancelAnimationFrame(raf); actx?.close(); });
+    audioStops.push(() => { stopped = true; for (const el of [fx, plain]) { el.pause(); el.removeAttribute('src'); } cancelAnimationFrame(raf); actx?.close(); });
   }).catch(() => { const box = $('[data-calls]', view); if (box) box.innerHTML = '<p class="muted small">Calls need an internet connection the first time.</p>'; });
 }
 
@@ -1653,9 +1677,16 @@ function renderBadges() {
 
 // Settings
 async function renderSettings() {
+  const pack = await loadCallPack();
+  const packKinds = {};
+  for (const id of Object.keys(pack)) { const k = kindOf(Number(id)); packKinds[k] = (packKinds[k] || 0) + 1; }
+  const callsBlurb = Object.keys(pack).length
+    ? `Short clips of the calls of ${Object.entries(packKinds).map(([k, n]) => plural(n, KINDS[k].one, KINDS[k].label.toLowerCase())).join(' and ')}, for the call quiz, the frog board on Listen and each species page. A clip is also kept once you have played it.`
+    : 'The call clips could not be loaded. Check your connection and open Settings again.';
   let usage = '';
   try { const est = await navigator.storage.estimate(); usage = `${(est.usage / 1e6).toFixed(1)} MB used on this phone`; } catch (_) {}
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
+  if (location.hash !== '#/settings') return; // left while the call pack was loading
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/badges" aria-label="Back">${icon.back}</a><h1>Settings</h1></header>
     <section class="block" data-account></section>
@@ -1666,8 +1697,16 @@ async function renderSettings() {
     </section>
     <section class="block">
       <h2 class="h2">Use it offline</h2>
-      <p class="muted small">Download every bird photo and description so the dex works with no signal. Takes about 30 MB. Calls are saved each time you play one.</p>
-      <button class="btn" data-dl>Download for offline</button> <span class="small muted" data-dlstatus></span>
+      <div class="offline-part">
+        <p class="muted small">Download every photo and description so the dex works with no signal. Takes about 30 MB.</p>
+        <button class="btn" data-dl>Download photos for offline</button> <span class="small muted" data-dlstatus role="status"></span>
+      </div>
+      <div class="offline-part" data-callpack>
+        <p class="muted small">${callsBlurb}</p>
+        <div class="callpack-ctl" data-callctl aria-live="polite"></div>
+        <div class="meter meter--thin hidden" data-callprog style="--p:0%"><span></span></div>
+        <p class="small muted" data-callstatus role="status"></p>
+      </div>
     </section>
     <section class="block">
       <h2 class="h2">Send to eBird</h2>
@@ -1682,7 +1721,7 @@ async function renderSettings() {
     </section>
     <section class="block">
       <h2 class="h2">About</h2>
-      <p class="small">Photos come from Wikipedia, Wikimedia Commons and iNaturalist contributors (via the Atlas of Living Australia), each credited on its page. Each species' write-up lists the sources it is based on. Calls are from iNaturalist (via the ALA) and Wikimedia Commons. Maps &copy; OpenStreetMap contributors; satellite imagery &copy; Esri, Maxar and Earthstar Geographics.</p>
+      <p class="small">Photos come from Wikipedia, Wikimedia Commons and iNaturalist contributors (via the Atlas of Living Australia), each credited on its page. Each species' write-up lists the sources it is based on. Calls are from iNaturalist (via the ALA) and Wikimedia Commons. The clips saved for offline are shortened, level-matched copies of iNaturalist recordings, each credited where it plays. Maps &copy; OpenStreetMap contributors; satellite imagery &copy; Esri, Maxar and Earthstar Geographics.</p>
       <p class="small">Hotspots, seasons and rarity come from Atlas of Living Australia records for SEQ since 2016 (including eBird and BirdLife Australia data). Birds: 40,000+ records is Common, 15,000+ Fairly common, 4,000+ Uncommon, 800+ Scarce and fewer is Rare. Other animals and plants are recorded far less often than birds, so each kind is ranked against its own kind: the most-recorded fifth of that kind is Common, the next fifth Fairly common, and so on down to Rare. Seasons are also compared within each kind. Record counts lean towards easy-to-see species and popular spots, so treat rarity as a guide.</p>
       <p class="small muted">Version 3.0</p>
     </section>
@@ -1691,6 +1730,7 @@ async function renderSettings() {
       <button class="btn btn--danger btn--quiet" data-wipe>Delete all my sightings</button>
     </section>`;
   renderAccountSection($('[data-account]', view));
+  wireCallPack();
   view.onchange = async e => {
     if (e.target.matches('[data-colour]')) { state.settings.colourUnseen = e.target.checked; await db.kvSet('settings', state.settings); }
     if (e.target.matches('[data-theme]')) { state.settings.theme = e.target.value; applyTheme(); await db.kvSet('settings', state.settings); }
@@ -1740,6 +1780,42 @@ async function renderSettings() {
     }
   };
 }
+// Settings: "Save calls for offline". The state comes from Cache Storage each time, so it survives a reload.
+async function wireCallPack() {
+  const ctl = $('[data-callctl]', view), status = $('[data-callstatus]', view), prog = $('[data-callprog]', view);
+  if (!ctl) return;
+  const mb = b => `${Math.max(1, Math.round(b / 1e6))} MB`;
+  const show = async () => {
+    const st = await callPackStatus();
+    if (!ctl.isConnected || !st.total) return;
+    if (st.saved >= st.total) {
+      ctl.innerHTML = `<p class="callpack-done" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Calls saved for offline: ${st.total} clips, ${(st.bytes / 1e6).toFixed(1)} MB</span></p>`;
+      status.textContent = '';
+      return;
+    }
+    const left = st.bytes - st.savedBytes;
+    ctl.innerHTML = `<button class="btn" data-calls-dl>${st.saved ? `Save the rest of the calls (about ${mb(left)})` : `Save calls for offline (about ${mb(st.bytes)})`}</button>`;
+    status.textContent = st.saved ? `${st.saved} of ${st.total} clips are on this phone already.` : '';
+  };
+  await show();
+  ctl.onclick = async e => {
+    const b = e.target.closest('[data-calls-dl]');
+    if (!b || b.disabled) return;
+    if (!navigator.onLine) { status.textContent = 'You are offline. Connect to the internet, then save the calls.'; return; }
+    b.disabled = true; b.textContent = 'Saving calls…';
+    prog.classList.remove('hidden');
+    let last = 0;
+    const res = await saveCallPack((d, t) => {
+      prog.style.setProperty('--p', `${Math.round(d / t * 100)}%`);
+      // Announce every 10 per cent or so, not every clip.
+      if (d === t || d - last >= t / 10) { last = d; status.textContent = `Saving calls: ${d} of ${t}`; }
+    }).catch(() => ({ failed: -1 }));
+    prog.classList.add('hidden');
+    await show();
+    if (res.failed) status.textContent = res.failed > 0 ? `${res.failed} clips didn't download. Check your connection and try again.` : 'Saving calls failed. Check your connection and try again.';
+    else { navigator.storage?.persist?.(); $('.callpack-done', ctl)?.focus(); }
+  };
+}
 const blobToDataUrl = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
 function download(name, blob) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
@@ -1784,8 +1860,49 @@ function openSearch() {
 }
 
 // ---------- Listen (BirdNET) ----------
+// Frogs: BirdNET has no SEQ frogs, so Listen lists the frogs calling this month with our clips to match by ear.
+const callLine = sp => {
+  const parts = String(sp.notes || '').match(/[^.]+\./g) || [];
+  return (parts.find(t => /\bcall|bleat|trill|chorus|cackle|"/i.test(t)) || parts[0] || '').trim();
+};
+function frogBoard(pack, month) {
+  const frogs = ofKind('frog').filter(sp => pack[sp.id]?.length)
+    .map(sp => ({ sp, r: relRate(sp.id, month) ?? 0 }))
+    .filter(({ sp, r }) => r >= 0.35 || inSeason(sp, month))
+    .sort((a, b) => b.r - a.r || a.sp.id - b.sp.id);
+  if (!frogs.length) return '';
+  return `<section class="frogboard" aria-labelledby="frogboard-h">
+    <h2 class="h2" id="frogboard-h">Frogs calling in ${MONTHS[month - 1]}</h2>
+    <p class="muted small">BirdNET only knows birds. Match frog calls by ear here.</p>
+    <p class="small frogboard-save hidden" data-fsave>To play these with no signal, <a href="#/settings">save calls in Settings</a>.</p>
+    <ul class="frogboard-list">${frogs.map(({ sp }) => {
+      const clips = pack[sp.id];
+      return `<li class="frog-row kind--frog" data-frog="${sp.id}">
+        <a class="row-thumb" href="#/bird/${sp.id}" tabindex="-1" aria-hidden="true">${birdImg(sp)}</a>
+        <div class="frog-main">
+          <a class="frog-name" href="#/bird/${sp.id}">${esc(sp.name)}</a>
+          <span class="frog-call small">${esc(callLine(sp))}</span>
+          <div class="frog-plays">${clips.map((c, i) => `<button class="fplay" data-fplay="${sp.id}:${i}" aria-pressed="false" aria-label="${esc(sp.name)}, call ${i + 1} of ${clips.length}"><span class="fplay-ico" aria-hidden="true">${icon.play}</span><span class="fplay-eq" aria-hidden="true"><i></i><i></i><i></i></span><span aria-hidden="true">${clips.length > 1 ? `Call <b>${i + 1}</b>` : 'Play call'}</span></button>`).join('')}</div>
+          <span class="frog-prog" aria-hidden="true"><span></span></span>
+          <p class="frog-credit small muted" data-fcredit></p>
+        </div></li>`;
+    }).join('')}</ul>
+    <p class="frog-sr" role="status" data-fstatus></p>
+    <details class="frog-credits"><summary class="small">Recording credits</summary>
+      <ul class="small muted">${frogs.flatMap(({ sp }) => pack[sp.id].map((c, i) => `<li>${esc(sp.name)}${pack[sp.id].length > 1 ? `, call ${i + 1}` : ''}: ${callCredit({ ...c, local: true })}</li>`)).join('')}</ul>
+    </details>
+  </section>`;
+}
+
+let listenGen = 0;
 async function renderListen() {
   const L = state.listen;
+  // The pack can take a few seconds on a weak signal. Only the latest render may draw, and only if Listen is still
+  // open; otherwise it would cover another screen and leave its own timer running.
+  const gen = ++listenGen;
+  const pack = await loadCallPack();
+  if (gen !== listenGen || location.hash !== '#/listen') return;
+  const month = new Date().getMonth() + 1;
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
       <div><h1>Listen</h1><p class="muted small">BirdNET names birds from their calls, right on your phone.</p></div></header>
@@ -1793,12 +1910,13 @@ async function renderListen() {
       <canvas class="spectro" width="600" height="220" aria-label="Live sound picture"></canvas>
       <div class="listen-ctl">
         <button class="micbtn" data-mic aria-pressed="false">${icon.mic}<span>Start listening</span></button>
-        <p class="small muted" data-lstatus>Point your phone towards the birds and keep still. The first time, the sound model downloads (about 60 MB).</p>
+        <p class="small muted" data-lstatus role="status">Point your phone towards the birds and keep still. The first time, the sound model downloads (about 60 MB). After that, Listen works with no signal.</p>
         <div class="meter meter--thin hidden" data-lprog style="--p:0%"><span></span></div>
       </div>
       <div class="block-h"><h2 class="h2">Heard</h2>${L.hits.size ? '<button class="btn btn--small btn--quiet" data-clear>Clear</button>' : ''}</div>
       <ul class="rows" data-hits></ul>
       <p class="small muted">BirdNET by the K. Lisa Yang Center for Conservation Bioacoustics and Chemnitz University of Technology (model CC BY-SA 4.0). Suggestions can be wrong, so check before you log.</p>
+      ${frogBoard(pack, month)}
     </div>`;
   const hitsEl = $('[data-hits]', view), status = $('[data-lstatus]', view), prog = $('[data-lprog]', view), btn = $('[data-mic]', view);
   const seen = seenSet();
@@ -1810,7 +1928,7 @@ async function renderListen() {
       return `<li class="hit ${Date.now() - h.last < 4000 ? 'hit--live' : ''}">
         <span class="row-thumb">${sp ? birdImg(sp) : `<span class="img-missing"></span>`}</span>
         <span class="row-main"><strong>${esc(sp ? sp.name : h.name)}</strong>
-          <span class="small muted">${Math.round(h.best * 100)}% sure, ${ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)} min ago`}${sp ? (seen.has(sp.id) ? '' : '. New for your dex!') : '. Not in the dex'}</span>
+          <span class="small muted">${Math.round(h.best * 100)}% sure, ${ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)} min ago`}${sp ? (seen.has(sp.id) ? '' : '. New for your dex') : '. Not in the dex'}</span>
           <span class="meter meter--thin" style="--p:${Math.round(h.best * 100)}%"><span></span></span></span>
         ${sp ? `<button class="btn btn--small" data-loghit="${sp.id}">Log it</button>` : ''}</li>`;
     }).join('') || '<li class="muted pad">Nothing yet. Calls show up here as they are recognised.</li>';
@@ -1818,14 +1936,18 @@ async function renderListen() {
   drawHits();
   let mod = null;
   const stop = () => { mod?.stopListening(); btn.setAttribute('aria-pressed', 'false'); btn.querySelector('span').textContent = 'Start listening'; btn.classList.remove('on'); };
-  state.cleanup = () => { stop(); clearInterval(L.tickT); };
+  const frogs = wireFrogBoard(pack, () => { if (btn.classList.contains('on')) { stop(); status.textContent = 'Stopped listening while the frog call plays, so BirdNET does not hear it.'; } });
+  state.cleanup = () => { stop(); frogs.stop(); clearInterval(L.tickT); };
   L.tickT = setInterval(drawHits, 2000);
   view.onclick = async e => {
+    const fp = e.target.closest('[data-fplay]');
+    if (fp) { frogs.play(fp); return; }
     const lh = e.target.closest('[data-loghit]');
     if (lh) openSightingSheet({ speciesId: Number(lh.dataset.loghit), autoGps: true, notes: 'Identified by call with BirdNET.' });
     if (e.target.closest('[data-clear]')) { L.hits.clear(); drawHits(); }
     if (!e.target.closest('[data-mic]')) return;
     if (btn.classList.contains('on')) { stop(); status.textContent = 'Stopped.'; return; }
+    frogs.stop();
     try {
       mod = await import('./listen.js');
       btn.classList.add('on'); btn.setAttribute('aria-pressed', 'true'); btn.querySelector('span').textContent = 'Stop';
@@ -1853,6 +1975,62 @@ async function renderListen() {
       stop();
       status.textContent = /denied|NotAllowed/i.test(String(err?.name || err?.message)) ? 'Microphone permission was denied. Allow it in your browser settings and try again.' : `Couldn't start listening: ${err.message || err}`;
     }
+  };
+}
+
+// One player for the whole frog board. The credit for the clip that is playing shows in its row.
+function wireFrogBoard(pack, beforePlay) {
+  const audio = new Audio();
+  let cur = null; // { btn, key }
+  const row = () => cur?.btn.closest('.frog-row');
+  const setPlaying = on => { cur?.btn.setAttribute('aria-pressed', String(on)); row()?.classList.toggle('is-playing', on); };
+  const reset = () => {
+    if (!cur) return;
+    setPlaying(false);
+    const bar = row() && $('.frog-prog span', row());
+    if (bar) bar.style.transform = 'scaleX(0)';
+  };
+  audio.addEventListener('timeupdate', () => {
+    const bar = row() && $('.frog-prog span', row());
+    if (bar && audio.duration) bar.style.transform = `scaleX(${Math.min(1, audio.currentTime / audio.duration)})`;
+  });
+  audio.addEventListener('ended', () => { reset(); cur = null; });
+  audio.addEventListener('error', () => {
+    if (!cur || !audio.getAttribute('src')) return;
+    const msg = navigator.onLine ? 'That clip would not play.' : 'Not saved on this phone yet. Save calls in Settings to play it with no signal.';
+    const cr = $('[data-fcredit]', row()), live = $('[data-fstatus]', view);
+    if (cr) cr.textContent = msg;
+    if (live) live.textContent = msg; // the row text isn't announced; this is
+    reset();
+    cur = null; // a second tap tries the clip again
+  });
+  // Say how to make the board work offline, until the pack is saved.
+  callPackStatus().then(st => { if (st.saved < st.total) $('[data-fsave]', view)?.classList.remove('hidden'); }).catch(() => {});
+  return {
+    play(btn) {
+      const [id, i] = btn.dataset.fplay.split(':').map(Number);
+      const key = `${id}:${i}`;
+      if (cur?.key === key) {
+        if (audio.paused) { beforePlay(); audio.play().catch(() => {}); setPlaying(true); }
+        else { audio.pause(); setPlaying(false); }
+        return;
+      }
+      reset();
+      const c = pack[id]?.[i];
+      if (!c) return;
+      cur = { btn, key };
+      beforePlay();
+      setPlaying(true);
+      const cr = $('[data-fcredit]', row()), live = $('[data-fstatus]', view);
+      if (cr) cr.innerHTML = callCredit({ ...c, local: true });
+      if (live) live.textContent = '';
+      localCalls(id).then(list => {
+        if (cur?.key !== key) return;
+        audio.src = list[i].src;
+        audio.play().catch(() => {});
+      });
+    },
+    stop() { audio.pause(); reset(); cur = null; },
   };
 }
 
@@ -2020,6 +2198,7 @@ async function boot() {
   // Photos arriving only change the dex/list pages; don't interrupt Listen or a playing call.
   onMediaReady(() => { if (!$('.sheet-wrap') && /^(#\/?(dex)?|#\/lists?.*|#\/targets|#\/badges|#\/bird\/\d+|#\/compare\/.*)?$/.test(location.hash)) render(); });
   loadIndex();
+  loadCallPack();
   if ('serviceWorker' in navigator) {
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').then(reg => {
