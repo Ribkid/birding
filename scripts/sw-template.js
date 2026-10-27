@@ -221,6 +221,9 @@ self.addEventListener('fetch', (event) => {
   if (isData(url)) {
     event.respondWith(
       (async () => {
+        // Prefer this release's shell: the persistent runtime cache is older after a deploy.
+        const own = await (await caches.open(SHELL)).match(request, MATCH);
+        if (own) return own;
         const cached = await caches.match(request, MATCH);
         const network = fetch(request)
           .then(async (res) => {
