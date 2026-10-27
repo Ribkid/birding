@@ -1,0 +1,81 @@
+/* Screens: the dex home (collection first), species pages that teach, and the badge shelf.
+   Loaded after app.css; uses only its tokens. */
+
+/* ---------- dex home ----------
+   Header, kind rail (the tally) and Today rail sit above the sticky tools, so the first tiles show on the first screen. */
+.dex-head { padding: calc(var(--sp-3) + env(safe-area-inset-top)) var(--sp-4) 0; }
+.dex-head-top { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-1); min-height: 48px; }
+.dex-head-top > .wordmark { flex: 1 1 auto; min-width: 0; }
+.dex-head-top > .head-actions { flex: none; margin-right: -6px; }
+/* The name stays on one line on a 375-390 px phone (it eases down from --fs-5); smaller phones let it wrap. */
+.wordmark { display: flex; align-items: center; gap: var(--sp-2); margin: 0; font: 400 clamp(var(--fs-4), 6.41vw, var(--fs-5))/1 var(--display); letter-spacing: -0.01em; }
+.wordmark .logo { width: 40px; height: 40px; flex: none; border-radius: 12px; box-shadow: var(--shadow-1); }
+.wordmark-txt { display: grid; gap: 4px; min-width: 0; color: var(--ink); }
+.wordmark-txt small { font: 500 var(--fs-2)/1.15 var(--font); color: var(--ink-2); }
+@media (max-width: 359px) { .wordmark .logo { width: 34px; height: 34px; border-radius: 10px; } }
+/* In the compact header the account chip is its avatar and sync dot; its label still says whose it is. */
+.dex-head .acct-chip { padding: 3px; }
+.dex-head .acct-chip-name { display: none; }
+
+/* Kind rail: each tab is a kind's tally, seen/total over a thin bar in the kind's colour. */
+.kind--all { --kc: var(--ink); }
+.kind-tabs {
+  display: flex; gap: var(--sp-2); margin: var(--sp-3) calc(-1 * var(--sp-4)) 0; padding: 2px var(--sp-4) 4px;
+  overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+}
+.kind-tabs::-webkit-scrollbar { display: none; }
+.kind-tab {
+  position: relative; flex: none; display: grid; align-content: center; gap: 3px; min-width: 84px; min-height: 60px; padding: 7px 12px 12px;
+  border: 0; border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-1); color: var(--ink); text-align: left; cursor: pointer;
+  transition: background-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), scale var(--dur-1) var(--ease-out);
+}
+.kind-tab:active { scale: .97; }
+.kind-tab-l { font-size: var(--fs-2); font-weight: 700; line-height: 1.15; white-space: nowrap; }
+.kind-tab-n { font: 600 var(--fs-3)/1 var(--stamp); color: var(--ink-2); letter-spacing: .02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kind-tab-n b { display: inline-block; font-weight: 800; font-size: var(--fs-4); color: var(--ink); }
+.kind-tab-bar { position: absolute; left: 12px; right: 12px; bottom: 7px; height: 3px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.kind-tab-bar i { display: block; height: 100%; background: var(--kc); transform-origin: left; }
+.kind-tab[aria-selected="true"] { background: color-mix(in srgb, var(--kc) 14%, var(--surface)); box-shadow: inset 0 0 0 2px var(--kc); }
+.kind-tab[aria-selected="true"] .kind-tab-bar { background: color-mix(in srgb, var(--kc) 22%, var(--surface)); }
+/* Plants close the rail, a step quieter than the animals. */
+.kind-tab--quiet { margin-left: var(--sp-2); background: transparent; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.kind-tab--quiet:not([aria-selected="true"]) .kind-tab-l { font-weight: 600; color: var(--ink-2); }
+
+/* Today: small tonal cards in one swipeable row. */
+.today {
+  display: flex; gap: var(--sp-2); margin: var(--sp-2) calc(-1 * var(--sp-4)) 0; padding: 4px var(--sp-4) 6px;
+  overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: var(--sp-4);
+}
+.today::-webkit-scrollbar { display: none; }
+.today .lt-wrap { display: contents; }
+.today-card, .today .lt, .today .lt-due {
+  flex: none; scroll-snap-align: start; height: 64px; min-height: 0; border: 0; border-radius: var(--r-2);
+  background: var(--surface); box-shadow: var(--shadow-1); color: var(--ink); text-decoration: none; font: inherit; text-align: left; cursor: pointer;
+  transition: scale var(--dur-1) var(--ease-out);
+}
+.today-card:active, .today .lt:active, .today .lt-due:active { scale: .97; }
+.today-card { display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-4) 0 var(--sp-3); }
+.today-tool > svg { width: 24px; height: 24px; flex: none; color: var(--azure); }
+.today-tool > span { display: grid; gap: 1px; line-height: 1.2; }
+.today-tool strong { font-size: var(--fs-2); white-space: nowrap; }
+.today-tool span span { font-size: var(--fs-1); color: var(--ink-2); white-space: nowrap; }
+.botd { width: 268px; padding-left: 4px; }
+.botd-img { width: 56px; height: 56px; flex: none; border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.botd-img img, .botd-img .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+.botd-txt { display: grid; min-width: 0; line-height: 1.25; }
+.botd-k { font-size: var(--fs-1); font-weight: 700; color: var(--sun-ink); }
+.botd-txt strong, .botd-why { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.botd-txt strong { font-size: var(--fs-2); }
+.botd-why { font-size: var(--fs-1); color: var(--ink-2); }
+.today .lt { width: auto; max-width: 300px; padding: 0 var(--sp-4) 0 var(--sp-3); gap: var(--sp-3); }
+.today .lt-main span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-1); }
+.today .lt-main strong { font-size: var(--fs-2); }
+.today .lt-due { padding: 0 var(--sp-4); }
+:root[data-theme="outdoor"] .today .lt { box-shadow: var(--shadow-1); }
+@media (prefers-reduced-motion: reduce) { .kind-tab, .today-card, .today .lt, .today .lt-due { transition: none; } }
+
+/* Groups further down skip layout and paint until they come near the screen; their height is estimated inline. */
+.dex-group--later { content-visibility: auto; }
+.empty-h { margin: 0 0 4px; font-weight: 700; font-size: var(--fs-3); color: var(--ink); }
+.empty .small { max-width: 36ch; margin: 0 auto var(--sp-2); }
+.row--sp .row-main i { font-style: italic; }

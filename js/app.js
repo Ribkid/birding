@@ -6,7 +6,8 @@ import { speciesList, periodFilter, totals, yearTotals, targets, badges, inPatch
 import { toEbirdCsv } from './ebird.js';
 import { loadSeq, seq, monthRates, likelihood, recordCount, spotsFor, pointsFor, hotspots, nearbyTargets } from './seqdata.js';
 import { openCard, confetti, shareCard } from './card3d.js';
-import { renderLearn, learnStats, learnReady } from './learn.js';
+import { renderLearn, learnStats, learnReady, learnTeaser, masteryOf } from './learn.js';
+import { tellFor, lookalikesOf, loadLookalikes, callWords, sentences, peaksOf } from './quiz.js';
 import { renderStats } from './statsview.js';
 import { renderScan } from './scan.js';
 import { describeArea } from './mapinfo.js';
@@ -107,13 +108,14 @@ function settleImages(root) {
   for (const img of $$('img.fade:not(.in)', root)) if (img.complete && img.naturalWidth) { img.classList.add('in'); shown.add(img.getAttribute('src')); }
 }
 // whole: show the entire photo (no cropping) over a soft blurred copy, for big views.
+// alt: '' where the name is already written next to the photo (tiles, rows), so it isn't read twice.
 // data-sp/data-size let a later photo index swap in a better picture without redrawing the page.
-function birdImg(sp, size = 'small', cls = '', { whole = false } = {}) {
+function birdImg(sp, size = 'small', cls = '', { whole = false, alt = sp.name } = {}) {
   const url = sized(sp.id, size);
-  if (url && whole) return wholeImg(url, sp.name, cls);
+  if (url && whole) return wholeImg(url, alt, cls);
   return url
-    ? `<img class="${cls} ${fade(url)}" src="${esc(url)}" alt="${esc(sp.name)}" loading="lazy" decoding="async" data-sp="${sp.id}" data-size="${size}" ${ONLOAD} onerror="this.classList.add('img-missing')">`
-    : `<span class="${cls} img-missing" role="img" aria-label="${esc(sp.name)}" data-sp="${sp.id}" data-size="${size}"></span>`;
+    ? `<img class="${cls} ${fade(url)}" src="${esc(url)}" alt="${esc(alt)}" loading="lazy" decoding="async" data-sp="${sp.id}" data-size="${size}" ${ONLOAD} onerror="this.classList.add('img-missing')">`
+    : `<span class="${cls} img-missing" ${alt ? `role="img" aria-label="${esc(alt)}"` : 'aria-hidden="true"'} data-sp="${sp.id}" data-size="${size}"></span>`;
 }
 const wholeImg = (url, alt, cls = '') => `<span class="whole ${cls}"><img class="whole-bg ${fade(url)}" src="${esc(url)}" alt="" aria-hidden="true" loading="lazy" decoding="async" ${ONLOAD}><img class="whole-fg ${fade(url)}" src="${esc(url)}" alt="${esc(alt)}" loading="lazy" decoding="async" ${ONLOAD} onerror="this.closest('.whole').classList.add('img-missing')"></span>`;
 // The first hero photo on a page (marked data-hero-frame) is the one thing worth fetching first.
@@ -144,7 +146,12 @@ const icon = {
   pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor"/></svg>',
   pin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="9.5" r="2.5" fill="currentColor"/></svg>',
   cam: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
-  gear: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v3M12 18.5v3M4.2 6.5l2.6 1.5M17.2 16l2.6 1.5M4.2 17.5l2.6-1.5M17.2 8l2.6-1.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor"><path d="M12 6V2.6M16.2 7.8l2.4-2.4M18 12h3.4M16.2 16.2l2.4 2.4M12 18v3.4M7.8 16.2l-2.4 2.4M6 12H2.6M7.8 7.8L5.4 5.4" stroke-width="3.4"/><circle cx="12" cy="12" r="6.6" stroke-width="2.2"/><circle cx="12" cy="12" r="2.4" stroke-width="2"/></g></svg>',
+  install: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10.5M7.5 10.5L12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5l1-4.2L15.8 5a2 2 0 0 1 2.9 0l.3.3a2 2 0 0 1 0 2.9L8.7 18.5zM13.5 7.3l3.2 3.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>',
+  clipboard: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4.5h6v2.5H9zM9 5.5H6.5A1.5 1.5 0 0 0 5 7v12a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19V7a1.5 1.5 0 0 0-1.5-1.5H15M8.5 12l1.8 1.8 3.4-3.4M8.5 17h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>',
+  outing: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.4-6-10.2a6 6 0 0 1 12 0C18 15.6 12 21 12 21z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.6 10.6l1.7 1.7 3.2-3.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  tick: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   search: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 15l5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   mic: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   scan: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
@@ -983,6 +990,11 @@ function onRouteChange() {
           if (img?.decode) waits.push(img.decode());
         }
       }
+    } else if (fromId && nav === 'back') {
+      // Dex groups off screen only have an estimated height, so the remembered scroll can land a little off:
+      // make sure the tile she opened is in sight.
+      const t = $(`[data-tile="${fromId}"]`, view);
+      if (t && !inView(t)) t.scrollIntoView({ block: 'center' });
     }
     return settle(Promise.all(waits), 150);
   }, { nav }).then(focusPageHeading);
@@ -1015,12 +1027,14 @@ function renderOutingBar() {
 // Dex
 const inScope = (s, scope = state.dex.kind || 'animals') => scope === 'all' ? true : scope === 'animals' ? s.kind !== 'plant' : s.kind === scope;
 const scopeNoun = (scope, n) => scope === 'animals' ? (n === 1 ? 'animal' : 'animals') : scope === 'all' ? 'species' : (n === 1 ? KINDS[scope].one : KINDS[scope].label.toLowerCase());
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const listWords = (list, and = 'and') => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} ${and} ${list[list.length - 1]}`);
 function dexFilter(seen) {
   const f = state.dex;
   const q = f.q.trim().toLowerCase();
   const month = new Date().getMonth() + 1;
   return SPECIES.filter(s => inScope(s) &&
-    (!q || `${s.name} ${s.sci} ${dexNo(s.id)} ${GROUPS[s.group]}`.toLowerCase().includes(q)) &&
+    (!q || `${s.name} ${s.sci} ${dexNo(s.id)} ${GROUPS[s.group]} ${KINDS[s.kind].label} ${KINDS[s.kind].one}`.toLowerCase().includes(q)) &&
     (f.show === 'all' || (f.show === 'seen') === seen.has(s.id)) &&
     (!f.group || s.group === f.group) && (!f.habitat || s.habitats.includes(f.habitat)) &&
     (!f.rarity || s.rarity === Number(f.rarity)) &&
@@ -1028,54 +1042,167 @@ function dexFilter(seen) {
 }
 function lastSeenOf(id) { const h = sightingsOf(id); return h[0] ? h[0].date + (h[0].time || '') : ''; }
 
-function birdOfDay(seen) {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  let pool = targets({ seen, month, ...targetOpts() }).slice(0, 40);
-  if (!pool.length) pool = BIRDS.slice();
+// '<Kind> of the day' follows the kind tab (a bird for All animals). The pick holds all day.
+function ofTheDay(seen, scope) {
+  const k = scope === 'animals' || scope === 'all' ? 'bird' : scope;
+  const now = new Date(), month = now.getMonth() + 1;
+  let pool = targets({ seen, month, kinds: [k], ...targetOpts() }).slice(0, 40);
+  if (!pool.length) pool = ofKind(k);
+  if (!pool.length) return '';
   const key = Number(todayStr(now).replace(/-/g, ''));
   const sp = pool[(key * 2654435761 >>> 0) % pool.length];
   const spot = spotsFor(sp.id, 1)[0];
-  const why = seen.has(sp.id) ? 'One of yours. Say hello again today.'
-    : `${relRate(sp.id, month) >= 0.8 ? 'Often reported right now' : 'Around this month'}${spot ? `. Try ${spot.h.name}.` : '.'}`;
-  return `<a class="botd" href="#/bird/${sp.id}">
-    <span class="botd-img">${birdImg(sp, 'large')}</span>
-    <span class="botd-txt"><span class="botd-k">Bird of the day</span><strong>${esc(sp.name)}</strong><span class="small muted">${esc(why)}</span></span></a>`;
+  const when = k === 'plant' && sp.season && inSeason(sp, month) ? 'Flowering now' : relRate(sp.id, month) >= 0.8 ? 'Often reported right now' : 'Around this month';
+  const why = seen.has(sp.id) ? 'One of yours. Say hello again today.' : `${when}${spot ? `. Try ${spot.h.name}.` : '.'}`;
+  return `<a class="today-card botd kind--${sp.kind}" href="#/bird/${sp.id}">
+    <span class="botd-img">${birdImg(sp, 'small', '', { alt: '' })}</span>
+    <span class="botd-txt"><span class="botd-k">${cap(KINDS[k].one)} of the day</span><strong>${esc(sp.name)}</strong><span class="botd-why">${esc(why)}</span></span></a>`;
+}
+
+// What photo ID covers (from data/photoid.json, read once), so Scan isn't offered for kinds it can't name.
+let photoKinds = null, photoKindsP = null;
+function scanCard(scope) {
+  const single = scope !== 'animals' && scope !== 'all';
+  const labels = (photoKinds || []).map(k => KINDS[k].label.toLowerCase());
+  const missing = single && labels.length && !photoKinds.includes(scope);
+  const title = missing ? `Scan a photo (${listWords(labels)})` : 'Scan a photo';
+  const sub = missing ? `No ${KINDS[scope].label.toLowerCase()} yet` : labels.length ? `${cap(listWords(labels))} by photo` : 'Name it from a photo';
+  return `${icon.scan}<span><strong>${esc(title)}</strong><span>${esc(sub)}</span></span>`;
+}
+function knowPhotoKinds() {
+  photoKindsP ||= import('./photoid.js').then(m => m.photoInfo()).then(info => {
+    photoKinds = info.kinds;
+    const card = $('[data-scancard]', view);
+    if (card) card.innerHTML = scanCard(state.dex.kind);
+  }).catch(() => { photoKindsP = null; });
+}
+
+// Today: one scrolling row of small cards. Listen and Scan, the pick of the day for this tab, and Learn.
+function todayRail(seen, scope) {
+  const single = scope !== 'animals' && scope !== 'all';
+  const [lt, ls] = single && scope !== 'bird' ? ['Listen (birds)', scope === 'frog' ? 'Frog calls to compare' : 'Birds by call'] : ['Listen', 'Birds by call'];
+  return `<section class="today" aria-label="Today">
+    ${state.installPrompt ? `<button class="today-card today-tool" data-install>${icon.install}<span><strong>Install</strong><span>Add to your home screen</span></span></button>` : ''}
+    <a class="today-card today-tool" href="#/listen">${icon.mic}<span><strong>${lt}</strong><span>${ls}</span></span></a>
+    <a class="today-card today-tool" href="#/scan" data-scancard>${scanCard(scope)}</a>
+    ${ofTheDay(seen, scope)}
+    ${learnTeaser(ctx)}
+  </section>`;
+}
+
+// The kind rail is the tally: each tab carries its own seen/total and a thin progress bar.
+function kindRail(seen, scope) {
+  if (kindsPresent.length < 2) return '';
+  const tab = (k, label, list, cls = '') => {
+    const got = list.filter(s => seen.has(s.id)).length, n = list.length;
+    return `<button role="tab" class="kind-tab kind--${k === 'animals' ? 'all' : k} ${cls}" aria-selected="${scope === k}" data-kind="${k}">
+      <span class="kind-tab-l">${label}</span>
+      <span class="kind-tab-n" aria-hidden="true"><b data-kn="${got}" data-of="${n}">${got}</b>/${n}</span>
+      <span class="kind-tab-bar" aria-hidden="true"><i style="transform:scaleX(${(got / Math.max(1, n)).toFixed(3)})"></i></span>
+      <span class="sr-only">, ${got} of ${n} ${k === 'plant' ? 'found' : 'seen'}</span></button>`;
+  };
+  return `<div class="kind-tabs" role="tablist" aria-label="What to show">
+    ${tab('animals', 'All animals', ANIMALS)}
+    ${ANIMAL_KINDS.filter(k => kindsPresent.includes(k)).map(k => tab(k, KINDS[k].label, ofKind(k))).join('')}
+    ${kindsPresent.includes('plant') ? tab('plant', 'Plants', ofKind('plant'), 'kind-tab--quiet') : ''}</div>`;
+}
+// A count that changed since the last draw (a new sighting) counts up; the first draw just shows the numbers.
+let dexCounts = null;
+function countKindTabs() {
+  const now = {};
+  for (const b of $$('[data-kn]', view)) {
+    const k = b.closest('[data-kind]').dataset.kind, n = Number(b.dataset.kn), of = Math.max(1, Number(b.dataset.of));
+    const was = dexCounts?.[k];
+    now[k] = n;
+    if (was == null || was === n) continue;
+    countUp(b, was, n, { delay: 200 });
+    if (motionOK()) b.closest('.kind-tab').querySelector('.kind-tab-bar i').animate(
+      [{ transform: `scaleX(${was / of})` }, { transform: `scaleX(${n / of})` }], { duration: 600, delay: 200, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'backwards' });
+  }
+  dexCounts = now;
+}
+
+// The horizontal rails keep where they were scrolled to across a redraw; the chosen kind tab is kept in sight.
+const RAILS = ['.kind-tabs', '.today', '.chips--dex'];
+function keepRails(draw) {
+  const was = RAILS.map(s => $(s, view)?.scrollLeft);
+  draw();
+  RAILS.forEach((s, i) => { const el = $(s, view); if (el && was[i]) el.scrollLeft = was[i]; });
+  const rail = $('.kind-tabs', view), on = rail && $('[aria-selected="true"]', rail);
+  if (on && (on.offsetLeft < rail.scrollLeft || on.offsetLeft + on.offsetWidth > rail.scrollLeft + rail.clientWidth)) {
+    rail.scrollLeft = on.offsetLeft - (rail.clientWidth - on.offsetWidth) / 2;
+  }
+}
+// Filters, sorts, kinds and layout: tiles glide to their new places and focus stays on the control she used.
+const redrawDex = () => { keepFocus(() => flip(() => renderDex())); sayDexCount(); };
+let sayT = 0;
+function sayDexCount(delay = 0) {
+  clearTimeout(sayT);
+  sayT = setTimeout(() => {
+    if (!/^#\/(dex)?$/.test(location.hash || '#/dex')) return;
+    const n = dexFilter(seenSet()).length;
+    announce(`${n} ${scopeNoun(state.dex.kind, n)}`);
+  }, delay);
+}
+
+function dexEmpty(f, seen, filtersOn) {
+  const noun = scopeNoun(f.kind, 2), q = f.q.trim();
+  const clear = `<button class="btn" data-reset>${q && !filtersOn ? 'Clear search' : 'Clear filters'}</button>`;
+  if (q) {
+    return `<div class="empty"><p class="empty-h">No ${noun} match "${esc(q)}"${filtersOn ? ' with these filters' : ''}.</p>
+      <p class="small">Check the spelling or try part of a name. Search everything to look through places and your sightings too.</p>
+      <div class="row-center"><button class="btn btn--primary" data-search>Search everything</button>${clear}</div></div>`;
+  }
+  if (f.show === 'seen' && !SPECIES.some(s => inScope(s) && seen.has(s.id))) {
+    return `<div class="empty"><p class="empty-h">No ${noun} logged yet.</p>
+      <p class="small">Press and hold any tile to log it, or tap the + button.</p>
+      <div class="row-center"><button class="btn btn--primary" data-show="all">Show all ${noun}</button></div></div>`;
+  }
+  return `<div class="empty"><p class="empty-h">None of the ${noun} match all of these filters.</p>
+    <p class="small">Turn one off, or clear them all to see the whole dex again.</p><div class="row-center">${clear}</div></div>`;
+}
+
+// Off-screen groups skip rendering until they're near (content-visibility); this is their size until then.
+function groupSize(n, layout) {
+  if (layout === 'list') return 52 + n * 69;
+  const w = Math.min(innerWidth, 760) - 32, min = innerWidth >= 700 ? 130 : 104;
+  const cols = Math.max(1, Math.floor((w + 10) / (min + 10))), rows = Math.ceil(n / cols);
+  return 60 + rows * ((w - (cols - 1) * 10) / cols + 64) + (rows - 1) * 16;
 }
 
 function renderDex() {
+  keepRails(drawDex);
+  countKindTabs();
+  if (!photoKinds) knowPhotoKinds();
+}
+function drawDex() {
   const seen = seenSet();
   const f = state.dex;
   f.kind ||= 'animals';
   const list = dexFilter(seen);
   const scopeAll = SPECIES.filter(s => inScope(s));
-  const scopeSeen = scopeAll.filter(s => seen.has(s.id)).length;
-  const pct = Math.round(scopeSeen / Math.max(1, scopeAll.length) * 100);
-  const filtersOn = f.habitat || f.group || f.rarity || f.season || f.show !== 'all';
-  const kindCount = k => { const all = ofKind(k); return `${all.filter(s => seen.has(s.id)).length}/${all.length}`; };
-  const animalKinds = ANIMAL_KINDS.filter(k => kindsPresent.includes(k));
-  const kindTabs = kindsPresent.length > 1 ? `<div class="kind-tabs" role="tablist" aria-label="What to show">
-      <button role="tab" class="kind-tab ${f.kind === 'animals' ? 'on' : ''}" aria-selected="${f.kind === 'animals'}" data-kind="animals"><span>All animals</span><em>${ANIMALS.filter(s => seen.has(s.id)).length}/${ANIMALS.length}</em></button>
-      ${animalKinds.map(k => `<button role="tab" class="kind-tab kind--${k} ${f.kind === k ? 'on' : ''}" aria-selected="${f.kind === k}" data-kind="${k}"><i aria-hidden="true"></i><span>${KINDS[k].label}</span><em>${kindCount(k)}</em></button>`).join('')}
-      ${kindsPresent.includes('plant') ? `<button role="tab" class="kind-tab kind-tab--quiet kind--plant ${f.kind === 'plant' ? 'on' : ''}" aria-selected="${f.kind === 'plant'}" data-kind="plant"><i aria-hidden="true"></i><span>Plants</span><em>${kindCount('plant')}</em></button>` : ''}
-    </div>` : '';
-  const tile = s => `<li><a class="tile kind--${s.kind} ${seen.has(s.id) ? 'tile--seen' : ''}" href="#/bird/${s.id}" data-tile="${s.id}">
-      <span class="tile-img">${birdImg(s)}</span>
-      ${band(s.id, seen.has(s.id))}
-      <span class="tile-name">${esc(s.name)}</span></a></li>`;
-  const row = s => `<li><a class="row row--sp kind--${s.kind}" href="#/bird/${s.id}" data-tile="${s.id}"><span class="row-thumb ${seen.has(s.id) ? 'row-thumb--seen' : ''}">${birdImg(s)}</span>
-      <span class="row-main"><strong>${esc(s.name)}</strong><span class="muted small">${GROUPS[s.group]}</span></span>${pips(s.rarity)} ${band(s.id, seen.has(s.id))}</a></li>`;
-  const block = items => state.dex.layout === 'list' ? `<ul class="rows pad-x">${items.map(row).join('')}</ul>` : `<ul class="dex-grid">${items.map(tile).join('')}</ul>`;
+  const filtersOn = !!(f.habitat || f.group || f.rarity || f.season || f.show !== 'all');
+  const isSeen = s => seen.has(s.id);
+  const hidden = s => `<span class="sr-only">, ${isSeen(s) ? 'seen' : 'not seen'}</span>`;
+  const tile = s => `<li><a class="tile kind--${s.kind} ${isSeen(s) ? 'tile--seen' : ''}" href="#/bird/${s.id}" data-tile="${s.id}">
+      <span class="tile-img">${birdImg(s, 'small', '', { alt: '' })}</span>
+      ${band(s.id, isSeen(s))}
+      <span class="tile-name">${esc(s.name)}${hidden(s)}</span></a></li>`;
+  // Under a group heading the group name would repeat on every row, so rows show the scientific name instead.
+  const row = s => `<li><a class="row row--sp kind--${s.kind}" href="#/bird/${s.id}" data-tile="${s.id}"><span class="row-thumb ${isSeen(s) ? 'row-thumb--seen' : ''}">${birdImg(s, 'small', '', { alt: '' })}</span>
+      <span class="row-main"><strong>${esc(s.name)}${hidden(s)}</strong><span class="muted small">${f.sort === 'dex' ? `<i>${esc(s.sci)}</i>` : esc(GROUPS[s.group])}</span></span>${pips(s.rarity)} ${band(s.id, isSeen(s))}</a></li>`;
+  const block = items => f.layout === 'list' ? `<ul class="rows pad-x">${items.map(row).join('')}</ul>` : `<ul class="dex-grid">${items.map(tile).join('')}</ul>`;
   let body;
-  if (!list.length) body = `<div class="empty"><p>Nothing matches those filters.</p><button class="btn" data-reset>Clear filters</button></div>`;
+  if (!list.length) body = dexEmpty(f, seen, filtersOn);
   else if (f.sort === 'dex') {
     const byGroup = {};
     list.forEach(s => (byGroup[s.group] ||= []).push(s));
-    body = Object.keys(GROUPS).filter(g => byGroup[g]).map(g => {
+    body = Object.keys(GROUPS).filter(g => byGroup[g]).map((g, i) => {
       const k = SPECIES.find(s => s.group === g)?.kind || 'bird';
       const all = SPECIES.filter(s => s.group === g);
-      const got = all.filter(s => seen.has(s.id)).length;
-      return `<section class="dex-group kind--${k}"><h2 class="dex-group-h"><span>${GROUPS[g]}</span><span class="dex-group-n">${got}/${all.length}</span></h2>${block(byGroup[g])}</section>`;
+      const got = all.filter(isSeen).length;
+      const later = i ? ` style="contain-intrinsic-size:auto ${Math.round(groupSize(byGroup[g].length, f.layout))}px"` : '';
+      return `<section class="dex-group kind--${k}${i ? ' dex-group--later' : ''}"${later}><h2 class="dex-group-h"><span>${GROUPS[g]}</span><span class="dex-group-n"><span aria-hidden="true">${got}/${all.length}</span><span class="sr-only">${got} of ${all.length} seen</span></span></h2>${block(byGroup[g])}</section>`;
     }).join('');
   } else {
     const sorted = list.slice().sort(
@@ -1087,25 +1214,15 @@ function renderDex() {
   view.innerHTML = `
     <header class="dex-head">
       <div class="dex-head-top">
-        <h1 class="wordmark"><img class="logo" src="icons/logo.svg" alt="" width="52" height="52"><span class="wordmark-txt">Sarah's BirdyDex<small>South East Queensland</small></span></h1>
+        <h1 class="wordmark"><img class="logo" src="icons/logo.svg" alt="" width="40" height="40"><span class="wordmark-txt">Sarah's BirdyDex<small>South East Queensland</small></span></h1>
         <div class="head-actions">
-          ${state.installPrompt ? '<button class="chip chip--install" data-install>Install</button>' : ''}
           ${accountChip()}
           <button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button>
           <a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a>
         </div>
       </div>
-      <div class="tally" aria-label="${scopeSeen} of ${scopeAll.length} ${scopeNoun(f.kind, scopeAll.length)} seen">
-        <span class="tally-band"><b>${scopeSeen}</b><i>/${scopeAll.length}</i></span>
-        <div class="tally-meta"><span>${scopeNoun(f.kind, 2)} ${f.kind === 'plant' ? 'found' : 'seen'}</span>
-          <div class="meter" style="--p:${pct}%"><span></span></div></div>
-      </div>
-      <div class="id-buttons">
-        <a class="idbtn" href="#/listen">${icon.mic}<span><strong>Listen</strong><em>ID by call</em></span></a>
-        <a class="idbtn" href="#/scan">${icon.scan}<span><strong>Scan a photo</strong><em>Name what you see</em></span></a>
-      </div>
-      ${birdOfDay(seen)}
-      ${kindTabs}
+      ${kindRail(seen, f.kind)}
+      ${todayRail(seen, f.kind)}
     </header>
     <div class="dex-tools">
       <div class="searchbox searchbox--dex">${icon.search}<input type="search" placeholder="Filter ${scopeAll.length} ${scopeNoun(f.kind, 2)}" value="${esc(f.q)}" data-q aria-label="Filter by name"></div>
@@ -1124,26 +1241,29 @@ function renderDex() {
         <option value="">All groups</option>${Object.entries(GROUPS).filter(([k]) => scopeAll.some(s => s.group === k)).map(([k, v]) => `<option value="${k}" ${f.group === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
       ${filtersOn ? '<button class="chip" data-reset>Clear</button>' : ''}
     </div>
-    ${f.q || filtersOn ? `<p class="list-count"><b>${list.length}</b> ${list.length === 1 ? 'bird' : 'birds'}</p>` : ''}
+    ${(f.q || filtersOn) && list.length ? `<p class="list-count"><b>${list.length}</b> ${scopeNoun(f.kind, list.length)}</p>` : ''}
     <div class="dex ${state.settings.colourUnseen ? 'dex--colour' : ''}">${body}</div>
     <p class="small muted pad dex-tip">Tip: press and hold anything in the dex to log it quickly.</p>`;
   const qi = $('[data-q]', view);
+  // Typing redraws without motion (tiles sliding on every key would be noise); the count is read out once she pauses.
   qi.addEventListener('input', () => {
     state.dex.q = qi.value;
     const pos = qi.selectionStart;
     renderDex();
     const n = $('[data-q]', view); n.focus(); n.setSelectionRange(pos, pos);
+    sayDexCount(900);
   });
   view.onclick = e => {
     if (state.suppressClick && e.target.closest('[data-tile]')) { state.suppressClick = false; e.preventDefault(); return; }
     const sh = e.target.closest('[data-show]');
-    if (sh) { state.dex.show = sh.dataset.show; renderDex(); }
-    if (e.target.closest('[data-season]')) { state.dex.season = !state.dex.season; renderDex(); }
+    if (sh) { state.dex.show = sh.dataset.show; redrawDex(); return; }
+    if (e.target.closest('[data-season]')) { state.dex.season = !state.dex.season; redrawDex(); return; }
     const kt = e.target.closest('[data-kind]');
-    if (kt) { state.dex.kind = kt.dataset.kind; state.dex.group = ''; renderDex(); }
-    if (e.target.closest('[data-layout]')) { state.dex.layout = state.dex.layout === 'list' ? 'grid' : 'list'; renderDex(); }
-    if (e.target.closest('[data-reset]')) { state.dex = { ...state.dex, q: '', show: 'all', group: '', habitat: '', rarity: '', season: false }; renderDex(); }
-    if (e.target.closest('[data-search]')) openSearch();
+    if (kt) { if (state.dex.kind !== kt.dataset.kind) { state.dex.kind = kt.dataset.kind; state.dex.group = ''; redrawDex(); } return; }
+    if (e.target.closest('[data-layout]')) { state.dex.layout = state.dex.layout === 'list' ? 'grid' : 'list'; redrawDex(); return; }
+    if (e.target.closest('[data-reset]')) { state.dex = { ...state.dex, q: '', show: 'all', group: '', habitat: '', rarity: '', season: false }; redrawDex(); return; }
+    const se = e.target.closest('[data-search]');
+    if (se) openSearch(se.closest('.empty') ? state.dex.q.trim() : '');
     if (e.target.closest('[data-install]')) promptInstall();
   };
   view.onchange = e => {
@@ -1151,7 +1271,7 @@ function renderDex() {
     if (e.target.matches('[data-group]')) state.dex.group = e.target.value;
     if (e.target.matches('[data-rarity]')) state.dex.rarity = e.target.value;
     if (e.target.matches('[data-sort]')) state.dex.sort = e.target.value;
-    renderDex();
+    redrawDex();
   };
   wireLongPress(view);
 }
@@ -2117,7 +2237,7 @@ function download(name, blob) {
 }
 
 // ---------- global search ----------
-function openSearch() {
+function openSearch(initial = '') {
   if ($('.search-ov')) return;
   const ov = document.createElement('div');
   ov.className = 'search-ov';
@@ -2149,6 +2269,7 @@ function openSearch() {
     ].join('') || '<p class="muted pad">Nothing found. Check the spelling, or try part of a name.</p>';
   };
   input.addEventListener('input', () => { run(); settleImages(res); });
+  if (initial) { input.value = initial; run(); settleImages(res); }
   // A result link closes search through the route change, so its photo can grow into the species page.
   ov.addEventListener('click', e => {
     const a = e.target.closest('a');
