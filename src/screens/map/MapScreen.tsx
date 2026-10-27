@@ -106,6 +106,14 @@ const SEQ_CENTER: [number, number] = [-27.47, 153.02];
 const SEQ_ZOOM = 9;
 const SEQ_VIEWBOX = `${SEQ_WEST},${SEQ_NORTH},${SEQ_EAST},${SEQ_SOUTH}`;
 
+// Popups must not open underneath the fixed search bar and filter chips — that hides the close
+// button, so the popup cannot be dismissed. Leaflet pans to keep the popup inside this padded
+// area (top leaves room for the search bar + chips, bottom for the attribution and tab bar).
+const POPUP_OPTS = {
+  autoPanPaddingTopLeft: L.point(12, 152),
+  autoPanPaddingBottomRight: L.point(12, 96),
+};
+
 const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -610,8 +618,21 @@ function MapView() {
       if (alive) map.invalidateSize();
     }, 50);
 
+    // Escape closes an open popup, which otherwise only closes by tapping the map.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const openPopup = el.querySelector('.leaflet-popup');
+      map.closePopup();
+      if (openPopup) {
+        event.stopPropagation();
+        el.focus();
+      }
+    };
+    el.addEventListener('keydown', onKeyDown);
+
     return () => {
       alive = false;
+      el.removeEventListener('keydown', onKeyDown);
       window.clearTimeout(timer);
       observer?.disconnect();
       hotspotMarkersRef.current = [];
@@ -681,6 +702,7 @@ function MapView() {
         .addTo(overlay)
         .bindPopup(
           `<strong>${esc(p.name)}</strong><br><a href="#/patch/${p.id}">Open patch list</a>`,
+          POPUP_OPTS,
         );
     }
 
@@ -701,6 +723,7 @@ function MapView() {
             `<strong>${esc(focus.name)}</strong><br>Reported here: ${count.toLocaleString(
               'en-AU',
             )} records in this 1 km square since 2016`,
+            POPUP_OPTS,
           );
       }
     }
@@ -748,7 +771,7 @@ function MapView() {
                 : ''
             }
             <a href="${directionsUrl(view.h.lat, view.h.lng)}" target="_blank" rel="noopener">Directions</a>`,
-            { maxWidth: 260 },
+            { maxWidth: 260, ...POPUP_OPTS },
           );
         marker.on('popupopen', (event) => {
           void describe(view.h.lat, view.h.lng, { hotspot: view.h, seen })
@@ -786,6 +809,7 @@ function MapView() {
             .slice(0, 12)
             .map((sp) => `<a href="#/bird/${sp.id}">${esc(sp.name)}</a>`)
             .join('<br>')}${group.names.length > 12 ? `<br>and ${group.names.length - 12} more` : ''}`,
+          POPUP_OPTS,
         );
     }
 
@@ -799,10 +823,11 @@ function MapView() {
       const clickLat = event.latlng.lat;
       const clickLng = event.latlng.lng;
       const key = `spot:${clickLat.toFixed(3)},${clickLng.toFixed(3)}`;
-      const popup = L.popup({ maxWidth: 260 })
+      const popup = L.popup({ maxWidth: 260, ...POPUP_OPTS })
         .setLatLng(event.latlng)
-        .setContent('<p class="pop-src">Looking up this spot…</p>')
-        .openOn(map);
+        .setContent('<p class="pop-src">Looking up this spot…</p>');
+      // openPopup() closes whatever is already open; openOn() would stack a second popup.
+      map.openPopup(popup);
       void describe(clickLat, clickLng, { seen: seenRef.current })
         .then((html) => {
           if (!alive) return;
@@ -864,10 +889,10 @@ function MapView() {
     map.setView([atLat, atLng], 15);
     let alive = true;
     const key = `at:${atLat},${atLng}`;
-    const popup = L.popup({ maxWidth: 280 })
+    const popup = L.popup({ maxWidth: 280, ...POPUP_OPTS })
       .setLatLng([atLat, atLng])
-      .setContent('<p class="pop-src">Looking up this spot…</p>')
-      .openOn(map);
+      .setContent('<p class="pop-src">Looking up this spot…</p>');
+    map.openPopup(popup);
     void describe(atLat, atLng, { seen })
       .then((html) => {
         if (!alive) return;
@@ -1061,7 +1086,7 @@ function MapView() {
     const popupHtml = `<span class="pop-h">${esc(result.name)}</span>${esc(result.kind)}`;
     const marker = L.marker([result.lat, result.lng], { icon: tempPinIcon() })
       .addTo(map)
-      .bindPopup(popupHtml);
+      .bindPopup(popupHtml, POPUP_OPTS);
     tempMarkerRef.current = marker;
     addNote(`search:${result.lat},${result.lng}`, popupHtml, result.lat, result.lng);
     window.setTimeout(() => {

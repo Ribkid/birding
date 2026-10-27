@@ -325,9 +325,23 @@ body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
 .mapwrap .leaflet-right .leaflet-control, .locpick .leaflet-right .leaflet-control { margin-right: 12px; }
 .mapwrap .leaflet-control-attribution, .locpick .leaflet-control-attribution { margin-top: 6px; border-radius: 8px 0 0 0; background: color-mix(in srgb, var(--surface) 78%, transparent); color: var(--ink-2); }
 .mapwrap .leaflet-control-attribution a, .locpick .leaflet-control-attribution a { color: var(--azure); }
-.leaflet-container .leaflet-popup-content-wrapper { border-radius: 18px; box-shadow: var(--shadow-float); }
-.leaflet-container .leaflet-popup-tip { box-shadow: none; }
-.leaflet-container a.leaflet-popup-close-button { width: 32px; height: 32px; font: 400 22px/32px var(--font); }
+.leaflet-container .leaflet-popup-content-wrapper { border-radius: 18px; box-shadow: var(--shadow-float); background: var(--surface); color: var(--ink); }
+.leaflet-container .leaflet-popup-tip { box-shadow: none; background: var(--surface); }
+/* A popup that cannot be dismissed is a trap: give the close control a real hit area, real
+   contrast in both themes, and keep the text clear of it. */
+.leaflet-container .leaflet-popup-content { margin: 14px 44px 14px 16px; }
+.leaflet-container a.leaflet-popup-close-button {
+  width: 44px; height: 44px; padding: 0; top: 0; right: 0;
+  display: flex; align-items: center; justify-content: center;
+  font: 400 26px/1 var(--font);
+  color: var(--ink); opacity: .75; border-radius: 0 18px 0 14px;
+}
+.leaflet-container a.leaflet-popup-close-button:hover,
+.leaflet-container a.leaflet-popup-close-button:focus-visible {
+  opacity: 1; color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  outline: 2px solid var(--seen-green); outline-offset: -3px;
+}
 /* The new-patch sheet floats over the map as glass, so the circle stays in view. */
 .sheet-wrap--map .sheet { background: var(--glass-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-2); }
 @media (prefers-reduced-transparency: reduce) {
