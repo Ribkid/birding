@@ -1875,6 +1875,7 @@ function frogBoard(pack, month) {
           <p class="frog-credit small muted" data-fcredit></p>
         </div></li>`;
     }).join('')}</ul>
+    <p class="frog-sr" role="status" data-fstatus></p>
     <details class="frog-credits"><summary class="small">Recording credits</summary>
       <ul class="small muted">${frogs.flatMap(({ sp }) => pack[sp.id].map((c, i) => `<li>${esc(sp.name)}${pack[sp.id].length > 1 ? `, call ${i + 1}` : ''}: ${callCredit({ ...c, local: true })}</li>`)).join('')}</ul>
     </details>
@@ -1984,8 +1985,10 @@ function wireFrogBoard(pack, beforePlay) {
   audio.addEventListener('ended', () => { reset(); cur = null; });
   audio.addEventListener('error', () => {
     if (!cur || !audio.getAttribute('src')) return;
-    const cr = $('[data-fcredit]', row());
-    if (cr) cr.textContent = navigator.onLine ? 'That clip would not play.' : 'Not saved on this phone yet. Save calls in Settings to play it with no signal.';
+    const msg = navigator.onLine ? 'That clip would not play.' : 'Not saved on this phone yet. Save calls in Settings to play it with no signal.';
+    const cr = $('[data-fcredit]', row()), live = $('[data-fstatus]', view);
+    if (cr) cr.textContent = msg;
+    if (live) live.textContent = msg; // the row text isn't announced; this is
     reset();
     cur = null; // a second tap tries the clip again
   });
@@ -2006,8 +2009,9 @@ function wireFrogBoard(pack, beforePlay) {
       cur = { btn, key };
       beforePlay();
       setPlaying(true);
-      const cr = $('[data-fcredit]', row());
+      const cr = $('[data-fcredit]', row()), live = $('[data-fstatus]', view);
       if (cr) cr.innerHTML = callCredit({ ...c, local: true });
+      if (live) live.textContent = '';
       localCalls(id).then(list => {
         if (cur?.key !== key) return;
         audio.src = list[i].src;
