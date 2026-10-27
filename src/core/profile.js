@@ -15,6 +15,8 @@ let prof = { displayName: '', avatarSpeciesId: null, showOnLeaderboard: true };
 let cloud = null; // { uid, publicId, avatarPath, showDex, memberSince }
 let cloudAt = 0;
 let bound = false;
+const subscribers = new Set();
+const notify = () => { for (const fn of subscribers) { try { fn(); } catch (_) {} } };
 const others = new Map(); // public id -> last get_profile row
 
 export const getProfile = () => prof;
@@ -23,15 +25,16 @@ export const myName = () => prof?.displayName || user()?.name || (user()?.email 
 export const getPublicProfileCache = id => others.get(id) || null;
 
 export async function initProfile(onChange) {
+  if (onChange) subscribers.add(onChange);
   if (!bound) {
     bound = true;
-    onAuth(async () => { prof = await localProfile(); if (user()) await fetchCloud(true); onChange?.(); });
-    onRemoteChange(async () => { prof = await localProfile(); onChange?.(); });
+    onAuth(async () => { prof = await localProfile(); if (user()) await fetchCloud(true); notify(); });
+    onRemoteChange(async () => { prof = await localProfile(); notify(); });
   }
   prof = await localProfile();
   if (!cloud) cloud = (await db.kvGet('me:cloud').catch(() => null)) || null;
   if (signedIn()) await fetchCloud();
-  onChange?.();
+  notify();
   return prof;
 }
 
