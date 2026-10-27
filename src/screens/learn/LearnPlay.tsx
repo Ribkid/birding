@@ -493,6 +493,7 @@ function Deck({ onBack }: { onBack: () => void }) {
   useEffect(() => { void learnReady().then(() => { setReady(true); force(); }); }, []);
   useEffect(() => { window.scrollTo(0, 0); }, [game?.n, game?.queue?.length, mode, revealed]);
   useEffect(() => { if (revealed) backRef.current?.focus({ preventScroll: true }); }, [revealed]);
+  const deckKind = (getLearn()?.prefs?.kind as string) || 'animals';
   const due = ready ? dueCards() : [];
   const cards = ready ? allCards() : [];
   const boxN = ready ? boxes() : [0, 0, 0, 0, 0];
@@ -513,7 +514,7 @@ function Deck({ onBack }: { onBack: () => void }) {
     const cardsNow = getLearn()?.cards || {};
     list = list.filter((s: any) => !cardsNow[s.id]).slice(0, which === 'month' ? 10 : 30);
     const n = addCards(list, 'all');
-    setToast(n ? `Added ${n} ${n === 1 ? 'card' : 'cards'}.` : which !== 'seen' ? 'Those are all in the deck already.' : 'Nothing new to add.');
+    setToast(n ? `Added ${n} ${n === 1 ? 'card' : 'cards'}.` : which === 'seen' ? (sightings.length ? 'Everything you have seen is already in the deck.' : 'Nothing logged yet. Log a sighting and it can go in the deck.') : 'Those are all in the deck already.');
     force();
   };
 
@@ -604,7 +605,7 @@ function Deck({ onBack }: { onBack: () => void }) {
           : <p className="ld-none" role="status">{cards.length ? `Nothing to review right now. ${nextTxt}` : 'Add a set to start. Species you miss in any round are added for you.'}</p>}
         <section className="lh-sec"><div className="lh-sec-h"><h2>Add cards</h2></div>
           <div className="ld-add">
-            <button type="button" className="btn btn--block" onClick={() => add('month')}><span className="ld-add-ic"><svg viewBox="0 0 24 24">{QI.deck}</svg></span><span>Add 10 species around in {monthName()}</span></button>
+            <button type="button" className="btn btn--block" onClick={() => add('month')}><span className="ld-add-ic"><svg viewBox="0 0 24 24">{QI.deck}</svg></span><span>Add 10 {deckKind === 'animals' ? 'animals' : KINDS[deckKind]?.label.toLowerCase()} around in {monthName()}</span></button>
             <button type="button" className="btn btn--block" onClick={() => add('seen')}><span className="ld-add-ic"><svg viewBox="0 0 24 24">{QI.deck}</svg></span><span>Add the ones I've seen</span></button>
           </div>
           <p className="small muted">Birds and frogs with recordings get a call card as well as a photo card.</p>

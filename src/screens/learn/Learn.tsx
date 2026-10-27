@@ -49,7 +49,7 @@ const tintable = (src: string) => /^https:\/\/(upload|thumb)\.wikimedia\.org\//.
 export default function Learn() {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [ready, setReady] = useState(false);
-  const [allPacks, setAllPacks] = useState(false);
+  const [notice, setNotice] = useState('');
   useMedia();
   useSightings();
 
@@ -71,6 +71,7 @@ export default function Learn() {
   const picks = D?.today?.date === today ? D.today.picks : [];
   const doneToday = D?.history?.[today] != null;
   const prefs = L?.prefs || { kind: 'animals', scope: 'all', difficulty: 'normal' };
+  const allPacks = !!prefs.allPacks;
   const kinds = ['animals', ...kindsPresent];
   const scopes: [string, string][] = [['all', 'Everything'], ['seen', "Ones I've seen"], ['month', `Around in ${monthName(date)}`]];
 
@@ -92,22 +93,41 @@ export default function Learn() {
   const packsDone = packs.filter((p: { plays: number }) => p.plays > 0).length;
   const mastered = ready ? Object.keys(L?.cards || {}).filter((id) => isMastered(Number(id))).length : 0;
 
-  const packCover = (key: string) => {
-    const list = Q.packSpecies(key).filter((s: Species) => Q.hasPhoto(s));
-    if (!list.length) return '';
-    const common = list.filter((s: Species) => s.rarity <= 3);
-    const pool = Q.shuffle((common.length >= 3 ? common : list).slice(), Q.seeded(Q.hashStr(`pack|${today}|${key}`)));
-    return faceSrc(pool[0]?.id);
-  };
-  const modeFaces = (kind: string): Record<string, number> => {
+  const packCovers = useMemo(() => {
+    const used = new Set<number>();
+    const out: Record<string, string> = {};
+    for (const p of PACKS as { key: string }[]) {
+      const list = Q.packSpecies(p.key).filter((s: Species) => Q.hasPhoto(s));
+      if (!list.length) continue;
+      const common = list.filter((s: Species) => s.rarity <= 3);
+      const pool = Q.shuffle((common.length >= 3 ? common : list).slice(), Q.seeded(Q.hashStr(`pack|${today}|${p.key}`)));
+      const framed = pool.filter((s: Species) => tintable(faceSrc(s.id)));
+      const pick = (framed.length ? framed : pool).find((s: Species) => !used.has(s.id)) || pool[0];
+      if (pick) { used.add(pick.id); out[p.key] = faceSrc(pick.id); }
+    }
+    return out;
+  }, [today, ready]);
+
+  const modeFaces = (kind: string): Record<string, number | number[]> => {
     const all = Q.speciesFor(kind).filter((s: Species) => Q.hasPhoto(s));
     if (!all.length) return {};
     const rng = Q.seeded(Q.hashStr(`faces|${today}|${kind}`));
     const common = all.filter((s: Species) => s.rarity <= 2);
     const pool = Q.shuffle((common.length >= 12 ? common : all).slice(), rng);
+    const inKind = new Set<number>(all.map((s: Species) => s.id));
+    const pairs = (Q.lookalikePairs() as { a: number; b: number }[]).filter((p) => {
+      const a = byId.get(p.a), b = byId.get(p.b);
+      return inKind.has(p.a) && inKind.has(p.b) && a && b && Q.hasPhoto(a) && Q.hasPhoto(b);
+    });
+    const pair = pairs.length ? pairs[(rng() * pairs.length) | 0] : null;
     const used = new Set<number>();
-    const out: Record<string, number> = {};
+    const out: Record<string, number | number[]> = {};
     for (const m of Q.MODES) {
+      if (m === 'duel' && pair) {
+        out[m] = [pair.a, pair.b];
+        used.add(pair.a); used.add(pair.b);
+        continue;
+      }
       const ok = m === 'call' ? (s: Species) => Q.CALL_KINDS.includes(s.kind) && Q.hasCall(s.id) : () => true;
       const s = pool.find((x: Species) => !used.has(x.id) && ok(x)) || pool.find((x: Species) => !used.has(x.id));
       if (s) { used.add(s.id); out[m] = s.id; }
@@ -163,7 +183,7 @@ export default function Learn() {
               <ul className="lh-modes lh-packs">
                 {packs.map((p: any, i: number) => {
                   if (!allPacks && i >= PACKS_SHOWN) return null;
-                  const cover = packCover(p.key);
+                  const cover = packCovers[p.key] || '';
                   const frac = p.total ? p.got / p.total : 0;
                   return (
                     <li key={p.key}>
@@ -180,7 +200,7 @@ export default function Learn() {
                 })}
               </ul>
               {packN > PACKS_SHOWN && (
-                <button type="button" className="btn btn--block lh-more" aria-expanded={allPacks} onClick={() => setAllPacks((v) => !v)}>
+                <button type="button" className="btn btn--block lh-more" aria-expanded={allPacks} onClick={() => set({ allPacks: !prefs.allPacks })}>
                   {allPacks ? 'Show fewer packs' : `Show all ${packN} packs`}
                 </button>
               )}
@@ -210,10 +230,11 @@ export default function Learn() {
               const off = m === 'call' && !callOk;
               const id = faces[m];
               const b = (L?.best as Record<string, number> | undefined)?.[bestKey(m, prefs)];
+              const split = Array.isArray(id);
               return (
                 <li key={m} className={m === 'quick' ? 'lh-mode--wide' : ''}>
-                  <Link className={`lh-mode lh-mode--${m}${off ? ' is-off' : ''}`} to={off ? '#' : `/learn/play/${m}`} aria-disabled={off || undefined} onClick={(e) => { if (off) e.preventDefault(); }}>
-                    <span className="lh-mode-bg" aria-hidden="true">{id ? <img src={faceSrc(id, m === 'quick' ? 'large' : 'small')} alt="" /> : null}</span>
+                  <Link className={`lh-mode lh-mode--${m}${off ? ' is-off' : ''}`} to={off ? '#' : `/learn/play/${m}`} aria-disabled={off || undefined} onClick={(e) => { if (off) { e.preventDefault(); setNotice('Calls are for birds and frogs. Choose All animals, Birds or Frogs.'); } }}>
+                    <span className={`lh-mode-bg${split ? ' is-split' : ''}`} aria-hidden="true">{split ? (id as number[]).map((sid) => <img key={sid} src={faceSrc(sid)} alt="" />) : id ? <img src={faceSrc(id as number, m === 'quick' ? 'large' : 'small')} alt="" /> : null}</span>
                     <span className="lh-mode-top"><span className="lh-mode-ic" aria-hidden="true"><svg viewBox="0 0 24 24">{MODE_ICONS[m]}</svg></span>{b != null && <span className="lh-best">{m === 'rapid' ? 'Best streak' : 'Best'} <b>{b}</b>{m === 'rapid' ? null : <span>/{ROUND}</span>}</span>}</span>
                     <span className="lh-mode-txt"><strong>{title}</strong><span className="lh-mode-desc">{off ? 'Calls are for birds and frogs. Choose All animals, Birds or Frogs.' : desc}</span></span>
                   </Link>
@@ -221,6 +242,7 @@ export default function Learn() {
               );
             })}
           </ul>
+          {notice && <p className="small muted" role="status">{notice}</p>}
         </section>
 
         <section className="lh-sec" aria-labelledby="lh-deck-h">
@@ -263,7 +285,7 @@ function Progress() {
           </li>
         ))}
       </ul>
-      {idle.length > 0 && <p className="small muted lh-empty">Nothing yet for {idle.map((r) => KINDS[r.k]?.label.toLowerCase()).join(', ')}.</p>}
+      {idle.length > 0 && <p className="small muted lh-empty">Nothing yet for {idle.length === 1 ? KINDS[idle[0].k]?.label.toLowerCase() : `${idle.slice(0, -1).map((r) => KINDS[r.k]?.label.toLowerCase()).join(', ')} or ${KINDS[idle[idle.length - 1].k]?.label.toLowerCase()}`}.</p>}
     </>
   );
 }
