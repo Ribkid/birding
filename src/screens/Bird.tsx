@@ -1,286 +1,491 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { GROUPS, HABITATS, RARITY, SPECIES, byId, dexCode } from '../lib/data';
-import { useSightings } from '../lib/hooks';
-import { galleryFor, infoFor } from '../core/gallery.js';
-import { localCallsNow, loadCallPack, calls as fetchCalls, audioUrl } from '../core/media.js';
-import { lookalikesOf, tellFor } from '../core/quiz.js';
+// The species page, ported from v1's renderBird (birding-refresh js/app.js) with spotSection, confuseSection,
+// whereSection and infoSection. The hero photo runs under the status bar with the name set on a scrim tinted from
+// the photo (src/lib/look.ts); the content is a sheet that slides up over its foot; a slim Log bar rises once the
+// main Log button has scrolled away. species.css styles it all under .bird.
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { Link, Navigate, useParams } from 'react-router-dom';
+import { GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, type Species } from '../lib/data';
+import { useMedia, useSightings } from '../lib/hooks';
+import { useSeqReady } from '../lib/seq';
+import { lookAfterDraw } from '../lib/look';
+import { db } from '../core/db.js';
+import { galleryFor, infoFor, loadExtras } from '../core/gallery.js';
+import { details, loadCallPack, photoFor, sized } from '../core/media.js';
+import { callWords, loadLookalikes, lookalikesOf, parseSize, peaksOf, sentences, tellFor } from '../core/quiz.js';
+import { monthRates, recordCount, spotsFor } from '../core/seqdata.js';
+import { MONTHS } from '../core/stats.js';
 import { learnReady, masteryOf } from '../core/learn.js';
 import { Icon } from '../components/Icon';
-import { Pips, SpeciesImage } from '../components/SpeciesImage';
+import { Band, Pips } from '../components/SpeciesImage';
+import { CallsSection, PauseIcon, PlayIcon, hasCalls, useCallPlayer } from './BirdCalls';
+import { SightingEditSheet } from './SightingEditSheet';
+import type { SightingRow } from './lists/shared';
 import './species.css';
 
-interface Clip { src: string; local?: string; title?: string; artist?: string; license?: string; page?: string; from?: string }
+// ---------- small pieces, as in v1 ----------
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const fmtDate = (d?: string | null) => {
+  if (!d) return '';
+  const [y, m, day] = d.split('-').map(Number);
+  return MONTHS[m - 1] ? `${day} ${String(MONTHS[m - 1]).slice(0, 3)} ${y}` : d;
+};
+const dexNo = (id: number) => dexCode(id);
+const article = (w: string) => (/^[aeiou]/i.test(w) ? 'an' : 'a');
+// Non-bird tiers rank each kind against itself, so the line says so.
+const rarityText = (sp: Species) => (sp.kind === 'bird' ? `${RARITY[sp.rarity].label} in SEQ`
+  : `${RARITY[sp.rarity].label} for ${article(KINDS[sp.kind].one)} ${KINDS[sp.kind].one} in SEQ`);
+function seasonText(sp: Species) {
+  if (sp.kind === 'plant') return sp.season === 's' ? 'Mostly spring to summer' : sp.season === 'w' ? 'Mostly autumn to winter' : 'Year round';
+  return sp.season === 's' ? (sp.kind === 'bird' ? 'Mostly September to April' : 'Most active September to April') : sp.season === 'w' ? 'Mostly April to September' : 'All year';
+}
+// The size with the label that fits it: Length, Wingspan (butterflies, flying-foxes), Height (plants), Shell or Body.
+const MEASURE: Record<string, string> = { length: 'Length', wingspan: 'Wingspan', height: 'Height', shell: 'Shell', body: 'Body' };
+function sizeFact(sp: Species): [string, string] | null {
+  const t = String(sp.sizeText || '').trim();
+  if (!t) return null;
+  const p = parseSize(t) as { measure: string } | null;
+  if (!p) return [sp.kind === 'plant' ? 'Grows as' : 'Size', cap(t)];
+  return [MEASURE[sp.kind === 'plant' ? 'height' : p.measure], cap(t.replace(/^wingspan\s+/i, '').replace(/\s+(shell|body)$/i, '').replace(/^to\b/i, 'up to'))];
+}
+// Look-alikes when there's no curated pair: the same kind, nearest in real size, from its own group unless that group
+// has fewer than two others (the Koala is alone in its group), then from the whole kind.
+function similarSpecies(sp: Species, n = 4) {
+  const kin = SPECIES.filter((s) => s.id !== sp.id && s.kind === sp.kind);
+  const group = kin.filter((s) => s.group === sp.group);
+  const gap = (s: Species) => (s.sizeCm && sp.sizeCm ? Math.abs(Math.log(s.sizeCm / sp.sizeCm)) : 1);
+  return (group.length >= 2 ? group : kin).map((s) => ({ s, d: gap(s) })).sort((a, b) => a.d - b.d).slice(0, n).map((x) => x.s);
+}
+
+interface Photo { src: string; wiki?: boolean; credit?: string; license?: string; page?: string }
+interface Details { url?: string; extract?: string; credit?: { artist: string; license: string; page: string } | null }
+interface Info { text: string; status: string; sources: { title?: string; url: string }[] }
+
+// Photos for the species page: the Wikipedia picture first, then the gallery (data/gallery.json).
+function heroPhotos(sp: Species, det: Details | null): Photo[] {
+  const out: Photo[] = [];
+  const wiki = photoFor(sp.id) as { url: string } | null;
+  if (wiki) {
+    const c = det?.credit;
+    out.push({ src: sized(sp.id, 'large') as string, wiki: true, credit: c?.artist || '', license: c?.license || '', page: c?.page || wiki.url });
+  }
+  for (const g of galleryFor(sp.id) as Photo[]) if (!out.some((o) => o.src === g.src)) out.push({ ...g });
+  return out.slice(0, 7);
+}
+// One small line under the photo: the author (linked to the source) and the licence.
+const author = (a?: string) => String(a || '').replace(/\s*\(?\bhttps?:\/\/[^\s)]*\)?/g, '').trim().slice(0, 60) || 'Unknown';
+function Credit({ ph }: { ph: Photo }) {
+  return <>Photo: {ph.page ? <a href={ph.page} target="_blank" rel="noopener">{author(ph.credit)}</a> : author(ph.credit)}{ph.license ? `, ${ph.license}` : ''}</>;
+}
+const sourceLabel = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+
+const LearnIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+const TickIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+
+// Photos fade in the first time they arrive; ones already shown this session come back at full strength.
+const shown = new Set<string>();
+function FadeImg({ src, alt, className = '', eager = false, hidden = false, onMissing }: {
+  src?: string; alt: string; className?: string; eager?: boolean; hidden?: boolean; onMissing?: (img: HTMLImageElement) => void;
+}) {
+  const [inn, setIn] = useState(() => !!src && shown.has(src));
+  return (
+    <img
+      className={`${className} fade${inn ? ' in' : ''}`}
+      src={src}
+      alt={alt}
+      aria-hidden={hidden || undefined}
+      loading={eager ? 'eager' : 'lazy'}
+      fetchPriority={eager ? 'high' : undefined}
+      decoding="async"
+      onLoad={() => { if (src) shown.add(src); setIn(true); }}
+      onError={(e) => onMissing?.(e.currentTarget)}
+    />
+  );
+}
+// A species photo: alt '' where the name is written next to it (cards, chips), so it isn't read twice.
+function BirdImg({ sp, size = 'small', alt = sp.name }: { sp: Species; size?: 'small' | 'large'; alt?: string }) {
+  const url = sized(sp.id, size) as string | null;
+  if (!url) return <span className="img-missing" {...(alt ? { role: 'img', 'aria-label': alt } : { 'aria-hidden': true })} />;
+  return <FadeImg key={url} src={url} alt={alt} onMissing={(img) => img.classList.add('img-missing')} />;
+}
+// The whole photo (no cropping) over a soft blurred copy. A slide not yet woken has no src.
+function WholeImg({ src, alt, className = '', eager = false }: { src?: string; alt: string; className?: string; eager?: boolean }) {
+  return (
+    <span className={`whole ${className}`}>
+      <FadeImg key={`bg-${src}`} src={src} alt="" hidden className="whole-bg" eager={eager} />
+      <FadeImg key={`fg-${src}`} src={src} alt={alt} className="whole-fg" eager={eager} onMissing={(img) => img.closest('.whole')?.classList.add('img-missing')} />
+    </span>
+  );
+}
+
+// Her own photo from a sighting, read from the photos store.
+function MinePhoto({ photoId }: { photoId: number }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    let alive = true, made = '';
+    void Promise.resolve(db.get('photos', photoId)).then((rec: { blob?: Blob } | undefined) => {
+      if (!alive || !rec?.blob) return;
+      made = URL.createObjectURL(rec.blob);
+      setUrl(made);
+    }).catch(() => {});
+    return () => { alive = false; if (made) URL.revokeObjectURL(made); };
+  }, [photoId]);
+  return url ? <img src={url} alt="" decoding="async" /> : <img alt="" />;
+}
 
 export default function Bird() {
   const { id } = useParams();
   const sp = byId.get(Number(id));
-  const sightings = useSightings();
-  const [clips, setClips] = useState<Clip[]>([]);
-  const [playing, setPlaying] = useState(-1);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const clipTicket = useRef(0);
-  const [, forceLearn] = useState(0);
+  if (!sp) return <Navigate to="/dex" replace />;
+  // A fresh page per species, so the player, gallery and Log bar start over when prev/next moves on.
+  return <SpeciesPage key={sp.id} sp={sp} />;
+}
 
-  const mine = useMemo(
-    () =>
-      sightings
-        .filter((s) => s.speciesId === sp?.id)
-        .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)),
-    [sightings, sp?.id],
+function SpeciesPage({ sp }: { sp: Species }) {
+  useMedia();
+  useSeqReady();
+  const [, setTick] = useState(0);
+  const sightings = useSightings() as SightingRow[];
+  const [det, setDet] = useState<Details | null>(null);
+  const [toast, setToast] = useState('');
+  const [editing, setEditing] = useState<SightingRow | null>(null);
+  const [slide, setSlide] = useState(0);
+  const [awake, setAwake] = useState<ReadonlySet<string>>(() => new Set());
+  const [barOn, setBarOn] = useState(false);
+  const [grown, setGrown] = useState(false);
+  const galRef = useRef<HTMLDivElement>(null);
+  const logRef = useRef<HTMLAnchorElement>(null);
+  const growRef = useRef<HTMLDivElement>(null);
+  const showToast = useCallback((msg: string) => setToast(msg), []);
+  const player = useCallPlayer(sp, showToast);
+
+  const hist = useMemo(
+    () => sightings.filter((s) => s.speciesId === sp.id)
+      .sort((a, b) => `${b.date}${b.time ?? ''}`.localeCompare(`${a.date}${a.time ?? ''}`)),
+    [sightings, sp.id],
   );
+  const first = hist[hist.length - 1];
+  const seen = hist.length > 0;
+  const isBird = sp.kind === 'bird';
 
+  // Learn progress, the curated look-alikes, the gallery/write-ups and the call pack load at start-up; fill them in
+  // if they arrive after the page.
   useEffect(() => {
     let alive = true;
-    learnReady().then(() => { if (alive) forceLearn((n) => n + 1); }).catch(() => {});
+    const again = () => { if (alive) setTick((n) => n + 1); };
+    for (const p of [loadExtras(), loadLookalikes(), learnReady(), loadCallPack()]) void Promise.resolve(p).then(again, () => {});
+    // Wikipedia text and photo credit
+    void Promise.resolve(details(sp)).then((d: Details | null) => { if (alive) setDet(d); }).catch(() => {});
     return () => { alive = false; };
-  }, [sp?.id]);
+  }, [sp]);
 
+  // One toast at a time, about 4.5 s, tap to dismiss.
   useEffect(() => {
-    clipTicket.current += 1;
-    setClips([]);
-    setPlaying(-1);
-    const old = audioRef.current;
-    if (old) {
-      old.pause();
-      if (old.src.startsWith('blob:')) URL.revokeObjectURL(old.src);
-      audioRef.current = null;
-    }
-    if (!sp || !['bird', 'frog'].includes(sp.kind)) return;
-    let alive = true;
-    void (async () => {
-      await loadCallPack().catch(() => null);
-      let list: Clip[] = localCallsNow(sp.id) as Clip[];
-      if (!list.length && navigator.onLine) {
-        try {
-          const remote = await fetchCalls(sp);
-          list = (remote as any[]).map((c) => ({ ...c, title: c.title || 'Recording' }));
-        } catch { /* no free recording */ }
-      }
-      if (alive) setClips(list.slice(0, 3));
-    })();
-    return () => {
-      alive = false;
-      clipTicket.current += 1;
-      const playingAudio = audioRef.current;
-      if (playingAudio) {
-        playingAudio.pause();
-        if (playingAudio.src.startsWith('blob:')) URL.revokeObjectURL(playingAudio.src);
-        audioRef.current = null;
-      }
-    };
-  }, [sp?.id]);
+    if (!toast) return;
+    const t = setTimeout(() => setToast(''), 4500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
-  const playClip = async (i: number) => {
-    if (i === playing) { audioRef.current?.pause(); setPlaying(-1); return; }
-    const c = clips[i];
-    if (!c) return;
-    const my = ++clipTicket.current;
-    const old = audioRef.current;
-    if (old) {
-      old.pause();
-      if (old.src.startsWith('blob:')) URL.revokeObjectURL(old.src);
-      audioRef.current = null;
-    }
-    const src = await audioUrl(c.local || c.src);
-    if (my !== clipTicket.current) {
-      if (src.startsWith('blob:')) URL.revokeObjectURL(src);
-      return;
-    }
-    const a = new Audio(src);
-    audioRef.current = a;
-    const drop = () => {
-      if (a.src.startsWith('blob:')) URL.revokeObjectURL(a.src);
-      if (audioRef.current === a) audioRef.current = null;
-      setPlaying(-1);
-    };
-    a.onended = drop;
-    a.onerror = drop;
-    setPlaying(i);
-    await a.play().catch(drop);
+  // Once the Log button has scrolled away, a slim bar with the name and a Log button rises above the tab bar.
+  useEffect(() => {
+    const el = logRef.current;
+    if (!el || !('IntersectionObserver' in window)) return;
+    const io = new IntersectionObserver(([e]) => setBarOn(!e.isIntersecting && e.boundingClientRect.top < 0));
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const months = monthRates(sp.id) as { rel: number[] } | null;
+  const hasMonths = !!months;
+  // Season bars grow up the first time they come into view.
+  useEffect(() => {
+    const el = growRef.current;
+    if (!el || grown) return;
+    if (!('IntersectionObserver' in window)) { setGrown(true); return; }
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { setGrown(true); io.disconnect(); } }, { rootMargin: '0px 0px -12% 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMonths, grown]);
+
+  const photos = heroPhotos(sp, det);
+  const n = photos.length;
+  // The tint comes from the first photo. If it arrives after the page (the photo index loads late), take it again.
+  const heroSrc = photos[0]?.src || '';
+  const firstSrc = useRef(heroSrc);
+  useEffect(() => {
+    if (heroSrc === firstSrc.current) return;
+    firstSrc.current = heroSrc;
+    const raf = requestAnimationFrame(() => lookAfterDraw(document.getElementById('view')));
+    return () => cancelAnimationFrame(raf);
+  }, [heroSrc]);
+
+  // Only the first photo loads with the page. The next loads when she starts to swipe, and each one after that as
+  // she reaches the one before it. Slides are remembered by photo, so a photo arriving late doesn't unload them.
+  const isAwake = (i: number) => i === 0 || awake.has(photos[i].src);
+  const wake = (...idx: number[]) => setAwake((prev) => {
+    const add = idx.map((i) => photos[i]?.src).filter((src) => src && !prev.has(src));
+    return add.length ? new Set([...prev, ...add]) : prev;
+  });
+  // The Wikipedia photo can arrive after the gallery photos are on screen. Until she has touched the gallery, it
+  // stays on the first photo rather than following the old first one along (scroll snap would keep that in view).
+  const touched = useRef(false);
+  const touch = () => { touched.current = true; wake(1); };
+  const listKey = photos.map((p) => p.src).join('|');
+  useLayoutEffect(() => {
+    const g = galRef.current;
+    if (!g || touched.current) return;
+    if (g.scrollLeft) g.scrollLeft = 0;
+    setSlide(0);
+  }, [listKey]);
+  const onGalleryScroll = () => {
+    const g = galRef.current;
+    if (!g) return;
+    if (!touched.current) { if (g.scrollLeft) g.scrollLeft = 0; return; }
+    const i = Math.round(g.scrollLeft / Math.max(1, g.clientWidth));
+    wake(i, i + 1);
+    if (i !== slide) setSlide(i);
+  };
+  const onGalleryKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    const g = galRef.current;
+    if (!g || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
+    e.preventDefault();
+    touched.current = true;
+    const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    g.scrollBy({ left: e.key === 'ArrowRight' ? g.clientWidth : -g.clientWidth, behavior });
   };
 
-  if (!sp) {
-    return (
-      <div className="pad">
-        <p>That species isn't in the dex.</p>
-        <Link className="btn" to="/dex">
-          Back to the dex
-        </Link>
-      </div>
-    );
-  }
+  const info = infoFor(sp.id) as Info | null;
+  const mastery = masteryOf(sp.id) as number;
+  const snaps = hist.filter((h) => h.photoId);
+  const kindWord = KINDS[sp.kind].label.toLowerCase();
+  const prev = [...SPECIES].reverse().find((s) => s.kind === sp.kind && s.id < sp.id);
+  const next = SPECIES.find((s) => s.kind === sp.kind && s.id > sp.id);
+  const logTo = `/add?species=${sp.id}`;
 
-  const info = infoFor(sp.id) as { text?: string; status?: string; sources?: { title: string; url: string }[] } | null;
-  const gallery = galleryFor(sp.id) as { src: string; credit?: string; license?: string; page?: string }[];
-  const mastery = masteryOf(sp.id);
-  const similar = SPECIES.filter((s) => s.id !== sp.id && s.group === sp.group).slice(0, 4);
-  const lookalikes = lookalikesOf(sp.id).map((n: number) => byId.get(n)).filter(Boolean) as typeof SPECIES;
+  // How to spot it: the field notes as short marks, the call words, size, when, group, habitats and a quick test.
+  const cw = callWords(sp) as { words: string; sentence: string } | null;
+  const marks = (sentences(sp.notes) as string[]).filter((s) => !/^introduced[.;]?$/i.test(s) && s !== cw?.sentence).slice(0, 4);
+  const size = sizeFact(sp), peaks = peaksOf(sp.id) as string;
+  const when: [string, string] = sp.kind === 'plant' && sp.season ? ['Flowers', seasonText(sp)]
+    : ['When', !peaks ? seasonText(sp) : /every month|most of the year/.test(peaks) ? 'Reported all year' : `Peaks in ${peaks}`];
+  const playable = !!cw && hasCalls(sp.id);
+  const callLine = (() => {
+    if (!cw) return null;
+    const token = `"${cw.words}"`, at = cw.sentence.indexOf(token);
+    return at < 0 ? cw.sentence : <>{cw.sentence.slice(0, at)}<q>{cw.words}</q>{cw.sentence.slice(at + token.length)}</>;
+  })();
+  const firstOn = player.playing === 0 && !player.paused;
+
+  // Easy to confuse with: the curated look-alikes first (with how to tell them apart), then the nearest in size.
+  const curated = (lookalikesOf(sp.id) as number[]).map((x) => byId.get(x)).filter(Boolean) as Species[];
+  const confuse = [...curated.map((s) => ({ s, tell: tellFor(sp.id, s.id) as string | null })),
+    ...similarSpecies(sp, 4).filter((s) => !curated.includes(s)).map((s) => ({ s, tell: null }))].slice(0, Math.max(4, curated.length));
+
+  const now = new Date().getMonth();
+  const spots = months ? (spotsFor(sp.id, 6) as { h: { name: string }; c: number; near?: boolean }[]) : [];
+  const near = spots[0]?.near;
 
   return (
-    <>
-      <header className="page-head page-head--back">
-        <Link className="iconbtn" to="/dex" aria-label="Back to the dex">
-          <Icon name="back" />
-        </Link>
-        <h1>{sp.name}</h1>
-      </header>
-
-      <div className="bird-hero">
-        <SpeciesImage sp={sp} size="large" whole />
+    <article className={`bird kind--${sp.kind}`}>
+      <div className="bird-hero" data-hero-box="">
+        <div className="hero-photo">
+          <div
+            className="gallery"
+            data-gallery=""
+            ref={galRef}
+            tabIndex={0}
+            role="group"
+            aria-label={`Photos of the ${sp.name}${n > 1 ? '. Swipe for more.' : ''}`}
+            onScroll={n > 1 ? onGalleryScroll : undefined}
+            onKeyDown={n > 1 ? onGalleryKey : undefined}
+            onPointerDown={n > 1 ? touch : undefined}
+            onTouchStart={n > 1 ? touch : undefined}
+            onWheel={n > 1 ? touch : undefined}
+            onFocus={n > 1 ? () => wake(1) : undefined}
+          >
+            {n ? photos.map((ph, i) => (
+              <figure className="slide" key={ph.src} data-hero-frame={i ? undefined : ''}>
+                <WholeImg src={isAwake(i) ? ph.src : undefined} alt={`${sp.name}${n > 1 ? `, photo ${i + 1} of ${n}` : ''}`} className="bird-photo" eager={i === 0} />
+              </figure>
+            )) : (
+              <figure className="slide" data-hero-frame=""><span className="bird-photo img-missing" role="img" aria-label={sp.name} /></figure>
+            )}
+          </div>
+        </div>
+        <div className="hero-scrim" aria-hidden="true" />
+        <div className="hero-cap">
+          <div className="hero-meta">
+            <Band sp={sp} seen={seen} />
+            {sp.kind !== 'bird' && <span className={`kindtag kind--${sp.kind}`}>{KINDS[sp.kind].one}</span>}
+            {n > 1 && <span className="hero-count" data-count="" aria-hidden="true"><b data-count-i="">{slide + 1}</b>/{n}</span>}
+          </div>
+          <h1 className="bird-name">{sp.name}</h1>
+          <p className="sci">{sp.sci}</p>
+          <p className="hero-credit" data-credit="">{photos[slide]?.credit ? <Credit ph={photos[slide]} /> : null}</p>
+        </div>
+        <Link className="iconbtn iconbtn--float" to="/dex" aria-label="Back to the dex"><Icon name="back" /></Link>
       </div>
 
-      <section className="pad">
-        <div className="bird-title">
-          <div>
-            <h2 className="h2">{sp.name}</h2>
-            <p className="muted small">
-              <i>{sp.sci}</i>
-            </p>
-          </div>
-          <span className={`band band--${sp.kind} band--on band--big`}>{dexCode(sp.id)}</span>
+      <div className="bird-body">
+        <div className="bird-sum">
+          <span className="rarity-line"><Pips rarity={sp.rarity} /><span>{rarityText(sp)}</span></span>
+          <span data-mastery="">{mastery >= 1
+            ? <span className="mastery mastery--done"><TickIcon />Learnt</span>
+            : mastery > 0 ? <span className="mastery"><i style={{ '--p': Math.round(mastery * 100) } as CSSProperties} aria-hidden="true" />Learning</span> : null}</span>
         </div>
+        <div className="bird-actions">
+          <Link className="btn btn--primary btn--grow" ref={logRef} to={logTo}>{seen ? 'Log another sighting' : 'Log a sighting'}</Link>
+        </div>
+        {seen && <p className="seen-line">Seen {plural(hist.length, 'time')}. First on {fmtDate(first.date)}{first.place ? ` at ${first.place}` : ''}.</p>}
 
-        {info?.text && <p className="bird-notes">{info.text}</p>}
-
-        <dl className="facts">
-          <div>
-            <dt>Group</dt>
-            <dd>{GROUPS[sp.group]}</dd>
-          </div>
-          <div>
-            <dt>Size</dt>
-            <dd>{sp.sizeText}</dd>
-          </div>
-          <div>
-            <dt>Habitat</dt>
-            <dd>{sp.habitats.map((h) => HABITATS[h]).join(', ')}</dd>
-          </div>
-          <div>
-            <dt>Rarity</dt>
-            <dd>
-              <Pips rarity={sp.rarity} /> {RARITY[sp.rarity]?.label}
-            </dd>
-          </div>
-          {sp.nocturnal && (
-            <div>
-              <dt>Active</dt>
-              <dd>Mostly at night</dd>
+        <section className="spot" aria-labelledby="spot-h">
+          <h2 className="h2" id="spot-h">How to spot it</h2>
+          {marks.length > 0 && <ul className="spot-marks">{marks.map((s, i) => <li key={i}>{s}</li>)}</ul>}
+          {cw && (
+            <div className="spot-call">
+              {playable
+                ? <button type="button" className="playbtn spot-play" aria-label={firstOn ? 'Pause its call' : 'Play its call'} onClick={player.playFirst}>{firstOn ? <PauseIcon /> : <PlayIcon />}</button>
+                : <span className="spot-call-ic" aria-hidden="true"><Icon name="mic" /></span>}
+              <p>{callLine}</p>
             </div>
           )}
-        </dl>
+          <dl className="facts">
+            {size && <div><dt>{size[0]}</dt><dd>{size[1]}</dd></div>}
+            <div><dt>{when[0]}</dt><dd>{when[1]}</dd></div>
+            <div><dt>Group</dt><dd><Link to="/dex" state={{ dexFilter: { kind: sp.kind === 'plant' ? 'plant' : 'animals', group: sp.group } }}>{GROUPS[sp.group]}</Link></dd></div>
+          </dl>
+          <ul className="spot-hab" aria-label="Where to look">
+            {sp.habitats.map((h) => <li key={h}>{HABITATS[h]}</li>)}
+            {sp.nocturnal && <li className="spot-hab--night">Active at night</li>}
+          </ul>
+          <Link className="btn spot-test" to={`/learn/test/${sp.id}`}><LearnIcon /><span>Test me on this</span></Link>
+        </section>
 
-        <div className="bird-sum">
-          <span className="rarity-line"><Pips rarity={sp.rarity} /> {RARITY[sp.rarity]?.label}</span>
-          <span data-mastery>{mastery >= 1 ? <span className="mastery mastery--done"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>Learnt</span> : mastery > 0 ? <span className="mastery"><i style={{ '--p': Math.round(mastery * 100) } as React.CSSProperties} aria-hidden="true" />Learning</span> : null}</span>
+        <div data-confuse="" data-curated={curated.length ? '' : undefined}>
+          {confuse.length > 0 && (
+            <section className="confuse" aria-labelledby="confuse-h">
+              <h2 className="h2" id="confuse-h">Easy to confuse with</h2>
+              <p className="small muted">Easy to mix up. Tap Compare to see them side by side.</p>
+              <ul className="lk-rail">
+                {confuse.map(({ s, tell }) => (
+                  <li className={`lk-card kind--${s.kind}`} key={s.id}>
+                    <Link className="lk-sp" to={`/bird/${s.id}`}>
+                      <span className="lk-photo cmp-img"><BirdImg sp={s} alt="" /></span>
+                      <strong className="lk-name">{s.name}</strong>
+                    </Link>
+                    <p className={`lk-tell${tell ? '' : ' muted'}`}>{tell || cap(s.sizeText || '')}</p>
+                    <Link className="btn btn--small lk-cmp" to={`/compare/${sp.id}/${s.id}`} aria-label={`Compare with the ${s.name}`}>Compare</Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
 
-        <Link className="btn spot-test" to={`/learn/test/${sp.id}`}><Icon name="grid" /><span>Test me on this</span></Link>
-
-        {info?.status && <p className="small muted">Conservation: {info.status}</p>}
-
-        <div className="quicklinks">
-          <Link className="btn" to={`/map/sp/${sp.id}`}>
-            <Icon name="pin" /> Show where it's reported
-          </Link>
-        </div>
-
-        {clips.length > 0 && (
-          <section className="call" aria-label="Calls">
-            <h2 className="h2">Calls</h2>
-            {clips.map((c, i) => (
-              <div className="call-row" key={`${c.src}-${i}`}>
-                <button type="button" className="playbtn" aria-label={playing === i ? `Pause recording ${i + 1}` : `Play recording ${i + 1}`} onClick={() => void playClip(i)}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">{playing === i ? <><rect x="7" y="5" width="4" height="14" fill="currentColor" /><rect x="13" y="5" width="4" height="14" fill="currentColor" /></> : <path d="M8 5v14l11-7z" fill="currentColor" />}</svg>
-                </button>
-                <div className="call-meta">
-                  <span className="call-title">{String(c.title || 'Recording').slice(0, 70)}</span>
-                  <span className="small muted call-credit">
-                    {c.artist || 'Unknown'}{c.license ? `, ${c.license}` : ''}{c.local ? ', from the offline call pack' : ''}
-                  </span>
-                </div>
-              </div>
-            ))}
+        {months && (
+          <section className="where" aria-labelledby="where-h">
+            <h2 className="h2" id="where-h">When and where</h2>
+            <h3 className="h3">When it's reported</h3>
+            <div className={`season${grown ? ' is-in' : ''}`} data-grow="" ref={growRef} role="img" aria-label={`Reporting rate by month, highest in ${MONTHS[months.rel.indexOf(1)]}`}>
+              {months.rel.map((v, i) => <i key={i} className={i === now ? 'now' : ''} style={{ height: `${Math.max(3, Math.round(v * 100))}%`, '--i': i } as CSSProperties} />)}
+            </div>
+            <div className="season-labels" aria-hidden="true">
+              {[...'JFMAMJJASOND'].map((c, i) => <span key={i} className={i === now ? 'now' : undefined}>{c}</span>)}
+            </div>
+            <p className="small muted">How often it's reported in SEQ each month, from {(recordCount(sp.id) as number).toLocaleString('en-AU')} records since 2016 in the Atlas of Living Australia.</p>
+            {spots.length > 0 && (
+              <>
+                <h3 className="h3">{near ? 'Places near its records' : 'Best places in SEQ'}</h3>
+                <ul className="spots">{spots.map(({ h, c }) => <li key={h.name}><span>{h.name}</span><span className="num">{c.toLocaleString('en-AU')}</span></li>)}</ul>
+                <p className="small muted">{near ? 'Named places within 3 km of where it has been recorded, with the number of records around each.' : 'Number of records at each spot.'}</p>
+              </>
+            )}
+            <Link className="btn" to={`/map/sp/${sp.id}`}><Icon name="pin" /> Show where it's reported</Link>
           </section>
         )}
 
-        {lookalikes.length > 0 && (
-          <section className="pad">
-            <h2 className="h2">Easily confused with</h2>
-            <ul className="rows">
-              {lookalikes.slice(0, 4).map((other: any) => (
-                <li key={other.id}>
-                  <Link className="row row--sp" to={`/compare/${sp.id}/${other.id}`}>
-                    <span className="row-thumb"><SpeciesImage sp={other} /></span>
-                    <span className="row-main"><strong>{other.name}</strong><span className="muted small">{tellFor(sp.id, other.id) || 'Compare the two side by side'}</span></span>
-                  </Link>
+        <CallsSection p={player} />
+
+        <section className="wiki" data-wiki="">
+          {info ? (
+            <>
+              <h2 className="h2">About</h2>
+              <p>{info.text}</p>
+              {info.status && <p className="status"><strong>Conservation status:</strong> {info.status}</p>}
+              {info.sources.length > 0 && (
+                <p className="small sources"><span className="muted">Sources:</span>{' '}
+                  {info.sources.map((src, i) => <span key={src.url}>{i ? '; ' : ''}<a href={src.url} target="_blank" rel="noopener">{src.title || sourceLabel(src.url)}</a></span>)}
+                </p>
+              )}
+            </>
+          ) : det?.extract ? (
+            <>
+              <h2 className="h2">About</h2>
+              <p>{det.extract}</p>
+              <p className="small muted">From <a href={det.url} target="_blank" rel="noopener">Wikipedia</a>, CC BY-SA 4.0.</p>
+            </>
+          ) : null}
+        </section>
+
+        <section className="mine" aria-labelledby="mine-h">
+          <h2 className="h2" id="mine-h">Your sightings</h2>
+          {snaps.length > 0 && (
+            <ul className="mine-strip">
+              {snaps.map((h) => (
+                <li key={h.id}>
+                  <button type="button" className="mine-ph" aria-label={`Your photo from ${fmtDate(h.date)}`} onClick={() => setEditing(h)}>
+                    <MinePhoto photoId={h.photoId as number} />
+                  </button>
                 </li>
               ))}
             </ul>
-          </section>
+          )}
+          {seen ? (
+            <ul className="hist">
+              {hist.map((h) => (
+                <li key={h.id}>
+                  <button type="button" className="hist-row" onClick={() => setEditing(h)}>
+                    <span className="hist-main"><strong>{fmtDate(h.date)}</strong>{h.time ? <> <span className="muted">{h.time}</span></> : null}<br /><span className="muted">{h.place || 'No place name'}</span></span>
+                    <span className="hist-n">{h.count ? `×${h.count}` : 'X'}{h.heard ? <><br /><span className="muted small">heard</span></> : null}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted mine-empty">Not seen yet. When you find {sp.kind === 'plant' ? 'it' : 'one'}, log it here and its card fills in with colour.</p>
+          )}
+        </section>
+
+        <nav className="more-links">
+          {isBird && <a href={`https://xeno-canto.org/species/${sp.sci.replace(' ', '-')}`} target="_blank" rel="noopener">More calls on xeno-canto</a>}
+          <a href={`https://bie.ala.org.au/search?q=${encodeURIComponent(sp.sci)}`} target="_blank" rel="noopener">Atlas of Living Australia</a>
+        </nav>
+        {(prev || next) && (
+          <nav className="prevnext" aria-label={`More ${kindWord}`}>
+            {prev ? <PrevNext s={prev} dir="prev" /> : <span />}
+            {next && <PrevNext s={next} dir="next" />}
+          </nav>
         )}
-      </section>
+      </div>
 
-      {mine.length > 0 && (
-        <section className="pad">
-          <h2 className="h2">Your sightings</h2>
-          <ul className="rows">
-            {mine.slice(0, 6).map((s) => (
-              <li className="row" key={s.id}>
-                <span className="row-main">
-                  <strong>{s.date}</strong>
-                  <span className="muted small">{s.time}{s.notes ? ` — ${s.notes}` : ''}</span>
-                </span>
-                <span className="row-n">{s.count ?? 1}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <div className={`logbar${barOn ? ' logbar--on' : ''}`} data-logbar="" inert={!barOn}>
+        <Band sp={sp} seen={seen} /><strong>{sp.name}</strong>
+        <Link className="btn btn--primary btn--small" to={logTo} aria-label={`Log a sighting of the ${sp.name}`}>Log it</Link>
+      </div>
 
-      {gallery.length > 0 && (
-        <section className="pad">
-          <h2 className="h2">More photos</h2>
-          <ul className="gallery">
-            {gallery.slice(0, 6).map((g) => (
-              <li key={g.src}>
-                <img src={g.src} alt={sp.name} loading="lazy" decoding="async" />
-                <span className="credit small muted">
-                  {g.page ? (
-                    <a href={g.page} target="_blank" rel="noopener">
-                      {g.credit || 'Unknown'}
-                    </a>
-                  ) : (
-                    g.credit || 'Unknown'
-                  )}
-                  {g.license ? `, ${g.license}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {toast && <div className="toast" role="status" onClick={() => setToast('')}>{toast}</div>}
+      {editing && <SightingEditSheet sighting={editing} onClose={() => setEditing(null)} />}
+    </article>
+  );
+}
 
-      {similar.length > 0 && (
-        <section className="pad">
-          <h2 className="h2">Similar species</h2>
-          <ul className="rows">
-            {similar.map((s) => (
-              <li key={s.id}>
-                <Link className="row row--sp" to={`/bird/${s.id}`}>
-                  <span className="row-thumb">
-                    <SpeciesImage sp={s} />
-                  </span>
-                  <span className="row-main">
-                    <strong>{s.name}</strong>
-                    <span className="muted small">{s.sizeText}</span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </>
+// Prev/next: a photo chip for the neighbour in the dex, of the same kind.
+function PrevNext({ s, dir }: { s: Species; dir: 'prev' | 'next' }) {
+  return (
+    <Link className={`pn pn--${dir} kind--${s.kind}`} to={`/bird/${s.id}`}>
+      <Icon name="back" />
+      <span className="pn-ph"><BirdImg sp={s} alt="" /></span>
+      <span className="pn-txt"><span className="sr-only">{dir === 'prev' ? 'Previous' : 'Next'}: </span><span className="pn-no">{dexNo(s.id)}</span><strong>{s.name}</strong></span>
+    </Link>
   );
 }
