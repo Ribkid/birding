@@ -53,6 +53,8 @@ export default function Scan() {
   const resultRef = useRef<HTMLElement>(null);
   const kindsRef = useRef<HTMLDivElement>(null);
   const [freshResult, setFreshResult] = useState(false);
+  const [land, setLand] = useState(false);
+  const [landTick, setLandTick] = useState(0);
   const pts = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ mode: 'move' | 'resize' | 'pinch'; start: any } | null>(null);
   const [activeHandle, setActiveHandle] = useState('');
@@ -65,6 +67,13 @@ export default function Scan() {
     S.at = at; S.photo = photo; S.box = box; S.whole = whole; S.kind = kind;
     S.result = result; S.logAt = logAt; S.yours = yours;
   }, [at, photo, box, whole, kind, result, logAt, yours]);
+
+  useEffect(() => {
+    if (!landTick) return;
+    setLand(true);
+    const timer = window.setTimeout(() => setLand(false), 700);
+    return () => window.clearTimeout(timer);
+  }, [landTick]);
 
   useEffect(() => {
     if (!freshResult) return;
@@ -128,6 +137,7 @@ export default function Scan() {
       setAt(Date.now());
       setResult(null); setLogAt(null); setError(''); setYours('');
       setBox({ cx: 0.5, cy: 0.5, s: 0.75 });
+      setLandTick((n) => n + 1);
       setStatus(`Photo ready. Move the box onto ${subject ? `the ${subject}` : 'what you want named'}, then choose Identify.`);
     } catch {
       if (ticket !== picks.current) return;
@@ -351,12 +361,12 @@ export default function Scan() {
                 onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
                 <div className="scan-photo">
                   <img src={photo.url} alt="" draggable={false} />
-                  <span className="scan-dim" aria-hidden="true" />
+                  <span className="scan-dim" aria-hidden="true" style={boxAt} />
                   <span className="scan-corners scan-corners--photo" aria-hidden="true" />
                   <span className="scan-sweep scan-sweep--whole" aria-hidden="true" />
                 </div>
                 {!whole && (
-                  <div className={`scan-box${boxScreenPx > 0 && boxScreenPx < 110 ? ' scan-box--small' : ''}`} data-box style={boxAt}>
+                  <div className={`scan-box${boxScreenPx > 0 && boxScreenPx < 110 ? ' scan-box--small' : ''}${land ? ' scan-box--land' : ''}`} data-box style={boxAt}>
                     <span className="scan-sweep" aria-hidden="true" />
                     {['nw', 'ne', 'sw', 'se'].map((c) => <span key={c} className={`scan-handle scan-handle--${c}${activeHandle === c ? ' is-active' : ''}`} data-handle={c} />)}
                   </div>
@@ -376,8 +386,8 @@ export default function Scan() {
               </div>
               {multi && (
                 <div ref={kindsRef} className="scan-kinds" role="group" aria-label="What kind is it?">
-                  <button type="button" className={`scan-chip ${kind ? `kind--${kind}` : ''}`} aria-pressed={!kind} onClick={() => setKind('')}>Anything</button>
-                  {covered.map((k) => <button key={k} type="button" className={`scan-chip kind--${k}`} aria-pressed={kind === k} onClick={() => setKind(k)}>{KINDS[k].label}</button>)}
+                  <button type="button" className="scan-chip" aria-pressed={!kind} onClick={() => setKind('')}>Anything</button>
+                  {covered.map((k) => <button key={k} type="button" className={`scan-chip kind--${k}`} aria-pressed={kind === k} onClick={() => setKind(k)}><i aria-hidden="true" />{KINDS[k].label}</button>)}
                 </div>
               )}
               <button type="button" className="scan-go" disabled={busy} onClick={() => void identify()} aria-disabled={busy}><span className="scan-go-ico"><Icon name="scan" /></span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
