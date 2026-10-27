@@ -53,6 +53,19 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keep = new Set([SHELL, RUNTIME, PHOTOS, CALLS, 'birddex-models']);
+      const shell = await caches.open(SHELL);
+      // A page still running the previous release may lazy-load an old content-hashed
+      // chunk. Keep the old shell's assets in the new shell before deleting it.
+      for (const name of await caches.keys()) {
+        if (name === SHELL || !name.startsWith('birdydex-shell-')) continue;
+        const old = await caches.open(name);
+        for (const req of await old.keys()) {
+          if (!new URL(req.url).pathname.startsWith('/assets/')) continue;
+          if (await shell.match(req, MATCH)) continue;
+          const res = await old.match(req);
+          if (res) await shell.put(req, res).catch(() => {});
+        }
+      }
       for (const name of await caches.keys()) {
         if (!keep.has(name) && name.startsWith('birdydex-')) await caches.delete(name);
       }

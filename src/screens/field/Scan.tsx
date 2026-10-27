@@ -41,6 +41,7 @@ export default function Scan() {
   const [logAt, setLogAt] = useState<number | null>(null);
   const [yours, setYours] = useState('');
   const [error, setError] = useState('');
+  const [needsReload, setNeedsReload] = useState(false);
   const [at, setAt] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ mode: 'move' | 'resize'; id: number; start: { x: number; y: number; cx: number; cy: number; s: number } } | null>(null);
@@ -104,7 +105,7 @@ export default function Scan() {
 
   const identify = async () => {
     if (busy || !photo) return;
-    setBusy(true); setError(''); setResult(null); setStatus('Starting photo ID…');
+    setBusy(true); setError(''); setNeedsReload(false); setResult(null); setStatus('Starting photo ID…');
     const MB = photoModelMb();
     try {
       const cached = await modelCached();
@@ -126,10 +127,17 @@ export default function Scan() {
       setYours(makeYours(photo, box, whole));
       setStatus('');
     } catch (err: any) {
-      const msg = /offline-first-run|Failed to fetch|NetworkError|network/i.test(String(err?.message || err))
-        ? `Photo ID needs a one-time download of about ${MB} MB. Connect to the internet (Wi-Fi is best) and try again.`
-        : `Photo ID couldn't run: ${err?.message || err}`;
-      setError(msg); setStatus('');
+      const raw = String(err?.message || err);
+      if (/dynamically imported module|Importing a module script failed|module script failed/i.test(raw)) {
+        setError('BirdyDex was updated. Reload to use Scan.');
+        setNeedsReload(true);
+      } else {
+        const msg = /offline-first-run|Failed to fetch|NetworkError|network/i.test(raw)
+          ? `Photo ID needs a one-time download of about ${MB} MB. Connect to the internet (Wi-Fi is best) and try again.`
+          : `Photo ID couldn't run: ${raw}`;
+        setError(msg);
+      }
+      setStatus('');
     } finally { setBusy(false); setProgress(null); }
   };
 
@@ -243,6 +251,7 @@ export default function Scan() {
       <div className="scan-sheet pad-x">
         <section className="scan-result" aria-labelledby="scan-verdict">
           {error && <p className="form-error" role="alert">{error}</p>}
+          {needsReload && <button type="button" className="btn btn--primary btn--block" onClick={() => window.location.reload()}>Reload BirdyDex</button>}
           {result && top.length > 0 && (
             <>
               <div className={`scan-verdict-wrap scan-verdict-wrap--${result.band}`}>
