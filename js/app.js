@@ -406,7 +406,7 @@ function openLocationPicker(init = {}) {
           <button type="button" class="iconbtn" data-lclose aria-label="Cancel">${icon.close}</button></div>
         <ul class="rows locpick-res hidden" data-lres></ul>
       </div>
-      <div class="locpick-mapwrap"><div class="locpick-map" data-lmap></div><div class="locpick-pin" aria-hidden="true">${icon.pin}</div></div>
+      <div class="locpick-mapwrap"><div class="locpick-map" data-lmap></div><div class="locpick-dot" aria-hidden="true"></div><div class="locpick-pin" aria-hidden="true">${icon.pin}</div></div>
       <div class="locpick-bottom">
         <p class="small muted">Move the map so the pin sits on the spot, or search above.</p>
         <label class="field"><span>Place name</span><input data-lname value="${esc(init.place || '')}" placeholder="e.g. Oxley Creek Common" autocomplete="off"></label>
@@ -429,6 +429,10 @@ function openLocationPicker(init = {}) {
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     $('.locpick-mapwrap', ov).append(baseLayers(map, L));
     setTimeout(() => map.invalidateSize(), 50);
+    // The pin lifts while the map moves under it and drops onto the spot when it stops.
+    const pin = $('.locpick-pin', ov);
+    map.on('movestart', () => pin.classList.add('locpick-pin--lift'));
+    map.on('moveend', () => pin.classList.remove('locpick-pin--lift'));
     const q = $('[data-lq]', ov), res = $('[data-lres]', ov), name = $('[data-lname]', ov);
     let found = [], timer = null, nameTouched = !!init.place;
     name.addEventListener('input', () => { nameTouched = true; });
@@ -2099,16 +2103,16 @@ async function renderMap(spId = null, at = null) {
           <button type="button" class="iconbtn hidden" data-mqx aria-label="Clear search">${icon.close}</button></div>
         <ul class="rows map-res hidden" data-mres></ul>
       </div>
-      <div class="map-ctl chips">
+      <div class="map-ctl chips" role="group" aria-label="What the map shows">
         ${focus ? `<a class="chip chip--on" href="#/map" aria-label="Stop showing ${esc(focus.name)}">${esc(focus.name)} ✕</a>` : ''}
         <button class="chip ${hotOn ? 'chip--on' : ''}" data-hot aria-pressed="${hotOn}">Hotspots</button>
         ${!focus ? `<button class="chip ${f.need ? 'chip--on' : ''}" data-need aria-pressed="${f.need}">Birds I need</button>` : ''}
         <button class="chip ${f.show === 'all' ? 'chip--on' : ''}" data-mshow="all" aria-pressed="${f.show === 'all'}">My sightings</button>
         <button class="chip ${f.show === 'photos' ? 'chip--on' : ''}" data-mshow="photos" aria-pressed="${f.show === 'photos'}">With photos</button>
         <button class="chip ${f.show === 'none' ? 'chip--on' : ''}" data-mshow="none" aria-pressed="${f.show === 'none'}">Hide mine</button>
-        <button class="chip" data-locate>${icon.pin} Me</button>
       </div>
-      <button class="btn btn--primary map-patch" data-patch>New patch here</button>
+      <button class="btn map-patch" data-patch><span class="map-patch-ring" aria-hidden="true"></span>New patch here</button>
+      <button type="button" class="map-fab" data-locate aria-label="Go to where I am"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
       <div class="map-cross hidden" aria-hidden="true"></div>
     </div>`;
   view.onchange = null;
@@ -2271,9 +2275,12 @@ async function renderMap(spId = null, at = null) {
     if (ms) { f.show = ms.dataset.mshow; keepFocus(() => renderMap(spId)); }
     if (e.target.closest('[data-hot]')) { if (focus) f.hotFocus = !f.hotFocus; else f.hot = !f.hot; keepFocus(() => renderMap(spId)); }
     if (e.target.closest('[data-patch]')) startPatch();
-    if (e.target.closest('[data-locate]')) {
+    const lb = e.target.closest('[data-locate]');
+    if (lb) {
+      lb.classList.add('map-fab--busy');
       try { const p = await getPosition(); map.setView([p.lat, p.lng], 15); L.circleMarker([p.lat, p.lng], { radius: 7, color: '#fff', weight: 3, fillColor: ink, fillOpacity: 1 }).addTo(map); }
       catch (err) { toast(err.message); }
+      finally { lb.classList.remove('map-fab--busy'); }
     }
   };
   if (mode === 'patch') {

@@ -257,3 +257,104 @@ button.set-row:active, label.set-row:active { background: var(--surface-2); }
 .set-card .btn:not(.btn--primary):not(.btn--quiet), .set-card .check--card { background: var(--paper); box-shadow: none; }
 .set-acct .acct-card { padding: 12px; margin: 4px 0 12px; border-radius: var(--r-2); background: var(--paper); }
 .set-acct > :last-child { margin-bottom: 10px; }
+
+/* ---------- Map: full-bleed under the floating tab bar, with glass chrome ---------- */
+.mapwrap .search-bar--map, .locpick .search-bar--map {
+  min-height: 52px; padding: 4px 4px 4px 16px; border: 0; border-radius: 26px;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+}
+.mapwrap .search-bar--map:focus-within, .locpick .search-bar--map:focus-within { box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float), 0 0 0 3px var(--azure); }
+.search-bar--map .iconbtn { border-radius: 50%; }
+.map-top { left: 12px; right: 12px; }
+.map-res, .locpick-res {
+  margin-top: 8px; padding: 0 14px; border-radius: var(--r-card);
+  background: var(--glass-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+}
+.map-res > li:last-child .row, .locpick-res > li:last-child .row { border-bottom: 0; }
+.map-ctl { top: calc(74px + env(safe-area-inset-top)); gap: 8px; padding: 2px 12px 12px; }
+.map-ctl .chip {
+  min-height: 40px; gap: 7px; border: 0; color: var(--ink); font-weight: 600;
+  background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--glass-edge), 0 6px 16px -8px rgba(10, 30, 26, .5);
+}
+.map-ctl .chip--on { background: var(--ink); color: var(--paper); box-shadow: 0 6px 16px -8px rgba(10, 30, 26, .6); }
+/* Each layer chip carries the colour of its marks on the map, so the chips double as the key. */
+.map-ctl [data-hot]::before, .map-ctl [data-need]::before, .map-ctl [data-mshow="all"]::before {
+  content: ''; flex: none; width: 11px; height: 11px; border-radius: 50%; background: var(--gold); box-shadow: inset 0 0 0 1.5px #3A2A00;
+}
+.map-ctl [data-need]::before { background: var(--lori); }
+.map-ctl [data-mshow="all"]::before { background: var(--azure); box-shadow: 0 0 0 2px #fff; }
+.mapwrap .map-patch {
+  left: 12px; bottom: calc(var(--chrome-bottom) + 6px); min-height: 46px; gap: 10px; padding: 6px 18px 6px 12px;
+  border-radius: var(--r-pill); color: var(--ink); font-weight: 700;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+}
+.map-patch-ring { flex: none; width: 22px; height: 22px; border-radius: 50%; border: 2px dashed var(--lori); background: color-mix(in srgb, var(--lori) 14%, transparent); }
+.map-fab {
+  position: absolute; z-index: 500; right: 12px; bottom: calc(var(--chrome-bottom) + 122px); width: 46px; height: 46px;
+  display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; cursor: pointer; color: var(--azure);
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+  transition: scale var(--dur-2) var(--ease-spring);
+}
+.map-fab svg { width: 24px; height: 24px; }
+.map-fab:active, .mapwrap .map-patch:active { scale: .93; transition-duration: var(--dur-1); }
+.map-fab--busy svg { opacity: .45; }
+.mapwrap .layer-toggle, .locpick .layer-toggle {
+  padding: 4px; gap: 2px; border-radius: var(--r-pill);
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+}
+.mapwrap .layer-toggle { left: 12px; right: auto; bottom: calc(var(--chrome-bottom) + 64px); }
+.mapwrap .layer-toggle button, .locpick .layer-toggle button { min-height: 38px; padding: 6px 14px; border-radius: var(--r-pill); }
+body.has-outing .mapwrap .map-patch { bottom: calc(var(--chrome-bottom) + 68px); }
+body.has-outing .mapwrap .layer-toggle { bottom: calc(var(--chrome-bottom) + 126px); }
+body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
+/* Leaflet's own controls (its stylesheet loads later, hence the longer selectors). */
+.mapwrap .leaflet-touch .leaflet-bar, .locpick .leaflet-touch .leaflet-bar {
+  border: 0; border-radius: 23px; overflow: hidden;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+}
+.mapwrap .leaflet-touch .leaflet-bar a, .locpick .leaflet-touch .leaflet-bar a {
+  width: 46px; height: 46px; line-height: 46px; background: transparent; color: var(--ink); border-bottom-color: var(--line); font-weight: 500;
+}
+.mapwrap .leaflet-touch .leaflet-bar a:last-child, .locpick .leaflet-touch .leaflet-bar a:last-child { border-bottom: 0; }
+.mapwrap .leaflet-right .leaflet-control, .locpick .leaflet-right .leaflet-control { margin-right: 12px; }
+.mapwrap .leaflet-control-attribution, .locpick .leaflet-control-attribution { margin-top: 6px; border-radius: 8px 0 0 0; background: color-mix(in srgb, var(--surface) 78%, transparent); color: var(--ink-2); }
+.mapwrap .leaflet-control-attribution a, .locpick .leaflet-control-attribution a { color: var(--azure); }
+.leaflet-container .leaflet-popup-content-wrapper { border-radius: 18px; box-shadow: var(--shadow-float); }
+.leaflet-container .leaflet-popup-tip { box-shadow: none; }
+.leaflet-container a.leaflet-popup-close-button { width: 32px; height: 32px; font: 400 22px/32px var(--font); }
+/* The new-patch sheet floats over the map as glass, so the circle stays in view. */
+.sheet-wrap--map .sheet { background: var(--glass-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-2); }
+@media (prefers-reduced-transparency: reduce) {
+  .mapwrap .search-bar--map, .locpick .search-bar--map, .map-res, .locpick-res, .mapwrap .map-patch, .map-fab, .mapwrap .layer-toggle, .locpick .layer-toggle,
+  .mapwrap .leaflet-touch .leaflet-bar, .locpick .leaflet-touch .leaflet-bar, .sheet-wrap--map .sheet { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .map-ctl .chip:not(.chip--on) { background: var(--surface); }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mapwrap .search-bar--map, .locpick .search-bar--map, .mapwrap .map-patch, .map-fab, .mapwrap .layer-toggle, .locpick .layer-toggle,
+  .mapwrap .leaflet-touch .leaflet-bar, .locpick .leaflet-touch .leaflet-bar { background: var(--glass-strong); }
+}
+@media (prefers-reduced-motion: reduce) { .map-fab { transition: none; } .map-fab:active, .mapwrap .map-patch:active { scale: none; } }
+
+/* ---------- the place picker: the map fills the screen, the place name sits on a sheet over it ---------- */
+.locpick { background: var(--surface-2); }
+.locpick-top { position: absolute; top: 0; left: 0; right: 0; z-index: 600; padding: calc(10px + env(safe-area-inset-top)) 12px 8px; }
+.locpick-res { left: 12px; right: 12px; top: calc(100% - 2px); }
+.locpick-mapwrap { flex: 1; }
+.locpick .leaflet-bottom { bottom: 24px; }
+.locpick-mapwrap .layer-toggle { left: 12px; right: auto; bottom: 36px; }
+.locpick-bottom {
+  position: relative; z-index: 600; margin-top: -24px; padding: 20px 16px calc(14px + env(safe-area-inset-bottom));
+  border: 0; border-radius: 28px 28px 0 0; background: var(--surface); box-shadow: 0 -12px 30px -14px rgba(10, 30, 26, .4);
+}
+.locpick-bottom .field input { background: var(--paper); }
+.locpick-dot { position: absolute; left: 50%; top: 50%; z-index: 549; width: 10px; height: 4px; margin: 2px 0 0 -5px; border-radius: 50%; background: rgba(6, 18, 15, .45); pointer-events: none; transition: scale var(--dur-3) var(--ease-spring), opacity var(--dur-3) var(--ease-out); }
+.locpick-pin { transition: translate var(--dur-3) var(--ease-spring); }
+.locpick-pin--lift { translate: 0 -12px; transition-duration: var(--dur-2); transition-timing-function: var(--ease-out); }
+.locpick-dot:has(+ .locpick-pin--lift) { scale: 1.6; opacity: .6; }
+@media (prefers-reduced-motion: reduce) { .locpick-pin, .locpick-dot { transition: none; } .locpick-pin--lift { translate: none; } .locpick-dot:has(+ .locpick-pin--lift) { scale: none; } }
