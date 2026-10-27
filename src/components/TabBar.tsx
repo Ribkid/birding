@@ -117,10 +117,20 @@ export function TabBar() {
       <nav className="tabbar" aria-label="Main">
         {TABS.map((tab) => {
           if (tab.plus) {
+            // v1 index.html #plus: a link to the log form (so it still works opened in a new tab) that opens the
+            // + sheet when tapped. Being a link, it also takes the tab bar's link icon styles (.tabbar a svg).
             return (
-              <button key={tab.to} type="button" className="tab-plus" aria-label={tab.label} onClick={() => setPlusOpen(true)}>
+              <Link
+                key={tab.to}
+                to={tab.to}
+                id="plus"
+                className="tab-plus"
+                aria-label={tab.label}
+                aria-current="false"
+                onClick={(e) => { e.preventDefault(); setPlusOpen(true); }}
+              >
                 <svg viewBox="0 0 24 24" aria-hidden="true">{tab.icon}</svg>
-              </button>
+              </Link>
             );
           }
           const active = current === tab.key;
