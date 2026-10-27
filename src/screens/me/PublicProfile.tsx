@@ -30,6 +30,10 @@ export default function PublicProfile() {
   }, []);
 
   useEffect(() => {
+    const cached = getPublicProfileCache(publicId) as PublicProfileRow | null;
+    setRow(cached);
+    setState(cached ? 'ready' : 'loading');
+    setErr('');
     void initProfile();
     if (!/^[0-9a-f-]{36}$/i.test(publicId)) { setState('error'); setErr("This profile isn't available. It may be private, or the link may be wrong."); return; }
     if (!configured) { setState('error'); setErr('Profiles need accounts, which are not set up in this copy of the app.'); return; }
@@ -42,8 +46,7 @@ export default function PublicProfile() {
     return () => { alive = false; };
   }, [publicId, authDone, authTick]);
 
-  const mine = getMyCloud();
-  const isMe = mine?.publicId === publicId;
+  const isMe = !!row?.is_me;
   const backHref = isMe ? '/me' : '/leaderboard';
   useEffect(() => {
     if (!row) return;
