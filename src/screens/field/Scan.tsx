@@ -1,530 +1,309 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type KeyboardEvent, type MouseEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { byId, type Species } from '../../lib/data';
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { KINDS, type ScanResult } from '../../lib/data';
 import { useSeen } from '../../lib/hooks';
-import { Icon } from '../../components/Icon';
-import { SpeciesImage } from '../../components/SpeciesImage';
+import { resizeImage } from '../../core/profile.js';
 import {
-  PHOTO_MODEL_MB,
-  identifyPhoto,
-  isPhotoModelCached,
-  loadPhotoModel,
-} from '../../core/photoid.js';
-import { errorText, logSighting } from './sighting';
-import './field.css';
+  photoIdInfo, identifyScan, modelCached, ensureModel, photoModelMb, scanSubject, scanFootnote,
+  topResults, scanHeadline, scanAdvice, bandLevel, bandWord, pct, words, article, firstSentence,
+  scanRefs, markChosen,
+} from '../../core/scan.js';
+import './scan.css';
 
-const MAX_EDGE = 1600;
-const LIKELY = 0.4;
-const STRONG = 0.9;
+const KEEP_MS = 30 * 60 * 1000;
+interface Chosen { file: File; blob: Blob; url: string; W: number; H: number }
+interface Box { cx: number; cy: number; s: number }
 
-interface ChosenPhoto {
-  blob: Blob;
-  url: string;
-  width: number;
-  height: number;
+const shortOf = (p: Chosen) => Math.min(p.W, p.H);
+function boxPct(photo: Chosen, b: Box) {
+  const side = b.s * shortOf(photo);
+  return { left: `${(b.cx * photo.W - side / 2) / photo.W * 100}%`, top: `${(b.cy * photo.H - side / 2) / photo.H * 100}%`, width: `${side / photo.W * 100}%`, height: `${side / photo.H * 100}%` };
 }
-
-interface Crop {
-  cx: number;
-  cy: number;
-  size: number;
-}
-
-interface Candidate {
-  id: number;
-  score: number;
-}
-
-type ModelPhase = 'checking' | 'loading' | 'ready' | 'error';
-
-const clamp = (v: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, v));
-
-/** v1's square crop box, measured against the short side of the photo. */
-function boxRect(photo: ChosenPhoto, crop: Crop) {
-  const ar = photo.width / photo.height;
-  const w = ar >= 1 ? crop.size / ar : crop.size;
-  const h = ar >= 1 ? crop.size : crop.size * ar;
-  const x = Math.min(Math.max(crop.cx - w / 2, 0), 1 - w);
-  const y = Math.min(Math.max(crop.cy - h / 2, 0), 1 - h);
-  return { x, y, w, h };
-}
-
-/** Resize the photo the way v1 did before handing it to BioCLIP. */
-async function preparePhoto(file: File): Promise<{ blob: Blob; width: number; height: number }> {
-  let bmp: ImageBitmap;
-  try {
-    bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  } catch {
-    bmp = await createImageBitmap(file);
-  }
-  try {
-    const scale = Math.min(1, MAX_EDGE / Math.max(bmp.width, bmp.height));
-    const width = Math.max(1, Math.round(bmp.width * scale));
-    const height = Math.max(1, Math.round(bmp.height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('This browser could not read the photo.');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(bmp, 0, 0, width, height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
-    if (!blob) throw new Error('This browser could not prepare the photo.');
-    return { blob, width, height };
-  } finally {
-    bmp.close();
-  }
+function clampBox(photo: Chosen, b: Box): Box {
+  const s = Math.min(1, Math.max(0.08, b.s));
+  const hw = s * shortOf(photo) / (2 * photo.W), hh = s * shortOf(photo) / (2 * photo.H);
+  return { s, cx: Math.min(Math.max(b.cx, hw), 1 - hw), cy: Math.min(Math.max(b.cy, hh), 1 - hh) };
 }
 
 export default function Scan() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const seen = useSeen();
-  const [modelPhase, setModelPhase] = useState<ModelPhase>('checking');
-  const [cached, setCached] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [progressLabel, setProgressLabel] = useState('Preparing the photo model');
-  const [modelError, setModelError] = useState('');
-  const [photo, setPhoto] = useState<ChosenPhoto | null>(null);
-  const [crop, setCrop] = useState<Crop>({ cx: 0.5, cy: 0.5, size: 1 });
+  const [info, setInfo] = useState<any>(null);
+  const [photo, setPhoto] = useState<Chosen | null>(null);
+  const [box, setBox] = useState<Box>({ cx: 0.5, cy: 0.5, s: 0.75 });
+  const [whole, setWhole] = useState(false);
+  const [kind, setKind] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
-  const [results, setResults] = useState<Candidate[] | null>(null);
+  const [progress, setProgress] = useState<{ phase: 'model' | 'view'; frac: number; index?: number; count?: number } | null>(null);
+  const [result, setResult] = useState<(ScanResult & { whole: boolean; kind: string }) | null>(null);
+  const [logAt, setLogAt] = useState<number | null>(null);
+  const [yours, setYours] = useState('');
   const [error, setError] = useState('');
-  const [savingId, setSavingId] = useState<number | null>(null);
-  const [logged, setLogged] = useState<Record<number, 'saved' | 'error'>>({});
+  const [at, setAt] = useState(0);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ mode: 'move' | 'resize'; id: number; start: { x: number; y: number; cx: number; cy: number; s: number } } | null>(null);
 
-  const mountedRef = useRef(true);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
-  const urlRef = useRef<string | null>(null);
-  const urlsRef = useRef<Set<string>>(new Set());
-  const runIdRef = useRef(0);
+  const covered: string[] = info?.kinds?.filter((k: string) => KINDS[k]) || [];
+  const multi = covered.length > 1;
+  const subject = scanSubject({ kinds: covered }, kind);
+  const intro = covered.length
+    ? `Name ${article(KINDS[covered[0]].one)} ${words(covered.map((k) => KINDS[k].one))} from a photo, right on your phone.`
+    : 'Find out what you photographed, right on your phone.';
 
-  // Warm the model as soon as the screen opens. loadPhotoModel is shared, so a
-  // second mount (or StrictMode) reuses the same in-flight load instead of
-  // downloading anything twice. It is never touched on app start.
   useEffect(() => {
-    mountedRef.current = true;
-    let alive = true;
-    void (async () => {
-      let already = false;
-      try {
-        already = await isPhotoModelCached();
-      } catch {
-        already = false;
-      }
-      if (!alive) return;
-      setCached(already);
-      setModelPhase('loading');
-      setProgressLabel(
-        already ? 'Loading the cached photo model' : `Downloading the photo model (about ${PHOTO_MODEL_MB} MB)`,
-      );
-      try {
-        await loadPhotoModel((p: number, label?: string) => {
-          if (!alive) return;
-          setProgress(clamp(Number(p) || 0));
-          setProgressLabel(already ? 'Loading the cached photo model' : label || 'Downloading the photo model');
-        });
-        if (!alive) return;
-        setProgress(1);
-        setProgressLabel('Ready');
-        setModelPhase('ready');
-      } catch (err) {
-        if (!alive) return;
-        setModelPhase('error');
-        setModelError(errorText(err));
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    if (at && Date.now() - at > KEEP_MS) { setPhoto(null); setResult(null); setAt(0); }
+    void photoIdInfo().then((i: any) => setInfo(i));
   }, []);
 
-  // Revoke every preview URL on unmount and stop any late async work updating state.
   useEffect(() => {
-    mountedRef.current = true;
-    const urls = urlsRef.current;
-    return () => {
-      mountedRef.current = false;
-      urlRef.current = null;
-      for (const url of urls) URL.revokeObjectURL(url);
-      urls.clear();
+    const stage = stageRef.current;
+    if (!stage) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!photo || whole || busy) return;
+      const step = 0.02;
+      const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (moves[e.key]) setBox((b) => clampBox(photo, { ...b, cx: b.cx + moves[e.key][0], cy: b.cy + moves[e.key][1] }));
+      else if (e.key === '+' || e.key === '=') setBox((b) => clampBox(photo, { ...b, s: b.s * 1.1 }));
+      else if (e.key === '-' || e.key === '_') setBox((b) => clampBox(photo, { ...b, s: b.s / 1.1 }));
+      else return;
+      e.preventDefault();
     };
-  }, []);
+    stage.addEventListener('keydown', onKey);
+    return () => stage.removeEventListener('keydown', onKey);
+  }, [photo, whole, busy]);
 
-  const likelyCount = useMemo(
-    () => (results ? results.filter((r) => r.score >= LIKELY).length : 0),
-    [results],
-  );
-
-  const onPick = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
+  const pick = async (file?: File) => {
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError('That file is not a photo. Choose an image from your camera or library.');
-      return;
-    }
-    setError('');
-    setStatus('');
-    setResults(null);
-    setLogged({});
+    setStatus('Opening the photo…');
+    let img: HTMLImageElement | null = null;
     try {
-      const prepared = await preparePhoto(file);
-      if (!mountedRef.current) return;
-      runIdRef.current += 1;
-      setBusy(false);
-      const url = URL.createObjectURL(prepared.blob);
-      const previous = urlRef.current;
-      urlRef.current = url;
-      urlsRef.current.add(url);
-      setPhoto({ ...prepared, url });
-      setCrop({ cx: 0.5, cy: 0.5, size: 1 });
-      if (previous) {
-        window.setTimeout(() => {
-          URL.revokeObjectURL(previous);
-          urlsRef.current.delete(previous);
-        }, 1000);
-      }
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setError(`That photo couldn't be read: ${errorText(err)}`);
+      const blob = await resizeImage(file, 1600);
+      if (!blob) throw new Error('unreadable');
+      const url = URL.createObjectURL(blob);
+      img = new Image();
+      img.src = url;
+      await img.decode();
+      setPhoto({ file, blob, url, W: img.naturalWidth, H: img.naturalHeight });
+      setAt(Date.now());
+      setResult(null); setLogAt(null); setError(''); setYours('');
+      setBox({ cx: 0.5, cy: 0.5, s: 0.75 });
+      setStatus(`Photo ready. Move the box onto ${subject ? `the ${subject}` : 'what you want named'}, then choose Identify.`);
+    } catch {
+      if (img?.src) URL.revokeObjectURL(img.src);
+      setStatus("That file couldn't be opened as a photo. Try a JPEG or PNG.");
     }
   };
 
-  const moveCrop = (e: MouseEvent<HTMLDivElement>) => {
-    const img = imgRef.current;
-    if (!img) return;
-    const r = img.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    const cx = clamp((e.clientX - r.left) / r.width);
-    const cy = clamp((e.clientY - r.top) / r.height);
-    setCrop((c) => ({ cx, cy, size: c.size === 1 ? 0.5 : c.size }));
-    runIdRef.current += 1;
-    setBusy(false);
-    setResults(null);
-    setStatus('');
-  };
-
-  const keyCrop = (e: KeyboardEvent<HTMLDivElement>) => {
-    const step = e.shiftKey ? 0.05 : 0.01;
-    let dx = 0;
-    let dy = 0;
-    let ds = 0;
-    if (e.key === 'ArrowLeft') dx = -step;
-    else if (e.key === 'ArrowRight') dx = step;
-    else if (e.key === 'ArrowUp') dy = -step;
-    else if (e.key === 'ArrowDown') dy = step;
-    else if (e.key === '+' || e.key === '=') ds = 0.05;
-    else if (e.key === '-') ds = -0.05;
-    else return;
-    e.preventDefault();
-    setCrop((c) => ({
-      cx: clamp(c.cx + dx),
-      cy: clamp(c.cy + dy),
-      size: clamp(c.size + ds, 0.15, 1),
-    }));
-    runIdRef.current += 1;
-    setBusy(false);
-    setResults(null);
-    setStatus('');
+  const cropFractions = () => {
+    if (!photo || whole) return null;
+    const side = box.s * shortOf(photo);
+    return { x: (box.cx * photo.W - side / 2) / photo.W, y: (box.cy * photo.H - side / 2) / photo.H, w: side / photo.W, h: side / photo.H };
   };
 
   const identify = async () => {
-    if (!photo || busy) return;
-    const run = ++runIdRef.current;
-    const current = photo;
-    const currentCrop = crop;
-    setBusy(true);
-    setError('');
-    setResults(null);
-    setLogged({});
-    setStatus(modelPhase === 'ready' ? 'Looking closely…' : 'Waiting for the photo model…');
+    if (busy || !photo) return;
+    setBusy(true); setError(''); setResult(null); setStatus('Starting photo ID…');
+    const MB = photoModelMb();
     try {
-      if (modelPhase !== 'ready') {
-        try {
-          await loadPhotoModel((p: number, label?: string) => {
-            if (!mountedRef.current || run !== runIdRef.current) return;
-            setProgress(clamp(Number(p) || 0));
-            setProgressLabel(label || 'Downloading the photo model');
-          });
-        } catch (err) {
-          if (!mountedRef.current || run !== runIdRef.current) return;
-          setModelPhase('error');
-          setModelError(errorText(err));
-          setStatus('');
-          setError(`Photo ID couldn't run here: ${errorText(err)}`);
-          return;
-        }
-        if (!mountedRef.current || run !== runIdRef.current) return;
-        setProgress(1);
-        setProgressLabel('Ready');
-        setModelPhase('ready');
+      const cached = await modelCached();
+      if (!cached) {
+        if (navigator.onLine === false) throw new Error('offline-first-run');
+        setStatus(`Getting photo ID ready: a one-time download of about ${MB} MB. Wi-Fi is best.`);
+        await ensureModel((f: number) => setProgress({ phase: 'model', frac: f }));
+      } else {
+        await ensureModel();
       }
-      setStatus('Looking closely…');
-      const out = await identifyPhoto(current.blob, {
-        crop: currentCrop.size < 1 ? boxRect(current, currentCrop) : null,
-      });
-      const res = (out.results ?? []).map((r: { id: number; p: number }) => ({ id: r.id, score: r.p })) as Candidate[];
-      if (!mountedRef.current || run !== runIdRef.current) return;
-      setResults(res);
-      const top = res[0]?.score ?? 0;
-      setStatus(
-        top >= STRONG
-          ? 'Strong match. Best guess first.'
-          : top >= LIKELY
-            ? 'Not certain. Compare the photos below.'
-            : 'Not sure. It may not be one of the dex birds. Try a tighter box or a sharper photo.',
-      );
-    } catch (err) {
-      if (!mountedRef.current || run !== runIdRef.current) return;
+      setProgress(null);
+      const month = new Date(photo.file.lastModified || Date.now()).getMonth() + 1;
+      const { res, logAt: logged } = await identifyScan(photo.file, {
+        crop: cropFractions(), kinds: kind ? [kind] : null, month,
+        onProgress: (x: any) => { if (x.phase === 'view') { setProgress({ phase: 'view', frac: 0, index: x.index, count: x.count }); setStatus(`Looking closely, ${x.index} of ${x.count}`); } },
+      } as any);
+      setResult({ ...res, whole, kind });
+      setLogAt(logged);
+      setYours(makeYours(photo, box, whole));
       setStatus('');
-      setError(`Photo ID couldn't run here: ${errorText(err)}`);
-    } finally {
-      if (mountedRef.current && run === runIdRef.current) setBusy(false);
-    }
+    } catch (err: any) {
+      const msg = /offline-first-run|Failed to fetch|NetworkError|network/i.test(String(err?.message || err))
+        ? `Photo ID needs a one-time download of about ${MB} MB. Connect to the internet (Wi-Fi is best) and try again.`
+        : `Photo ID couldn't run: ${err?.message || err}`;
+      setError(msg); setStatus('');
+    } finally { setBusy(false); setProgress(null); }
   };
 
-  const addToDex = async (sp: Species) => {
-    if (!photo || savingId !== null) return;
-    setSavingId(sp.id);
-    setError('');
-    try {
-      await logSighting({
-        speciesId: sp.id,
-        notes: 'Identified from a photo with BioCLIP.',
-        photoBlob: photo.blob,
-      });
-      if (!mountedRef.current) return;
-      setLogged((prev) => ({ ...prev, [sp.id]: 'saved' }));
-      setStatus(`${sp.name} added to your dex.`);
-      navigator.vibrate?.(30);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setLogged((prev) => ({ ...prev, [sp.id]: 'error' }));
-      setError(`Could not save that sighting: ${errorText(err)}`);
-    } finally {
-      if (mountedRef.current) setSavingId(null);
+  const chosen = async (id: number) => {
+    await markChosen(logAt, id);
+    navigate(`/add?species=${id}`, { state: { scan: true, at: location.pathname } });
+  };
+  const none = (why: string) => { void markChosen(logAt, 'none'); setStatus(why); };
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!photo || whole || busy) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const r = e.currentTarget.getBoundingClientRect();
+    const p = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+    const handle = (e.target as HTMLElement).closest('[data-handle]') as HTMLElement | null;
+    const inside = (e.target as HTMLElement).closest('[data-box]');
+    if (handle) drag.current = { mode: 'resize', id: e.pointerId, start: { ...p, cx: box.cx, cy: box.cy, s: box.s } };
+    else {
+      if (!inside) setBox((b) => clampBox(photo, { ...b, cx: p.x, cy: p.y }));
+      drag.current = { mode: 'move', id: e.pointerId, start: { ...p, cx: inside ? box.cx : p.x, cy: inside ? box.cy : p.y, s: box.s } };
     }
   };
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!photo || !d || d.id !== e.pointerId) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const p = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+    if (d.mode === 'move') setBox((b) => clampBox(photo, { ...b, cx: d.start.cx + (p.x - d.start.x), cy: d.start.cy + (p.y - d.start.y) }));
+    else {
+      const sideX = Math.abs(p.x - d.start.cx) * 2 * photo.W / shortOf(photo);
+      const sideY = Math.abs(p.y - d.start.cy) * 2 * photo.H / shortOf(photo);
+      setBox((b) => clampBox(photo, { ...b, s: Math.max(sideX, sideY) }));
+    }
+  };
+  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => { if (drag.current?.id === e.pointerId) drag.current = null; };
 
-  const pct = Math.round(progress * 100);
-  const rect = photo ? boxRect(photo, crop) : null;
-  const topScore = results?.[0]?.score ?? null;
-  const notSure = topScore !== null && topScore < LIKELY;
+  const top = result ? topResults(result).slice(0, 3) : [];
+  const lead = result?.band === 'likely' ? 1 : result?.band === 'possibly' ? 2 : 0;
+  const headline = result ? scanHeadline(result) : '';
+  const advice = result ? scanAdvice(result, { whole: result.whole, multi, kind, known: info }) : '';
+  const sure = result ? Math.min(99, Math.max(1, Math.round((result.results[0]?.p || 0) * 100))) : 0;
+  const boxAt = photo ? boxPct(photo, box) : undefined;
 
   return (
-    <>
-      <header className="page-head page-head--back">
-        <Link className="iconbtn" to="/dex" aria-label="Back to the dex">
-          <Icon name="back" />
-        </Link>
-        <div>
-          <h1>Scan a bird</h1>
-          <p className="muted small">Take a photo or pick one, and BioCLIP suggests which dex bird it is.</p>
+    <div className="scan">
+      <section className="scan-cam" data-hero-zone>
+        <header className="page-head page-head--back scan-head">
+          <Link className="iconbtn" to="/dex" aria-label="Back to the dex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M15 5l-7 7 7 7" /></svg></Link>
+          <div><h1>Scan a photo</h1><p className="small">{intro}</p></div>
+        </header>
+        <div className="scan-cam-body">
+          <section className="scan-vf" aria-label="Photo">
+            {!photo ? (
+              <>
+                <div className="scan-frame">
+                  <span className="scan-corners" aria-hidden="true" />
+                  <div className="scan-entry"><span className="scan-entry-icon">◱</span><p>Works best when {subject ? `the ${subject}` : 'it'} fills a good part of the frame.</p></div>
+                </div>
+                <div className="scan-pick">
+                  <label className="scan-pickbtn scan-pickbtn--main"><span className="scan-shutter">◉</span><span>Take a photo</span><input type="file" accept="image/*" capture="environment" className="scan-file" onChange={(e) => void pick(e.target.files?.[0])} /></label>
+                  <label className="scan-pickbtn scan-pickbtn--side"><span className="scan-pickicon">▣</span><span>Choose from gallery</span><input type="file" accept="image/*" className="scan-file" onChange={(e) => void pick(e.target.files?.[0])} /></label>
+                </div>
+              </>
+            ) : (
+              <>
+                <div ref={stageRef} className={`scan-stage${whole ? ' scan-stage--whole' : ''}`} tabIndex={0} role="application"
+                  aria-label={whole ? 'Your photo. The whole photo will be identified.' : 'Your photo with the identify box. Arrow keys move the box, plus and minus change its size.'}
+                  onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+                  <div className="scan-photo">
+                    <img src={photo.url} alt="" draggable={false} />
+                    <span className="scan-dim" aria-hidden="true" />
+                    <span className="scan-corners scan-corners--photo" aria-hidden="true" />
+                    <span className="scan-sweep scan-sweep--whole" aria-hidden="true" />
+                  </div>
+                  {!whole && (
+                    <div className="scan-box" data-box style={boxAt}>
+                      <span className="scan-sweep" aria-hidden="true" />
+                      {['nw', 'ne', 'sw', 'se'].map((c) => <span key={c} className={`scan-handle scan-handle--${c}`} data-handle={c} />)}
+                    </div>
+                  )}
+                  <span className="scan-pips" aria-hidden="true">{progress?.phase === 'view' && Array.from({ length: progress.count || 0 }, (_, i) => <i key={i} className={i < (progress.index || 0) - 1 ? 'on' : i === (progress.index || 0) - 1 ? 'now' : ''} />)}</span>
+                </div>
+                <div className="scan-tools">
+                  <p className="scan-hint">{whole ? 'The whole photo will be identified.' : subject ? `Drag the box onto the ${subject}. Pull a corner to resize.` : 'Drag the box onto what you want named. Pull a corner to resize.'}</p>
+                  <div className="scan-tool-row">
+                    <button type="button" className="scan-chip scan-chip--whole" data-whole aria-pressed={whole} onClick={() => setWhole((v) => !v)}><i aria-hidden="true" />Whole photo</button>
+                    <label className="scan-chip scan-change"><span>Change photo</span><input type="file" accept="image/*" className="scan-file" onChange={(e) => void pick(e.target.files?.[0])} /></label>
+                  </div>
+                </div>
+                {multi && (
+                  <div className="scan-kinds" role="group" aria-label="What kind is it?">
+                    <button type="button" className={`scan-chip ${kind ? `kind--${kind}` : ''}`} aria-pressed={!kind} onClick={() => setKind('')}>Anything</button>
+                    {covered.map((k) => <button key={k} type="button" className={`scan-chip kind--${k}`} aria-pressed={kind === k} onClick={() => setKind(k)}>{KINDS[k].label}</button>)}
+                  </div>
+                )}
+                <button type="button" className="scan-go" disabled={busy} onClick={() => void identify()} aria-disabled={busy}><span>◱</span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
+              </>
+            )}
+            <div className="scan-work">
+              <p className="scan-status" role="status" aria-live="polite">{status}</p>
+              {progress?.phase === 'model' && <div className="scan-progress"><div className="meter"><span style={{ width: `${Math.round(progress.frac * 100)}%` }} /></div><p className="scan-mb">{Math.round(progress.frac * photoModelMb())} of {photoModelMb()} MB</p></div>}
+            </div>
+          </section>
         </div>
-      </header>
+      </section>
 
-      <div className="scan pad-x">
-        <section
-          className={`field-model ${modelPhase === 'error' ? 'field-model--error' : ''}`}
-          aria-label="Photo model"
-        >
-          <div className="field-model-h">
-            <strong>On-device photo model</strong>
-            <span className={`field-pill ${modelPhase === 'ready' ? 'field-pill--ok' : ''}`}>
-              {modelPhase === 'ready'
-                ? 'Ready'
-                : modelPhase === 'error'
-                  ? 'Unavailable'
-                  : modelPhase === 'checking'
-                    ? 'Checking'
-                    : 'Loading'}
-            </span>
-          </div>
-          {modelPhase === 'ready' ? (
-            <p className="small muted field-model-note">
-              {cached
-                ? 'Ready. It was already saved on this phone, so nothing was downloaded.'
-                : `Ready. It stays on this phone, so next time it won't download the ${PHOTO_MODEL_MB} MB again.`}
-            </p>
-          ) : modelPhase === 'error' ? (
-            <p className="small field-model-note" role="alert">
-              {modelError} You can try again by identifying a photo.
-            </p>
-          ) : (
+      <div className="scan-sheet pad-x">
+        <section className="scan-result" aria-labelledby="scan-verdict">
+          {error && <p className="form-error" role="alert">{error}</p>}
+          {result && top.length > 0 && (
             <>
-              <p className="small muted field-model-note">
-                {progressLabel} — {pct}%
-              </p>
-              <div
-                className="meter meter--thin"
-                role="progressbar"
-                aria-label="Photo model download"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={pct}
-              >
-                <span style={{ '--p': `${pct}%` } as CSSProperties} />
+              <div className={`scan-verdict-wrap scan-verdict-wrap--${result.band}`}>
+                <div className="scan-ring" aria-hidden="true" style={{ '--p': sure } as CSSProperties}>
+                  <svg viewBox="0 0 80 80"><circle className="scan-ring-track" cx="40" cy="40" r="34" pathLength="100" /><circle className="scan-ring-fill" cx="40" cy="40" r="34" pathLength="100" /></svg>
+                  {result.band === 'unsure' ? <b className="scan-ring-q">?</b> : <b className="scan-ring-n"><span>{sure}</span><small>%</small></b>}
+                </div>
+                <div className="scan-verdict-text">
+                  <h2 className={`scan-verdict scan-verdict--${result.band}`} id="scan-verdict" tabIndex={-1}>{headline}</h2>
+                  <p className="scan-next">{advice}</p>
+                </div>
               </div>
-              <p className="small muted field-model-note">
-                About {PHOTO_MODEL_MB} MB the first time. Best on Wi-Fi; it works offline afterwards.
-              </p>
+              <div className="scan-cards">
+                {top.map((x: any, i: number) => {
+                  const sp = x.sp;
+                  const refs = scanRefs(sp.id);
+                  const level = bandLevel(x.p, result.bands);
+                  return (
+                    <article key={sp.id} className={`scan-card kind--${sp.kind} ${i < lead ? 'scan-card--lead' : ''}`}>
+                      <div className="scan-strip">
+                        <figure className="scan-yours">{yours ? <img src={yours} alt="Your photo" /> : <span className="scan-tile-missing" />}<figcaption>Yours</figcaption></figure>
+                        {[0, 1].map((j) => refs[j] ? <img key={j} src={refs[j].src} alt={`${sp.name}, reference photo`} loading="lazy" decoding="async" /> : <span key={j} className="scan-tile-missing" />)}
+                      </div>
+                      <div className="scan-card-body">
+                        <div className="scan-card-head"><h3><Link to={`/bird/${sp.id}`}>{sp.name}</Link></h3><span className="scan-kind">{KINDS[sp.kind]?.one}</span>{!seen.has(sp.id) && <span className="scan-new">New for your dex</span>}</div>
+                        {sp.notes && <p className="scan-tip">{firstSentence(sp.notes)}</p>}
+                        <div className="scan-card-foot">
+                          <div className={`scan-conf scan-conf--${level}`}><p><strong>{bandWord(level)}</strong> <span>{pct(x.p)}</span></p><span className="scan-bar" aria-hidden="true"><i style={{ '--p': Math.max(0.02, Math.min(1, x.p)).toFixed(3) } as CSSProperties} /></span></div>
+                          <button type="button" className={`btn scan-this ${i < lead ? 'btn--primary' : 'scan-this--soft'}`} onClick={() => void chosen(sp.id)} aria-label={`This one: ${sp.name}`}>This one</button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+              <section className="scan-none" aria-labelledby="scan-none-h">
+                <h3 id="scan-none-h">None of these?</h3>
+                <div className="scan-none-acts">
+                  <button type="button" className="btn" onClick={() => { none('Move the box onto just the part you want named, then choose Identify.'); setWhole(false); setBox((b) => clampBox(photo!, { ...b, s: b.s * 0.75 })); }}>Try a tighter box</button>
+                  {multi && <button type="button" className="btn" onClick={() => none('Choose what kind it is, then try again.')}>Pick a kind</button>}
+                  <Link className="btn" to="/dex">Search the dex</Link>
+                </div>
+              </section>
             </>
           )}
         </section>
-
-        <div className="scan-pick">
-          <input
-            ref={fileInputRef}
-            id="scan-file"
-            className="scan-file"
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={onPick}
-            tabIndex={photo ? -1 : 0}
-            aria-label="Take or choose a photo"
-          />
-          {!photo && (
-            <label className="scan-drop" htmlFor="scan-file">
-              <span className="scan-preview">
-                <Icon name="scan" />
-                <strong>Take or choose a photo</strong>
-                <em>Works best when the bird fills a good part of the frame</em>
-              </span>
-            </label>
-          )}
-        </div>
-
-        {photo && (
-          <div className="crop">
-            {/* The photo is the click target as well as the visual reference. */}
-            <div
-              className="crop-stage"
-              role="group"
-              tabIndex={0}
-              aria-label="Photo crop box. Click or tap the bird to centre the box, or use the arrow keys to move it and plus or minus to resize it."
-              aria-describedby="scan-crop-hint"
-              onClick={moveCrop}
-              onKeyDown={keyCrop}
-            >
-              <img ref={imgRef} src={photo.url} alt="Your photo" draggable={false} />
-              {rect && (
-                <span
-                  className="crop-box"
-                  style={{
-                    left: `${rect.x * 100}%`,
-                    top: `${rect.y * 100}%`,
-                    width: `${rect.w * 100}%`,
-                    height: `${rect.h * 100}%`,
-                  }}
-                />
-              )}
-            </div>
-            <p className="small muted" id="scan-crop-hint">
-              Tap the bird so the box sits on it. A tight box gives much better answers for distant birds.
-              With a keyboard, use the arrow keys to move the box and plus or minus to resize it.
-            </p>
-            <label className="field">
-              <span>Box size</span>
-              <input
-                type="range"
-                min={15}
-                max={100}
-                value={Math.round(crop.size * 100)}
-                onChange={(e) => {
-                  setCrop((c) => ({ ...c, size: Number(e.target.value) / 100 }));
-                  runIdRef.current += 1;
-                  setBusy(false);
-                  setResults(null);
-                  setStatus('');
-                }}
-              />
-            </label>
-            <div className="row-start">
-              <button className="btn btn--primary" onClick={() => void identify()} disabled={busy} aria-busy={busy}>
-                {busy ? 'Working…' : 'Identify this bird'}
-              </button>
-              <button className="btn" onClick={() => fileInputRef.current?.click()}>
-                Use another photo
-              </button>
-            </div>
-          </div>
-        )}
-
-        <p className="small muted field-status" role="status" aria-live="polite">
-          {status}
-        </p>
-
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
-
-        {notSure && (
-          <p className="empty-inline">
-            Not sure. The best guess is only {Math.round((topScore ?? 0) * 100)}% confident, so it may not be one
-            of the dex birds. Try a tighter box or a sharper photo.
-          </p>
-        )}
-
-        {results && (
-          <>
-            <div className="block-h">
-              <h2 className="h2">Best guesses</h2>
-              <span className="small muted">
-                {likelyCount} likely · {results.length - likelyCount} possibly
-              </span>
-            </div>
-            <ul className="rows" aria-live="polite" aria-busy={busy}>
-              {results.map((r) => {
-                const sp = byId.get(r.id);
-                if (!sp) return null;
-                const score = Math.round(r.score * 100);
-                const band = r.score >= LIKELY ? 'likely' : 'possibly';
-                const state = logged[sp.id];
-                return (
-                  <li className="hit" key={r.id}>
-                    <Link className="row-thumb" to={`/bird/${sp.id}`} aria-label={`Open ${sp.name}`}>
-                      <SpeciesImage sp={sp} />
-                    </Link>
-                    <span className="row-main">
-                      <strong>{sp.name}</strong>
-                      <span className="small muted">
-                        {score}% sure ·{' '}
-                        <span className={`hit-band hit-band--${band}`}>{band}</span>
-                        {seen.has(sp.id) ? '' : '. New for your dex!'}
-                      </span>
-                      <span className="meter meter--thin" style={{ '--p': `${score}%` } as CSSProperties}>
-                        <span />
-                      </span>
-                    </span>
-                    <button
-                      className="btn btn--small"
-                      onClick={() => void addToDex(sp)}
-                      disabled={state === 'saved' || savingId !== null}
-                      aria-label={
-                        state === 'saved' ? `${sp.name} added to your dex` : `Add ${sp.name} to your dex`
-                      }
-                    >
-                      {state === 'saved' ? 'Added' : savingId === sp.id ? 'Saving…' : 'Add to dex'}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-
-        <p className="small muted field-footnote">
-          Photo ID uses BioCLIP (Imageomics Institute, MIT licence) running on your phone. The first scan downloads
-          the model (about {PHOTO_MODEL_MB} MB, best on Wi-Fi), then it works offline. In testing it named the right
-          bird first about 6 times in 10, and 8 in 10 when it was very sure, so compare with the photos before you
-          log.
-        </p>
+        <p className="scan-foot">{scanFootnote(info)}</p>
       </div>
-    </>
+    </div>
   );
+}
+
+function makeYours(photo: Chosen, b: Box, whole: boolean) {
+  const img = new Image(); img.src = photo.url;
+  const n = 240, c = document.createElement('canvas'); c.width = c.height = n;
+  const cx = c.getContext('2d');
+  if (!cx) return '';
+  cx.imageSmoothingQuality = 'high';
+  if (whole) {
+    const k = n / Math.max(photo.W, photo.H), w = photo.W * k, h = photo.H * k;
+    cx.fillStyle = '#000'; cx.fillRect(0, 0, n, n); cx.drawImage(img, (n - w) / 2, (n - h) / 2, w, h);
+  } else {
+    const side = b.s * shortOf(photo);
+    cx.drawImage(img, b.cx * photo.W - side / 2, b.cy * photo.H - side / 2, side, side, 0, 0, n, n);
+  }
+  try { return c.toDataURL('image/jpeg', 0.85); } catch { return ''; }
 }

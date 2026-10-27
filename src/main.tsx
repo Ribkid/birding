@@ -5,6 +5,8 @@ import App from './App';
 import './styles/app.css';
 import './styles/look.css';
 import './styles/motion.css';
+import './screens/screens.css';
+import './screens/rest.css';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root missing from index.html');

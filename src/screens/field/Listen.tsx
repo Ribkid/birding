@@ -7,6 +7,7 @@ import { SpeciesImage } from '../../components/SpeciesImage';
 import { loadListenModel, setLocation, startListening, stopListening } from '../../core/listen.js';
 import { errorText, logSighting } from './sighting';
 import './field.css';
+import './calls.css';
 
 // The v1 copy quotes about 60 MB for the first sound-model download.
 const LISTEN_MODEL_MB = 60;

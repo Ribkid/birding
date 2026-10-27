@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../components/Icon';
 import {
   SightingFields,
@@ -13,7 +13,13 @@ import './lists.css';
 
 export default function AddSighting() {
   const navigate = useNavigate();
-  const [draft, setDraft] = useState<SightingDraft>(() => emptyDraft());
+  const [params] = useSearchParams();
+  const [draft, setDraft] = useState<SightingDraft>(() => {
+    const d = emptyDraft();
+    const species = Number(params.get('species'));
+    if (species && Number.isFinite(species)) d.speciesId = species;
+    return d;
+  });
   const [error, setError] = useState('');
   const [status, setStatus] = useState('No location yet');
   const [locating, setLocating] = useState(false);

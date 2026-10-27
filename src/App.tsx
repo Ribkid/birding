@@ -71,6 +71,8 @@ export default function App() {
 
           <Route path="/learn" element={<Learn />} />
           <Route path="/learn/play/:pack" element={<LearnPlay />} />
+          <Route path="/learn/daily" element={<LearnPlay fixedPack="daily" />} />
+          <Route path="/learn/deck" element={<LearnPlay fixedPack="deck" />} />
           <Route path="/quiz" element={<Navigate to="/learn" replace />} />
 
           <Route path="/lists" element={<Lists />} />

@@ -23,6 +23,7 @@ interface AccountUser {
 
 interface LeaderRow {
   rank: number;
+  public_id?: string | null;
   display_name: string;
   avatar_species_id?: number | null;
   outings: number;
@@ -295,29 +296,36 @@ export default function Leaderboard() {
     return parts.length ? ` · ${Number(row.bird ?? 0)} birds, ${parts.join(', ')}` : '';
   };
 
-  const renderRow = (row: LeaderRow) => (
-    <li
-      key={`${row.rank}-${row.display_name}`}
-      className={`lb-row ${row.is_me ? 'lb-row--me' : ''}`}
-      aria-current={row.is_me ? true : undefined}
-    >
-      <span className="lb-rank">{row.rank}</span>
-      <LeaderAvatar speciesId={row.avatar_species_id} name={row.display_name} />
-      <span className="row-main">
-        <strong>
-          {row.display_name}
-          {row.is_me && <span className="lb-you">You</span>}
-        </strong>
-        <span className="small muted">
-          {plural(row.outings, 'outing')} · {plural(row.badges, 'badge')}
-          {kindLine(row)}
+  const renderRow = (row: LeaderRow) => {
+    const inner = (
+      <>
+        <span className="lb-rank">{row.rank}</span>
+        <LeaderAvatar speciesId={row.avatar_species_id} name={row.display_name} />
+        <span className="row-main">
+          <strong>
+            {row.display_name}
+            {row.is_me && <span className="lb-you">You</span>}
+          </strong>
+          <span className="small muted">
+            {plural(row.outings, 'outing')} · {plural(row.badges, 'badge')}
+            {kindLine(row)}
+          </span>
         </span>
-      </span>
-      <span className="row-n" aria-label={`${row.species} ${what}`}>
-        {row.species}
-      </span>
-    </li>
-  );
+        <span className="row-n" aria-label={`${row.species} ${what}`}>
+          {row.species}
+        </span>
+      </>
+    );
+    return (
+      <li
+        key={`${row.rank}-${row.display_name}`}
+        className={`lb-row ${row.is_me ? 'lb-row--me' : ''}`}
+        aria-current={row.is_me ? true : undefined}
+      >
+        {row.public_id ? <Link className="lb-link" to={`/u/${row.public_id}`}>{inner}</Link> : <span className="lb-link">{inner}</span>}
+      </li>
+    );
+  };
 
   const topRows = rows?.filter((row) => row.rank <= 50 || !row.is_me) ?? [];
   const meBelow = rows?.find((row) => row.is_me && row.rank > 50);
@@ -325,7 +333,7 @@ export default function Leaderboard() {
 
   const header = (
     <header className="page-head page-head--back">
-      <Link className="iconbtn" to="/badges" aria-label="Back to badges">
+      <Link className="iconbtn" to="/me" aria-label="Back to Me">
         <Icon name="back" />
       </Link>
       <h1>Leaderboard</h1>

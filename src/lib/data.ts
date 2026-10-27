@@ -136,14 +136,14 @@ export interface DailyState {
 }
 export interface RoundState {
   mode: string;
-  pack: string | null;
-  kind: string;
+  pack?: string | null;
+  kind?: string;
   qs: QuizQuestion[];
   i: number;
   score: number;
-  prefs: LearnPrefs;
-  practice: boolean;
-  testId: number | null;
+  prefs?: LearnPrefs;
+  practice?: boolean;
+  testId?: number | null;
   daily?: boolean;
   date?: string;
   endsAt?: number;
@@ -153,7 +153,7 @@ export interface RoundState {
   shown?: boolean;
   newBest?: boolean;
   deck?: boolean;
-  queue?: { id: number; skill: 'look' | 'call'; reps: number }[];
+  queue?: { id: number; skill: 'look' | 'call'; reps: number; box?: number; due?: number }[];
   total?: number;
   n?: number;
   tally?: { knew: number; unsure: number; missed: number };
