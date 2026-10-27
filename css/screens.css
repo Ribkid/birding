@@ -415,7 +415,8 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 .stats-page .statgrid b { display: inline-block; justify-self: start; }
 .stats-page .block { margin: var(--sp-4) var(--sp-4) 0; padding: 0 var(--sp-4) var(--sp-4); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
 .stats-page .block > .h2 { margin: 0; padding: var(--sp-4) 0 var(--sp-3); }
-.stats-page .spots li:last-child { border-bottom: 0; }
+.stats-page :is(.spots, .rows) li:last-child, .stats-page .rows li:last-child .row { border-bottom: 0; }
+.stats-page .rows .num { font: 600 var(--fs-4)/1 var(--stamp); color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .stats-page .block:last-child { margin-bottom: var(--sp-5); }
 :root[data-theme="outdoor"] .stats-page :is(.block, .statgrid div) { box-shadow: var(--shadow-1); }
 .gkind + .gkind { margin-top: var(--sp-5); }

@@ -47,7 +47,7 @@ export function renderStats(ctx) {
     <section class="block"><h2 class="h2">Days out</h2><p class="small muted">The last 26 weeks. Darker squares mean more species that day.</p>${heatmap(perDay, now)}
       ${bestDay ? `<p class="small">Best day: <strong>${bestDay[1].size} species</strong> on ${fmtDate(bestDay[0])}.</p>` : ''}</section>
     ${topPlaces.length ? `<section class="block"><h2 class="h2">Top places</h2><ul class="spots">${topPlaces.map(([p, set]) => `<li><span>${esc(p)}</span><span class="num">${set.size}</span></li>`).join('')}</ul></section>` : ''}
-    ${topBirds.length ? `<section class="block"><h2 class="h2">Most logged</h2><ul class="spots">${topBirds.map(([id, n]) => `<li><a href="#/bird/${id}">${esc(byId.get(id)?.name)}</a><span class="num">${n}</span></li>`).join('')}</ul></section>` : ''}
+    ${topBirds.length ? `<section class="block"><h2 class="h2">Most logged</h2><ul class="rows">${topBirds.filter(([id]) => byId.get(id)).map(([id, n]) => `<li><a class="row" href="#/bird/${id}" data-tile="${id}"><span class="row-thumb">${ctx.birdImg(byId.get(id), 'small', '', { alt: '' })}</span><span class="row-main"><strong>${esc(byId.get(id).name)}</strong></span><span class="num">${n}<span class="sr-only"> ${n === 1 ? 'sighting' : 'sightings'}</span></span></a></li>`).join('')}</ul></section>` : ''}
     <section class="block"><h2 class="h2">Dex progress by group</h2>${groupBars(ctx, seen)}</section></div>`;
   view.onclick = null; view.onchange = null;
   if (!play) return;
