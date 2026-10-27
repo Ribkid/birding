@@ -4,6 +4,7 @@ import { KINDS, type ScanResult } from '../../lib/data';
 import { useSeen } from '../../lib/hooks';
 import { resizeImage } from '../../core/profile.js';
 import { Icon } from '../../components/Icon';
+import { countUp } from '../../lib/motion';
 import {
   photoIdInfo, identifyScan, modelCached, ensureModel, photoModelMb, scanSubject, scanFootnote,
   topResults, scanHeadline, scanAdvice, bandLevel, bandWord, pct, words, article, firstSentence,
@@ -15,6 +16,12 @@ import './scan.css';
 
 type Chosen = ScanPhoto;
 type Box = ScanBox;
+
+function RefTile({ item, name }: { item?: { src: string } | null; name: string }) {
+  const [failed, setFailed] = useState(!item);
+  if (!item || failed) return <span className="scan-tile-missing" />;
+  return <img src={item.src} alt={`${name}, reference photo`} loading="lazy" decoding="async" onLoad={(e) => e.currentTarget.classList.add('in')} onError={() => setFailed(true)} />;
+}
 
 const GalleryIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M6.5 16.5l4-4.5 3 3 2-2 2.5 3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="15.5" cy="9" r="1.5" fill="currentColor" /></svg>
@@ -48,6 +55,7 @@ export default function Scan() {
   const [error, setError] = useState('');
   const [needsReload, setNeedsReload] = useState(false);
   const [at, setAt] = useState(S.at);
+  const sure = result ? Math.min(99, Math.max(1, Math.round((result.results[0]?.p || 0) * 100))) : 0;
   const stageRef = useRef<HTMLDivElement>(null);
   const workRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLElement>(null);
@@ -55,6 +63,8 @@ export default function Scan() {
   const [freshResult, setFreshResult] = useState(false);
   const [land, setLand] = useState(false);
   const [landTick, setLandTick] = useState(0);
+  const [rise, setRise] = useState(false);
+  const ringNRef = useRef<HTMLElement>(null);
   const pts = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{ mode: 'move' | 'resize' | 'pinch'; start: any } | null>(null);
   const [activeHandle, setActiveHandle] = useState('');
@@ -74,6 +84,13 @@ export default function Scan() {
     const timer = window.setTimeout(() => setLand(false), 700);
     return () => window.clearTimeout(timer);
   }, [landTick]);
+
+  useEffect(() => {
+    if (!rise) return;
+    const start = window.setTimeout(() => { void countUp(ringNRef.current, 0, sure, { delay: 260, duration: 820 }); }, 60);
+    const end = window.setTimeout(() => setRise(false), 1300);
+    return () => { window.clearTimeout(start); window.clearTimeout(end); };
+  }, [rise, sure]);
 
   useEffect(() => {
     if (!freshResult) return;
@@ -195,6 +212,7 @@ export default function Scan() {
       setLogAt(logged);
       setYours(makeYours(photo, box, whole));
       setFreshResult(true);
+      setRise(true);
       setStatus('');
     } catch (err: any) {
       if (currentFile.current !== file || run !== identifyRun.current) return;
@@ -293,10 +311,13 @@ export default function Scan() {
   };
 
   const top = result ? topResults(result).slice(0, 3) : [];
-  const lead = result?.band === 'likely' ? 1 : result?.band === 'possibly' ? 2 : 0;
-  const headline = result ? scanHeadline(result) : '';
+  const band = result ? (result.band === 'possibly' && top.length < 2 ? 'unsure' : result.band) : '';
+  const lead = band === 'likely' ? 1 : band === 'possibly' ? 2 : 0;
+  const headlineNode = !result ? null
+    : band === 'likely' ? <><span className="scan-band">Likely<span className="sr-only">:</span></span> <span className="scan-verdict-name">{top[0]?.sp.name}</span></>
+    : band === 'possibly' ? <><span className="scan-band">Possibly</span> <span className="scan-verdict-name">{top[0]?.sp.name} or {top[1]?.sp.name}</span></>
+    : <span className="scan-verdict-name">Can't tell from this photo</span>;
   const advice = result ? scanAdvice(result, { whole: result.whole, multi, kind, known: info }) : '';
-  const sure = result ? Math.min(99, Math.max(1, Math.round((result.results[0]?.p || 0) * 100))) : 0;
   const boxAt = photo ? boxPct(photo, box) : undefined;
 
   useEffect(() => {
@@ -317,10 +338,10 @@ export default function Scan() {
     const credits = refs.filter((p2: any) => p2.credit).map((p2: any) => String(p2.credit).slice(0, 40));
     const level = bandLevel(x.p, result.bands);
     return (
-      <article key={sp.id} className={`scan-card kind--${sp.kind} ${i < lead ? 'scan-card--lead' : ''}`}>
+      <article key={sp.id} className={`scan-card kind--${sp.kind} ${i < lead ? 'scan-card--lead' : ''}${rise ? ' scan-rise' : ''}`} style={{ '--i': i } as CSSProperties}>
         <div className="scan-strip">
           <figure className="scan-yours">{yours ? <img src={yours} alt="Your photo" /> : <span className="scan-tile-missing" />}<figcaption>Yours</figcaption></figure>
-          {[0, 1].map((j) => refs[j] ? <img key={j} src={refs[j].src} alt={`${sp.name}, reference photo`} loading="lazy" decoding="async" /> : <span key={j} className="scan-tile-missing" />)}
+          {[0, 1].map((j) => <RefTile key={j} item={refs[j]} name={sp.name} />)}
         </div>
         <div className="scan-card-body">
           {credits.length > 0 && <p className="scan-credit">Photos: {words(credits, 'and')}{refs.some((p2: any) => p2.from && p2.credit) ? ` (${refs.find((p2: any) => p2.credit)?.from || ''})` : ''}</p>}
@@ -406,22 +427,22 @@ export default function Scan() {
           {needsReload && <button type="button" className="btn btn--primary btn--block" onClick={() => window.location.reload()}>Reload BirdyDex</button>}
           {result && top.length > 0 && (
             <>
-              <div className={`scan-verdict-wrap scan-verdict-wrap--${result.band}`}>
-                <div className="scan-ring" aria-hidden="true" style={{ '--p': sure } as CSSProperties}>
+              <div className={`scan-verdict-wrap scan-verdict-wrap--${band}${rise ? ' scan-rise' : ''}`} style={{ '--i': 0 } as CSSProperties}>
+                <div className="scan-ring" aria-hidden="true" style={{ '--p': band === 'unsure' ? 0 : sure } as CSSProperties}>
                   <svg viewBox="0 0 80 80"><circle className="scan-ring-track" cx="40" cy="40" r="34" pathLength="100" /><circle className="scan-ring-fill" cx="40" cy="40" r="34" pathLength="100" /></svg>
-                  {result.band === 'unsure' ? <b className="scan-ring-q">?</b> : <b className="scan-ring-n"><span>{sure}</span><small>%</small></b>}
+                  {band === 'unsure' ? <b className="scan-ring-q">?</b> : <b className="scan-ring-n"><span ref={ringNRef}>{sure}</span><small>%</small></b>}
                 </div>
                 <div className="scan-verdict-text">
-                  <h2 className={`scan-verdict scan-verdict--${result.band}`} id="scan-verdict" tabIndex={-1}>{headline}</h2>
+                  <h2 className={`scan-verdict scan-verdict--${band}`} id="scan-verdict" tabIndex={-1}>{headlineNode}</h2>
                   <p className="scan-next">{advice}</p>
                 </div>
               </div>
               <div className="scan-cards">
                 {top.slice(0, lead).map(renderCard)}
-                {top.length > lead && <h3 className="scan-also">{lead ? 'Also worth comparing' : 'Closest matches'}</h3>}
+                {top.length > lead && <h3 className={`scan-also${rise ? ' scan-rise' : ''}`} style={{ '--i': 1 } as CSSProperties}>{lead ? 'Also worth comparing' : 'Closest matches'}</h3>}
                 {top.slice(lead).map((x: any, i: number) => renderCard(x, lead + i))}
               </div>
-              <section className="scan-none" aria-labelledby="scan-none-h">
+              <section className={`scan-none${rise ? ' scan-rise' : ''}`} style={{ '--i': 3 } as CSSProperties} aria-labelledby="scan-none-h">
                 <h3 id="scan-none-h">None of these?</h3>
                 <div className="scan-none-acts">
                   <button type="button" className="btn" onClick={() => {
