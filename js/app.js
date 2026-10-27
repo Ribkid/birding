@@ -1665,6 +1665,12 @@ function renderBadges() {
 
 // Settings
 async function renderSettings() {
+  const pack = await loadCallPack();
+  const packKinds = {};
+  for (const id of Object.keys(pack)) { const k = kindOf(Number(id)); packKinds[k] = (packKinds[k] || 0) + 1; }
+  const callsBlurb = Object.keys(pack).length
+    ? `Short clips of the calls of ${Object.entries(packKinds).map(([k, n]) => plural(n, KINDS[k].one, KINDS[k].label.toLowerCase())).join(' and ')}, for the call quiz, the frog board on Listen and each species page. A clip is also kept once you have played it.`
+    : 'The call clips could not be loaded. Check your connection and open Settings again.';
   let usage = '';
   try { const est = await navigator.storage.estimate(); usage = `${(est.usage / 1e6).toFixed(1)} MB used on this phone`; } catch (_) {}
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
@@ -1678,8 +1684,16 @@ async function renderSettings() {
     </section>
     <section class="block">
       <h2 class="h2">Use it offline</h2>
-      <p class="muted small">Download every bird photo and description so the dex works with no signal. Takes about 30 MB. Calls are saved each time you play one.</p>
-      <button class="btn" data-dl>Download for offline</button> <span class="small muted" data-dlstatus></span>
+      <div class="offline-part">
+        <p class="muted small">Download every photo and description so the dex works with no signal. Takes about 30 MB.</p>
+        <button class="btn" data-dl>Download photos for offline</button> <span class="small muted" data-dlstatus role="status"></span>
+      </div>
+      <div class="offline-part" data-callpack>
+        <p class="muted small">${callsBlurb}</p>
+        <div class="callpack-ctl" data-callctl aria-live="polite"></div>
+        <div class="meter meter--thin hidden" data-callprog style="--p:0%"><span></span></div>
+        <p class="small muted" data-callstatus role="status"></p>
+      </div>
     </section>
     <section class="block">
       <h2 class="h2">Send to eBird</h2>
@@ -1694,7 +1708,7 @@ async function renderSettings() {
     </section>
     <section class="block">
       <h2 class="h2">About</h2>
-      <p class="small">Photos come from Wikipedia, Wikimedia Commons and iNaturalist contributors (via the Atlas of Living Australia), each credited on its page. Each species' write-up lists the sources it is based on. Calls are from iNaturalist (via the ALA) and Wikimedia Commons. Maps &copy; OpenStreetMap contributors; satellite imagery &copy; Esri, Maxar and Earthstar Geographics.</p>
+      <p class="small">Photos come from Wikipedia, Wikimedia Commons and iNaturalist contributors (via the Atlas of Living Australia), each credited on its page. Each species' write-up lists the sources it is based on. Calls are from iNaturalist (via the ALA) and Wikimedia Commons. The clips saved for offline are shortened, level-matched copies of iNaturalist recordings, each credited where it plays. Maps &copy; OpenStreetMap contributors; satellite imagery &copy; Esri, Maxar and Earthstar Geographics.</p>
       <p class="small">Hotspots, seasons and rarity come from Atlas of Living Australia records for SEQ since 2016 (including eBird and BirdLife Australia data). Birds: 40,000+ records is Common, 15,000+ Fairly common, 4,000+ Uncommon, 800+ Scarce and fewer is Rare. Other animals and plants are recorded far less often than birds, so each kind is ranked against its own kind: the most-recorded fifth of that kind is Common, the next fifth Fairly common, and so on down to Rare. Seasons are also compared within each kind. Record counts lean towards easy-to-see species and popular spots, so treat rarity as a guide.</p>
       <p class="small muted">Version 3.0</p>
     </section>
@@ -1703,6 +1717,7 @@ async function renderSettings() {
       <button class="btn btn--danger btn--quiet" data-wipe>Delete all my sightings</button>
     </section>`;
   renderAccountSection($('[data-account]', view));
+  wireCallPack();
   view.onchange = async e => {
     if (e.target.matches('[data-colour]')) { state.settings.colourUnseen = e.target.checked; await db.kvSet('settings', state.settings); }
     if (e.target.matches('[data-theme]')) { state.settings.theme = e.target.value; applyTheme(); await db.kvSet('settings', state.settings); }
@@ -1750,6 +1765,42 @@ async function renderSettings() {
       await db.kvSet('activeOuting', null);
       await loadData(); toast('All sightings deleted'); location.hash = '#/dex';
     }
+  };
+}
+// Settings: "Save calls for offline". The state comes from Cache Storage each time, so it survives a reload.
+async function wireCallPack() {
+  const ctl = $('[data-callctl]', view), status = $('[data-callstatus]', view), prog = $('[data-callprog]', view);
+  if (!ctl) return;
+  const mb = b => `${Math.max(1, Math.round(b / 1e6))} MB`;
+  const show = async () => {
+    const st = await callPackStatus();
+    if (!ctl.isConnected || !st.total) return;
+    if (st.saved >= st.total) {
+      ctl.innerHTML = `<p class="callpack-done" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Calls saved for offline: ${st.total} clips, ${(st.bytes / 1e6).toFixed(1)} MB</span></p>`;
+      status.textContent = '';
+      return;
+    }
+    const left = st.bytes - st.savedBytes;
+    ctl.innerHTML = `<button class="btn" data-calls-dl>${st.saved ? `Save the rest of the calls (about ${mb(left)})` : `Save calls for offline (about ${mb(st.bytes)})`}</button>`;
+    status.textContent = st.saved ? `${st.saved} of ${st.total} clips are on this phone already.` : '';
+  };
+  await show();
+  ctl.onclick = async e => {
+    const b = e.target.closest('[data-calls-dl]');
+    if (!b || b.disabled) return;
+    if (!navigator.onLine) { status.textContent = 'You are offline. Connect to the internet, then save the calls.'; return; }
+    b.disabled = true; b.textContent = 'Saving calls…';
+    prog.classList.remove('hidden');
+    let last = 0;
+    const res = await saveCallPack((d, t) => {
+      prog.style.setProperty('--p', `${Math.round(d / t * 100)}%`);
+      // Announce every 10 per cent or so, not every clip.
+      if (d === t || d - last >= t / 10) { last = d; status.textContent = `Saving calls: ${d} of ${t}`; }
+    }).catch(() => ({ failed: -1 }));
+    prog.classList.add('hidden');
+    await show();
+    if (res.failed) status.textContent = res.failed > 0 ? `${res.failed} clips didn't download. Check your connection and try again.` : 'Saving calls failed. Check your connection and try again.';
+    else { navigator.storage?.persist?.(); $('.callpack-done', ctl)?.focus(); }
   };
 }
 const blobToDataUrl = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
