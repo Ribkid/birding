@@ -737,23 +737,76 @@ Duplicate keys can happen:
 
 ## Status
 
-Tier 1 fixed (items 1–17), each verified against the current code before the fix and committed separately or as a small related group:
+Working tree is on `port-fixes`; nothing was pushed or merged. Every listed item was checked against the current code before being changed. `npm run build` and `npm test` pass at HEAD, and a production preview was smoke-tested on `#/dex`, cold `#/learn`, cold `#/learn/daily`, `#/badges`, `#/map`, `#/settings` and `#/scan` with no console errors.
 
-- 1 — `6d6e167`: editing a sighting now spreads the whole stored record (`uid`, `updatedAt`, `acc`, `outingUid`, …) and only writes `notes`; legacy `note` is mapped on read. Added `src/__tests__/sighting.test.ts`.
-- 2 — `ca001d5`: Learn gates `packProgress()` on `ready`, `learn.js` is null-safe, a loading shell renders before the hub, and `src/components/ErrorBoundary.tsx` wraps the routes.
-- 3 — `4b3d6ae`: `src/main.tsx` now imports stylesheets in v1's order before `App`; dist CSS has `.btn{display:inline-flex` before `.me-join-in{` and `.lq-act{`.
-- 4 and 5 — `0ba446c`: `restart`, `startWithIds`, `pick`, `next` and `play` are declared before every early return; rapid-fire resets its clock on a new round, finishes in an effect, and Practise uses a photo round.
-- 6 — `e876342`: media and call players are keyed per question/card, the player resets on clip change and when loading, and changing questions stops the old audio. Untested by browser here; code path checked.
-- 7 and 8 — `1f0280f`: LearnPlay awaits `learnReady`, `loadSeq`, `loadExtras` and `cachedIndex`, then reads sightings from IndexedDB before building a round; route changes reset error/game.
-- 9 and 10 — `a5b23cc`: the service worker uses `birddex-calls` and fetches call clips whole by URL (no Range forwarding), so 206 responses are never sent to `cache.put`.
-- 11 — `135b5ec`: `.bin` model parts bypass the worker, `/models/` and `/vendor/` use `birddex-models`, the cache write no longer holds `respondWith`, and old runtime entries are cleaned on activate.
-- 12 — `1f4e24e`: navigations only store good HTML; app URLs replace `/index.html` only when the body has `#root`, and other pages are stored under their own request. Offline fallback checks the request first.
-- 13 — `2ed4fcb`: Wikimedia photos and OSM/ArcGIS tiles are cached with a CORS fetch into `birddex-images` / `birddex-tiles` (tiles trimmed to 3000).
-- 14 — `6b7d042`: Scan's tools, kind chips, Identify button and status now sit outside the centred `.scan-vf`, and `.scan-vf--empty` / `.scan-vf--busy` are applied.
-- 15 — `3b84b54`: added `scanHandoff.ts`; "This one" carries the blob, "Identified from a photo." and auto-location into Add sighting, which previews/replaces/removes the photo, stores it as a photo record (deleting it if save fails), and cancels back to Scan.
-- 16 — `626e666`: Settings has v1's "Delete my account and cloud data" button and confirm sheet, calls core `deleteAccount()`, refuses offline, and reports the v1 messages.
-- 17 — `4524735`: Badges now uses v1's trophy/shelf/emblem markup, section order, earned-first ordering, `is-in` animation and Learning progress; Stats' broken bottom Badges block is removed.
+### Fixed
 
-Status update itself is committed separately after this list.
+- Tier 1, items 1–17: `6d6e167`, `ca001d5`, `4b3d6ae`, `0ba446c` (4+5), `e876342`, `1f0280f` (7+8), `a5b23cc` (9+10), `135b5ec`, `1f4e24e`, `2ed4fcb`, `6b7d042`, `3b84b54`, `626e666`, `4524735`.
+  Sighting edits keep every stored field and use only `notes`; Learn cold-load and render errors are guarded; CSS follows v1 order; results controls and rapid fire work; call questions reset audio; seen rounds and regional data load before a round; the service worker shares the app's calls cache, stores whole clips, keeps model parts single-copy, stores only real app HTML, opens from cache after 4 s, and caches Wikimedia photos/map tiles; Scan's controls no longer overflow, scan hand-off keeps the photo/notes/location, account deletion exists, and Badges uses v1's shelf.
+- 18 — `9ab1e0a`: failed precache files carry forward; a missing index/asset fails the install instead of leaving an empty shell.
+- 19 — `0a824a6`: old release `/assets/` are copied into the new shell before deletion, and a lazy chunk failure tells the user to reload.
+- 20 — `8f2d815`: data reads prefer the current release's shell over the older runtime cache.
+- 21 — `b0839f7`: navigations race the network against a 4 s cache fallback while a late response still refreshes the shell.
+- 22 — `9b1cc4b`: added the service worker `shell-status` / `shell-fill` messages and the "Ready for the field" card with six rows; calls use the shared cache name.
+- 23 — `1ff1e51`: silhouettes and zoom questions gain `is-revealed` after answering.
+- 24 — `ac9a52e`: options use `aria-disabled`, announce right/your answer, feedback is focused and scrolled, question/result headings and the deck back get focus.
+- 25 — `beea41c`: new questions, results and deck cards scroll to the top.
+- 26 — `a98de14`: duel and odd-one-out sides are named after answering.
+- 27 — `fec5463`: the active practice round is held at module level and reused when returning from a species page.
+- 28 — `5f71249`: mode cards show saved best scores/streaks.
+- 29 — `f352964`: added `/learn/test/:id`, the species "Test me on this" link and the mastery mark.
+- 30 — `4623951`: the big call player's glyph is inside an `<svg>`.
+- 31 — `fb33e5b`: deck cards show the real box and habitat names.
+- 32 — `abdfa18`: photo fallback indexes reset for every question/card.
+- 33 — `3187a29`: feedback calls play inline instead of adding a second player.
+- 34 — `db41396`: pack progress only counts species in that pack.
+- 35 — `61e6044`: the deck tile shows when cards exist even if none are due.
+- 36 — `909919a`: a failed recording reports why and reveals the field-notes hint.
+- 37 — `36f1d51`: the newest scan photo wins, stale runs never set a result or log, old object URLs are revoked, and Change photo is disabled while busy.
+- 38 — `e27d028`: Scan keeps its photo and result for 30 minutes across navigation; the dead expiry check is replaced by a real session reset.
+- 39 — `e03afc8`: reference photo credits appear on scan cards.
+- 40 — `cc0902f`: scan result focus/scroll, quarter download statuses, the "Also worth comparing" heading, and Pick a kind / tighter-box movement.
+- 41 — `6b7abfd`: ported v1 crop gestures (anchored corner resize, pinch, small-box class, keyboard steps, whole-photo tightening).
+- 42 — `163404c`: public profiles wait for `authSettled` and re-run on auth changes.
+- 43 — `5c6c7e3`: `me:cloud` is restored from IndexedDB, and a missing public id opens via `myPublicId()`.
+- 44 — `211bc57`: the one-time third-sighting sign-up nudge is ported (`me:nudged`, 20 s hide, announce).
+- 45 and 49 — `eeb71d2`: Me has Not now and the slim "Back up your dex" card; TabBar has the dot, avatar, `tab-ico` wrappers, v1 Learn icon and v1 route→tab mapping with manual `aria-current`.
+- 46 — `0ce8cca`: leaderboard/Settings show profile photos; public profile rings use real totals and "of N".
+- 47 — `28a8090`: avatar upload now opens v1's "Frame your photo" crop sheet; the crop maths feed `squareJpeg`.
+- 48 — `0b2d9e5`: Me and Edit profile subscribe to `onStatus`, and App renders the migrating sync banner.
+- 50 — `2f6a46d`: `HashRouter` disables router transitions and tab navigation runs through `lib/motion.vt()`.
+- 51 — `f03da9c`: added the first-run "Hi Sarah" welcome card, `welcomed` gating and the Settings re-open row.
+- 52 — `57fe300`: the + tab opens v1's Add sheet (Log one sighting / start or resume an outing / Listen / Scan), with a working start-outing form.
+- 53 — `009ff5c`: the "All animals" chip carries `kind--all`.
+- 54 — `6f78805`: Scan's empty state and controls use real SVG icons and the `scan-vf--empty` class.
+- 59 — `ad4423a`: fact feedback shows the source and snake safety line.
+- 60 — `555d446`: offline photo fallback renders field notes as React nodes, not a tofu character.
+- 61 — `7c848e1`: Learn prefs save Show all packs, the off Call card explains itself, idle wording, duel split faces, cover dedupe/framing, and deck add/toast copy.
+- 62 — `3b08c36`: dim follows the box, busy/empty classes, icons, small-box/land classes, kind dots and a plain Anything chip.
+- 63 — `29464be`: the unsure ring, JSX headline spans, `scan-rise`, count-up and reference-image `in`/missing states.
+- 64 — `8944b0f`: clamp keeps a 24 px crop floor.
+- 65 — `9a9fefd`: worker and `/js/` scripts revalidate; Supabase vendor is per-release shell.
+- 66 — `6b25cb1`: cache comments now describe the actual caches.
+- 67 — `8f4d41c`: the map fills the viewport, the text summary is screen-reader-only, and locate is v1's floating button; "New patch here" has its ring.
+- 68 — `a1f29bd`: the repeated "Life list: 25 25" line and period chips are gone.
+- 70 — `5255837`: Bird resets its player/clip state per species, guards late `audioUrl` results, and revokes blob URLs.
+- 71 — `ca4b16f`: the catch-all route shows a real "That page isn't in BirdyDex" message.
+- 72 — `e5f4564`: document title follows the screen h1.
+- 73 — `f08b69e`: Log/Outing dialogs now render on the shared `Sheet`/layer stack.
+- 74 — `5891ab1`: malformed public profile ids are rejected before the UUID RPC.
+- 75 — `85507cb`: profile changes notify every subscriber, not just the first caller.
+- 77 — `543c762`: sign-up/sign-in routes have distinct keys and redirect signed-in users.
+- 78 — `dd09ffc`: Public profile uses `row.is_me` and resets its row when the id changes.
+- 79 — `f8ffb34`: leaderboard row keys prefer `public_id`.
+- 80 — `920fc05`: Me and Public profile hero covers crop full-bleed.
+- 81 — `7959ba7`: Edit profile checks online before the file picker and uses `myName()` as the placeholder.
+- 82 — `2661a9c`: the map layer toggle merges into the latest settings object.
 
-Tier 2 and 3 not started yet; the remaining items are untouched.
+### Partial
+
+- 76 — `846f244`: leaderboard sign-in points at `/me/signin` and `?groups=1` scrolls the Groups section into view. The remaining v1 profile-row/Edit-profile row and Google mark/copy parity were not ported.
+
+### Skipped
+
+- 55 (species page renderBird), 56 (Dex home renderDex), 57 (Settings renderSettings) and 58 (Lists renderLists): these are the four deliberately larger full-page rebuilds. They were not attempted because they are large visual rewrites with high regression risk; the current screens still render and the smaller fixes they cross-reference (back links, /learn copy, Badges learning count) were handled where cheap.
+- 69 (Stats renderStats restyle): skipped as the remaining large visual port. Item 68's wrong text and period chips were fixed; Stats still keeps the first-port card structure, headings and By year section.
