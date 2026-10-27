@@ -233,6 +233,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       if (!alive) return;
       if (r.error) { setError(r.error); return; }
       setGame(r.game);
+      if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
     });
     return () => { alive = false; };
   }, [pack, isDeck, isDaily]);
@@ -255,6 +256,71 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     force();
   }, [game]);
 
+  const current = game?.qs[game?.i ?? 0];
+  const asked = game ? game.qs.filter((q) => q.picked != null) : [];
+  const total = game ? (game.mode === 'rapid' ? asked.length : game.qs.length) : 0;
+  const isOver = !!game && (!current || game.i >= game.qs.length || (game.mode === 'rapid' && rapidLeft <= 0 && current.picked == null));
+
+  // Finish outside render, so restarting a rapid round is never ended by stale state.
+  useEffect(() => {
+    if (!game || game.done || !isOver) return;
+    finish();
+  }, [game, isOver, finish]);
+
+  // These must be declared before any early return: the results screen calls them.
+  const restart = async () => {
+    setGame(null);
+    setError('');
+    setQuickCall(null);
+    const r = isDaily ? newDailyRound() : await newPracticeRound(pack, { seen: seenSet } as any);
+    if (r.error) {
+      setError(r.error);
+      return;
+    }
+    setGame(r.game);
+    if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
+  };
+  const startWithIds = async (ids: number[]) => {
+    setQuickCall(null);
+    const mode = game?.mode === 'rapid' ? 'photo' : pack;
+    const r = await newPracticeRound(mode, { ids, seen: seenSet } as any);
+    if (r.error) {
+      setError(r.error);
+      return;
+    }
+    setGame(r.game);
+    setError('');
+    if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
+  };
+  const next = () => {
+    if (!game) return;
+    setQuickCall(null);
+    game.i += 1;
+    setRevealed(false);
+    force();
+  };
+  const pick = (key: string) => {
+    if (!game || !current || current.picked != null) return;
+    const q = current;
+    const ok = recordAnswer(game, q, key);
+    navigator.vibrate?.(ok ? 30 : [40, 60, 40]);
+    if (game.mode === 'rapid') {
+      const g = game;
+      window.setTimeout(() => {
+        if (g.qs[g.i] === q) { g.i += 1; setRevealed(false); force(); }
+      }, ok ? 450 : 1100);
+    }
+    force();
+  };
+  const play = (which: string) => {
+    if (!current) return;
+    const q = current;
+    const sp = which === 'answer' ? byId.get(q.focus) : byId.get(Number(which));
+    if (!sp) return;
+    const list = which === 'answer' && q.call ? [q.call as CallClip] : Q.callsOf(sp.id);
+    if (list.length) setQuickCall(list[Math.floor(Math.random() * list.length)]);
+  };
+
   if (isDeck) return <Deck onBack={() => navigate('/learn')} />;
 
   if (error) {
@@ -267,48 +333,16 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   }
   if (!ready || !game) return <div className="learn learn--loading" aria-busy="true" />;
 
-  const asked = game.qs.filter((q) => q.picked != null);
-  const total = game.mode === 'rapid' ? asked.length : game.qs.length;
-  const q = game.qs[game.i];
-  if (!q || game.i >= game.qs.length || (game.mode === 'rapid' && rapidLeft <= 0 && q.picked == null)) {
-    if (!game.done) { finishRound(game, total); }
+  if (isOver) {
     return <Results game={game} total={total} onAgain={() => { void restart(); }} onAgainMissed={(ids) => { void startWithIds(ids); }} onHub={() => navigate('/learn')} />;
   }
+
+  const q = current!;
   const picked = q.picked ?? null;
   const right = picked != null && picked === q.answer;
   const roundName = game.daily ? "Today's challenge" : game.testId ? 'Test me' : game.pack ? packBy[game.pack]?.name : MODE_INFO[game.mode] || '';
   const safety = q.safety || (game.pack && packBy[game.pack]?.safety ? Q.SNAKE_RULE : '');
   const sub = q.type === 'duel' ? 'Tap the photo you think it is.' : q.type === 'odd' ? 'Tap the odd one out.' : q.sub || '';
-
-  const pick = (key: string) => {
-    if (q.picked != null) return;
-    const ok = recordAnswer(game, q, key);
-    navigator.vibrate?.(ok ? 30 : [40, 60, 40]);
-    if (game.mode === 'rapid') {
-      const g = game;
-      window.setTimeout(() => {
-        if (g.qs[g.i] === q) { g.i += 1; setRevealed(false); force(); }
-      }, ok ? 450 : 1100);
-    }
-    force();
-  };
-  const next = () => { game.i += 1; setRevealed(false); force(); };
-  const play = (which: string) => {
-    const sp = which === 'answer' ? byId.get(q.focus) : byId.get(Number(which));
-    if (!sp) return;
-    const list = which === 'answer' && q.call ? [q.call as CallClip] : Q.callsOf(sp.id);
-    if (list.length) setQuickCall(list[Math.floor(Math.random() * list.length)]);
-  };
-  const restart = async () => {
-    setGame(null); setError('');
-    const r = isDaily ? newDailyRound() : await newPracticeRound(pack, { seen: seenSet } as any);
-    if (r.error) setError(r.error); else setGame(r.game);
-  };
-  const startWithIds = async (ids: number[]) => {
-    const r = await newPracticeRound(pack, { ids } as any);
-    if (r.error) { setError(r.error); return; }
-    setGame(r.game); setError('');
-  };
 
   return (
     <div className={`lq-screen lq-screen--${game.mode}${game.kind && game.kind !== 'animals' ? ` kind--${game.kind}` : ''}`} data-own-topbar>
