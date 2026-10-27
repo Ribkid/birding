@@ -2,6 +2,7 @@ import { useEffect, useMemo, useReducer, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { KINDS, byId, kindsPresent, ofKind, type Species } from '../../lib/data';
 import { useOutings, useSightings, useMedia } from '../../lib/hooks';
+import { db } from '../../core/db.js';
 import { usePatches } from '../lists/shared';
 import { totals, badges as computeBadges, MONTHS } from '../../core/stats.js';
 import { learnReady, learnStats } from '../../core/learn.js';
@@ -49,11 +50,16 @@ export default function Me() {
   const patches = usePatches();
   const navigate = useNavigate();
   const [profileMsg, setProfileMsg] = useState('');
+  const [notNow, setNotNow] = useState(false);
   useMedia();
 
   useEffect(() => {
     void initProfile(() => force());
     void learnReady().then(() => force()).catch(() => {});
+    let alive = true;
+    void db.kvGet('me:notnow').then((value) => { if (alive) setNotNow(!!value); }).catch(() => {});
+    const off = db.onChange((name: string) => { if (name === 'kv:me:notnow') void db.kvGet('me:notnow').then((value) => { if (alive) setNotNow(!!value); }); });
+    return () => { alive = false; off(); };
   }, []);
 
   const prof = getProfile();
@@ -138,7 +144,16 @@ export default function Me() {
       ) : (
         <>
           <header className="page-head me-head"><h1>Me</h1><Link className="iconbtn" to="/settings" aria-label="Settings"><svg viewBox="0 0 24 24">{I.gear}</svg></Link></header>
-          {configured && (
+          {configured && (notNow ? (
+            <section className="me-join me-join--slim" aria-labelledby="me-join-h">
+              <div className="me-fan me-fan--mini" aria-hidden="true">{fan.map((sp, i) => <span className="me-fan-card" key={i}><SpeciesImage sp={sp} /></span>)}</div>
+              <div className="me-join-body">
+                <h2 className="me-join-h" id="me-join-h">Back up your dex</h2>
+                <p>{seen.size} species saved on this phone only.</p>
+              </div>
+              <Link className="btn me-join-go" to="/me/signup">Sign up</Link>
+            </section>
+          ) : (
             <section className="me-join" aria-labelledby="me-join-h">
               <div className="me-fan" aria-hidden="true">{fan.map((sp, i) => <span className="me-fan-card" key={i}><SpeciesImage sp={sp} /></span>)}</div>
               <div className="me-join-body">
@@ -146,9 +161,10 @@ export default function Me() {
                 <p className="me-join-p">Sign up free to back up your dex, use it on any phone, join the leaderboard and see friends' profiles.</p>
                 {seen.size > 0 && <p className="me-join-note"><svg viewBox="0 0 24 24">{I.cloud}</svg><span>{seen.size} species {seen.size === 1 ? 'is' : 'are'} saved on this phone only.</span></p>}
                 <div className="me-join-acts"><Link className="btn me-join-go" to="/me/signup">Sign up free</Link><Link className="btn me-join-in" to="/me/signin">Sign in</Link></div>
+                <button type="button" className="btn btn--quiet me-join-later" onClick={async () => { await db.kvSet('me:notnow', true); setNotNow(true); }}>Not now</button>
               </div>
             </section>
-          )}
+          ))}
         </>
       )}
 
