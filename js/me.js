@@ -154,7 +154,7 @@ const dayPick = (salt = 0) => {
 
 function hero({ cover, av, name, sub = '', top = '', back = '' }) {
   return `<section class="me-hero" data-hero-zone>
-    <div class="me-cover" data-hero-frame>${cover ? ctx.birdImg(cover, 'large') : ''}</div>
+    <div class="me-cover" data-hero-frame aria-hidden="true">${cover ? ctx.birdImg(cover, 'large') : ''}</div>
     <div class="me-scrim" aria-hidden="true"></div>
     ${back}${top}
     <div class="me-id">

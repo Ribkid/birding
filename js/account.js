@@ -37,7 +37,7 @@ export function avatarHtml({ spId = null, path = null, name = '', cls = 'acct-av
   const sp = byId.get(spId);
   const inner = path ? `<img src="${ctx.esc(avatarUrl(path))}" alt="" loading="lazy" decoding="async" onerror="this.remove()">`
     : sp ? ctx.birdImg(sp, size) : `<span class="acct-av-letter">${ctx.esc((name || '?').slice(0, 1).toUpperCase())}</span>`;
-  return `<span class="${cls}${path ? ' acct-av--photo' : ''}">${inner}</span>`;
+  return `<span class="${cls}${path ? ' acct-av--photo' : ''}" aria-hidden="true">${inner}</span>`; // the name always sits beside it
 }
 // ---------- dex header chip ----------
 const shownName = () => prof?.displayName || user()?.name || (user()?.email || '').split('@')[0] || 'You';
