@@ -223,11 +223,16 @@ export default function Scan() {
     } catch (err: any) {
       if (currentFile.current !== file || run !== identifyRun.current) return;
       const raw = String(err?.message || err);
-      if (/dynamically imported module|Importing a module script failed|module script failed/i.test(raw)) {
+      const importFailed = /dynamically imported module|Importing a module script failed|module script failed/i.test(raw);
+      // Only a new release makes a reload help. A module that is just not saved yet (offline) needs the network,
+      // which is v1's message for a failed fetch.
+      const updated = importFailed && await releaseChanged();
+      if (currentFile.current !== file || run !== identifyRun.current) return;
+      if (updated) {
         setError('BirdyDex was updated. Reload to use Scan.');
         setNeedsReload(true);
       } else {
-        const msg = /offline-first-run|Failed to fetch|NetworkError|network/i.test(raw)
+        const msg = importFailed || /offline-first-run|Failed to fetch|NetworkError|network/i.test(raw)
           ? `Photo ID needs a one-time download of about ${MB} MB. Connect to the internet (Wi-Fi is best) and try again.`
           : `Photo ID couldn't run: ${raw}`;
         setError(msg);
@@ -479,6 +484,24 @@ export default function Scan() {
       </div>
     </div>
   );
+}
+
+// True when a newer release is installed or deployed: its index.html loads a different entry chunk from the one
+// this page runs. The service worker answers with the shell it has installed (also offline); without one this is
+// the server's copy. Any doubt counts as no update.
+async function releaseChanged() {
+  const entry = (html: string) => /<script\b[^>]*\btype="module"[^>]*\bsrc="([^"]+)"/.exec(html)?.[1]
+    ?? /<script\b[^>]*\bsrc="([^"]+)"[^>]*\btype="module"/.exec(html)?.[1];
+  const mine = document.querySelector('script[type="module"][src]')?.getAttribute('src');
+  if (!mine) return false;
+  try {
+    const res = await fetch('/index.html', { cache: 'no-store' });
+    if (!res.ok) return false;
+    const live = entry(await res.text());
+    return !!live && live !== mine;
+  } catch {
+    return false;
+  }
 }
 
 function makeYours(photo: Chosen, b: Box, whole: boolean) {

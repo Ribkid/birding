@@ -95,4 +95,29 @@ describe('Scan', () => {
     const box = document.querySelector('[data-box]') as HTMLElement;
     expect({ left: box.style.left, top: box.style.top, width: box.style.width, height: box.style.height }).toEqual(at);
   });
+
+  describe('a module that will not load (offline-sw new 3)', () => {
+    const DOWNLOAD = 'Photo ID needs a one-time download of about 104 MB. Connect to the internet (Wi-Fi is best) and try again.';
+    const page = (entry: string) => `<!doctype html><head><script type="module" crossorigin src="${entry}"></script></head><body><div id="root"></div></body>`;
+    beforeEach(() => {
+      const script = document.createElement('script');
+      script.type = 'module'; script.src = '/assets/index-OLD.js';
+      document.head.append(script);
+      vi.mocked(scan.modelCached).mockRejectedValueOnce(new TypeError('Failed to fetch dynamically imported module: http://127.0.0.1/vendor/ort/ort.wasm.min.mjs'));
+    });
+    afterEach(() => { document.head.querySelectorAll('script').forEach((s) => s.remove()); vi.unstubAllGlobals(); });
+
+    it.each([
+      ['offline, nothing reachable', () => Promise.reject(new TypeError('Failed to fetch')), DOWNLOAD, false],
+      ['the same release', async () => new Response(page('/assets/index-OLD.js')), DOWNLOAD, false],
+      ['a new release', async () => new Response(page('/assets/index-NEW.js')), 'BirdyDex was updated. Reload to use Scan.', true],
+    ])('%s', async (_, fetcher, message, reload) => {
+      vi.stubGlobal('fetch', vi.fn(fetcher));
+      mount();
+      fireEvent.click(identifyButton());
+      expect((await screen.findByRole('alert')).textContent).toBe(message);
+      expect(screen.queryByText('Reload BirdyDex') !== null).toBe(reload);
+      expect(fetch).toHaveBeenCalledWith('/index.html', { cache: 'no-store' });
+    });
+  });
 });
