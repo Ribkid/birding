@@ -289,7 +289,8 @@ export async function saveCallPack(onProgress) {
 // Audio is fetched whole and kept in the cache so it plays offline later.
 // Our own clips are just returned: the service worker keeps them in the calls cache.
 export async function audioUrl(src) {
-  if (isSameOrigin(src)) return src;
+  // ALA originals stream only: a CORS fetch always fails there and logs an error.
+  if (isSameOrigin(src) || /^https:\/\/images\.ala\.org\.au\//.test(src)) return src;
   try {
     const cache = await caches.open('birddex-audio');
     let res = await cache.match(src);
