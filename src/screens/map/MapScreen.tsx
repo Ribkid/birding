@@ -1293,13 +1293,14 @@ function MapView() {
               {label}
             </button>
           ))}
-          <button type="button" className="chip" onClick={locate}>
-            <Icon name="pin" /> Me
-          </button>
         </div>
 
         <button type="button" className="btn btn--primary map-patch" onClick={openPatch}>
-          New patch here
+          <span className="map-patch-ring" aria-hidden="true" />New patch here
+        </button>
+
+        <button type="button" className="map-fab" aria-label="Go to where I am" onClick={locate}>
+          <Icon name="pin" />
         </button>
 
         <div className="layer-toggle" role="group" aria-label="Map style">
