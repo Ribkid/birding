@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { KINDS, byId, kindsPresent } from '../../lib/data';
+import { avatarUrl } from '../../core/profile.js';
 import {
   client,
   configured,
@@ -26,6 +27,7 @@ interface LeaderRow {
   public_id?: string | null;
   display_name: string;
   avatar_species_id?: number | null;
+  avatar_path?: string | null;
   outings: number;
   badges: number;
   species: number;
@@ -54,11 +56,13 @@ function friendly(error: unknown) {
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
-function LeaderAvatar({ speciesId, name }: { speciesId?: number | null; name: string }) {
+function LeaderAvatar({ speciesId, path, name }: { speciesId?: number | null; path?: string | null; name: string }) {
   const sp = speciesId != null ? byId.get(Number(speciesId)) : undefined;
   return (
-    <span className="acct-av">
-      {sp ? (
+    <span className={`acct-av${path ? ' acct-av--photo' : ''}`}>
+      {path ? (
+        <img src={avatarUrl(path)} alt="" loading="lazy" decoding="async" onError={(e) => e.currentTarget.remove()} />
+      ) : sp ? (
         <SpeciesImage sp={sp} />
       ) : (
         <span className="lb-avatar-letter">{(name || '?').slice(0, 1).toUpperCase()}</span>
@@ -300,7 +304,7 @@ export default function Leaderboard() {
     const inner = (
       <>
         <span className="lb-rank">{row.rank}</span>
-        <LeaderAvatar speciesId={row.avatar_species_id} name={row.display_name} />
+        <LeaderAvatar speciesId={row.avatar_species_id} path={row.avatar_path} name={row.display_name} />
         <span className="row-main">
           <strong>
             {row.display_name}

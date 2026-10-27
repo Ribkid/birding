@@ -33,6 +33,7 @@ import { Icon } from '../../components/Icon';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { deleteAccount as deleteMyAccount } from '../../core/account.js';
 import { ConfirmDialog } from '../lists/shared';
+import { avatarUrl, getMyCloud } from '../../core/profile.js';
 import { FIELD, checkField, fieldJob, fieldJobs, fieldLabel, type FieldKey, type FieldReport, type FieldResult } from './fieldReady';
 import './progress.css';
 
@@ -127,16 +128,20 @@ const blobToDataUrl = (blob: Blob) =>
 
 function AccountAvatar({
   sp,
+  path,
   name,
   big = false,
 }: {
   sp: ReturnType<typeof byId.get> | null;
+  path?: string | null;
   name: string;
   big?: boolean;
 }) {
   return (
-    <span className={`acct-av ${big ? 'acct-av--big' : ''}`}>
-      {sp ? (
+    <span className={`acct-av ${big ? 'acct-av--big' : ''}${path ? ' acct-av--photo' : ''}`}>
+      {path ? (
+        <img src={avatarUrl(path)} alt="" loading="lazy" decoding="async" onError={(e) => e.currentTarget.remove()} />
+      ) : sp ? (
         <SpeciesImage sp={sp} />
       ) : (
         <span className="acct-av-letter">{(name || 'You').slice(0, 1).toUpperCase()}</span>
@@ -666,7 +671,7 @@ export default function Settings() {
     accountBody = (
       <div className="progress-stack">
         <div className="acct-card">
-          <AccountAvatar sp={avatarSp} name={shownName} big />
+          <AccountAvatar sp={avatarSp} path={getMyCloud()?.avatarPath} name={shownName} big />
           <div className="acct-who">
             <strong>{shownName}</strong>
             <span className="small muted">{accountUser.email}</span>

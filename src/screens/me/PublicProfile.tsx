@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { KINDS, byId, kindsPresent, type PublicProfileRow } from '../../lib/data';
+import { KINDS, byId, kindsPresent, ofKind, type PublicProfileRow } from '../../lib/data';
 import { useSeen, useMedia } from '../../lib/hooks';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { CountUp } from '../../components/Motion';
@@ -101,12 +101,13 @@ export default function PublicProfile() {
           <ul className="me-rings" role="list">
             {kindsPresent.map((k) => {
               const n = counts[k] || 0;
-              const total = Math.max(n, 1);
+              const total = ofKind(k).length;
+              const p = total ? Math.max(n ? 0.03 : 0, n / total) : 0;
               return (
                 <li key={k} className={`me-ring-item kind--${k}`}>
-                  <span className="sr-only">{n} {KINDS[k]?.label}</span>
-                  <span className="me-ring" style={{ '--p': (n ? 0.03 : 0) } as React.CSSProperties} aria-hidden="true"><svg viewBox="0 0 48 48"><circle className="me-ring-track" cx="24" cy="24" r="20" /><circle className="me-ring-fill" cx="24" cy="24" r="20" pathLength="100" /></svg><b className="me-ring-n"><CountUp value={n} /></b></span>
-                  <span className="me-ring-l" aria-hidden="true">{KINDS[k]?.label}</span>
+                  <span className="sr-only">{n} of {total} {KINDS[k]?.label.toLowerCase()}</span>
+                  <span className="me-ring" style={{ '--p': p.toFixed(4) } as React.CSSProperties} aria-hidden="true"><svg viewBox="0 0 48 48"><circle className="me-ring-track" cx="24" cy="24" r="20" /><circle className="me-ring-fill" cx="24" cy="24" r="20" pathLength="100" /></svg><b className="me-ring-n"><CountUp value={n} /></b></span>
+                  <span className="me-ring-l" aria-hidden="true">{KINDS[k]?.label}</span><span className="me-ring-of" aria-hidden="true">of {total}</span>
                 </li>
               );
             })}
