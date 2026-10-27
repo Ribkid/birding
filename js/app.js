@@ -559,7 +559,8 @@ function speciesPicker(selectedId) {
       <ul class="picker-results" data-picker-results></ul>
     </div></div>`;
 }
-const pickerChosen = sp => `<div class="chosen">${birdImg(sp, 'small', 'chosen-img')}<div><strong>${esc(sp.name)}</strong><em>${esc(sp.sci)}</em></div><button type="button" class="btn btn--small" data-picker-change>Change</button></div>`;
+// The chosen species shows as a photo card, so she can see at a glance she picked the right one.
+const pickerChosen = sp => `<div class="chosen kind--${sp.kind}">${birdImg(sp, 'large', 'chosen-img', { alt: '' })}<div class="chosen-txt">${band(sp.id, seenSet().has(sp.id))}<strong>${esc(sp.name)}</strong><em>${esc(sp.sci)}</em></div><button type="button" class="btn btn--small chosen-change" data-picker-change aria-label="Change species">Change</button></div>`;
 function matchSpecies(q, limit = 8) {
   q = q.trim().toLowerCase();
   if (!q) return [];
@@ -652,7 +653,7 @@ async function openSightingSheet({ speciesId = null, sightingId = null, autoGps 
         <button type="button" class="btn" data-close>Cancel</button>
         <button type="submit" class="btn btn--primary">${existing ? 'Save changes' : 'Save sighting'}</button>
       </div>
-    </form>`, { onOpen: s => wirePicker(s, sp => fitSheetToKind(s, sp.kind)) });
+    </form>`, { onOpen: s => wirePicker(s, sp => fitSheetToKind(s, sp.kind)), cls: 'sheet-wrap--log' });
   const form = $('[data-form]', sheet);
   const status = $('[data-gps-status]', sheet);
   const toOuting = $('[name=toOuting]', form);
@@ -741,16 +742,17 @@ async function openSightingSheet({ speciesId = null, sightingId = null, autoGps 
 function openPlusSheet() {
   const o = activeOuting();
   const ones = (photoKinds || []).map(k => KINDS[k].one);
+  const all = ones.length && kindsPresent.every(k => photoKinds.includes(k));
+  const tile = (attrs, ic, title, sub, cls = '') => `<${attrs.startsWith('href') ? 'a' : 'button'} class="plus-tile ${cls}" ${attrs}><span class="plus-ic">${ic}</span><strong>${title}</strong><span>${sub}</span></${attrs.startsWith('href') ? 'a' : 'button'}>`;
   const s = openSheet(`<h2 class="sheet-title">Add a sighting</h2>
-    <div class="plus-options">
-      <button class="plus-opt plus-opt--main" data-one>${icon.pencil}<strong>Log one sighting</strong><span>A single sighting with photo, place and notes.</span></button>
-      ${o ? `<button class="plus-opt" data-resume>${icon.outing}<strong>Back to your outing</strong><span>${esc(o.place || 'Current outing')}, started ${o.time}</span></button>`
-          : `<button class="plus-opt" data-outing>${icon.clipboard}<strong>Start or add an outing</strong><span>Tally everything at one place, like an eBird checklist. Works for earlier outings too.</span></button>`}
-      <div class="plus-id">
-        <a class="plus-opt plus-opt--id" href="#/listen" data-close>${icon.mic}<strong>Listen</strong><span>Name birds by their calls</span></a>
-        <a class="plus-opt plus-opt--id" href="#/scan" data-close>${icon.scan}<strong>Scan a photo</strong><span>${ones.length ? `Name ${article(ones[0])} ${esc(listWords(ones, 'or'))} from a photo` : 'Name what you photographed'}</span></a>
-      </div>
-    </div>`);
+    <div class="plus-grid">
+      ${tile('data-one', icon.pencil, 'Log one sighting', 'With photo, place and notes', 'plus-tile--main')}
+      ${o ? tile('data-resume', icon.outing, 'Back to your outing', `${esc(o.place || 'Current outing')}, started ${esc(o.time)}`)
+          : tile('data-outing', icon.clipboard, 'Start an outing', 'Tally everything at one place, like an eBird checklist')}
+      ${tile('href="#/listen" data-close', icon.mic, 'Listen', 'Name birds by their calls')}
+      ${tile('href="#/scan" data-close', icon.scan, 'Scan a photo', all || !ones.length ? 'Name an animal or plant from a photo' : `Name ${article(ones[0])} ${esc(listWords(ones, 'or'))} from a photo`)}
+    </div>
+    ${o ? '' : '<p class="plus-more small muted">Earlier outings can be added too: start one and change its date.</p>'}`, { cls: 'sheet-wrap--plus' });
   s.addEventListener('click', e => {
     if (e.target.closest('[data-one]')) openSightingSheet();
     if (e.target.closest('[data-outing]')) openStartOuting();
@@ -775,7 +777,7 @@ function openStartOuting() {
       </fieldset>
       <p class="form-error" data-error role="alert"></p>
       <div class="row-end"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn--primary" data-go>Start outing</button></div>
-    </form>`);
+    </form>`, { cls: 'sheet-wrap--outing' });
   const form = $('[data-form]', s), status = $('[data-gps-status]', s);
   const isPast = () => {
     const t = new Date(`${form.date.value}T${form.time.value || '00:00'}`).getTime();
@@ -854,7 +856,7 @@ function openFinishOuting(o) {
       <label class="check check--card"><input type="checkbox" name="complete" ${o.complete || !o.endedAt ? 'checked' : ''}><span>I logged every bird I could identify. eBird calls this a complete checklist.</span></label>
       <label class="field"><span>Notes</span><textarea name="notes" rows="2" placeholder="Weather, tide, company…">${esc(o.notes)}</textarea></label>
       <div class="row-end"><button type="button" class="btn" data-close>${o.endedAt ? 'Cancel' : 'Keep going'}</button><button class="btn btn--primary">${o.endedAt ? 'Save details' : 'Finish outing'}</button></div>
-    </form>`);
+    </form>`, { cls: 'sheet-wrap--outing' });
   s.addEventListener('click', async e => {
     if (!e.target.closest('[data-pickmap]')) return;
     const r = await openLocationPicker({ lat: loc.lat, lng: loc.lng, place: $('[name=place]', s).value });

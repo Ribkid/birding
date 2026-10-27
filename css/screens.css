@@ -281,7 +281,7 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 .trophy-next { margin: 0; font-size: var(--fs-2); line-height: 1.4; color: var(--ink-2); }
 .trophy-next strong { color: var(--ink); }
 .trophy-links { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); }
-.trophy-links .btn { min-height: var(--tap); padding: 6px 16px; border-radius: var(--r-pill); background: var(--surface); box-shadow: none; font-size: var(--fs-2); }
+.trophy-links .btn { flex: 1 1 auto; justify-content: center; min-height: var(--tap); padding: 6px 16px; border-radius: var(--r-pill); background: var(--surface); box-shadow: none; font-size: var(--fs-2); }
 :root[data-theme="outdoor"] .trophy-links .btn { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
 
 .shelf-sec { margin: 0 var(--sp-4) var(--sp-4); padding: 0 var(--sp-4) var(--sp-4); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
@@ -300,7 +300,7 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 .badge--group { --ef: var(--seen); --eo: var(--on-seen); --ny: 54%; }
 .emb { position: relative; display: grid; place-items: center; width: 76px; height: 76px; margin-bottom: var(--sp-1); }
 .emb svg { width: 66px; height: 66px; overflow: visible; }
-.badge--done .emb svg { filter: drop-shadow(0 6px 8px color-mix(in srgb, var(--ef) 35%, transparent)); }
+.badge--done .emb svg { filter: drop-shadow(0 4px 3px color-mix(in srgb, var(--ef) 28%, transparent)); }
 .emb .e-body, .emb .e-tail { fill: var(--ef); }
 .emb .e-tail { opacity: .7; }
 .emb .e-line { fill: none; stroke: var(--eo); stroke-width: 1.6; opacity: .55; }
@@ -339,14 +339,52 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
   .badge--done .emb::after { display: none; }
 }
 
-/* ---------- + sheet: every option has an icon, and logging one sighting leads ---------- */
-.plus-opt { grid-template-columns: auto 1fr; column-gap: var(--sp-3); align-items: center; color: var(--ink); }
-.plus-opt > svg { grid-row: span 2; width: 26px; height: 26px; color: var(--azure); }
-.plus-opt--main { background: var(--azure); color: var(--on-azure); }
-.plus-opt--main > svg, .plus-opt--main span { color: inherit; }
-.plus-opt--main span { opacity: .88; }
-.plus-opt--id { grid-template-columns: 1fr; align-items: start; }
-.plus-opt--id > svg { grid-row: auto; }
+/* ---------- sheets I own: + sheet, sighting, outing start and finish ----------
+   The page behind blurs a little under the scrim; the sheet springs up. */
+.sheet-wrap:is(.sheet-wrap--plus, .sheet-wrap--log, .sheet-wrap--outing) .sheet-scrim { -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+@media (prefers-reduced-transparency: reduce) { .sheet-wrap:is(.sheet-wrap--plus, .sheet-wrap--log, .sheet-wrap--outing) .sheet-scrim { -webkit-backdrop-filter: none; backdrop-filter: none; } }
+@media (prefers-reduced-motion: no-preference) {
+  .sheet-wrap--plus.open:not([data-closing]):not(.sheet-wrap--drag) .sheet { transition: transform var(--dur-4) var(--ease-spring); }
+}
+
+/* The species she picked, as a photo card with its name over a scrim. */
+.picker .chosen { position: relative; display: block; height: 176px; padding: 0; overflow: hidden; border-radius: var(--r-card); background: var(--surface-2); box-shadow: var(--shadow-card); color: #fff; }
+.picker .chosen-img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; object-fit: cover; object-position: 50% 30%; }
+.picker .chosen::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgba(6, 18, 15, .82) 0, rgba(6, 18, 15, .3) 50%, rgba(6, 18, 15, 0) 75%); }
+.picker .chosen-txt { position: absolute; left: 14px; right: 14px; bottom: 12px; z-index: 1; display: grid; justify-items: start; gap: 3px; text-shadow: 0 1px 8px rgba(0, 0, 0, .4); }
+.picker .chosen-txt strong { font-size: var(--fs-4); font-weight: 800; line-height: 1.15; }
+.picker .chosen-txt em { font-size: var(--fs-2); color: rgba(255, 255, 255, .9); }
+.picker .chosen-txt .band { text-shadow: none; }
+.sheet .picker .btn.chosen-change { position: absolute; top: 10px; right: 10px; z-index: 1; min-height: 40px; border-radius: var(--r-pill); background: var(--glass-strong); color: var(--ink); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float); }
+
+/* + sheet: a floating glass panel with four big action tiles, logging one sighting first. */
+.sheet-wrap--plus .sheet {
+  width: calc(100% - 20px); margin-bottom: calc(10px + env(safe-area-inset-bottom)); padding: 8px var(--sp-4) var(--sp-4); border-radius: 28px;
+  background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-2);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @starting-style { .sheet-wrap--plus.open .sheet { transform: translateY(calc(100% + 40px)); } }
+  .sheet-wrap--plus[data-closing] .sheet { transform: translateY(calc(100% + 40px)); }
+}
+.plus-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+.plus-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 152px; padding: 14px;
+  border: 0; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); color: var(--ink);
+  font: inherit; text-align: left; text-decoration: none; cursor: pointer;
+  transition: scale var(--dur-3) var(--ease-spring);
+}
+.plus-tile:active { scale: .95; transition-duration: var(--dur-1); transition-timing-function: var(--ease-out); }
+.plus-ic { display: grid; place-items: center; width: 46px; height: 46px; margin-bottom: auto; border-radius: 50%; background: var(--azure-soft); color: var(--azure); }
+.plus-ic svg { width: 24px; height: 24px; }
+.plus-tile strong { margin-top: var(--sp-3); font-size: var(--fs-3); font-weight: 800; line-height: 1.2; }
+.plus-tile > span:last-child { font-size: var(--fs-2); line-height: 1.3; color: var(--ink-2); }
+.plus-tile--main { background: var(--azure); color: var(--on-azure); box-shadow: 0 16px 28px -16px var(--azure), var(--shadow-card); }
+.plus-tile--main .plus-ic { background: color-mix(in srgb, var(--on-azure) 20%, transparent); color: inherit; }
+.plus-tile--main > span:last-child { color: inherit; opacity: .9; }
+.plus-more { margin: var(--sp-3) var(--sp-1) 0; }
+:root[data-theme="outdoor"] .plus-tile:not(.plus-tile--main) { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+@media (max-width: 359px) { .plus-tile { min-height: 140px; padding: 12px; } .plus-tile > span:last-child { font-size: var(--fs-1); } }
+@media (prefers-reduced-motion: reduce) { .plus-tile { transition: none; } }
 
 /* ---------- stats: group bars under their kind ---------- */
 .gkind + .gkind { margin-top: var(--sp-4); }
