@@ -24,10 +24,11 @@ export async function renderScan(ctx) {
   try {
     mod = mod || await import('./photoid.js');
     info = info || await mod.photoInfo();
-  } catch (_) { info = info || { kinds: [], metrics: null }; }
+  } catch (_) {} // no data yet (first visit offline): generic wording now, the real thing next visit
   if (location.hash !== '#/scan') return;
+  const known = info || { kinds: [], metrics: null };
 
-  const covered = info.kinds.filter(k => KINDS[k]);
+  const covered = known.kinds.filter(k => KINDS[k]);
   const multi = covered.length > 1;
   const subject = () => (S.kind ? KINDS[S.kind].one : covered.length === 1 ? KINDS[covered[0]].one : null);
   const intro = covered.length ? `Name ${article(KINDS[covered[0]].one)} ${words(covered.map(k => KINDS[k].one))} from a photo, right on your phone.` : 'Find out what you photographed, right on your phone.';
@@ -54,7 +55,7 @@ export async function renderScan(ctx) {
   let busy = false;
 
   // ---------- footnote ----------
-  $('[data-foot]', view).textContent = `Photo ID runs on your phone with BioCLIP, a model from the Imageomics Institute (MIT licence). The first scan downloads about ${mod?.PHOTO_MODEL_MB ?? 98} MB once, best on Wi-Fi. After that it works offline.${accuracyLine(info.metrics)}`;
+  $('[data-foot]', view).textContent = `Photo ID runs on your phone with BioCLIP, a model from the Imageomics Institute (MIT licence). The first scan downloads about ${mod?.PHOTO_MODEL_MB ?? 98} MB once, best on Wi-Fi. After that it works offline.${accuracyLine(known.metrics)}`;
 
   // ---------- viewfinder ----------
   function drawVF() {
@@ -184,6 +185,7 @@ export async function renderScan(ctx) {
       img = new Image(); img.src = URL.createObjectURL(blob);
       await img.decode();
     } catch (_) {
+      if (img?.src) URL.revokeObjectURL(img.src);
       status.textContent = 'That file couldn\'t be opened as a photo. Try a JPEG or PNG.';
       return;
     }
@@ -203,8 +205,9 @@ export async function renderScan(ctx) {
     out.innerHTML = ''; prog.innerHTML = '';
     status.textContent = 'Starting photo ID…';
     status.closest('.scan-work').scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-    const MB = mod.PHOTO_MODEL_MB;
+    const MB = mod?.PHOTO_MODEL_MB ?? 98;
     try {
+      mod = mod || await import('./photoid.js');
       if (!(await mod.isPhotoModelCached())) {
         if (navigator.onLine === false) throw new Error('offline-first-run');
         status.textContent = `Getting photo ID ready: a one-time download of about ${MB} MB. Wi-Fi is best.`;
@@ -303,7 +306,7 @@ export async function renderScan(ctx) {
         ${sp.notes ? `<p class="scan-tip">${esc(firstSentence(sp.notes))}</p>` : ''}
         <div class="scan-card-foot">
           <p class="scan-conf"><strong>${word(x.p)}</strong> <span>${pct(x.p)}</span></p>
-          <button type="button" class="btn ${isLead ? 'btn--primary' : ''} scan-this" data-this="${sp.id}">This one</button>
+          <button type="button" class="btn ${isLead ? 'btn--primary' : ''} scan-this" data-this="${sp.id}" aria-label="This one: ${esc(sp.name)}">This one</button>
         </div>
       </article>`;
     };
@@ -351,10 +354,11 @@ export async function renderScan(ctx) {
     }
     if (t.closest('[data-tighter]')) {
       markChosen(S.logAt, 'none');
+      const wasWhole = S.whole;
       if (S.url) { if (!S.whole) S.box.s *= 0.75; S.whole = false; drawVF(); }
       vf.scrollIntoView({ block: 'center' });
       $('[data-stage]', vf)?.focus({ preventScroll: true });
-      status.textContent = 'Move the smaller box onto just the part you want named, then choose Identify.';
+      status.textContent = `Move the ${wasWhole ? '' : 'smaller '}box onto just the part you want named, then choose Identify.`;
       return;
     }
     if (t.closest('[data-pickkind]')) {
