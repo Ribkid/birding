@@ -798,7 +798,7 @@ export default function Settings() {
   return (
     <>
       <header className="page-head page-head--back">
-        <Link className="iconbtn" to="/badges" aria-label="Back">
+        <Link className="iconbtn" to="/me" aria-label="Back to Me">
           <Icon name="back" />
         </Link>
         <h1>Settings</h1>

@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { useViewTransitionNavigate } from './Motion';
 
 const TABS = [
   {
@@ -14,18 +15,16 @@ const TABS = [
     ),
   },
   {
-    to: '/lists',
-    label: 'Lists',
+    to: '/learn',
+    label: 'Learn',
     icon: (
       <>
-        <path d="M9 6h11M9 12h11M9 18h11" />
-        <circle cx="4.5" cy="6" r="1.2" />
-        <circle cx="4.5" cy="12" r="1.2" />
-        <circle cx="4.5" cy="18" r="1.2" />
+        <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H11v16H6.5A2.5 2.5 0 0 0 4 22z" />
+        <path d="M20 6.5A2.5 2.5 0 0 0 17.5 4H13v16h4.5A2.5 2.5 0 0 1 20 22z" />
       </>
     ),
   },
-  { to: '/add', label: 'Add birds', plus: true, icon: <path d="M12 5v14M5 12h14" /> },
+  { to: '/add', label: 'Add a sighting', plus: true, icon: <path d="M12 5v14M5 12h14" /> },
   {
     to: '/map',
     label: 'Map',
@@ -37,26 +36,33 @@ const TABS = [
     ),
   },
   {
-    to: '/badges',
-    label: 'Badges',
+    to: '/me',
+    label: 'Me',
     icon: (
       <>
-        <circle cx="12" cy="9" r="5.5" />
-        <path d="M8.5 13.5L7 21l5-2.5 5 2.5-1.5-7.5" />
+        <circle cx="12" cy="8.5" r="4" />
+        <path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" />
       </>
     ),
   },
 ];
 
 export function TabBar() {
+  const go = useViewTransitionNavigate();
   return (
     <nav className="tabbar" aria-label="Main">
       {TABS.map((tab) => (
         <NavLink
           key={tab.to}
           to={tab.to}
+          id={tab.to === '/me' ? 'me-tab' : undefined}
           className={tab.plus ? 'tab-plus' : undefined}
           aria-label={tab.plus ? tab.label : undefined}
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            go(tab.to);
+          }}
         >
           <svg viewBox="0 0 24 24" aria-hidden="true">
             {tab.icon}
