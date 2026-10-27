@@ -1,73 +1,37 @@
+// Settings (#/settings): a port of v1 renderSettings (birding-refresh js/app.js:2465-2570), the "Your profile" row
+// (js/me.js profileRow) and the Account card (js/account.js renderAccountSection), on rest.css's grouped set-cards.
 import {
   useEffect,
+  useReducer,
   useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
-  type FormEvent,
+  type ReactNode,
 } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { byId } from '../../lib/data';
 import { db } from '../../core/db.js';
 import { toEbirdCsv } from '../../core/ebird.js';
-import {
-  configured,
-  onAuth,
-  sendEmailLink,
-  signInWithGoogle,
-  signOut,
-  startAuth,
-  verifyEmailCode,
-} from '../../core/cloud.js';
-import {
-  forgetSync,
-  localProfile,
-  onStatus,
-  pendingCount,
-  saveProfile,
-  startSync,
-  syncNow,
-  syncStatus,
-} from '../../core/sync.js';
-import { Icon } from '../../components/Icon';
-import { SpeciesImage } from '../../components/SpeciesImage';
-import { deleteAccount as deleteMyAccount } from '../../core/account.js';
-import { ConfirmDialog } from '../lists/shared';
-import { avatarUrl, getMyCloud } from '../../core/profile.js';
+import { onAuth, user } from '../../core/cloud.js';
+import { localProfile, onStatus, pendingCount, syncNow, syncStatus } from '../../core/sync.js';
+import { accountStarted, authSettled, deleteAccount, signOutAccount } from '../../core/account.js';
+import { configured, getMyCloud, getProfile, myName, saveMyProfile, signedIn } from '../../core/profile.js';
 import { openWelcome } from '../../components/Welcome';
-import { FIELD, checkField, fieldJob, fieldJobs, fieldLabel, type FieldKey, type FieldReport, type FieldResult } from './fieldReady';
+import { Icon } from '../../components/Icon';
+import { stagger } from '../../lib/look';
+import { focusables } from '../../lib/layers';
+import { countUp } from '../../lib/motion';
+import { ConfirmDialog, Modal, fmtDate, plural } from '../lists/shared';
+import { AccountAvatar, SignInForm, trophyIcon, useProfile } from '../me/accountBits';
+import { announce, toast } from '../toast';
+import { FIELD, callWho, checkField, fieldJob, fieldJobs, fieldLabel, type FieldKey, type FieldReport, type FieldResult } from './fieldReady';
+import { isInstalled, promptInstall, useInstallPrompt } from './install';
+import { THEMES, saveTheme, storedSettings, type Theme } from './theme';
 import './progress.css';
 
-interface Settings {
-  theme: 'auto' | 'light' | 'dark';
-  colourUnseen: boolean;
-}
-
-interface AccountUser {
-  id: string;
-  email: string;
-  name: string;
-}
-
-interface Profile {
-  displayName?: string;
-  avatarSpeciesId?: number | null;
-  showOnLeaderboard?: boolean;
-  updatedAt?: number;
-}
-
-interface SyncState {
-  state: string;
-  text?: string;
-  at?: number;
-}
-
-interface BackupPhoto {
-  id: number;
-  at?: number;
-  data: string;
-}
-
+interface AccountUser { id: string; email: string; name: string }
+interface SyncState { state: string; text?: string }
 interface BackupData {
   app?: string;
   version?: number;
@@ -75,980 +39,515 @@ interface BackupData {
   sightings?: unknown[];
   outings?: unknown[];
   patches?: unknown[];
-  settings?: Partial<Settings>;
-  photos?: BackupPhoto[];
+  settings?: Record<string, unknown>;
+  photos?: { id: number; at?: number; data: string }[];
 }
 
-const DEFAULT_SETTINGS: Settings = { theme: 'auto', colourUnseen: false };
+const chev = (
+  <svg className="set-chev" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const person = <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="4" /><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" /></svg>;
+const meChev = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6" /></svg>;
+const tick = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 
-function applyTheme(theme: Settings['theme']) {
-  const root = document.documentElement;
-  if (theme === 'auto') delete root.dataset.theme;
-  else root.dataset.theme = theme;
-}
-
-function friendly(error: unknown) {
-  const message =
-    error instanceof Error
-      ? error.message
-      : error && typeof error === 'object' && 'message' in error
-        ? String((error as { message?: unknown }).message ?? '')
-        : String(error ?? '');
-  if (/rate limit|too many/i.test(message)) return 'Too many tries. Wait a minute, then try again.';
-  if (/expired|invalid/i.test(message)) {
-    return "That code didn't work. It may have expired, so ask for a new email.";
-  }
-  if (/fetch|network/i.test(message)) return 'Signing in needs a connection.';
-  return message || 'Something went wrong. Try again.';
-}
-
-function today() {
-  const now = new Date();
+const todayStr = () => {
+  const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+const blobToDataUrl = (b: Blob) => new Promise<string>((resolve, reject) => {
+  const fr = new FileReader();
+  fr.onload = () => resolve(String(fr.result));
+  fr.onerror = () => reject(fr.error ?? new Error('Could not read the photo'));
+  fr.readAsDataURL(b);
+});
+function download(name: string, blob: Blob) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+const message = (e: unknown) => (e instanceof Error ? e.message : String((e as { message?: unknown })?.message ?? e ?? ''));
+
+// v1's openSheet puts focus on the sheet's first control (Cancel, or "Keep a copy") once it is up
+// (js/app.js openSheet); the shared Sheet leaves it on the page, so Settings' sheets do it here.
+function useSheetFocus(open: boolean) {
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => {
+      const sheet = document.querySelector<HTMLElement>('.sheet-wrap:not([data-closing]) .sheet');
+      if (sheet && !sheet.contains(document.activeElement)) focusables(sheet)[0]?.focus({ preventScroll: true });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [open]);
 }
 
-function downloadBlob(name: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
-
-const blobToDataUrl = (blob: Blob) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read the photo'));
-    reader.readAsDataURL(blob);
-  });
-
-function AccountAvatar({
-  sp,
-  path,
-  name,
-  big = false,
-}: {
-  sp: ReturnType<typeof byId.get> | null;
-  path?: string | null;
-  name: string;
-  big?: boolean;
-}) {
+// ---------- the "Your profile" row (v1 js/me.js profileRow) ----------
+function ProfileRow() {
+  const prof = getProfile();
+  const u = signedIn();
+  const sub = !configured ? 'Your lists, badges and stats' : u ? 'Photo, name, leaderboard and groups' : 'Sign up free to back up your dex';
   return (
-    <span className={`acct-av ${big ? 'acct-av--big' : ''}${path ? ' acct-av--photo' : ''}`}>
-      {path ? (
-        <img src={avatarUrl(path)} alt="" loading="lazy" decoding="async" onError={(e) => e.currentTarget.remove()} />
-      ) : sp ? (
-        <SpeciesImage sp={sp} />
-      ) : (
-        <span className="acct-av-letter">{(name || 'You').slice(0, 1).toUpperCase()}</span>
+    <Link className="me-row-link" to="/me">
+      {u
+        ? <AccountAvatar spId={prof.avatarSpeciesId} path={getMyCloud()?.avatarPath} name={myName()} cls="acct-av me-row-av" />
+        : <span className="acct-av me-row-av me-row-av--guest">{person}</span>}
+      <span className="me-row-main"><strong>{u ? myName() : 'Your profile'}</strong><span className="small muted">{sub}</span></span>
+      <span className="me-chev">{meChev}</span>
+    </Link>
+  );
+}
+
+// ---------- Ready for the field (v1 js/app.js:2479-2489 and wireField, :2684+) ----------
+type FieldRow = FieldResult & { busy?: boolean; prog?: number };
+
+function ReadyCard() {
+  const [field, setField] = useState<Partial<Record<FieldKey, FieldRow>>>({});
+  const [summary, setSummary] = useState<{ text: string; n: number } | null>(null);
+  const alive = useRef(true);
+  const who = useRef('');
+  const texts = useRef<Partial<Record<FieldKey, HTMLSpanElement | null>>>({});
+  const num = useRef<HTMLElement>(null);
+  const shown = useRef(0);
+
+  const paint = (key: FieldKey, r: FieldResult) => {
+    if (alive.current) setField((cur) => ({ ...cur, [key]: { ...r, busy: false } }));
+  };
+  const check = (key: FieldKey) => checkField(key, who.current)
+    .catch(() => ({ ok: false, text: "Couldn't check this one. Open Settings again to retry." }))
+    .then((r) => { paint(key, r); return r; });
+
+  const follow = (key: FieldKey, job: ReturnType<typeof fieldJob>) => {
+    const on: FieldReport = (f, t) => {
+      if (!alive.current) return;
+      setField((cur) => {
+        const row = cur[key] || { ok: false, text: '' };
+        return { ...cur, [key]: { ...row, busy: true, text: t || row.text, prog: f == null ? row.prog || 0 : Math.round(f * 100) } };
+      });
+    };
+    setField((cur) => ({ ...cur, [key]: { ok: false, text: 'Saving…', busy: true, prog: 0 } }));
+    job.subs.add(on);
+    on(...job.last);
+    job.p.then(() => {
+      if (!alive.current) return;
+      void navigator.storage?.persist?.();
+      void check(key).then((r) => announce(`${fieldLabel(key)}: ${r.text || 'done'}`));
+    }, (err: unknown) => {
+      if (!alive.current) return;
+      const msg = `Couldn't finish: ${message(err)}. Check the connection and try again.`;
+      paint(key, { ok: false, text: msg, get: true });
+      announce(`${fieldLabel(key)}: ${msg}`);
+    }).finally(() => job.subs.delete(on));
+  };
+
+  const get = (key: FieldKey) => {
+    if (!navigator.onLine) {
+      setField((cur) => ({ ...cur, [key]: { ...(cur[key] || { ok: false }), get: true, busy: false, text: "You're offline. Connect to the internet, then try again." } }));
+      return;
+    }
+    // The button turns into a "Saving" chip, so keep focus in the row on its status text (v1 follow()).
+    texts.current[key]?.focus({ preventScroll: true });
+    follow(key, fieldJob(key));
+  };
+
+  useEffect(() => {
+    alive.current = true;
+    void callWho().catch(() => '').then((w) => {
+      who.current = w;
+      for (const { key } of FIELD) {
+        const running = fieldJobs.get(key);
+        if (running) follow(key, running);
+        else void check(key);
+      }
+    });
+    return () => { alive.current = false; };
+    // Checked once when Settings opens; a download keeps going if she leaves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The summary and ring wait until every row has an answer (and none is downloading), as v1 summary() does.
+  const allIn = FIELD.every(({ key }) => field[key] && !field[key]?.busy);
+  useEffect(() => {
+    if (!allIn) return;
+    const n = FIELD.filter(({ key }) => field[key]?.ok).length;
+    setSummary({
+      n,
+      text: n === FIELD.length ? 'Everything here works with no signal.'
+        : `${n} of ${FIELD.length} ready. ${navigator.onLine ? 'Get the rest while you have Wi-Fi.' : 'The rest needs signal to save.'}`,
+    });
+  }, [allIn, field]);
+  useEffect(() => {
+    const el = num.current;
+    const n = summary?.n ?? 0;
+    if (!el) return;
+    if (shown.current !== n) void countUp(el, shown.current, n);
+    else el.textContent = String(n);
+    shown.current = n;
+  }, [summary?.n]);
+
+  const n = summary?.n ?? 0;
+  return (
+    <section className="set-card set-ready" aria-labelledby="field-h">
+      <div className="ready-head">
+        <span className={`ready-ring${summary && n === FIELD.length ? ' ready-ring--all' : ''}`} style={{ '--p': summary ? n / FIELD.length : 0 } as CSSProperties} aria-hidden="true">
+          <svg viewBox="0 0 48 48"><circle className="ready-ring-track" cx="24" cy="24" r="20" /><circle className="ready-ring-fill" cx="24" cy="24" r="20" pathLength={100} /></svg>
+          <b ref={num} />
+        </span>
+        <div className="ready-head-txt">
+          <h2 className="set-title" id="field-h">Ready for the field</h2>
+          <p className="small muted">{summary?.text ?? 'What works on this phone with no signal.'}</p>
+        </div>
+      </div>
+      <ul className="ready-list">
+        {FIELD.map(({ key, label }) => {
+          const r = field[key];
+          const cls = r?.busy ? ' ready-row--busy' : r ? (r.ok ? ' ready-row--ok' : ' ready-row--todo') : '';
+          return (
+            <li key={key} className={`ready-row${cls}`}>
+              <strong className="ready-name">{label}</strong>
+              <div className="ready-act">
+                {!r ? <span className="ready-chip ready-chip--wait">Checking</span>
+                  : r.busy ? <span className="ready-chip ready-chip--busy">Saving</span>
+                    : r.ok ? <span className="ready-chip ready-chip--ok">{tick}Saved</span>
+                      : r.get ? <button type="button" className="ready-chip ready-chip--get" onClick={() => get(key)} aria-label={`Get it now: ${label}`}>Get it now</button>
+                        : r.link ? <Link className="ready-chip ready-chip--get" to={r.link.replace(/^#/, '')}>{r.linkText}</Link>
+                          : <span className="ready-chip ready-chip--wait">Not yet</span>}
+              </div>
+              <span className="ready-text small muted" data-field-text tabIndex={-1} ref={(el) => { texts.current[key] = el; }}>{r?.text || 'Checking…'}</span>
+              {r?.busy && (
+                <div className="meter meter--thin" style={{ '--p': `${r.prog || 0}%` } as CSSProperties} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={r.prog || 0} aria-label={`${label}: saving`}>
+                  <span />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+// ---------- the Account card (v1 js/account.js renderAccountSection) ----------
+function AccountCard({ onChange }: { onChange: () => void }) {
+  const [ready, setReady] = useState(accountStarted());
+  const [u, setU] = useState<AccountUser | null>(() => (accountStarted() ? (user() as AccountUser | null) : null));
+  const [sync, setSync] = useState<SyncState>(() => syncStatus() as SyncState);
+  const [pending, setPending] = useState(0);
+  const [name, setName] = useState(() => getProfile().displayName || '');
+  const [lb, setLb] = useState(() => getProfile().showOnLeaderboard !== false);
+  const [signOutAsk, setSignOutAsk] = useState(false);
+  const [deleteAsk, setDeleteAsk] = useState(false);
+  useSheetFocus(signOutAsk || deleteAsk);
+
+  const countPending = () => { void Promise.resolve(pendingCount()).then((n: number) => setPending(n || 0)).catch(() => {}); };
+  const loadProfile = async () => {
+    const p = (await localProfile()) as { displayName?: string; showOnLeaderboard?: boolean };
+    setName(p.displayName || '');
+    setLb(p.showOnLeaderboard !== false);
+  };
+
+  useEffect(() => {
+    let alive = true;
+    void authSettled.then(() => { if (alive) { setReady(true); setU(user() as AccountUser | null); } });
+    const offAuth = onAuth((next: AccountUser | null) => {
+      if (!alive) return;
+      setU(next);
+      void loadProfile();
+      countPending();
+      onChange();
+    });
+    const offStatus = onStatus((st: SyncState) => { if (alive) { setSync(st); countPending(); } });
+    void loadProfile();
+    countPending();
+    return () => { alive = false; offAuth(); offStatus(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (!configured || !ready) return null;
+
+  if (!u) {
+    return (
+      <section className="set-card set-acct" data-account>
+        <h2 className="h2">Account</h2>
+        <p className="muted small">Optional. Sign in to back up your sightings and photos, have them on your other devices, and join the leaderboard. Without an account everything still works, offline too.</p>
+        <div data-signin><SignInForm /></div>
+      </section>
+    );
+  }
+
+  const prof = getProfile();
+  const shown = myName();
+  const saveName = async () => {
+    const v = name.trim().slice(0, 40);
+    if (v === (getProfile().displayName || '')) return;
+    await saveMyProfile({ displayName: v });
+    setName(v);
+    toast('Name saved');
+    onChange();
+  };
+  const doSync = async () => {
+    if (!navigator.onLine) { toast('Offline, will sync when you are back online'); return; }
+    await syncNow();
+    countPending();
+  };
+  const doSignOut = async (wipeLocal: boolean) => {
+    setSignOutAsk(false);
+    await signOutAccount({ wipeLocal });
+    toast(wipeLocal ? 'Signed out and removed from this device' : 'Signed out. Your data stays on this device.');
+    setU(null);
+    onChange();
+  };
+  const askDelete = () => {
+    if (!navigator.onLine) { toast('Deleting your account needs a connection.'); return; }
+    setDeleteAsk(true);
+  };
+  const doDelete = async () => {
+    setDeleteAsk(false);
+    try {
+      toast('Deleting your account…');
+      await deleteAccount();
+      toast('Account deleted. Your sightings are still on this device.');
+      setU(null);
+      onChange();
+    } catch (e) {
+      toast(`Couldn't delete the account: ${message(e)}`);
+    }
+  };
+
+  return (
+    <section className="set-card set-acct" data-account>
+      <h2 className="h2">Account</h2>
+      <div className="acct-card">
+        <AccountAvatar spId={prof.avatarSpeciesId} path={getMyCloud()?.avatarPath} name={shown} cls="acct-av acct-av--big" />
+        <div className="acct-who">
+          <strong>{shown}</strong>
+          <span className="small muted">{u.email}</span>
+          <span className="small acct-status" data-sync-status data-state={sync.state}>{sync.text || ''}</span>
+        </div>
+      </div>
+      <label className="field">
+        <span>Display name (shown on the leaderboard)</span>
+        <input
+          name="displayName"
+          maxLength={40}
+          value={name}
+          placeholder={shown}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => void saveName()}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void saveName(); } }}
+        />
+      </label>
+      <div className="acct-row"><span className="small muted">Photo, name and who sees your profile</span><Link className="btn btn--small" to="/me/edit">Edit profile</Link></div>
+      <label className="check check--card me-check">
+        <input type="checkbox" checked={lb} onChange={(e) => { const on = e.target.checked; setLb(on); void saveMyProfile({ showOnLeaderboard: on }); }} />
+        <span><strong>Show me on the leaderboard</strong><span className="small muted">Only your name, picture and counts are shown, never your sightings, places, notes or photos. Groups you join always show you to their members.</span></span>
+      </label>
+      <div className="row-start">
+        <Link className="btn" to="/leaderboard">{trophyIcon} Leaderboard</Link>
+        <button type="button" className="btn" onClick={() => void doSync()}>Sync now</button>
+        <button type="button" className="btn" onClick={() => { countPending(); setSignOutAsk(true); }}>Sign out</button>
+      </div>
+      {pending > 0 && <p className="small muted">{pending} change{pending === 1 ? '' : 's'} waiting to sync.</p>}
+      <button type="button" className="btn btn--danger btn--quiet" onClick={askDelete}>Delete my account and cloud data</button>
+      {signOutAsk && (
+        <Modal title="Sign out" onClose={() => setSignOutAsk(false)}>
+          <p className="muted">Keep a copy of your sightings, outings, patches and photos on this device? Your account keeps them either way.</p>
+          {pending > 0 && (
+            <p className="form-error">{pending} change{pending === 1 ? " hasn't" : "s haven't"} reached the cloud yet. Keep the copy, or sync first, so {pending === 1 ? "it isn't" : "they aren't"} lost.</p>
+          )}
+          <div className="acct-choices">
+            <button type="button" className="btn btn--primary btn--block" onClick={() => void doSignOut(false)}>Keep a copy on this device</button>
+            <button type="button" className={`btn btn--block ${pending ? 'btn--danger' : ''}`} onClick={() => void doSignOut(true)}>Remove it from this device</button>
+            <button type="button" className="btn btn--quiet btn--block" onClick={() => setSignOutAsk(false)}>Cancel</button>
+          </div>
+        </Modal>
       )}
-    </span>
+      {deleteAsk && (
+        <ConfirmDialog
+          title="Delete your account?"
+          body="This permanently deletes your account, your cloud copy of every sighting, outing, patch and photo, and your place on the leaderboard and in groups. What is on this device stays here, as a guest."
+          confirmLabel="Delete my account"
+          danger
+          onCancel={() => setDeleteAsk(false)}
+          onConfirm={() => void doDelete()}
+        />
+      )}
+    </section>
+  );
+}
+
+// ---------- the page ----------
+function Card({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  return (
+    <section className="set-card" aria-labelledby={id}>
+      <h2 className="set-title" id={id}>{title}</h2>
+      {children}
+    </section>
   );
 }
 
 export default function Settings() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-  const [settingsMsg, setSettingsMsg] = useState('');
+  const navigate = useNavigate();
+  const [, force] = useReducer((x: number) => x + 1, 0);
+  useProfile();
+  const canInstall = useInstallPrompt();
+  const [theme, setTheme] = useState<Theme>('auto');
   const [usage, setUsage] = useState('');
-  const [persisted, setPersisted] = useState(false);
-
-  const [field, setField] = useState<Partial<Record<FieldKey, FieldResult & { busy?: boolean; prog?: number }>>>({});
-  const [fieldAnnounce, setFieldAnnounce] = useState('');
-  const fieldAlive = useRef(true);
-
-  const [backupMsg, setBackupMsg] = useState('');
-  const [restoring, setRestoring] = useState(false);
-  const [pendingBackup, setPendingBackup] = useState<{ data: BackupData; name: string } | null>(null);
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const [ebirdMsg, setEbirdMsg] = useState('');
-
-  const [authReady, setAuthReady] = useState(!configured);
-  const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [syncState, setSyncState] = useState<SyncState>({ state: 'off', text: '' });
-  const [pendingSync, setPendingSync] = useState(0);
-  const [displayName, setDisplayName] = useState('');
-  const [authStage, setAuthStage] = useState<'idle' | 'code'>('idle');
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [sending, setSending] = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [accountError, setAccountError] = useState('');
-  const [accountNote, setAccountNote] = useState('');
-  const [signOutAsk, setSignOutAsk] = useState(false);
-  const [deleteAsk, setDeleteAsk] = useState(false);
-  const [deleteBusy, setDeleteBusy] = useState(false);
-  const [signOutBusy, setSignOutBusy] = useState(false);
-
-  const refreshPending = async () => {
-    try {
-      setPendingSync((await pendingCount()) as number);
-    } catch {
-      /* the count is a hint, not a blocker */
-    }
-  };
+  const [persisted, setPersisted] = useState(true);
+  const [restore, setRestore] = useState<BackupData | null>(null);
+  const [wipeAsk, setWipeAsk] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  useSheetFocus(wipeAsk || !!restore);
 
   useEffect(() => {
     let alive = true;
+    void storedSettings().then((s) => { if (alive) setTheme(((s.theme as Theme) || 'auto')); });
     (async () => {
       try {
-        const stored = (await db.kvGet('settings')) as Partial<Settings> | null | undefined;
-        if (!alive) return;
-        const next: Settings = { ...DEFAULT_SETTINGS, ...(stored ?? {}) };
-        setSettings(next);
-        applyTheme(next.theme);
-      } catch {
-        /* keep the defaults */
-      }
+        const est = await navigator.storage.estimate();
+        if (alive) setUsage(`${((est.usage || 0) / 1e6).toFixed(1)} MB used on this phone`);
+      } catch { /* not every browser says */ }
+      const p = await navigator.storage?.persisted?.().catch(() => false);
+      if (alive) setPersisted(!!p);
     })();
-    return () => {
-      alive = false;
-    };
+    const raf = requestAnimationFrame(() => stagger(document.getElementById('view'), '.set-card', { key: 'settings', max: 8 }));
+    return () => { alive = false; cancelAnimationFrame(raf); };
   }, []);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        if (navigator.storage?.estimate) {
-          const estimate = await navigator.storage.estimate();
-          if (alive && estimate.usage != null) {
-            setUsage(`${(estimate.usage / 1e6).toFixed(1)} MB used on this device`);
-          }
-        }
-      } catch {
-        /* storage estimates are optional */
-      }
-      try {
-        if (navigator.storage?.persisted) {
-          const isPersisted = await navigator.storage.persisted();
-          if (alive) setPersisted(!!isPersisted);
-        }
-      } catch {
-        /* optional */
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!configured) return;
-    let alive = true;
-
-    const offAuth = onAuth(async (nextUser: AccountUser | null) => {
-      if (!alive) return;
-      setAccountUser(nextUser);
-      try {
-        const nextProfile = (await localProfile()) as Profile;
-        if (!alive) return;
-        setProfile(nextProfile);
-        setDisplayName(nextProfile.displayName ?? '');
-      } catch {
-        /* profile is loaded below as well */
-      }
-      if (nextUser) {
-        startSync();
-        void syncNow();
-      }
-      void refreshPending();
-    });
-
-    const offStatus = onStatus((nextState: SyncState) => {
-      if (alive) setSyncState(nextState);
-    });
-
-    (async () => {
-      setSyncState(syncStatus() as SyncState);
-      try {
-        const nextProfile = (await localProfile()) as Profile;
-        if (alive) {
-          setProfile(nextProfile);
-          setDisplayName(nextProfile.displayName ?? '');
-        }
-        const nextUser = (await startAuth()) as AccountUser | null;
-        if (!alive) return;
-        setAccountUser(nextUser);
-        setAuthReady(true);
-        if (nextUser) {
-          startSync();
-          void syncNow();
-        }
-        void refreshPending();
-      } catch {
-        if (alive) setAuthReady(true);
-      }
-    })();
-
-    return () => {
-      alive = false;
-      offAuth();
-      offStatus();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!configured) return;
-    if (syncState.state === 'saved' || syncState.state === 'error' || syncState.state === 'offline') {
-      void refreshPending();
-    }
-  }, [syncState.state]);
-
-  const updateSettings = async (patch: Partial<Settings>) => {
-    const next: Settings = { ...settings, ...patch };
-    setSettings(next);
-    setSettingsMsg('');
-    if (patch.theme) applyTheme(next.theme);
-    try {
-      await db.kvSet('settings', next);
-    } catch (err) {
-      setSettingsMsg(`Couldn't save that setting: ${friendly(err)}`);
-    }
-  };
-
-  const exportBackup = async () => {
-    setBackupMsg('Preparing the backup…');
-    try {
-      const [sightings, outings, patches, photos, storedSettings] = await Promise.all([
-        db.all('sightings'),
-        db.all('outings'),
-        db.all('patches'),
-        db.all('photos'),
-        db.kvGet('settings'),
-      ]);
-      const photoData: BackupPhoto[] = [];
-      for (const photo of photos as { id: number; at?: number; blob?: Blob }[]) {
-        if (photo.blob) {
-          photoData.push({
-            id: photo.id,
-            at: photo.at,
-            data: await blobToDataUrl(photo.blob),
-          });
-        }
-      }
-      const data: BackupData = {
-        app: 'birddex',
-        version: 1,
-        savedAt: new Date().toISOString(),
-        sightings,
-        outings,
-        patches,
-        settings: (storedSettings as Partial<Settings>) ?? settings,
-        photos: photoData,
-      };
-      downloadBlob(
-        `birddex-backup-${today()}.json`,
-        new Blob([JSON.stringify(data)], { type: 'application/json' }),
-      );
-      setBackupMsg(
-        `Saved a backup with ${(sightings as unknown[]).length} sightings and ${photoData.length} photos.`,
-      );
-    } catch (err) {
-      setBackupMsg(`Couldn't save a backup: ${friendly(err)}`);
-    }
-  };
-
-  const chooseRestoreFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    setBackupMsg('');
-    try {
-      const parsed = JSON.parse(await file.text()) as BackupData;
-      if (
-        !parsed ||
-        parsed.app !== 'birddex' ||
-        !Array.isArray(parsed.sightings) ||
-        !Array.isArray(parsed.outings) ||
-        !Array.isArray(parsed.patches)
-      ) {
-        throw new Error('not a backup');
-      }
-      setPendingBackup({ data: parsed, name: file.name });
-    } catch {
-      setPendingBackup(null);
-      setBackupMsg('That file is not a BirdyDex backup.');
-    }
-  };
-
-  const restoreBackup = async () => {
-    if (!pendingBackup) return;
-    setRestoring(true);
-    setBackupMsg('Restoring…');
-    try {
-      const data = pendingBackup.data;
-      for (const name of ['sightings', 'outings', 'patches', 'photos'] as const) {
-        await db.clear(name);
-      }
-      for (const photo of data.photos ?? []) {
-        if (!photo?.data) continue;
-        const blob = await (await fetch(photo.data)).blob();
-        await db.put('photos', { id: photo.id, blob, at: photo.at });
-      }
-      for (const sighting of data.sightings ?? []) await db.put('sightings', sighting);
-      for (const outing of data.outings ?? []) await db.put('outings', outing);
-      for (const patch of data.patches ?? []) await db.put('patches', patch);
-      if (data.settings) {
-        await db.kvSet('settings', data.settings);
-        const next: Settings = { ...DEFAULT_SETTINGS, ...data.settings };
-        setSettings(next);
-        applyTheme(next.theme);
-      }
-      setPendingBackup(null);
-      setBackupMsg(`Restored ${(data.sightings ?? []).length} sightings from ${pendingBackup.name}.`);
-    } catch (err) {
-      setBackupMsg(`Couldn't restore that backup: ${friendly(err)}`);
-    } finally {
-      setRestoring(false);
-    }
+  const changeTheme = async (t: Theme) => {
+    setTheme(t);
+    await saveTheme(t);
   };
 
   const exportEbird = async () => {
-    setEbirdMsg('');
+    const [sightings, outings] = await Promise.all([db.all('sightings'), db.all('outings')]);
+    const list = sightings as { speciesId: number }[];
+    if (!list.some((x) => byId.get(x.speciesId)?.kind === 'bird')) { toast('Log a bird first. eBird only takes birds.'); return; }
+    download(`birddex-ebird-${todayStr()}.csv`, new Blob([toEbirdCsv(list, outings)], { type: 'text/csv' }));
+  };
+
+  const saveBackup = async () => {
+    const photos = [];
+    for (const p of (await db.all('photos')) as { id: number; at?: number; blob?: Blob }[]) {
+      if (p.blob) photos.push({ id: p.id, at: p.at, data: await blobToDataUrl(p.blob) });
+    }
+    const [sightings, outings, patches, settings] = await Promise.all([db.all('sightings'), db.all('outings'), db.all('patches'), storedSettings()]);
+    const data = { app: 'birddex', version: 1, savedAt: new Date().toISOString(), sightings, outings, patches, settings, photos };
+    download(`birddex-backup-${todayStr()}.json`, new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  };
+
+  const pickRestore = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
     try {
-      const [sightings, outings] = await Promise.all([db.all('sightings'), db.all('outings')]);
-      const list = sightings as { speciesId: number }[];
-      if (!list.some((sighting) => byId.get(sighting.speciesId)?.kind === 'bird')) {
-        setEbirdMsg('Log a bird first. eBird only takes birds.');
-        return;
+      const data = JSON.parse(await file.text()) as BackupData;
+      if (data?.app !== 'birddex' || !Array.isArray(data.sightings) || !Array.isArray(data.outings) || !Array.isArray(data.patches)) throw new Error('not a backup');
+      setRestore(data);
+    } catch {
+      toast('That file is not a BirdyDex backup.');
+    }
+  };
+  const doRestore = async () => {
+    const data = restore;
+    setRestore(null);
+    if (!data) return;
+    try {
+      for (const s of ['sightings', 'outings', 'patches', 'photos']) await db.clear(s);
+      for (const p of data.photos ?? []) {
+        if (!p?.data) continue;
+        const blob = await (await fetch(p.data)).blob();
+        await db.put('photos', { id: p.id, blob, at: p.at });
       }
-      downloadBlob(
-        `birddex-ebird-${today()}.csv`,
-        new Blob([toEbirdCsv(list, outings)], { type: 'text/csv' }),
-      );
-      setEbirdMsg('Exported your bird sightings for eBird.');
+      for (const s of data.sightings ?? []) await db.put('sightings', s);
+      for (const o of data.outings ?? []) await db.put('outings', o);
+      for (const p of data.patches ?? []) await db.put('patches', p);
+      if (data.settings) await db.kvSet('settings', data.settings);
+      toast('Backup restored');
+      navigate('/dex');
     } catch (err) {
-      setEbirdMsg(`Couldn't export for eBird: ${friendly(err)}`);
+      toast(`Couldn't restore that backup: ${message(err)}`);
     }
   };
 
-  const handleGoogle = async () => {
-    setAccountError('');
-    if (!navigator.onLine) {
-      setAccountError('Signing in needs a connection.');
-      return;
-    }
-    try {
-      await signInWithGoogle();
-    } catch (err) {
-      setAccountError(friendly(err));
-    }
+  const doWipe = async () => {
+    setWipeAsk(false);
+    for (const s of ['sightings', 'outings', 'patches', 'photos']) await db.clear(s);
+    await db.kvSet('activeOuting', null);
+    toast('All sightings deleted');
+    navigate('/dex');
   };
 
-  const handleEmail = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const value = email.trim();
-    setAccountError('');
-    if (!/^\S+@\S+\.\S+$/.test(value)) {
-      setAccountError('Type the email address you want to sign in with.');
-      return;
-    }
-    if (!navigator.onLine) {
-      setAccountError('Signing in needs a connection.');
-      return;
-    }
-    setSending(true);
-    try {
-      await sendEmailLink(value);
-      setEmail(value);
-      setAuthStage('code');
-    } catch (err) {
-      setAccountError(friendly(err));
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleCode = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setAccountError('');
-    if (!code.trim()) {
-      setAccountError('Type the code from the email.');
-      return;
-    }
-    setVerifying(true);
-    try {
-      await verifyEmailCode(email, code);
-      setAuthStage('idle');
-      setCode('');
-      setAccountNote('Signed in.');
-    } catch (err) {
-      setAccountError(friendly(err));
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const saveName = async () => {
-    const name = displayName.trim().slice(0, 40);
-    try {
-      const next = (await saveProfile({ displayName: name })) as Profile;
-      setProfile(next);
-      setDisplayName(next.displayName ?? '');
-      setAccountNote('Name saved');
-    } catch (err) {
-      setAccountError(friendly(err));
-    }
-  };
-
-  const setLeaderboardVisibility = async (show: boolean) => {
-    try {
-      const next = (await saveProfile({ showOnLeaderboard: show })) as Profile;
-      setProfile(next);
-    } catch (err) {
-      setAccountError(friendly(err));
-    }
-  };
-
-  const doSync = async () => {
-    setAccountError('');
-    if (!navigator.onLine) {
-      setAccountNote('Offline, will sync when you are back online');
-      return;
-    }
-    setAccountNote('Syncing…');
-    try {
-      await syncNow();
-      setSyncState(syncStatus() as SyncState);
-      await refreshPending();
-      setAccountNote('');
-    } catch (err) {
-      setAccountError(friendly(err));
-    }
-  };
-
-  const askSignOut = () => {
-    void refreshPending();
-    setAccountError('');
-    setSignOutAsk(true);
-  };
-
-  const doSignOut = async (wipeLocal: boolean) => {
-    setSignOutBusy(true);
-    setAccountError('');
-    try {
-      await signOut();
-      await forgetSync({ wipeLocal });
-      setAccountUser(null);
-      setSignOutAsk(false);
-      const nextProfile = (await localProfile()) as Profile;
-      setProfile(nextProfile);
-      setDisplayName(nextProfile.displayName ?? '');
-      setAccountNote(
-        wipeLocal
-          ? 'Signed out and removed from this device.'
-          : 'Signed out. Your data stays on this device.',
-      );
-      await refreshPending();
-    } catch (err) {
-      setAccountError(friendly(err));
-    } finally {
-      setSignOutBusy(false);
-    }
-  };
-
-  const doDeleteAccount = async () => {
-    setAccountError('');
-    if (!navigator.onLine) {
-      setDeleteAsk(false);
-      setAccountNote('Deleting your account needs a connection.');
-      return;
-    }
-    setDeleteBusy(true);
-    setAccountNote('Deleting your account…');
-    try {
-      await deleteMyAccount();
-      setAccountUser(null);
-      setProfile((await localProfile()) as Profile);
-      setDeleteAsk(false);
-      setAccountNote('Account deleted. Your sightings are still on this device.');
-      await refreshPending();
-    } catch (err) {
-      setAccountError(`Couldn't delete the account: ${friendly(err)}`);
-    } finally {
-      setDeleteBusy(false);
-    }
-  };
-
-  const avatarSp = profile?.avatarSpeciesId ? byId.get(profile.avatarSpeciesId) ?? null : null;
-  const shownName =
-    profile?.displayName ||
-    accountUser?.name ||
-    accountUser?.email.split('@')[0] ||
-    'You';
-
-  let accountBody;
-  if (!configured) {
-    accountBody = (
-      <p className="small muted">
-        Cloud accounts are not configured in this copy of the app, so there is no sign-in or
-        cloud sync here. Everything else still works offline.
-      </p>
-    );
-  } else if (!authReady) {
-    accountBody = <p className="small muted">Checking your account…</p>;
-  } else if (!accountUser) {
-    accountBody = (
-      <div className="account-signed-out">
-        <p className="muted small">
-          Optional. Sign in to back up your sightings and photos, have them on your other
-          devices, and join the leaderboard. Without an account everything still works, offline
-          too.
-        </p>
-        <button type="button" className="btn btn--block acct-google" onClick={() => void handleGoogle()}>
-          Continue with Google
-        </button>
-        {authStage === 'idle' ? (
-          <form className="form acct-email" onSubmit={handleEmail} noValidate>
-            <label className="field">
-              <span>Or sign in with your email</span>
-              <input
-                type="email"
-                name="email"
-                autoComplete="email"
-                inputMode="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
-            <button className="btn btn--primary" disabled={sending}>
-              {sending ? 'Sending…' : 'Email me a sign-in link'}
-            </button>
-          </form>
-        ) : (
-          <form className="form acct-code" onSubmit={handleCode} noValidate>
-            <p className="small">Check your email. Tap the link in it, or type the 6-digit code here.</p>
-            <label className="field">
-              <span>Code from the email</span>
-              <input
-                name="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={10}
-                placeholder="123456"
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-              />
-            </label>
-            <div className="row-start">
-              <button className="btn btn--primary" disabled={verifying}>
-                {verifying ? 'Signing in…' : 'Sign in'}
-              </button>
-              <button
-                type="button"
-                className="btn btn--quiet"
-                onClick={() => {
-                  setAuthStage('idle');
-                  setCode('');
-                  setAccountError('');
-                }}
-              >
-                Use a different email
-              </button>
-            </div>
-          </form>
-        )}
-        {accountError && (
-          <p className="form-error" role="alert">
-            {accountError}
-          </p>
-        )}
-        {accountNote && (
-          <p className="small muted" role="status">
-            {accountNote}
-          </p>
-        )}
-      </div>
-    );
-  } else {
-    accountBody = (
-      <div className="progress-stack">
-        <div className="acct-card">
-          <AccountAvatar sp={avatarSp} path={getMyCloud()?.avatarPath} name={shownName} big />
-          <div className="acct-who">
-            <strong>{shownName}</strong>
-            <span className="small muted">{accountUser.email}</span>
-            <span className="small acct-status" data-sync-status data-state={syncState.state}>
-              {syncState.text || (navigator.onLine ? 'Not synced yet.' : 'Offline, will sync')}
-            </span>
-          </div>
-        </div>
-        <label className="field">
-          <span>Display name (shown on the leaderboard)</span>
-          <input
-            name="displayName"
-            maxLength={40}
-            value={displayName}
-            placeholder={shownName}
-            onChange={(event) => setDisplayName(event.target.value)}
-            onBlur={() => void saveName()}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') event.currentTarget.blur();
-            }}
-          />
-        </label>
-        <label className="check check--card">
-          <input
-            type="checkbox"
-            checked={profile?.showOnLeaderboard !== false}
-            onChange={(event) => void setLeaderboardVisibility(event.target.checked)}
-          />
-          <span>
-            Show me on the leaderboard. Only your name, avatar and counts are shown, never
-            your sightings, places, notes or photos. Groups you join always show you to their
-            members.
-          </span>
-        </label>
-        <div className="row-start">
-          <Link className="btn" to="/leaderboard">
-            Leaderboard
-          </Link>
-          <button className="btn" onClick={() => void doSync()}>
-            Sync now
-          </button>
-          <button className="btn" onClick={askSignOut}>
-            Sign out
-          </button>
-          <button className="btn btn--danger btn--quiet" disabled={deleteBusy} onClick={() => setDeleteAsk(true)}>
-            Delete my account and cloud data
-          </button>
-        </div>
-        {deleteAsk && (
-          <ConfirmDialog
-            title="Delete your account?"
-            body="This permanently deletes your account, your cloud copy of every sighting, outing, patch and photo, and your place on the leaderboard and in groups. What is on this device stays here, as a guest."
-            confirmLabel={deleteBusy ? 'Deleting…' : 'Delete my account'}
-            danger
-            onCancel={() => setDeleteAsk(false)}
-            onConfirm={() => void doDeleteAccount()}
-          />
-        )}
-        {pendingSync > 0 && (
-          <p className="small muted">
-            {pendingSync} change{pendingSync === 1 ? '' : 's'} waiting to sync.
-          </p>
-        )}
-        {signOutAsk && (
-          <div className="empty-inline acct-choices" role="group" aria-label="Sign out options">
-            <p className="muted">
-              Keep a copy of your sightings, outings, patches and photos on this device? Your
-              account keeps them either way.
-            </p>
-            {pendingSync > 0 && (
-              <p className="form-error">
-                {pendingSync} change{pendingSync === 1 ? " hasn't" : "s haven't"} reached the cloud
-                yet. Keep the copy, or sync first, so {pendingSync === 1 ? "it isn't" : "they aren't"}{' '}
-                lost.
-              </p>
-            )}
-            <button
-              className="btn btn--primary btn--block"
-              disabled={signOutBusy}
-              onClick={() => void doSignOut(false)}
-            >
-              Keep a copy on this device
-            </button>
-            <button
-              className={`btn btn--block ${pendingSync ? 'btn--danger' : ''}`}
-              disabled={signOutBusy}
-              onClick={() => void doSignOut(true)}
-            >
-              Remove it from this device
-            </button>
-            <button
-              className="btn btn--quiet btn--block"
-              disabled={signOutBusy}
-              onClick={() => setSignOutAsk(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        )}
-        {accountError && (
-          <p className="form-error" role="alert">
-            {accountError}
-          </p>
-        )}
-        {accountNote && (
-          <p className="small muted" role="status">
-            {accountNote}
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  const backupIsError = /Couldn't|not a BirdyDex/.test(backupMsg);
-
-  const paintField = (key: FieldKey, result: FieldResult) => {
-    setField((current) => ({ ...current, [key]: { ...result, busy: false } }));
-  };
-
-  const followField = (key: FieldKey, job: ReturnType<typeof fieldJob>) => {
-    setField((current) => ({
-      ...current,
-      [key]: { ...(current[key] || { ok: false, text: '' }), busy: true, prog: current[key]?.prog || 0, text: job.last[1] || 'Saving…' },
-    }));
-    const on: FieldReport = (fraction, text) => {
-      if (!fieldAlive.current) return;
-      setField((current) => {
-        const row = current[key] || { ok: false, text: '' };
-        return {
-          ...current,
-          [key]: {
-            ...row,
-            busy: true,
-            text: text || row.text,
-            prog: fraction == null ? row.prog || 0 : Math.round(fraction * 100),
-          },
-        };
-      });
-    };
-    job.subs.add(on);
-    on(...job.last);
-    job.p.then(async () => {
-      const result = await checkField(key).catch(() => ({ ok: false, text: "Couldn't check this one. Open Settings again to retry." }));
-      if (!fieldAlive.current) return;
-      paintField(key, result);
-      setFieldAnnounce(`${fieldLabel(key)}: ${result.text}`);
-    }, (err: unknown) => {
-      if (!fieldAlive.current) return;
-      const message = err instanceof Error ? err.message : String(err);
-      const result = { ok: false, text: `Couldn't finish: ${message}. Check the connection and try again.`, get: true };
-      paintField(key, result);
-      setFieldAnnounce(`${fieldLabel(key)}: ${result.text}`);
-    }).finally(() => job.subs.delete(on));
-  };
-
-  const requestField = (key: FieldKey) => {
-    if (!navigator.onLine) {
-      setField((current) => ({
-        ...current,
-        [key]: { ...(current[key] || { ok: false, text: '' }), busy: false, text: "You're offline. Connect to the internet, then try again.", get: true },
-      }));
-      return;
-    }
-    followField(key, fieldJob(key));
-  };
-
-  useEffect(() => {
-    fieldAlive.current = true;
-    for (const { key } of FIELD) {
-      const running = fieldJobs.get(key);
-      if (running) followField(key, running);
-      else {
-        void checkField(key)
-          .then((result) => { if (fieldAlive.current) paintField(key, result); })
-          .catch(() => {
-            if (fieldAlive.current) paintField(key, { ok: false, text: "Couldn't check this one. Open Settings again to retry." });
-          });
-      }
-    }
-    return () => { fieldAlive.current = false; };
-    // Check the six rows once when Settings opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const fieldDone = FIELD.filter(({ key }) => field[key]).length;
-  const fieldReady = FIELD.filter(({ key }) => field[key]?.ok).length;
-  const fieldSummary = fieldDone < FIELD.length
-    ? 'Checking what works with no signal…'
-    : fieldReady === FIELD.length
-      ? 'Everything here works with no signal.'
-      : `${fieldReady} of ${FIELD.length} ready. ${navigator.onLine ? 'Get the rest while you have Wi-Fi.' : 'The rest needs signal to save.'}`;
-
+  const installed = isInstalled();
   return (
     <>
       <header className="page-head page-head--back">
-        <Link className="iconbtn" to="/me" aria-label="Back to Me">
-          <Icon name="back" />
-        </Link>
+        <Link className="iconbtn" to="/me" aria-label="Back to Me"><Icon name="back" /></Link>
         <h1>Settings</h1>
       </header>
-
-      <section className="block">
-        <h2 className="h2">Account</h2>
-        {accountBody}
-        <p className="small muted">
-          Read the <a href="/privacy.html">privacy notice</a> and{' '}
-          <a href="/terms.html">terms</a>.
-        </p>
-      </section>
-
-      <section className="block">
-        <h2 className="h2">Colour & contrast</h2>
-        <p className="muted small">
-          Light and dark change the screen's contrast. Match my phone follows your device's
-          setting.
-        </p>
-        <label className="field">
-          <span>Theme</span>
-          <select
-            value={settings.theme}
-            onChange={(event) => void updateSettings({ theme: event.target.value as Settings['theme'] })}
-          >
-            <option value="auto">Match my phone</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
-        <label className="check check--card">
-          <input
-            type="checkbox"
-            checked={settings.colourUnseen}
-            onChange={(event) => void updateSettings({ colourUnseen: event.target.checked })}
-          />
-          <span>Show the photos of species I haven't seen in colour</span>
-        </label>
-        {settingsMsg && (
-          <p className="form-error" role="alert">
-            {settingsMsg}
-          </p>
-        )}
-      </section>
-
-      <section className="set-card set-ready" aria-labelledby="field-h">
-        <div className="ready-head">
-          <span className="ready-ring" style={{ '--p': fieldReady / FIELD.length } as CSSProperties} aria-hidden="true">
-            <svg viewBox="0 0 48 48"><circle className="ready-ring-track" cx="24" cy="24" r="20" /><circle className="ready-ring-fill" cx="24" cy="24" r="20" /></svg>
-            <b>{fieldReady}</b>
-          </span>
-          <div className="ready-head-txt">
-            <h2 className="set-title" id="field-h">Ready for the field</h2>
-            <p className="small muted" role="status">{fieldSummary}</p>
-          </div>
+      <ProfileRow />
+      <ReadyCard />
+      <AccountCard onChange={force} />
+      <Card id="phone-h" title="On this phone">
+        <div className="set-list">
+          <label className="set-row">
+            <span className="set-row-l">Theme</span>
+            <select className="set-select" value={theme} onChange={(e) => void changeTheme(e.target.value as Theme)}>
+              {THEMES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+          {canInstall ? (
+            <button type="button" className="set-row" onClick={() => void promptInstall()}><span className="set-row-l">Install app on this phone</span>{chev}</button>
+          ) : (
+            <div className="set-row set-row--info"><span className="set-row-l">Install</span><span className="set-row-v">{installed ? 'Installed on this phone' : 'Open the browser menu, then Add to Home screen'}</span></div>
+          )}
+          <button type="button" className="set-row" onClick={openWelcome}><span className="set-row-l">Show the welcome screen</span>{chev}</button>
         </div>
-        <ul className="ready-list">
-          {FIELD.map(({ key, label }) => {
-            const row = field[key];
-            return (
-              <li key={key} className={`ready-row${row?.ok ? ' ready-row--ok' : row ? ' ready-row--todo' : ''}${row?.busy ? ' ready-row--busy' : ''}`}>
-                <strong className="ready-name">{label}</strong>
-                <div className="ready-act">
-                  {row?.busy ? (
-                    <span className="ready-chip ready-chip--busy">Saving</span>
-                  ) : row?.ok ? (
-                    <span className="ready-chip ready-chip--ok"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>Saved</span>
-                  ) : row?.get ? (
-                    <button type="button" className="ready-chip ready-chip--get" onClick={() => requestField(key)} aria-label={`Get it now: ${label}`}>Get it now</button>
-                  ) : row?.link ? (
-                    <a className="ready-chip ready-chip--get" href={row.link}>{row.linkText}</a>
-                  ) : (
-                    <span className="ready-chip ready-chip--wait">Not yet</span>
-                  )}
-                </div>
-                <span className="ready-text small muted" role="status">{row?.text || 'Checking…'}</span>
-                {row?.busy && (
-                  <div className="meter meter--thin" style={{ '--p': `${row.prog || 0}%` } as CSSProperties} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={row.prog || 0} aria-label={`${label} download progress`}>
-                    <span />
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-        <p className="sr-only" role="status" aria-live="polite">{fieldAnnounce}</p>
-      </section>
-
-      <section className="block">
-        <h2 className="h2">On this phone</h2>
-        <button type="button" className="btn" onClick={openWelcome}>Show the welcome screen</button>
-      </section>
-
-      <section className="block">
-        <h2 className="h2">Send to eBird</h2>
-        <p className="muted small">
-          Download your bird sightings as an eBird Record Format file (eBird only takes birds, so
-          other animals and plants are left out). On a computer, go to ebird.org, then Submit,
-          then Import data, and choose "eBird Record Format (Extended)". eBird may ask you to
-          confirm a few bird names and locations.
-        </p>
-        <button className="btn" onClick={() => void exportEbird()}>
-          Export for eBird
-        </button>
-        {ebirdMsg && (
-          <p className="small muted progress-status" role="status">
-            {ebirdMsg}
-          </p>
-        )}
-      </section>
-
-      <section className="block">
-        <h2 className="h2">Backup</h2>
-        <p className="muted small">
-          Your sightings and photos are kept on this device
-          {persisted ? '' : ", and clearing the browser's site data would erase the local copy"}.
-          {accountUser ? ' Your account backs them up when a connection is available.' : ''} Save
-          a backup now and then. {usage}
-        </p>
-        <div className="progress-actions">
-          <button className="btn" onClick={() => void exportBackup()}>
-            Save backup
-          </button>
-          <button className="btn" onClick={() => fileRef.current?.click()}>
-            Restore backup
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".json,application/json"
-            className="hidden"
-            onChange={(event) => void chooseRestoreFile(event)}
-          />
+      </Card>
+      <Card id="ebird-h" title="Send to eBird">
+        <p className="set-note small muted">Download your bird sightings as an eBird Record Format file (eBird only takes birds, so other animals and plants are left out). On a computer, go to ebird.org, then Submit, then Import data, and choose "eBird Record Format (Extended)". eBird may ask you to confirm a few bird names and locations.</p>
+        <div className="set-list"><button type="button" className="set-row" onClick={() => void exportEbird()}><span className="set-row-l">Export for eBird</span>{chev}</button></div>
+      </Card>
+      <Card id="backup-h" title="Backup">
+        <p className="set-note small muted">Your sightings and photos live only on this phone{persisted ? '' : ", and clearing the browser's site data would erase them"}. Save a backup now and then. {usage}</p>
+        <div className="set-list">
+          <button type="button" className="set-row" onClick={() => void saveBackup()}><span className="set-row-l">Save backup</span>{chev}</button>
+          <button type="button" className="set-row" onClick={() => fileRef.current?.click()}><span className="set-row-l">Restore backup</span>{chev}</button>
+          <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => void pickRestore(e)} />
         </div>
-        {backupMsg && (
-          <p
-            className={`small progress-status ${backupIsError ? 'progress-status--error' : 'muted'}`}
-            role="status"
-          >
-            {backupMsg}
-          </p>
-        )}
-        {pendingBackup && (
-          <div className="empty-inline backup-confirm">
-            <p>
-              Restore <strong>{pendingBackup.name}</strong>? It replaces everything on this device
-              with {(pendingBackup.data.sightings ?? []).length} sightings from{' '}
-              {pendingBackup.data.savedAt?.slice(0, 10) || 'that backup'}.
-            </p>
-            <div className="row-start">
-              <button
-                className="btn btn--primary"
-                disabled={restoring}
-                onClick={() => void restoreBackup()}
-              >
-                {restoring ? 'Restoring…' : 'Restore'}
-              </button>
-              <button className="btn" disabled={restoring} onClick={() => setPendingBackup(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <section className="block settings-about">
-        <h2 className="h2">About</h2>
-        <p className="small">
-          Photos come from Wikipedia, Wikimedia Commons and iNaturalist contributors (via the
-          Atlas of Living Australia), each credited on its page. Calls are from iNaturalist (via
-          the ALA) and Wikimedia Commons. Maps © OpenStreetMap contributors; satellite imagery ©
-          Esri, Maxar and Earthstar Geographics.
-        </p>
-        <p className="small">
-          Read the <a href="/privacy.html">privacy notice</a> and{' '}
-          <a href="/terms.html">terms</a> for what is kept and how it is used.
-        </p>
+      </Card>
+      <Card id="about-h" title="About">
+        <p className="small">Photos come from Wikipedia, Wikimedia Commons and iNaturalist contributors (via the Atlas of Living Australia), each credited on its page. Each species' write-up lists the sources it is based on. Calls are from iNaturalist (via the ALA) and Wikimedia Commons. The clips saved for offline are shortened, level-matched copies of iNaturalist recordings, each credited where it plays. Maps &copy; OpenStreetMap contributors; satellite imagery &copy; Esri, Maxar and Earthstar Geographics.</p>
+        <p className="small">Hotspots, seasons and rarity come from Atlas of Living Australia records for SEQ since 2016 (including eBird and BirdLife Australia data). Birds: 40,000+ records is Common, 15,000+ Fairly common, 4,000+ Uncommon, 800+ Scarce and fewer is Rare. Other animals and plants are recorded far less often than birds, so each kind is ranked against its own kind: the most-recorded fifth of that kind is Common, the next fifth Fairly common, and so on down to Rare. Seasons are also compared within each kind. Record counts lean towards easy-to-see species and popular spots, so treat rarity as a guide.</p>
         <p className="small muted">Version 3.0</p>
-      </section>
+      </Card>
+      <Card id="over-h" title="Start over">
+        <div className="set-list"><button type="button" className="set-row set-row--danger" onClick={() => setWipeAsk(true)}><span className="set-row-l">Delete all my sightings</span></button></div>
+      </Card>
+      {restore && (
+        <ConfirmDialog
+          title="Restore this backup?"
+          body={`It replaces everything on this phone with ${plural((restore.sightings ?? []).length, 'sighting')} from ${fmtDate(restore.savedAt?.slice(0, 10))}.`}
+          confirmLabel="Restore"
+          onCancel={() => setRestore(null)}
+          onConfirm={() => void doRestore()}
+        />
+      )}
+      {wipeAsk && (
+        <ConfirmDialog
+          title="Delete all sightings?"
+          body="Every sighting, outing, patch and photo will be erased from this phone, and from your account if you are signed in. Save a backup first if you might want them back."
+          confirmLabel="Delete everything"
+          danger
+          onCancel={() => setWipeAsk(false)}
+          onConfirm={() => void doWipe()}
+        />
+      )}
     </>
   );
 }

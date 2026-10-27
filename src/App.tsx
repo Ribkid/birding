@@ -31,6 +31,7 @@ import { initLook, lookAfterDraw } from './lib/look';
 import { closeAllLayers } from './lib/layers';
 import { initProfile } from './core/profile.js';
 import { initAccount, onStatus, syncStatus } from './core/account.js';
+import { applySavedTheme } from './screens/progress/theme';
 import { useState } from 'react';
 
 /** v1 scrolled to the top on navigation unless you were moving between dex pages. */
@@ -73,6 +74,7 @@ export default function App() {
   useEffect(() => {
     void initProfile();
     void initAccount();
+    void applySavedTheme();
   }, []);
   return (
     <>
