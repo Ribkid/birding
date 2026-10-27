@@ -51,8 +51,11 @@ function TopBar() {
     const view = document.getElementById('view');
     const id = requestAnimationFrame(() => {
       lookAfterDraw(view);
-      const heading = view?.querySelector('h1')?.textContent?.trim();
-      document.title = heading ? `${heading} – BirdyDex` : "Sarah's BirdyDex";
+      // v1 afterDraw: the heading without its <small> line; the dex wordmark is the app's own name.
+      const h1 = view?.querySelector('h1')?.cloneNode(true) as HTMLElement | undefined;
+      h1?.querySelectorAll('small').forEach((n) => n.remove());
+      const heading = (h1?.textContent || '').replace(/\s+/g, ' ').trim();
+      document.title = !heading || /BirdyDex/.test(heading) ? "Sarah's BirdyDex" : `${heading} – BirdyDex`;
     });
     return () => cancelAnimationFrame(id);
   }, [location.pathname, location.search]);
