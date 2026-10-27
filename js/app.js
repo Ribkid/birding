@@ -1648,7 +1648,7 @@ async function renderSettings() {
     <header class="page-head page-head--back"><a class="iconbtn" href="#/badges" aria-label="Back">${icon.back}</a><h1>Settings</h1></header>
     <section class="block" data-account></section>
     <section class="block">
-      <label class="field"><span>Theme</span><select data-theme>${[['auto', 'Match my phone'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => `<option value="${v}" ${state.settings.theme === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="field"><span>Theme</span><select data-theme>${[['auto', 'Match my phone'], ['light', 'Light'], ['dark', 'Dark'], ['outdoor', 'Outdoor (high contrast for bright sun)']].map(([v, l]) => `<option value="${v}" ${state.settings.theme === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${state.installPrompt ? '<button class="btn btn--primary" data-install>Install app on this phone</button>' : `<p class="small muted">${matchMedia('(display-mode: standalone)').matches ? "Installed on this phone." : 'To install: open the browser menu, then Add to Home screen.'}</p>`}
       <button class="btn btn--quiet" data-welcome>Show the welcome screen</button>
     </section>

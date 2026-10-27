@@ -6,58 +6,125 @@
 @font-face { font-family: 'Big Shoulders'; font-weight: 600; font-display: swap; src: url(../fonts/big-shoulders-display-latin-600-normal.woff2) format('woff2'); }
 @font-face { font-family: 'Big Shoulders'; font-weight: 800; font-display: swap; src: url(../fonts/big-shoulders-display-latin-800-normal.woff2) format('woff2'); }
 
+/* ---------- design tokens ----------
+   Colours are named after SEQ species and places. Roles, not hues, are what components use:
+   paper/surface/surface-2 (three tonal steps), ink/ink-2 (text), line (dividers) and line-strong (control edges),
+   azure (actions), seen (in your dex), sun (progress), lori (new), gold (rare), danger, and one colour per kind.
+   Every "on-*" token is the text colour that sits on that fill. Ratios are WCAG, checked for light, dark and outdoor. */
 :root {
-  --seen-green: #2E9E4F;
-  --paper: #EDF1EE;      /* cool morning mist */
-  --surface: #FFFFFF;
-  --ink: #142E29;        /* mangrove */
-  --ink-2: #4F6861;      /* gum-leaf shade */
-  --line: #CCD7D2;
-  --azure: #1A5FCC;      /* azure kingfisher: actions */
-  --azure-ink: #FFFFFF;
-  --lori: #E4531C;       /* lorikeet chest: new birds, earned */
-  --gold: #D9A21B;       /* rosella: rare */
-  --sun: #F5C518;        /* eastern yellow robin: new birds, progress */
-  --display: 'Caprasimo', 'Big Shoulders', Georgia, serif;
-  /* kinds */
-  --k-bird: #1A5FCC; --k-mammal: #8B4A2B; --k-reptile: #9A5F00; --k-frog: #0B7A80; --k-butterfly: #9C3FB3; --k-plant: #2F7D3A;
-  --sun-ink: #8A6400;
-  --dim: #2A403B;        /* unseen tile wash */
-  --band-hi: #F2F4F5; --band-mid: #B4BCC1; --band-lo: #DCE0E3;
+  --paper: #EEF2EF;      /* cool morning mist */
+  --surface: #FFFFFF;    /* raised: cards, sheets, fields */
+  --surface-2: #E1E8E4;  /* sunk: placeholders, insets, tracks */
+  --ink: #10302A;        /* mangrove, 12.6:1 on paper */
+  --ink-2: #37514B;      /* gum-leaf shade, 7.6:1 on paper */
+  --line: #D3DDD8;       /* dividers only */
+  --line-strong: #71877F;/* control edges, 3.4:1 on paper */
+  --azure: #1A5CCB;      /* azure kingfisher: actions */
+  --on-azure: #FFFFFF;
+  --azure-soft: color-mix(in srgb, var(--azure) 12%, var(--surface));
+  --seen: #1E7A3A;       /* in your dex, 5.4:1 under white */
+  --on-seen: #FFFFFF;
+  --sun: #F5C518;        /* eastern yellow robin: progress */
+  --sun-ink: #7A5800;
+  --lori: #C8431A;       /* rainbow lorikeet chest: new */
+  --gold: #D9A21B;       /* rosella: rare (fill) */
+  --gold-ink: #6E4C00;
   --danger: #B3261E;
-  --r-tile: 14px; --r-sheet: 22px;
-  --font: 'Schibsted Grotesk', system-ui, sans-serif;
+  --on-danger: #FFFFFF;
+  --k-bird: #1A5CCB; --k-mammal: #8B4A2B; --k-reptile: #8A5500; --k-frog: #0A7378; --k-butterfly: #9437AE; --k-plant: #2B7636;
+  --on-kind: #FFFFFF;
+  --scrim: rgba(8, 24, 20, .5);
+  --shadow-1: 0 1px 2px rgba(16, 48, 42, .08), 0 3px 10px rgba(16, 48, 42, .07);
+  --shadow-2: 0 18px 40px -12px rgba(16, 48, 42, .35), 0 2px 6px rgba(16, 48, 42, .08);
+
+  /* type: Caprasimo is the voice (wordmark, screen titles, collect moments), Big Shoulders stamps numbers only,
+     Schibsted Grotesk carries everything you read. Seven sizes, ratio about 1.25. */
+  --display: 'Caprasimo', Georgia, serif;
   --stamp: 'Big Shoulders', 'Schibsted Grotesk', sans-serif;
+  --font: 'Schibsted Grotesk', system-ui, sans-serif;
+  --fs-1: .75rem; --fs-2: .875rem; --fs-3: 1rem; --fs-4: 1.25rem; --fs-5: 1.5625rem; --fs-6: 2rem; --fs-7: 2.75rem;
+
+  /* space and shape: radius follows role (controls, cards, sheets), not one value everywhere */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px; --sp-7: 48px;
+  --r-1: 8px; --r-2: 14px; --r-3: 24px; --r-pill: 999px;
+  --tap: 44px;           /* smallest touch target */
+
+  /* motion: press, respond, travel, celebrate */
+  --dur-1: 120ms; --dur-2: 200ms; --dur-3: 320ms; --dur-4: 560ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-in: cubic-bezier(.5, 0, .75, 0);
+  --ease-spring: cubic-bezier(.2, 1.4, .4, 1);
+
   --tabbar-h: 64px;
   color-scheme: light;
+
+  /* older names still used around the app */
+  --seen-green: var(--seen);
+  --azure-ink: var(--on-azure);
+  --dim: var(--surface-2);
+  --r-tile: var(--r-2); --r-sheet: var(--r-3);
+  --band-hi: #F2F4F5; --band-mid: #B4BCC1; --band-lo: #DCE0E3;
+}
+/* A spring that overshoots a little and settles. Kept behind @supports: an unsupported linear() inside a custom
+   property would fall back to 'ease' at computed-value time, not to the cubic-bezier above. */
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(0, .009, .035 2.1%, .141 4.4%, .723 12.9%, .938 16.7%, 1.017 19.4%, 1.067 22.5%, 1.077 25.1%, 1.07 28.1%, 1.017 34.2%, .995 38.7%, .988 43.3%, 1.002 56.5%, 1);
+    --ease-settle: linear(0, .16 6%, .52 15%, .82 26%, .95 38%, .99 52%, 1);
+  }
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #0F1E1B; --surface: #172A26; --ink: #E3EBE7; --ink-2: #97ACA5; --line: #2A433D;
-    --azure: #78A8F7; --azure-ink: #0B1B33; --lori: #FF7C4A; --gold: #F0C04A; --dim: #0A1513;
-    --sun: #F5C518; --sun-ink: #F5C518;
-    --k-bird: #78A8F7; --k-mammal: #E19A7A; --k-reptile: #F2B04C; --k-frog: #5ED0D6; --k-butterfly: #D592EA; --k-plant: #7BC77F;
-    --band-hi: #DCE1E4; --band-mid: #8E979D; --band-lo: #B9C0C4; --danger: #FF8A80;
+  :root:not([data-theme="light"]):not([data-theme="outdoor"]) {
+    --paper: #0E1C19; --surface: #1B332D; --surface-2: #0A1513;
+    --ink: #E6EEEA; --ink-2: #A6BAB3; --line: #2C463F; --line-strong: #62807A;
+    --azure: #7EADF8; --on-azure: #0B1B33; --seen: #5BC27A; --on-seen: #0E1C19;
+    --sun: #F5C518; --sun-ink: #F5C518; --lori: #FF8457; --gold: #F0C04A; --gold-ink: #F0C04A;
+    --danger: #FF8A80; --on-danger: #0E1C19;
+    --k-bird: #7EADF8; --k-mammal: #E5A385; --k-reptile: #F2B04C; --k-frog: #5ED0D6; --k-butterfly: #D99BEC; --k-plant: #7BC77F;
+    --on-kind: #0E1C19; --scrim: rgba(0, 0, 0, .6);
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, .3), 0 3px 10px rgba(0, 0, 0, .25);
+    --shadow-2: 0 18px 40px -12px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .3);
+    --band-hi: #DCE1E4; --band-mid: #8E979D; --band-lo: #B9C0C4;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-    --paper: #0F1E1B; --surface: #172A26; --ink: #E3EBE7; --ink-2: #97ACA5; --line: #2A433D;
-    --azure: #78A8F7; --azure-ink: #0B1B33; --lori: #FF7C4A; --gold: #F0C04A; --dim: #0A1513;
-    --sun: #F5C518; --sun-ink: #F5C518;
-    --k-bird: #78A8F7; --k-mammal: #E19A7A; --k-reptile: #F2B04C; --k-frog: #5ED0D6; --k-butterfly: #D592EA; --k-plant: #7BC77F;
-    --band-hi: #DCE1E4; --band-mid: #8E979D; --band-lo: #B9C0C4; --danger: #FF8A80;
-    color-scheme: dark;
+  --paper: #0E1C19; --surface: #1B332D; --surface-2: #0A1513;
+  --ink: #E6EEEA; --ink-2: #A6BAB3; --line: #2C463F; --line-strong: #62807A;
+  --azure: #7EADF8; --on-azure: #0B1B33; --seen: #5BC27A; --on-seen: #0E1C19;
+  --sun: #F5C518; --sun-ink: #F5C518; --lori: #FF8457; --gold: #F0C04A; --gold-ink: #F0C04A;
+  --danger: #FF8A80; --on-danger: #0E1C19;
+  --k-bird: #7EADF8; --k-mammal: #E5A385; --k-reptile: #F2B04C; --k-frog: #5ED0D6; --k-butterfly: #D99BEC; --k-plant: #7BC77F;
+  --on-kind: #0E1C19; --scrim: rgba(0, 0, 0, .6);
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .3), 0 3px 10px rgba(0, 0, 0, .25);
+  --shadow-2: 0 18px 40px -12px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .3);
+  --band-hi: #DCE1E4; --band-mid: #8E979D; --band-lo: #B9C0C4;
+  color-scheme: dark;
+}
+/* Outdoor: white paper, near-black ink and firm edges for full sun. Also used when the phone asks for more contrast. */
+:root[data-theme="outdoor"] {
+  --paper: #FFFFFF; --surface: #FFFFFF; --surface-2: #E6ECE9;
+  --ink: #06201B; --ink-2: #263F39; --line: #A7B6B0; --line-strong: #3E5751;
+  --azure: #0F4FB8; --seen: #17692F; --lori: #B23A14; --danger: #A0201A;
+  --shadow-1: 0 0 0 1.5px #3E5751; --shadow-2: 0 0 0 2px #06201B, 0 12px 30px -10px rgba(0, 0, 0, .35);
+}
+@media (prefers-contrast: more) {
+  :root:not([data-theme]) {
+    --paper: #FFFFFF; --surface: #FFFFFF; --surface-2: #E6ECE9;
+    --ink: #06201B; --ink-2: #263F39; --line: #A7B6B0; --line-strong: #3E5751;
+    --azure: #0F4FB8; --seen: #17692F; --lori: #B23A14; --danger: #A0201A;
+  }
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 72px; scroll-padding-bottom: calc(var(--tabbar-h) + 72px + env(safe-area-inset-bottom)); }
 body {
   margin: 0; background: var(--paper); color: var(--ink);
-  font: 400 16px/1.5 var(--font);
+  font: 400 1rem/1.5 var(--font);
   padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
   -webkit-tap-highlight-color: transparent;
 }
+:root[data-theme="outdoor"] body { font-weight: 500; }
 body.has-sheet { overflow: hidden; }
 a { color: var(--azure); }
 img { display: block; max-width: 100%; }
