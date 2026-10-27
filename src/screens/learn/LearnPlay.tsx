@@ -134,6 +134,10 @@ function Feedback({ q, right, game, onNext, onPlay }: {
       {line && <p className="lq-line">{line}</p>}
       {mark && <p className="lq-line">{mark}</p>}
       {tell && <p className="lq-tell"><strong>How to tell them apart.</strong> {tell}</p>}
+      {q.safety && <p className="lq-safety"><svg viewBox="0 0 24 24">{QI.warn}</svg><span>{q.safety}</span></p>}
+      {q.type === 'fact' && q.source?.title && (
+        <p className="lq-source">Source: {q.source.url ? <a href={q.source.url} target="_blank" rel="noopener">{q.source.title}</a> : q.source.title}</p>
+      )}
       <div className="lq-actions">
         {Q.hasCall(ans.id) && q.type !== 'fact' && <button type="button" className="btn lq-act" onClick={() => onPlay(q.type === 'call' ? 'answer' : String(ans.id))}><span><svg viewBox="0 0 24 24">{QI.play}</svg></span><span>{q.type === 'call' ? 'Hear it again' : 'Hear its call'}</span></button>}
         {!right && pickedSp && Q.hasCall(pickedSp.id) && q.type !== 'fact' && <button type="button" className="btn lq-act" onClick={() => onPlay(String(pickedSp.id))}><span><svg viewBox="0 0 24 24">{QI.play}</svg></span><span>Hear the one you picked</span></button>}
