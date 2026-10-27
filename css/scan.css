@@ -270,7 +270,7 @@ body.has-outing .scan-go { bottom: calc(var(--chrome-bottom) + 66px); }
   position: absolute; left: var(--sp-2); bottom: var(--sp-2); padding: 2px 9px; border-radius: var(--r-pill);
   font-size: var(--fs-1); font-weight: 700; background: rgba(6, 14, 12, .72); color: #fff;
 }
-.scan-tile-missing { display: block; background: repeating-linear-gradient(135deg, var(--surface-2) 0 8px, color-mix(in srgb, var(--surface-2) 85%, var(--ink-2)) 8px 16px) !important; }
+.scan-strip .scan-tile-missing { display: block; background: repeating-linear-gradient(135deg, var(--surface-2) 0 8px, color-mix(in srgb, var(--surface-2) 85%, var(--ink-2)) 8px 16px); }
 .scan-card-body { display: grid; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4) var(--sp-4); }
 .scan-credit { margin: 0; font-size: var(--fs-1); color: var(--ink-2); overflow-wrap: anywhere; }
 .scan-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); }
