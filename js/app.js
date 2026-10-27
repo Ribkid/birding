@@ -1767,7 +1767,7 @@ function renderLists() {
   const t = totals(state.sightings, now);
   const seen = seenSet();
   const month = now.getMonth() + 1;
-  const tg = targets({ seen, month, ...targetOpts() }).slice(0, 8);
+  const allTg = targets({ seen, month, ...targetOpts() }), tg = allTg.slice(0, 8);
   const chance = targetChances(tg, month);
   const outings = state.outings.slice().sort((a, b) => b.startedAt - a.startedAt);
   const years = yearTotals(state.sightings).filter(y => y.year !== String(now.getFullYear()));
@@ -1795,7 +1795,7 @@ function renderLists() {
       <p class="muted small">Birds you haven't seen that are most often reported in SEQ this month.</p>
       ${tg.length ? `<ul class="tcar" aria-label="Targets for ${MONTHS[now.getMonth()]}">${tg.map(s => `<li><a class="tcard kind--${s.kind}" href="#/bird/${s.id}">
         <span class="row-thumb tcard-img">${birdImg(s, 'small', '', { alt: '' })}</span>
-        <span class="tcard-txt"><strong>${esc(s.name)}</strong><span class="tcard-r">${RARITY[s.rarity].label}</span>${chanceBar(chance.get(s.id), 'chance--on-photo', '')}</span></a></li>`).join('')}</ul>`
+        <span class="tcard-txt"><strong>${esc(s.name)}</strong><span class="tcard-r">${RARITY[s.rarity].label}</span>${chanceBar(chance.get(s.id), 'chance--on-photo', '')}</span></a></li>`).join('')}${allTg.length > tg.length ? `<li><a class="tcard tcard--more" href="#/targets"><b>${allTg.length}</b><span>See all targets</span></a></li>` : ''}</ul>`
         : '<p class="empty-inline">You have seen every likely bird for this month. Impressive.</p>'}
       <a class="btn btn--block near-btn" href="#/targets" data-near>${icon.pin} Find targets near me</a>
     </section>

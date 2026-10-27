@@ -456,3 +456,14 @@ body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
 .tally-list.rows--card .tally-row { flex-wrap: wrap; row-gap: 6px; }
 .tally-list.rows--card .tally-sp { min-width: 150px; }
 .tally-list.rows--card .tally-ctl { margin-left: auto; }
+.tcard--more { display: grid; align-content: end; gap: 4px; padding: 16px; color: var(--ink); background: var(--surface); }
+.tcard--more b { font: 800 3rem/.95 var(--stamp); font-variant-numeric: tabular-nums; }
+.tcard--more span { font-weight: 700; color: var(--azure); }
+
+/* Touch targets: every control in the field is at least 44px. */
+.lseg-btn, .seg-btn, .ready-chip--get, .map-ctl .chip, .mapwrap .layer-toggle button, .locpick .layer-toggle button { min-height: var(--tap); }
+.lseg, .seg, .mapwrap .layer-toggle, .locpick .layer-toggle { padding: 2px; }
+.mapwrap .map-patch { min-height: 48px; }
+.map-fab { width: 48px; height: 48px; }
+.mapwrap .leaflet-touch .leaflet-bar a, .locpick .leaflet-touch .leaflet-bar a { width: 48px; height: 48px; line-height: 48px; }
+.set-select { min-height: var(--tap); }
