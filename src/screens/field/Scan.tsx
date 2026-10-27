@@ -182,7 +182,7 @@ export default function Scan() {
           <div><h1>Scan a photo</h1><p className="small">{intro}</p></div>
         </header>
         <div className="scan-cam-body">
-          <section className="scan-vf" aria-label="Photo">
+          <section className={`scan-vf${!photo ? ' scan-vf--empty' : ''}${busy ? ' scan-vf--busy' : ''}`} aria-label="Photo">
             {!photo ? (
               <>
                 <div className="scan-frame">
@@ -195,45 +195,47 @@ export default function Scan() {
                 </div>
               </>
             ) : (
-              <>
-                <div ref={stageRef} className={`scan-stage${whole ? ' scan-stage--whole' : ''}`} tabIndex={0} role="application"
-                  aria-label={whole ? 'Your photo. The whole photo will be identified.' : 'Your photo with the identify box. Arrow keys move the box, plus and minus change its size.'}
-                  onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
-                  <div className="scan-photo">
-                    <img src={photo.url} alt="" draggable={false} />
-                    <span className="scan-dim" aria-hidden="true" />
-                    <span className="scan-corners scan-corners--photo" aria-hidden="true" />
-                    <span className="scan-sweep scan-sweep--whole" aria-hidden="true" />
-                  </div>
-                  {!whole && (
-                    <div className="scan-box" data-box style={boxAt}>
-                      <span className="scan-sweep" aria-hidden="true" />
-                      {['nw', 'ne', 'sw', 'se'].map((c) => <span key={c} className={`scan-handle scan-handle--${c}`} data-handle={c} />)}
-                    </div>
-                  )}
-                  <span className="scan-pips" aria-hidden="true">{progress?.phase === 'view' && Array.from({ length: progress.count || 0 }, (_, i) => <i key={i} className={i < (progress.index || 0) - 1 ? 'on' : i === (progress.index || 0) - 1 ? 'now' : ''} />)}</span>
+              <div ref={stageRef} className={`scan-stage${whole ? ' scan-stage--whole' : ''}`} tabIndex={0} role="application"
+                aria-label={whole ? 'Your photo. The whole photo will be identified.' : 'Your photo with the identify box. Arrow keys move the box, plus and minus change its size.'}
+                onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+                <div className="scan-photo">
+                  <img src={photo.url} alt="" draggable={false} />
+                  <span className="scan-dim" aria-hidden="true" />
+                  <span className="scan-corners scan-corners--photo" aria-hidden="true" />
+                  <span className="scan-sweep scan-sweep--whole" aria-hidden="true" />
                 </div>
-                <div className="scan-tools">
-                  <p className="scan-hint">{whole ? 'The whole photo will be identified.' : subject ? `Drag the box onto the ${subject}. Pull a corner to resize.` : 'Drag the box onto what you want named. Pull a corner to resize.'}</p>
-                  <div className="scan-tool-row">
-                    <button type="button" className="scan-chip scan-chip--whole" data-whole aria-pressed={whole} onClick={() => setWhole((v) => !v)}><i aria-hidden="true" />Whole photo</button>
-                    <label className="scan-chip scan-change"><span>Change photo</span><input type="file" accept="image/*" className="scan-file" onChange={(e) => void pick(e.target.files?.[0])} /></label>
-                  </div>
-                </div>
-                {multi && (
-                  <div className="scan-kinds" role="group" aria-label="What kind is it?">
-                    <button type="button" className={`scan-chip ${kind ? `kind--${kind}` : ''}`} aria-pressed={!kind} onClick={() => setKind('')}>Anything</button>
-                    {covered.map((k) => <button key={k} type="button" className={`scan-chip kind--${k}`} aria-pressed={kind === k} onClick={() => setKind(k)}>{KINDS[k].label}</button>)}
+                {!whole && (
+                  <div className="scan-box" data-box style={boxAt}>
+                    <span className="scan-sweep" aria-hidden="true" />
+                    {['nw', 'ne', 'sw', 'se'].map((c) => <span key={c} className={`scan-handle scan-handle--${c}`} data-handle={c} />)}
                   </div>
                 )}
-                <button type="button" className="scan-go" disabled={busy} onClick={() => void identify()} aria-disabled={busy}><span>◱</span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
-              </>
+                <span className="scan-pips" aria-hidden="true">{progress?.phase === 'view' && Array.from({ length: progress.count || 0 }, (_, i) => <i key={i} className={i < (progress.index || 0) - 1 ? 'on' : i === (progress.index || 0) - 1 ? 'now' : ''} />)}</span>
+              </div>
             )}
-            <div className="scan-work">
-              <p className="scan-status" role="status" aria-live="polite">{status}</p>
-              {progress?.phase === 'model' && <div className="scan-progress"><div className="meter"><span style={{ width: `${Math.round(progress.frac * 100)}%` }} /></div><p className="scan-mb">{Math.round(progress.frac * photoModelMb())} of {photoModelMb()} MB</p></div>}
-            </div>
           </section>
+          {photo && (
+            <>
+              <div className="scan-tools">
+                <p className="scan-hint">{whole ? 'The whole photo will be identified.' : subject ? `Drag the box onto the ${subject}. Pull a corner to resize.` : 'Drag the box onto what you want named. Pull a corner to resize.'}</p>
+                <div className="scan-tool-row">
+                  <button type="button" className="scan-chip scan-chip--whole" data-whole aria-pressed={whole} onClick={() => setWhole((v) => !v)}><i aria-hidden="true" />Whole photo</button>
+                  <label className="scan-chip scan-change"><span>Change photo</span><input type="file" accept="image/*" className="scan-file" onChange={(e) => void pick(e.target.files?.[0])} /></label>
+                </div>
+              </div>
+              {multi && (
+                <div className="scan-kinds" role="group" aria-label="What kind is it?">
+                  <button type="button" className={`scan-chip ${kind ? `kind--${kind}` : ''}`} aria-pressed={!kind} onClick={() => setKind('')}>Anything</button>
+                  {covered.map((k) => <button key={k} type="button" className={`scan-chip kind--${k}`} aria-pressed={kind === k} onClick={() => setKind(k)}>{KINDS[k].label}</button>)}
+                </div>
+              )}
+              <button type="button" className="scan-go" disabled={busy} onClick={() => void identify()} aria-disabled={busy}><span>◱</span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
+            </>
+          )}
+          <div className="scan-work">
+            <p className="scan-status" role="status" aria-live="polite">{status}</p>
+            {progress?.phase === 'model' && <div className="scan-progress"><div className="meter"><span style={{ width: `${Math.round(progress.frac * 100)}%` }} /></div><p className="scan-mb">{Math.round(progress.frac * photoModelMb())} of {photoModelMb()} MB</p></div>}
+          </div>
         </div>
       </section>
 
