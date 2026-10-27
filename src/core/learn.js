@@ -41,6 +41,9 @@ let active = null;
 export const getActive = () => active;
 export const setActive = (game) => { active = game; };
 const currentRoute = () => (typeof location !== 'undefined' ? location.hash : '');
+// The round (or review deck) to go back to on this route, if any. Like v1 renderLearn, a round is kept while its
+// route (window.location.hash when it started, e.g. '#/learn/play/whoami') is the one showing.
+export const activeFor = (route = currentRoute(), { deck = false } = {}) => (active && !!active.deck === deck && active.route === route ? active : null);
 export const getLearn = () => L;
 export const getDaily = () => D;
 export const getQuizStats = () => ST;

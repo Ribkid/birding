@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { HABITATS, KINDS, byId, type QuizQuestion, type RoundState } from '../../lib/data';
 import { useMedia, useSightings } from '../../lib/hooks';
 import { CountUp } from '../../components/Motion';
@@ -11,7 +11,7 @@ import { cachedIndex } from '../../core/media.js';
 import {
   learnReady, newPracticeRound, newDailyRound, newDeckRound, answer as recordAnswer, finishRound,
   roundNote, testSet, allCards, dueCards, boxes, nextDue, addCards, gradeCard, dayStr, monthName,
-  packBy, ROUND, RAPID_MS, kindLabel, emptyMessage, startOfDay, getLearn, getActive, setActive,
+  packBy, ROUND, RAPID_MS, kindLabel, emptyMessage, startOfDay, getLearn, getActive, setActive, activeFor,
 } from '../../core/learn.js';
 import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, type CallClip } from './QuizMedia';
 import './learn.css';
@@ -34,20 +34,35 @@ const cleanClue = (clue: string) => {
 
 function speciesName(id?: number | null) { return byId.get(Number(id))?.name || ''; }
 
+// The round on screen is kept in learn.js (getActive) with the route it belongs to, so leaving for a species page or
+// Compare and pressing Back puts her back where she was, as v1 does. This remembers how far down the page she was.
+const scrollOf = new WeakMap<object, number>();
+const hereNow = () => window.location.hash;
+function useRememberScroll(round: object | null) {
+  useEffect(() => {
+    if (!round) return;
+    const here = hereNow();
+    // Only while this round's route is showing: the next screen's scroll-to-top must not overwrite it.
+    const onScroll = () => { if (hereNow() === here) scrollOf.set(round, window.scrollY); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [round]);
+}
+
 function promptFor(q: QuizQuestion) {
   return q.prompt;
 }
 
-function Media({ q }: { q: QuizQuestion }) {
+function Media({ q, still = false }: { q: QuizQuestion; still?: boolean }) {
   const [showHint, setShowHint] = useState(false);
   const sp = byId.get(q.focus);
   if (!sp) return null;
   const missing = <>This photo needs a connection. Here are its field notes instead: {cleanClue(Q.blankNotes(sp, q.wrong || []))}</>;
   if (q.type === 'photo') return <PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}`} missing={missing} />;
   if (q.type === 'silhouette') {
-    return <><SilhouetteFilter /><PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, shown as a silhouette`} cls={`lq-photo lq-photo--sil${q.picked != null ? ' is-revealed' : ''}`} missing={missing} /></>;
+    return <><SilhouetteFilter /><PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, shown as a silhouette`} cls={`lq-photo lq-photo--sil${q.picked != null ? ' is-revealed' : ''}${still ? ' no-anim' : ''}`} missing={missing} /></>;
   }
-  if (q.type === 'zoom') return <PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, close up`} cls={`lq-photo lq-photo--zoom${q.picked != null ? ' is-revealed' : ''}`} style={{ '--zx': `${q.zoom?.x ?? 50}%`, '--zy': `${q.zoom?.y ?? 50}%`, '--zs': q.zoom?.scale ?? 2 } as React.CSSProperties} missing={missing} />;
+  if (q.type === 'zoom') return <PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, close up`} cls={`lq-photo lq-photo--zoom${q.picked != null ? ' is-revealed' : ''}${still ? ' no-anim' : ''}`} style={{ '--zx': `${q.zoom?.x ?? 50}%`, '--zy': `${q.zoom?.y ?? 50}%`, '--zs': q.zoom?.scale ?? 2 } as React.CSSProperties} missing={missing} />;
   if (q.type === 'call') return (
     <>
       <CallPlayer call={q.call as CallClip} seed={q.call?.src || sp.id} onFail={() => setShowHint(true)} />
@@ -59,8 +74,10 @@ function Media({ q }: { q: QuizQuestion }) {
   return null;
 }
 
-function Options({ q, picked, onPick, rapid, round }: { q: QuizQuestion; picked: string | null; onPick: (key: string) => void; rapid: boolean; round: number }) {
+function Options({ q, picked, onPick, rapid, round, still = false }: { q: QuizQuestion; picked: string | null; onPick: (key: string) => void; rapid: boolean; round: number; still?: boolean }) {
   const disabled = picked != null;
+  // A restored answer is drawn without replaying the pop and shake (v1 showAnswer restore adds no-anim).
+  const calm = disabled && still ? ' no-anim' : '';
   if (q.options[0]?.photos) {
     const n = q.options.length;
     return (
@@ -70,7 +87,7 @@ function Options({ q, picked, onPick, rapid, round }: { q: QuizQuestion; picked:
           const named = q.named || disabled;
           const suffix = disabled ? (o.key === q.answer ? ' (right answer)' : o.key === picked ? ' (your answer)' : '') : '';
           return (
-            <button key={o.key} type="button" className={`lq-side${cls}`} data-pick={o.key} aria-disabled={disabled || undefined} aria-label={named ? `${o.label}${suffix}` : SIDES[n]?.[i] || `Photo ${i + 1}`} onClick={() => onPick(o.key)}>
+            <button key={o.key} type="button" className={`lq-side${cls}${calm}`} data-pick={o.key} aria-disabled={disabled || undefined} aria-label={named ? `${o.label}${suffix}` : SIDES[n]?.[i] || `Photo ${i + 1}`} onClick={() => onPick(o.key)}>
               <PhotoBox key={`${round}-${o.key}`} photos={o.photos} alt="" cls="lq-photo lq-photo--duel" missing="Photo not saved on this phone" />
               <span className="lq-side-name" data-name>{named ? o.label : ''}</span>
               <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24">{QI.cross}</svg> : null}</span>
@@ -87,7 +104,7 @@ function Options({ q, picked, onPick, rapid, round }: { q: QuizQuestion; picked:
         const cls = disabled ? (o.key === q.answer ? ' is-right' : o.key === picked ? ' is-wrong' : ' is-dim') : '';
         const suffix = disabled ? (o.key === q.answer ? ' (right answer)' : o.key === picked ? ' (your answer)' : '') : '';
         return (
-          <button key={o.key} type="button" className={`lq-opt${cls}`} data-pick={o.key} aria-disabled={disabled || undefined} onClick={() => onPick(o.key)}>
+          <button key={o.key} type="button" className={`lq-opt${cls}${calm}`} data-pick={o.key} aria-disabled={disabled || undefined} onClick={() => onPick(o.key)}>
             <span className={`lq-opt-label${q.italic ? ' is-sci' : ''}`}>{o.label}</span>
             <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24">{QI.cross}</svg> : null}</span>
             <span className="sr-only">{suffix}</span>
@@ -98,9 +115,9 @@ function Options({ q, picked, onPick, rapid, round }: { q: QuizQuestion; picked:
   );
 }
 
-function Feedback({ q, right, game, onNext, onPlay }: {
+function Feedback({ q, right, game, onNext, onPlay, restore = false }: {
   q: QuizQuestion; right: boolean; game: RoundState; onNext: () => void;
-  onPlay: (which: string) => void;
+  onPlay: (which: string) => void; restore?: boolean;
 }) {
   const ans = byId.get(q.focus);
   if (!ans) return null;
@@ -121,13 +138,14 @@ function Feedback({ q, right, game, onNext, onPlay }: {
   const fbRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = fbRef.current;
-    if (!el) return;
+    // Coming back to an answered question (v1 showAnswer restore) neither moves focus nor scrolls.
+    if (!el || restore) return;
     el.focus({ preventScroll: true });
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' }));
   }, []);
   return (
-    <div ref={fbRef} className={`lq-fb ${right ? 'is-right' : 'is-wrong'}`} data-fb tabIndex={-1}>
+    <div ref={fbRef} className={`lq-fb ${right ? 'is-right' : 'is-wrong'}${restore ? ' no-anim' : ''}`} data-fb tabIndex={-1}>
       <p className="lq-verdict"><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{verdictText}</span></p>
       {speciesQ && <p className="lq-name"><Link to={`/bird/${ans.id}`}>{ans.name}</Link> <span className="lq-sci">{ans.sci}</span></p>}
       {(q.type === 'call' || q.type === 'whoami') && q.photos?.length ? <PhotoBox photos={q.photos} alt={ans.name} cls="lq-photo lq-photo--answer" /> : null}
@@ -161,14 +179,16 @@ function Results({ game, total, onAgain, onAgainMissed, onHub }: {
   const wrongs = game.mode === 'rapid' ? missed.slice(0, 15) : missed;
   const roundName = game.daily ? "Today's challenge" : game.testId ? 'Test me' : game.pack ? packBy[game.pack]?.name : MODE_INFO[game.mode] || '';
   const headRef = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { headRef.current?.focus({ preventScroll: true }); }, []);
+  // The score counts up the first time only, not when she comes back to it (v1 game.shown).
+  const [first] = useState(() => !game.shown);
+  useEffect(() => { game.shown = true; headRef.current?.focus({ preventScroll: true }); }, [game]);
   return (
     <div className="lr">
       <header className="page-head"><h1 ref={headRef} className="lh-title" tabIndex={-1}>{roundName}</h1></header>
       <section className="lr-hero" aria-label="Your score">
         <div className="lr-ring">
           <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" pathLength="100" /><circle className={`lr-ring-fg${frac > 0 ? '' : ' is-zero'}`} cx="60" cy="60" r="52" pathLength="100" style={{ strokeDashoffset: 100 - frac * 100 }} /></svg>
-          <p className="lr-score" role="status"><CountUp value={big} /><span aria-hidden="true">{of}</span><span className="sr-only">{big} {of}</span></p>
+          <p className="lr-score" role="status">{first ? <CountUp value={big} /> : <span>{big}</span>}<span aria-hidden="true">{of}</span><span className="sr-only">{big} {of}</span></p>
         </div>
         <p className="lr-note">{note}</p>
       </section>
@@ -228,9 +248,10 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const params = useParams();
   const pack = fixedPack || params.pack || 'quick';
   const navigate = useNavigate();
-  const location = useLocation();
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [game, setGame] = useState<RoundState | null>(null);
+  // True from coming back to a saved round until she next answers or moves on.
+  const [resumed, setResumed] = useState(false);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const [deckMode, setDeckMode] = useState<'overview' | 'card' | 'done'>('overview');
@@ -258,14 +279,18 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     let alive = true;
     setError('');
     setGame(null);
+    setResumed(false);
     setReady(false);
     void (async () => {
       await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
       if (!alive) return;
       setReady(true);
       if (isDeck) return;
-      const active = getActive();
-      if (active && active.route === location.hash && !active.done) {
+      // Back from a species page or Compare: the same question, options, answer and feedback, or the same results
+      // (v1 renderLearn keeps `game` while its route matches). learn.js stores window.location.hash as the route.
+      const active = activeFor(hereNow()) as RoundState | null;
+      if (active) {
+        setResumed(true);
         setGame(active);
         if (active.mode === 'rapid') setRapidLeft(Math.max(0, (active.endsAt || 0) - Date.now()));
         return;
@@ -333,12 +358,20 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     }
   }, [game?.i]);
 
-  // Every new question and the results start at the top, like v1 drawn().
-  useEffect(() => { window.scrollTo(0, 0); }, [game?.i, isOver]);
+  // Every new question and the results start at the top, like v1 drawn(); a resumed round goes back to where she was.
+  useEffect(() => { if (!resumed) window.scrollTo(0, 0); }, [game?.i, isOver]);
+  useRememberScroll(game);
+  useEffect(() => {
+    if (!resumed || !game) return;
+    window.scrollTo(0, scrollOf.get(game) || 0);
+    // v1 focuses the screen's heading after a route change (the results heading focuses itself).
+    promptRef.current?.focus({ preventScroll: true });
+  }, [resumed, game]);
 
   // These must be declared before any early return: the results screen calls them.
   const restart = async () => {
     wantHeadFocus.current = true;
+    setResumed(false);
     stopCalls();
     setActive(null);
     setGame(null);
@@ -365,6 +398,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   };
   const startWithIds = async (ids: number[]) => {
     wantHeadFocus.current = true;
+    setResumed(false);
     stopCalls();
     stopInline();
     await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
@@ -385,6 +419,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const next = () => {
     if (!game) return;
     wantHeadFocus.current = true;
+    setResumed(false);
     stopCalls();
     stopInline();
     game.i += 1;
@@ -395,11 +430,12 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (!game || !current || current.picked != null) return;
     const q = current;
     const ok = recordAnswer(game, q, key);
+    setResumed(false);
     navigator.vibrate?.(ok ? 30 : [40, 60, 40]);
     if (game.mode === 'rapid') {
       const g = game;
       window.setTimeout(() => {
-        if (g.qs[g.i] === q) { wantHeadFocus.current = true; stopInline(); g.i += 1; setRevealed(false); force(); }
+        if (g.qs[g.i] === q) { wantHeadFocus.current = true; setResumed(false); stopInline(); g.i += 1; setRevealed(false); force(); }
       }, ok ? 450 : 1100);
     }
     force();
@@ -438,7 +474,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   if (!ready || !game) return <div className="learn learn--loading" aria-busy="true" />;
 
   if (isOver) {
-    return <Results game={game} total={total} onAgain={() => { void restart(); }} onAgainMissed={(ids) => { void startWithIds(ids); }} onHub={() => { setActive(null); navigate('/learn'); }} />;
+    return <Results game={game} total={total} onAgain={() => { void restart(); }} onAgainMissed={(ids) => { void startWithIds(ids); }} onHub={() => { setActive(null); navigate('/learn', { replace: true }); }} />;
   }
 
   const q = current!;
@@ -451,7 +487,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   return (
     <div className={`lq-screen lq-screen--${game.mode}${game.kind && game.kind !== 'animals' ? ` kind--${game.kind}` : ''}`} data-own-topbar>
       <header className="lq-head glass">
-        <Link className="iconbtn" to="/learn" aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { setActive(null); if (!game.daily) setGame(null); }}>
+        <Link className="iconbtn" to="/learn" replace aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { setActive(null); if (!game.daily) setGame(null); }}>
           <svg viewBox="0 0 24 24">{game.daily ? QI.back : QI.close}</svg>
         </Link>
         {game.mode === 'rapid' ? (
@@ -469,10 +505,10 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         <h1 ref={promptRef} className="lq-prompt" tabIndex={-1}>{promptFor(q)}</h1>
         {sub && <p className="lq-sub">{sub}</p>}
         {safety && <p className="lq-safety"><svg viewBox="0 0 24 24">{QI.warn}</svg><span>{safety}</span></p>}
-        <Media key={game.i} q={q} />
-        <Options q={q} picked={picked} onPick={pick} rapid={game.mode === 'rapid'} round={game.i} />
-        {picked != null && game.mode !== 'rapid' && <Feedback q={q} right={right} game={game} onNext={next} onPlay={play} />}
-        {picked != null && game.mode === 'rapid' && <p className={`lq-verdict lq-fb ${right ? 'is-right' : 'is-wrong'} lq-fb--brief`}><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{right ? 'Correct.' : `Not quite. It's the ${speciesName(q.focus)}.`}</span></p>}
+        <Media key={game.i} q={q} still={resumed} />
+        <Options q={q} picked={picked} onPick={pick} rapid={game.mode === 'rapid'} round={game.i} still={resumed} />
+        {picked != null && game.mode !== 'rapid' && <Feedback q={q} right={right} game={game} onNext={next} onPlay={play} restore={resumed} />}
+        {picked != null && game.mode === 'rapid' && <p className={`lq-verdict lq-fb ${right ? 'is-right' : 'is-wrong'} lq-fb--brief${resumed ? ' no-anim' : ''}`}><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{right ? 'Correct.' : `Not quite. It's the ${speciesName(q.focus)}.`}</span></p>}
       </div>
     </div>
   );
@@ -482,16 +518,35 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
 function Deck({ onBack }: { onBack: () => void }) {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [ready, setReady] = useState(false);
-  const [mode, setMode] = useState<'overview' | 'card' | 'done'>('overview');
-  const [game, setGame] = useState<RoundState | null>(null);
-  const [revealed, setRevealed] = useState(false);
+  // Back from a species page returns to the same card, or to Deck reviewed (v1 renderDeck keeps the deck round while
+  // its route matches). The answer stays shown if it was.
+  const [saved] = useState(() => {
+    const a = activeFor(hereNow(), { deck: true });
+    return a?.game ? a as { mode: 'card' | 'done'; game: RoundState; revealed: boolean } : null;
+  });
+  const [mode, setMode] = useState<'overview' | 'card' | 'done'>(saved?.mode || 'overview');
+  const [game, setGame] = useState<RoundState | null>(saved?.game || null);
+  const [revealed, setRevealed] = useState(saved?.revealed || false);
   const [toast, setToast] = useState('');
   const backRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLHeadingElement>(null);
+  const resuming = useRef(!!saved);
   const sightings = useSightings();
   useMedia();
 
   useEffect(() => { void learnReady().then(() => { setReady(true); force(); }); }, []);
-  useEffect(() => { window.scrollTo(0, 0); }, [game?.n, game?.queue?.length, mode, revealed]);
+  useEffect(() => {
+    if (game && mode !== 'overview') setActive({ deck: true, route: hereNow(), mode, game, revealed });
+    else if (getActive()?.deck) setActive(null);
+  }, [mode, game, revealed]);
+  useRememberScroll(game);
+  useEffect(() => { if (!resuming.current) window.scrollTo(0, 0); }, [game?.n, game?.queue?.length, mode, revealed]);
+  useEffect(() => {
+    if (!ready || !resuming.current) return;
+    resuming.current = false;
+    if (game) window.scrollTo(0, scrollOf.get(game) || 0);
+    headRef.current?.focus({ preventScroll: true });
+  }, [ready]);
   useEffect(() => { if (revealed) backRef.current?.focus({ preventScroll: true }); }, [revealed]);
   const deckKind = (getLearn()?.prefs?.kind as string) || 'animals';
   const due = ready ? dueCards() : [];
@@ -547,7 +602,7 @@ function Deck({ onBack }: { onBack: () => void }) {
         </header>
         <p className="lq-kicker">Review deck<span>Box {(getLearn()?.cards?.[c.id]?.[c.skill]?.box) || 1}, {c.skill === 'call' ? 'by call' : 'by sight'}</span></p>
         <div className="lq ld-card">
-          <h1 className="lq-prompt" tabIndex={-1}>{c.skill === 'call' ? 'Whose call is this?' : `Which ${KINDS[sp.kind]?.one || 'species'} is this?`}</h1>
+          <h1 ref={headRef} className="lq-prompt" tabIndex={-1}>{c.skill === 'call' ? 'Whose call is this?' : `Which ${KINDS[sp.kind]?.one || 'species'} is this?`}</h1>
           {c.skill === 'call' ? <CallPlayer key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} call={(Q.callsOf(sp.id) as CallClip[])[0]} seed={sp.id} /> : <PhotoBox key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} photos={photos} alt={`Mystery ${KINDS[sp.kind]?.one}`} missing={<>This photo needs a connection. Its field notes: {cleanClue(Q.blankNotes(sp))}</>} />}
           {!revealed && <button type="button" className="btn btn--primary btn--block" onClick={() => setRevealed(true)}>Show the answer</button>}
           {revealed && (
@@ -578,7 +633,7 @@ function Deck({ onBack }: { onBack: () => void }) {
     const seenN = t.knew + t.unsure + t.missed;
     return (
       <div className="lr">
-        <header className="page-head"><h1 className="lh-title" tabIndex={-1}>Deck reviewed</h1></header>
+        <header className="page-head"><h1 ref={headRef} className="lh-title" tabIndex={-1}>Deck reviewed</h1></header>
         <section className="lr-hero" aria-label="Your score">
           <div className="lr-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" pathLength="100" /><circle className="lr-ring-fg" cx="60" cy="60" r="52" pathLength="100" style={{ strokeDashoffset: 100 - (seenN ? t.knew / seenN : 0) * 100 }} /></svg><p className="lr-score" role="status"><CountUp value={t.knew} /><span aria-hidden="true">knew it</span></p></div>
           <p className="lr-note">{t.unsure ? `${t.unsure} unsure. ` : ''}{t.missed ? `${t.missed} missed, and they'll come back soon. ` : ''}Cards you knew come back in a few days.</p>
