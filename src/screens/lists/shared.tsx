@@ -11,6 +11,7 @@ import { MONTHS, targets } from '../../core/stats.js';
 import { byId, dexCode, SPECIES, type Species } from '../../lib/data';
 import { useOutings, useSeen, useSightings, type Outing, type Sighting } from '../../lib/hooks';
 import { Icon } from '../../components/Icon';
+import { Sheet } from '../../components/Sheet';
 import { nudgeAfterSave } from '../me/nudge';
 import { Band, SpeciesImage } from '../../components/SpeciesImage';
 import './lists.css';
@@ -251,9 +252,6 @@ export function matchSpecies(query: string, limit = 8): Species[] {
 /* Dialogs                                                             */
 /* ------------------------------------------------------------------ */
 
-const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 interface ModalProps {
   title: string;
   onClose: () => void;
@@ -261,71 +259,13 @@ interface ModalProps {
   wide?: boolean;
 }
 
-/** A v1-style bottom sheet with Escape-to-close and a focus trap. */
+/** A v1-style bottom sheet on the shared layer stack, so the page behind is inert. */
 export function Modal({ title, onClose, children, wide = false }: ModalProps) {
-  const titleId = useId();
-  const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const node = ref.current;
-    document.body.classList.add('has-sheet');
-
-    const first = node?.querySelector<HTMLElement>(FOCUSABLE);
-    (first ?? node)?.focus({ preventScroll: true });
-
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeRef.current();
-        return;
-      }
-      if (event.key !== 'Tab' || !node) return;
-      const items = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE));
-      if (!items.length) {
-        event.preventDefault();
-        node.focus();
-        return;
-      }
-      const firstItem = items[0];
-      const lastItem = items[items.length - 1];
-      if (event.shiftKey && (document.activeElement === firstItem || document.activeElement === node)) {
-        event.preventDefault();
-        lastItem.focus();
-      } else if (!event.shiftKey && document.activeElement === lastItem) {
-        event.preventDefault();
-        firstItem.focus();
-      }
-    };
-
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.classList.remove('has-sheet');
-      previous?.focus?.();
-    };
-  }, []);
-
   return (
-    <div className="sheet-wrap open">
-      <div className="sheet-scrim" onClick={onClose} aria-hidden="true" />
-      <div
-        className={`sheet ${wide ? 'sheet--wide' : ''}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        ref={ref}
-      >
-        <div className="sheet-grip" aria-hidden="true" />
-        <h2 className="sheet-title" id={titleId}>
-          {title}
-        </h2>
-        {children}
-      </div>
-    </div>
+    <Sheet open onClose={onClose} label={title} wide={wide}>
+      <h2 className="sheet-title">{title}</h2>
+      {children}
+    </Sheet>
   );
 }
 
