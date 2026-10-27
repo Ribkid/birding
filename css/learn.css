@@ -119,6 +119,8 @@
 .lq { display: grid; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4) 0; }
 .lq-sub { margin: calc(var(--sp-2) * -1) 0 0; font-size: var(--fs-2); color: var(--ink-2); }
 .lq-prompt { margin: 0; font-size: var(--fs-4); font-weight: 700; line-height: 1.25; }
+/* headings take focus after a redraw (focusHead in learn.js); they aren't controls, so no ring */
+:is(.lq-prompt, .lh-title):focus { outline: none; }
 
 .lq-photo { position: relative; margin: 0; border-radius: var(--r-2); overflow: hidden; background: var(--surface-2); }
 .lq-photo .whole { width: 100%; aspect-ratio: 4 / 3; }

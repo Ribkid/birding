@@ -218,6 +218,11 @@ function preload(q) {
 }
 const clueHTML = clue => esc(clue).replace(/\u0001/g, '<span class="lq-blank"><span class="sr">blank</span></span>');
 
+// Redrawing the view drops keyboard and TalkBack focus onto <body>. If she was working inside the view, put focus on
+// the new screen's heading so she keeps her place and hears the next question.
+const focusWithin = view => view.contains(document.activeElement) && document.activeElement !== view;
+const focusHead = (view, had) => { if (had) view.querySelector('h1')?.focus({ preventScroll: true }); };
+
 // ---------- routing ----------
 let game = null;
 export async function renderLearn(ctx, sub = '', arg = '') {
@@ -399,18 +404,20 @@ function mediaHTML(q) {
 
 function drawQuestion(ctx) {
   const { view } = ctx;
+  const had = focusWithin(view);
   cleanup();
   const q = game.qs[game.i];
   if (!q || (game.mode === 'rapid' && Date.now() >= game.endsAt)) return drawResults(ctx);
   view.innerHTML = `<div class="lq-screen lq-screen--${game.mode}">${headHTML()}
     <div class="lq lq--${q.type}">
-      <h1 class="lq-prompt">${esc(q.prompt)}</h1>
+      <h1 class="lq-prompt" tabindex="-1">${esc(q.prompt)}</h1>
       ${q.type === 'duel' ? '<p class="lq-sub">Tap the photo you think it is.</p>' : ''}
       ${mediaHTML(q)}
       ${optionsHTML(q)}
       <div class="lq-fb" data-fb tabindex="-1"></div>
     </div></div>`;
   wireImages(view);
+  focusHead(view, had);
   preload(game.qs[game.i + 1]);
   if (q.picked != null) showAnswer(ctx, q, { restore: true });
   if (game.mode === 'rapid') {
@@ -527,6 +534,7 @@ function feedbackHTML(q, right, brief) {
 // ---------- results ----------
 function drawResults(ctx) {
   const { view } = ctx;
+  const had = focusWithin(view);
   cleanup();
   const asked = game.qs.filter(q => q.picked != null);
   const total = game.mode === 'rapid' ? asked.length : game.qs.length;
@@ -565,7 +573,7 @@ function drawResults(ctx) {
   const big = game.mode === 'rapid' ? game.top : game.score;
   const of = game.mode === 'rapid' ? 'in a row' : `of ${total}`;
   view.innerHTML = `<div class="lr">
-    <header class="page-head"><h1 class="lh-title">${game.daily ? "Today's challenge" : esc(MODE_INFO[game.mode][0])}</h1></header>
+    <header class="page-head"><h1 class="lh-title" tabindex="-1">${game.daily ? "Today's challenge" : esc(MODE_INFO[game.mode][0])}</h1></header>
     <div class="lr-score ${reduced() ? 'no-anim' : ''}" role="status"><b>${big}</b><span>${esc(of)}</span></div>
     <p class="lr-note">${esc(note)}</p>
     <div class="lr-actions">
@@ -583,6 +591,7 @@ function drawResults(ctx) {
         <a class="lr-main" href="#/bird/${sp.id}"><strong>${esc(title)}</strong><span class="small muted">${ok ? (q.type === 'fact' ? esc(q.options.find(o => o.key === q.answer)?.label) : 'Got it') : `You picked ${esc(picked?.label || 'nothing')}`}</span></a></li>`;
     }).join('')}</ul>
   </div>`;
+  focusHead(view, had);
   view.onclick = e => {
     if (e.target.closest('[data-again]')) { game = null; startRound(ctx, ROUTE_MODE()); }
     if (e.target.closest('[data-again-missed]')) {
@@ -664,6 +673,7 @@ function renderDeck(ctx) {
 }
 function drawCard(ctx) {
   const { view } = ctx;
+  const had = focusWithin(view);
   cleanup();
   const c = game.queue[0];
   const sp = byId.get(c.id);
@@ -680,7 +690,7 @@ function drawCard(ctx) {
       <span class="lq-count" aria-hidden="true">${game.queue.length}<span> left</span></span></header>
     <p class="lq-kicker">Review deck<span>Box ${L.cards[sp.id]?.[c.skill]?.box || 1}, ${c.skill === 'call' ? 'by call' : 'by sight'}</span></p>
     <div class="lq ld-card">
-      <h1 class="lq-prompt">${c.skill === 'call' ? `Whose call is this?` : `Which ${KINDS[sp.kind].one} is this?`}</h1>
+      <h1 class="lq-prompt" tabindex="-1">${c.skill === 'call' ? `Whose call is this?` : `Which ${KINDS[sp.kind].one} is this?`}</h1>
       ${front}
       <button class="btn btn--primary btn--block" data-reveal>Show the answer</button>
       <div class="ld-back" data-back hidden tabindex="-1">
@@ -698,6 +708,7 @@ function drawCard(ctx) {
       </div>
     </div></div>`;
   wireImages(view);
+  focusHead(view, had);
   const nextC = game.queue[1] && byId.get(game.queue[1].id);
   if (nextC && game.queue[1].skill === 'look') preload({ photos: Q.photosFor(nextC.id) });
   view.onclick = e => {
@@ -737,13 +748,15 @@ function gradeCard(ctx, c, grade) {
 }
 function drawDeckDone(ctx) {
   const { view } = ctx;
+  const had = focusWithin(view);
   cleanup();
   const t = game.tally || { knew: 0, unsure: 0, missed: 0 };
   view.innerHTML = `<div class="lr">
-    <header class="page-head"><h1 class="lh-title">Deck reviewed</h1></header>
+    <header class="page-head"><h1 class="lh-title" tabindex="-1">Deck reviewed</h1></header>
     <div class="lr-score" role="status"><b>${t.knew}</b><span>knew it</span></div>
     <p class="lr-note">${t.unsure ? `${t.unsure} unsure. ` : ''}${t.missed ? `${t.missed} missed, and they'll come back soon. ` : ''}Cards you knew come back in a few days.</p>
     <div class="lr-actions"><a class="btn btn--primary btn--block" href="#/learn">Back to Learn</a><button class="btn btn--block" data-deck>Deck overview</button></div>
   </div>`;
+  focusHead(view, had);
   view.onclick = e => { if (e.target.closest('[data-deck]')) { game = null; renderDeck(ctx); } };
 }
