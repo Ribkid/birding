@@ -427,7 +427,9 @@ function MapView() {
 
   const focus = speciesId != null ? byId.get(speciesId) : undefined;
   const hasAt = atLat != null && atLng != null;
-  const hotOn = focus ? hotFocus : hot;
+  // Hotspot records are eBird birding sites: birds only, so a frog or a gum gets no Hotspots chip (v1).
+  const noHot = focus != null && focus.kind !== 'bird';
+  const hotOn = !noHot && (focus ? hotFocus : hot);
 
   // -- derived data --------------------------------------------------------
 
@@ -1183,7 +1185,7 @@ function MapView() {
               ref={inputRef}
               type="search"
               value={q}
-              placeholder="Search species, hotspots, suburbs, parks"
+              placeholder="Search species and places"
               aria-label="Search the map"
               aria-controls="map-search-results"
               autoComplete="off"
@@ -1255,7 +1257,7 @@ function MapView() {
           </p>
         </div>
 
-        <div className="map-ctl chips" role="group" aria-label="Map filters">
+        <div className="map-ctl chips" role="group" aria-label="What the map shows">
           {focus && (
             <Link
               className="chip chip--on"
@@ -1265,21 +1267,26 @@ function MapView() {
               {focus.name} <span aria-hidden="true">✕</span>
             </Link>
           )}
-          <button
-            type="button"
-            className={`chip ${hotOn ? 'chip--on' : ''}`}
-            aria-pressed={hotOn}
-            onClick={() => {
-              if (focus) setHotFocus((value) => !value);
-              else setHot((value) => !value);
-            }}
-          >
-            Hotspots
-          </button>
+          {/* data-hot/data-need/data-mshow draw each chip's map colour (rest.css), as in v1. */}
+          {!noHot && (
+            <button
+              type="button"
+              className={`chip ${hotOn ? 'chip--on' : ''}`}
+              data-hot=""
+              aria-pressed={hotOn}
+              onClick={() => {
+                if (focus) setHotFocus((value) => !value);
+                else setHot((value) => !value);
+              }}
+            >
+              Hotspots
+            </button>
+          )}
           {!focus && (
             <button
               type="button"
               className={`chip ${need ? 'chip--on' : ''}`}
+              data-need=""
               aria-pressed={need}
               onClick={() => setNeed((value) => !value)}
             >
@@ -1297,6 +1304,7 @@ function MapView() {
               key={value}
               type="button"
               className={`chip ${show === value ? 'chip--on' : ''}`}
+              data-mshow={value}
               aria-pressed={show === value}
               onClick={() => setShow(value)}
             >
