@@ -374,30 +374,6 @@ export default function Stats() {
         <h1>Stats</h1>
       </header>
 
-      <div className="chips" role="group" aria-label="Period">
-        {(
-          [
-            ['all', 'All time'],
-            ['year', year],
-            ['month', MONTH_NAMES[now.getMonth()]],
-          ] as [Period, string][]
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            className={`chip ${period === value ? 'chip--on' : ''}`}
-            aria-pressed={period === value}
-            onClick={() => setPeriod(value)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <p className="muted small pad-x">
-        Showing {periodLabel}. Life list: {lifeSeen.size} {plural(lifeSeen.size, 'species')} across{' '}
-        {all.length} {plural(all.length, 'sighting')}.
-      </p>
 
       {body}
 
