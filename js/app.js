@@ -481,30 +481,53 @@ async function deleteSighting(id) {
   state.sightings = state.sightings.filter(x => x.id !== id);
 }
 
+// New for the dex: a dialog with the photo settling in, the band clamping on and the count stamping up by one.
 function celebrate(sp, newBadges) {
   navigator.vibrate?.([60, 40, 120]);
   confetti();
   const hist = sightingsOf(sp.id);
   const first = hist[hist.length - 1];
+  const seen = seenSet();
+  const ofIt = ofKind(sp.kind), got = ofIt.filter(x => seen.has(x.id)).length;
+  const animalsGot = ANIMALS.filter(x => seen.has(x.id)).length;
+  const verb = sp.kind === 'plant' ? 'found' : 'seen';
+  // The overall animal tally only adds something once the dex holds more than birds.
+  const total = sp.kind !== 'plant' && ANIMALS.length > ofIt.length;
+  const id = `cel-${sp.id}-${Date.now()}`;
   const el = document.createElement('div');
   el.className = 'celebrate';
-  el.setAttribute('role', 'status');
   el.innerHTML = `<div class="celebrate-card">
-    <div class="celebrate-photo">${birdImg(sp, 'large', '', { whole: true })}<span class="band band--on band--big band--clamp">${dexNo(sp.id)}</span></div>
-    <p class="celebrate-kicker">New for your dex</p>
-    <h2>${esc(sp.name)}</h2>
-    <p class="muted">${sp.kind === 'plant' ? `${ofKind('plant').filter(x => seenSet().has(x.id)).length} of ${ofKind('plant').length} plants found` : `${ANIMALS.filter(x => seenSet().has(x.id)).length} of ${ANIMALS.length} animals seen`}</p>
+    <div class="celebrate-photo">${birdImg(sp, 'large', '', { whole: true })}<span class="band band--${sp.kind} band--on band--big band--clamp">${dexNo(sp.id)}</span></div>
+    <p class="celebrate-kicker" id="${id}-k">New for your dex</p>
+    <h2 id="${id}-h">${esc(sp.name)}</h2>
+    <p class="celebrate-count"><b class="celebrate-n" data-count>${got}</b> of ${ofIt.length} ${KINDS[sp.kind].label.toLowerCase()} ${verb}</p>
+    ${total ? `<p class="celebrate-total small muted"><span data-count-all>${animalsGot}</span> of ${ANIMALS.length} animals in your dex</p>` : ''}
     ${newBadges.length ? `<p class="celebrate-badges">Badge earned: ${newBadges.map(b => `<strong>${esc(b.name)}</strong>`).join(', ')}</p>` : ''}
     <div class="row-center"><button class="btn" data-share>${icon.share} Share</button><button class="btn" data-card>See card</button><button class="btn btn--primary" data-dismiss>Nice</button></div></div>`;
   document.body.append(el);
-  const done = () => { el.classList.add('celebrate--out'); setTimeout(() => el.remove(), 250); };
+  settleImages(el);
+  // While the large photo loads, show the small one she has just seen in the dex.
+  const small = sized(sp.id, 'small'), frame = $('.celebrate-photo .whole', el);
+  if (frame && small && shown.has(small)) frame.style.backgroundImage = `url("${small.replace(/"/g, '%22')}")`;
+  let layer;
+  const done = (reason, then) => {
+    if (!closeLayer(layer, { restore: !then && reason !== 'nav' })) return;
+    if (reason === 'nav') { el.remove(); return; }
+    el.classList.add('celebrate--out');
+    setTimeout(() => el.remove(), 220);
+    then?.();
+  };
+  layer = openLayer(el, { dialog: $('.celebrate-card', el), labelledBy: `${id}-k ${id}-h`, close: reason => done(reason) });
   const info = { seen: true, isNew: true, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
   el.addEventListener('click', e => {
     if (e.target.closest('[data-share]')) { shareCard(sp, info); return; }
-    if (e.target.closest('[data-card]')) { done(); openCard(sp, info); return; }
-    if (e.target.closest('[data-dismiss]') || e.target === el) done();
+    if (e.target.closest('[data-card]')) { const back = layer.returnTo; done('button', () => openCard(sp, info, { returnTo: back })); return; }
+    if (e.target.closest('[data-dismiss]') || e.target === el) done('button');
   });
-  setTimeout(() => $('[data-dismiss]', el)?.focus(), 50);
+  $('[data-dismiss]', el).focus({ preventScroll: true });
+  // Count lands after the card has popped in.
+  countUp($('[data-count]', el), got - 1, got, { delay: 380 });
+  if (total) countUp($('[data-count-all]', el), animalsGot - 1, animalsGot, { delay: 520 });
 }
 
 // ---------- sighting sheet ----------
