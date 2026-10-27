@@ -42,7 +42,7 @@ function Media({ q }: { q: QuizQuestion }) {
   const [showHint, setShowHint] = useState(false);
   const sp = byId.get(q.focus);
   if (!sp) return null;
-  const missing = `This photo needs a connection. Here are its field notes instead: ${Q.blankNotes(sp, q.wrong || [])}`;
+  const missing = <>This photo needs a connection. Here are its field notes instead: {cleanClue(Q.blankNotes(sp, q.wrong || []))}</>;
   if (q.type === 'photo') return <PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}`} missing={missing} />;
   if (q.type === 'silhouette') {
     return <><SilhouetteFilter /><PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, shown as a silhouette`} cls={`lq-photo lq-photo--sil${q.picked != null ? ' is-revealed' : ''}`} missing={missing} /></>;
@@ -547,7 +547,7 @@ function Deck({ onBack }: { onBack: () => void }) {
         <p className="lq-kicker">Review deck<span>Box {(getLearn()?.cards?.[c.id]?.[c.skill]?.box) || 1}, {c.skill === 'call' ? 'by call' : 'by sight'}</span></p>
         <div className="lq ld-card">
           <h1 className="lq-prompt" tabIndex={-1}>{c.skill === 'call' ? 'Whose call is this?' : `Which ${KINDS[sp.kind]?.one || 'species'} is this?`}</h1>
-          {c.skill === 'call' ? <CallPlayer key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} call={(Q.callsOf(sp.id) as CallClip[])[0]} seed={sp.id} /> : <PhotoBox key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} photos={photos} alt={`Mystery ${KINDS[sp.kind]?.one}`} missing={`This photo needs a connection. Its field notes: ${Q.blankNotes(sp)}`} />}
+          {c.skill === 'call' ? <CallPlayer key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} call={(Q.callsOf(sp.id) as CallClip[])[0]} seed={sp.id} /> : <PhotoBox key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} photos={photos} alt={`Mystery ${KINDS[sp.kind]?.one}`} missing={<>This photo needs a connection. Its field notes: {cleanClue(Q.blankNotes(sp))}</>} />}
           {!revealed && <button type="button" className="btn btn--primary btn--block" onClick={() => setRevealed(true)}>Show the answer</button>}
           {revealed && (
             <div ref={backRef} className="ld-back" tabIndex={-1}>

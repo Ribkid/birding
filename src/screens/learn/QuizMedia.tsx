@@ -19,7 +19,7 @@ const credit = (p?: PhotoRef | null) => (p ? `Photo: ${String(p.credit || 'Unkno
 
 /** A quiz photo with the same fall-back chain as v1: if a host fails, try the next picture, then say why not. */
 export function PhotoBox({ photos, alt = '', cls = 'lq-photo', missing = '', style }: {
-  photos?: PhotoRef[] | null; alt?: string; cls?: string; missing?: string; style?: CSSProperties;
+  photos?: PhotoRef[] | null; alt?: string; cls?: string; missing?: ReactNode; style?: CSSProperties;
 }) {
   const list = photos || [];
   const [i, setI] = useState(0);
