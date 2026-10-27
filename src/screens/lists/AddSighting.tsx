@@ -2,13 +2,16 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../components/Icon';
 import { db } from '../../core/db.js';
+import { resizeImage } from '../../core/profile.js';
 import { takePending } from '../field/scanHandoff';
 import {
+  PhotoField,
   SightingFields,
   buildSighting,
   emptyDraft,
   getPosition,
   saveSighting,
+  useObjectUrl,
   type SightingDraft,
 } from './shared';
 import './lists.css';
@@ -29,7 +32,18 @@ export default function AddSighting() {
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
-  const [photoUrl, setPhotoUrl] = useState('');
+  const photoUrl = useObjectUrl(photoBlob);
+
+  // v1 app.js: a picked photo is resized (1600 px, JPEG 0.82) before it is kept.
+  const pickPhoto = async (file: File) => {
+    setError('');
+    const blob = await resizeImage(file);
+    if (!blob) {
+      setError("That file couldn't be opened as a photo.");
+      return;
+    }
+    setPhotoBlob(blob);
+  };
 
   const locate = async () => {
     setLocating(true);
@@ -40,6 +54,7 @@ export default function AddSighting() {
         ...current,
         lat: pos.lat.toFixed(6),
         lng: pos.lng.toFixed(6),
+        acc: pos.acc,
       }));
       setStatus(`${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)} (±${pos.acc} m)`);
     } catch (err) {
@@ -60,16 +75,6 @@ export default function AddSighting() {
     // Run once when the scan hand-off opens this form.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    if (!photoBlob) {
-      setPhotoUrl('');
-      return;
-    }
-    const url = URL.createObjectURL(photoBlob);
-    setPhotoUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [photoBlob]);
 
   const cancel = () => {
     if (fromScan.current) navigate(-1);
@@ -112,21 +117,6 @@ export default function AddSighting() {
       </p>
 
       <form className="form pad" onSubmit={save} noValidate>
-        {photoBlob && photoUrl && (
-          <div className="scan-preview">
-            <img src={photoUrl} alt="The photo you scanned" />
-            <div className="scan-preview-acts">
-              <label className="btn">
-                Replace photo
-                <input type="file" accept="image/*" className="visually-hidden" onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) setPhotoBlob(file);
-                }} />
-              </label>
-              <button type="button" className="btn btn--quiet" onClick={() => setPhotoBlob(null)}>Remove</button>
-            </div>
-          </div>
-        )}
         <SightingFields
           draft={draft}
           onChange={setDraft}
@@ -134,6 +124,7 @@ export default function AddSighting() {
           onLocate={locate}
           locating={locating}
           error={error}
+          photo={<PhotoField url={photoUrl} onPick={(file) => void pickPhoto(file)} onRemove={() => setPhotoBlob(null)} />}
         />
         <div className="row-end">
           <button type="button" className="btn" onClick={cancel}>

@@ -1,11 +1,14 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { byId } from '../../lib/data';
 import { Icon } from '../../components/Icon';
 import { SpeciesImage } from '../../components/SpeciesImage';
+import { db } from '../../core/db.js';
+import { resizeImage } from '../../core/profile.js';
 import {
   ConfirmDialog,
   Modal,
+  PhotoField,
   SightingFields,
   buildSighting,
   deleteSighting,
@@ -13,6 +16,7 @@ import {
   fmtDate,
   getPosition,
   saveSighting,
+  useObjectUrl,
   useSightingRows,
   type SightingDraft,
   type SightingRow,
@@ -30,6 +34,35 @@ function EditSighting({ sighting, onClose }: { sighting: SightingRow; onClose: (
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // v1's sheet: the saved photo (when its blob is on this phone), a replacement, or a removal, applied on save.
+  const [storedPhoto, setStoredPhoto] = useState<Blob | null>(null);
+  const [newPhoto, setNewPhoto] = useState<Blob | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
+  const photoUrl = useObjectUrl(newPhoto ?? (removePhoto ? null : storedPhoto));
+
+  useEffect(() => {
+    if (sighting.photoId == null) return;
+    let alive = true;
+    void db.get('photos', sighting.photoId)
+      .then((photo: { blob?: Blob | null } | undefined) => {
+        if (alive && photo?.blob) setStoredPhoto(photo.blob);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [sighting.photoId]);
+
+  const pickPhoto = async (file: File) => {
+    setError('');
+    const blob = await resizeImage(file);
+    if (!blob) {
+      setError("That file couldn't be opened as a photo.");
+      return;
+    }
+    setNewPhoto(blob);
+    setRemovePhoto(false);
+  };
 
   const locate = async () => {
     setLocating(true);
@@ -40,6 +73,7 @@ function EditSighting({ sighting, onClose }: { sighting: SightingRow; onClose: (
         ...current,
         lat: pos.lat.toFixed(6),
         lng: pos.lng.toFixed(6),
+        acc: pos.acc,
       }));
       setStatus(`${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)} (±${pos.acc} m)`);
     } catch (err) {
@@ -58,10 +92,21 @@ function EditSighting({ sighting, onClose }: { sighting: SightingRow; onClose: (
       return;
     }
     setSaving(true);
+    const oldPhotoId = sighting.photoId ?? null;
+    let addedPhotoId: number | null = null;
     try {
+      if (newPhoto) {
+        addedPhotoId = (await db.add('photos', { blob: newPhoto, at: Date.now() })) as number;
+        rec.photoId = addedPhotoId;
+      } else if (removePhoto && oldPhotoId != null) {
+        rec.photoId = null;
+      }
       await saveSighting(rec);
+      // The old photo goes only once the record no longer points at it.
+      if (oldPhotoId != null && rec.photoId !== oldPhotoId) await db.del('photos', oldPhotoId).catch(() => {});
       onClose();
     } catch {
+      if (addedPhotoId != null) await db.del('photos', addedPhotoId).catch(() => {});
       setError('The change could not be saved. Try again.');
     } finally {
       setSaving(false);
@@ -94,6 +139,16 @@ function EditSighting({ sighting, onClose }: { sighting: SightingRow; onClose: (
           onLocate={locate}
           locating={locating}
           error={error}
+          photo={
+            <PhotoField
+              url={photoUrl}
+              onPick={(file) => void pickPhoto(file)}
+              onRemove={() => {
+                setNewPhoto(null);
+                setRemovePhoto(true);
+              }}
+            />
+          }
         />
         <div className="row-end">
           <button

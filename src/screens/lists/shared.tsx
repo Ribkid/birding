@@ -396,11 +396,14 @@ export function SpeciesPicker({ value, onChange, label = 'Species' }: SpeciesPic
 export interface SightingDraft {
   speciesId: number | null;
   count: string;
+  heard: boolean;
   date: string;
   time: string;
   place: string;
   lat: string;
   lng: string;
+  /** GPS accuracy in metres for lat/lng, or null when they were typed or are blank (v1 `acc`). */
+  acc: number | null;
   note: string;
 }
 
@@ -408,11 +411,13 @@ export function emptyDraft(): SightingDraft {
   return {
     speciesId: null,
     count: '1',
+    heard: false,
     date: todayStr(),
     time: timeStr(),
     place: '',
     lat: '',
     lng: '',
+    acc: null,
     note: '',
   };
 }
@@ -421,15 +426,37 @@ export function draftFromSighting(s: SightingRow): SightingDraft {
   return {
     speciesId: s.speciesId ?? null,
     count: s.count != null ? String(s.count) : '',
+    heard: !!s.heard,
     date: s.date ?? todayStr(),
     time: s.time ?? '',
     place: s.place ?? '',
     lat: s.lat != null ? String(s.lat) : '',
     lng: s.lng != null ? String(s.lng) : '',
+    acc: s.acc ?? null,
     note: s.notes ?? '',
   };
 }
 
+/** Plants can't be heard, so v1 hides 'Heard only' for them and never stores it. */
+const canBeHeard = (speciesId: number | null) => byId.get(Number(speciesId))?.kind !== 'plant';
+
+// v1 app.js: the notes prompt follows the kind picked.
+const NOTES_HINT: Record<string, string> = {
+  bird: 'Behaviour, plumage, who you were with…',
+  mammal: 'Behaviour, tracks, who you were with…',
+  reptile: 'Basking, size, behaviour…',
+  frog: 'Calling, weather, where it was…',
+  butterfly: 'Feeding on, markings, behaviour…',
+  plant: 'Flowering, fruit, where it grows…',
+};
+const notesHint = (speciesId: number | null) =>
+  NOTES_HINT[byId.get(Number(speciesId))?.kind ?? ''] ?? 'What it was doing, who you were with…';
+
+/**
+ * The record v1's sighting sheet writes: speciesId, count, heard, date, time, lat, lng, acc, place, notes,
+ * photoId and outingId, on top of whatever an edited record already holds (id, uid, createdAt, outingUid…).
+ * The caller sets photoId when it stores a new photo.
+ */
 export function buildSighting(
   draft: SightingDraft,
   base: Partial<SightingRow> = {},
@@ -458,19 +485,78 @@ export function buildSighting(
     lng = lngValue;
   }
 
-  const note = draft.note.trim();
+  // A new record gets every v1 field. An edit, like v1's, keeps the stored record and only adds acc when the
+  // place changed, so an old record without these fields is not padded with nulls.
+  const isNew = base.id == null;
+  const acc = lat != null ? (draft.acc ?? null) : null;
+  const moved = lat !== (base.lat ?? null) || lng !== (base.lng ?? null) || acc !== (base.acc ?? null);
   const rec: SightingInput = {
     ...base,
     speciesId: draft.speciesId,
     count,
+    heard: canBeHeard(draft.speciesId) && !!draft.heard,
     date: draft.date,
     time: draft.time,
-    place: draft.place.trim(),
     lat,
     lng,
-    notes: note,
+    ...(isNew || moved || 'acc' in base ? { acc } : {}),
+    place: draft.place.trim(),
+    notes: draft.note.trim(),
+    ...(isNew || 'photoId' in base ? { photoId: base.photoId ?? null } : {}),
+    ...(isNew || 'outingId' in base ? { outingId: base.outingId ?? null } : {}),
   };
   return { rec };
+}
+
+/** An object URL for a photo blob, revoked when the blob changes or the form closes. */
+export function useObjectUrl(blob: Blob | null): string {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    if (!blob) {
+      setUrl('');
+      return;
+    }
+    const next = URL.createObjectURL(blob);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [blob]);
+  return url;
+}
+
+interface PhotoFieldProps {
+  /** The photo's preview URL, or '' when the sighting has none. */
+  url: string;
+  onPick: (file: File) => void;
+  onRemove: () => void;
+}
+
+/** v1's photo field: a 72 px thumbnail, Add photo or Replace photo, and Remove. */
+export function PhotoField({ url, onPick, onRemove }: PhotoFieldProps) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="photo-field">
+      <div className="photo-preview">{url ? <img src={url} alt="Your photo" /> : null}</div>
+      <button type="button" className="btn" onClick={() => input.current?.click()}>
+        <Icon name="cam" /> <span>{url ? 'Replace photo' : 'Add photo'}</span>
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (file) onPick(file);
+        }}
+      />
+      {url ? (
+        <button type="button" className="btn btn--quiet" onClick={onRemove}>
+          Remove
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 interface SightingFieldsProps {
@@ -480,6 +566,8 @@ interface SightingFieldsProps {
   onLocate?: () => void;
   locating?: boolean;
   error?: string;
+  /** The photo field, shown after Where as in v1's sheet. */
+  photo?: ReactNode;
 }
 
 /** The shared fields for adding or editing a sighting. */
@@ -490,6 +578,7 @@ export function SightingFields({
   onLocate,
   locating = false,
   error,
+  photo,
 }: SightingFieldsProps) {
   const update = (patch: Partial<SightingDraft>) => onChange({ ...draft, ...patch });
   const step = (delta: number) => {
@@ -501,9 +590,12 @@ export function SightingFields({
     <>
       <SpeciesPicker
         value={draft.speciesId}
-        onChange={(sp) => update({ speciesId: sp ? sp.id : null })}
+        onChange={(sp) =>
+          update({ speciesId: sp ? sp.id : null, heard: sp?.kind === 'plant' ? false : draft.heard })
+        }
       />
 
+      {/* v1's order: How many beside Heard only, then Date beside Time. */}
       <div className="grid2">
         <label className="field">
           <span>How many</span>
@@ -525,6 +617,20 @@ export function SightingFields({
             </button>
           </div>
         </label>
+        {canBeHeard(draft.speciesId) && (
+          <label className="check">
+            <input
+              type="checkbox"
+              name="heard"
+              checked={!!draft.heard}
+              onChange={(event) => update({ heard: event.target.checked })}
+            />
+            <span>Heard only</span>
+          </label>
+        )}
+      </div>
+
+      <div className="grid2">
         <label className="field">
           <span>Date</span>
           <input
@@ -535,9 +641,6 @@ export function SightingFields({
             onChange={(event) => update({ date: event.target.value })}
           />
         </label>
-      </div>
-
-      <div className="grid2">
         <label className="field">
           <span>Time</span>
           <input
@@ -545,16 +648,6 @@ export function SightingFields({
             name="time"
             value={draft.time}
             onChange={(event) => update({ time: event.target.value })}
-          />
-        </label>
-        <label className="field">
-          <span>Place name (optional)</span>
-          <input
-            name="place"
-            value={draft.place}
-            placeholder="e.g. Oxley Creek Common"
-            autoComplete="off"
-            onChange={(event) => update({ place: event.target.value })}
           />
         </label>
       </div>
@@ -570,6 +663,17 @@ export function SightingFields({
           )}
           <span className="muted small">{status ?? 'No location yet'}</span>
         </div>
+        <label className="field">
+          <span>Place name</span>
+          <input
+            name="place"
+            value={draft.place}
+            placeholder="e.g. Oxley Creek Common"
+            autoComplete="off"
+            onChange={(event) => update({ place: event.target.value })}
+          />
+        </label>
+        {/* Typed coordinates have no GPS accuracy, so acc is cleared (v1 does the same for map and place picks). */}
         <div className="grid2">
           <label className="field">
             <span>Latitude</span>
@@ -578,7 +682,7 @@ export function SightingFields({
               inputMode="decimal"
               value={draft.lat}
               placeholder="e.g. -27.5210"
-              onChange={(event) => update({ lat: event.target.value })}
+              onChange={(event) => update({ lat: event.target.value, acc: null })}
             />
           </label>
           <label className="field">
@@ -588,11 +692,13 @@ export function SightingFields({
               inputMode="decimal"
               value={draft.lng}
               placeholder="e.g. 153.0200"
-              onChange={(event) => update({ lng: event.target.value })}
+              onChange={(event) => update({ lng: event.target.value, acc: null })}
             />
           </label>
         </div>
       </fieldset>
+
+      {photo}
 
       <label className="field">
         <span>Note (optional)</span>
@@ -600,7 +706,7 @@ export function SightingFields({
           name="note"
           rows={2}
           value={draft.note}
-          placeholder="Behaviour, plumage, who you were with…"
+          placeholder={notesHint(draft.speciesId)}
           onChange={(event) => update({ note: event.target.value })}
         />
       </label>

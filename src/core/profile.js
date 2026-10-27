@@ -24,18 +24,26 @@ export const getMyCloud = () => (cloud && configured && user() && cloud.uid === 
 export const myName = () => prof?.displayName || user()?.name || (user()?.email || '').split('@')[0] || 'You';
 export const getPublicProfileCache = id => others.get(id) || null;
 
-export async function initProfile(onChange) {
+async function loadProfile() {
+  prof = await localProfile();
+  if (!cloud) cloud = (await db.kvGet('me:cloud').catch(() => null)) || null;
+  if (signedIn()) await fetchCloud();
+  notify();
+  return prof;
+}
+
+// Loads the profile and, when onChange is given, calls it after every load, sign-in or sign-out and synced
+// profile change. Returns an unsubscribe for an effect's cleanup; its `ready` resolves with the loaded profile.
+export function initProfile(onChange) {
   if (onChange) subscribers.add(onChange);
   if (!bound) {
     bound = true;
     onAuth(async () => { prof = await localProfile(); if (user()) await fetchCloud(true); notify(); });
     onRemoteChange(async () => { prof = await localProfile(); notify(); });
   }
-  prof = await localProfile();
-  if (!cloud) cloud = (await db.kvGet('me:cloud').catch(() => null)) || null;
-  if (signedIn()) await fetchCloud();
-  notify();
-  return prof;
+  const off = () => { if (onChange) subscribers.delete(onChange); };
+  off.ready = loadProfile().catch(() => prof);
+  return off;
 }
 
 export async function refreshProfile() {
@@ -184,8 +192,10 @@ export async function squareJpeg(img, sx, sy, side) {
   throw new Error('That photo is too large. Try another one.');
 }
 
+// v1 app.js resizeImage: at most maxEdge px on the long side, upright, JPEG 0.82. Null when the file isn't a photo.
 export async function resizeImage(file, maxEdge = 1600) {
-  const bmp = await createImageBitmap(file).catch(() => null);
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
+    .catch(() => createImageBitmap(file)).catch(() => null);
   if (!bmp) return null;
   try {
     const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
@@ -194,7 +204,7 @@ export async function resizeImage(file, maxEdge = 1600) {
     const cx = c.getContext('2d');
     cx.imageSmoothingQuality = 'high';
     cx.drawImage(bmp, 0, 0, w, h);
-    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
     return blob;
   } finally { bmp.close?.(); }
 }
