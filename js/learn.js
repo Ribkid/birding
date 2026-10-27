@@ -264,6 +264,20 @@ const clueHTML = clue => esc(clue).replace(/\u0001/g, '<span class="lq-blank"><s
 // the new screen's heading so she keeps her place and hears the next question.
 const focusWithin = view => view.contains(document.activeElement) && document.activeElement !== view;
 const focusHead = (view, had) => { if (had) view.querySelector('h1')?.focus({ preventScroll: true }); };
+// Screens drawn here (not by the router) still tell the frosted top bar which title and back control are on screen.
+const drawn = (ctx, had) => { focusHead(ctx.view, had); lookAfterDraw(ctx.view); };
+
+// The progress bar fills from where the last screen left it, so it visibly grows between questions and cards.
+let barWas = 0;
+const barSpan = frac => `<span data-fill style="transform:scaleX(${barWas.toFixed(3)})" data-to="${frac.toFixed(3)}"></span>`;
+function fillBar(view, frac = null) {
+  const s = view.querySelector('[data-fill]');
+  if (!s) return;
+  const to = frac ?? Number(s.dataset.to);
+  barWas = to;
+  if (!reduced()) void s.offsetWidth; // start from the old width so the change animates
+  s.style.transform = `scaleX(${to.toFixed(3)})`;
+}
 
 // ---------- routing ----------
 let game = null;
@@ -523,6 +537,7 @@ async function startRound(ctx, mode, { ids = null } = {}) {
     seen: ctx.seenSet(), month, n: mode === 'rapid' ? 60 : ids ? Math.min(ROUND, ids.length) : ROUND, ids, offline });
   if (qs.length < (ids ? 1 : 3)) { ctx.toast(emptyMessage(mode, p, !!offline)); return toHub(); }
   game = { route, mode, qs, i: 0, score: 0, prefs: { ...p }, practice: !!ids };
+  barWas = 0;
   if (mode === 'rapid') Object.assign(game, { endsAt: Date.now() + RAPID_MS, streak: 0, top: 0 });
   drawQuestion(ctx);
 }
@@ -536,9 +551,9 @@ function headHTML() {
       <span class="lq-count" data-secs aria-label="Seconds left">${Math.ceil(left / 1000)}<span>s</span></span></header>
       <p class="lq-hud" role="status"><span>In a row <b data-streak>${game.streak}</b></span><span>Best this round <b data-top>${game.top}</b></span></p>`;
   }
-  const n = game.i + 1;
+  const n = game.i + 1, filled = game.qs[game.i]?.picked != null ? n : n - 1;
   return `<header class="lq-head"><button class="iconbtn" data-quit aria-label="${game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'}">${game.daily ? I.back : I.close}</button>
-    <span class="lq-bar" role="progressbar" aria-label="Question ${n} of ${total}" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${n}"><span style="transform:scaleX(${((n - 1) / total).toFixed(3)})"></span></span>
+    <span class="lq-bar" role="progressbar" aria-label="Question ${n} of ${total}" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${n}">${barSpan(filled / total)}</span>
     <span class="lq-count" aria-hidden="true">${n}<span>/${total}</span></span></header>
     <p class="lq-kicker">${game.daily ? "Today's challenge" : esc(MODE_INFO[game.mode]?.[0] || '')}${game.practice ? '<span>The ones you missed</span>' : ''}</p>`;
 }
@@ -555,9 +570,7 @@ function optionsHTML(q) {
 function mediaHTML(q) {
   const sp = byId.get(q.focus);
   if (q.type === 'photo') return photoHTML(q.photos, { alt: `Mystery ${KINDS[sp.kind].one}`, missing: `This photo needs a connection. Here are its field notes instead: ${clueHTML(Q.blankNotes(sp, q.wrong))}` });
-  if (q.type === 'call') return `<div class="lq-call"><button class="lq-play" data-play="answer" aria-label="Play the call"><span data-ic>${I.play}</span></button>
-    <p class="lq-status" data-status aria-live="polite">Tap to listen</p><p class="lq-credit">${esc(credit(q.call))}</p>
-    <p class="lq-hint" data-callhint hidden>Field notes: ${clueHTML(Q.blankNotes(sp, q.wrong))}</p></div>`;
+  if (q.type === 'call') return callPlayerHTML(sp, { call: q.call, extra: `<p class="lq-hint" data-callhint hidden>Field notes: ${clueHTML(Q.blankNotes(sp, q.wrong))}</p>` });
   if (q.type === 'whoami') return `<blockquote class="lq-clue">${clueHTML(q.clue)}</blockquote>`;
   if (q.type === 'fact' && q.photos?.length) return photoHTML(q.photos, { alt: byId.get(q.img)?.name || '', cls: 'lq-photo lq-photo--small' });
   return '';
@@ -569,7 +582,7 @@ function drawQuestion(ctx) {
   cleanup();
   const q = game.qs[game.i];
   if (!q || (game.mode === 'rapid' && Date.now() >= game.endsAt)) return drawResults(ctx);
-  view.innerHTML = `<div class="lq-screen lq-screen--${game.mode}">${headHTML()}
+  view.innerHTML = `<div class="lq-screen lq-screen--${game.mode}${game.prefs?.kind && game.prefs.kind !== 'animals' ? ` kind--${game.prefs.kind}` : ''}" data-own-topbar>${headHTML()}
     <div class="lq lq--${q.type}">
       <h1 class="lq-prompt" tabindex="-1">${esc(q.prompt)}</h1>
       ${q.type === 'duel' ? '<p class="lq-sub">Tap the photo you think it is.</p>' : ''}
@@ -578,7 +591,8 @@ function drawQuestion(ctx) {
       <div class="lq-fb" data-fb tabindex="-1"></div>
     </div></div>`;
   wireImages(view);
-  focusHead(view, had);
+  drawn(ctx, had);
+  fillBar(view);
   preload(game.qs[game.i + 1]);
   if (q.picked != null) showAnswer(ctx, q, { restore: true });
   if (game.mode === 'rapid') {
@@ -652,6 +666,7 @@ function showAnswer(ctx, q, { brief = false, restore = false } = {}) {
     if (st) st.textContent = game.streak;
     if (tp) tp.textContent = game.top;
   }
+  if (!restore && game.mode !== 'rapid') fillBar(view, (game.i + 1) / game.qs.length);
   const fb = view.querySelector('[data-fb]');
   if (!fb) return;
   fb.innerHTML = feedbackHTML(q, right, brief);
@@ -733,26 +748,39 @@ function drawResults(ctx) {
   }
   const big = game.mode === 'rapid' ? game.top : game.score;
   const of = game.mode === 'rapid' ? 'in a row' : `of ${total}`;
+  const first = !game.shown;
+  game.shown = true;
+  const wrongs = game.mode === 'rapid' ? missed.slice(0, 15) : missed;
+  const rights = game.mode === 'rapid' ? [] : asked.filter(q => q.picked === q.answer);
   view.innerHTML = `<div class="lr">
     <header class="page-head"><h1 class="lh-title" tabindex="-1">${game.daily ? "Today's challenge" : esc(MODE_INFO[game.mode][0])}</h1></header>
-    <div class="lr-score ${reduced() ? 'no-anim' : ''}" role="status"><b>${big}</b><span>${esc(of)}</span></div>
-    <p class="lr-note">${esc(note)}</p>
+    ${scoreHTML(big, of, total ? game.score / total : 0, note)}
     <div class="lr-actions">
       ${missed.length && !game.daily ? `<button class="btn btn--primary btn--block" data-again-missed>Practise ${missed.length === 1 ? 'the one' : missed.length > ROUND ? `${ROUND} of the ${missed.length}` : `the ${missed.length}`} you missed</button>` : ''}
       ${game.daily ? '<a class="btn btn--primary btn--block" href="#/learn">Back to Learn</a>' : `<button class="btn ${missed.length ? '' : 'btn--primary'} btn--block" data-again>Play again</button>`}
       ${game.daily && missed.some(x => x.type !== 'fact') ? '<a class="btn btn--block" href="#/learn/deck">Review the ones you missed</a>' : ''}
       ${game.daily ? '' : '<button class="btn btn--quiet btn--block" data-hub>Back to Learn</button>'}
     </div>
-    ${game.mode === 'rapid' && missed.length ? '<h2 class="lr-h">The ones you missed</h2>' : ''}
-    <ul class="lr-list">${(game.mode === 'rapid' ? missed.slice(0, 15) : asked).map(q => {
-      const ok = q.picked === q.answer, sp = byId.get(q.focus);
-      const picked = q.options.find(o => o.key === q.picked);
+    ${wrongs.length ? `<h2 class="lr-h">The ones you missed</h2>
+    <ul class="lr-cards">${wrongs.map(q => {
+      const sp = byId.get(q.focus), picked = q.options.find(o => o.key === q.picked)?.label || 'nothing';
+      const fact = q.type === 'fact' && q.ttype !== 'Calls';
+      const sub = fact ? `${q.prompt} It's ${q.options.find(o => o.key === q.answer)?.label || ''}. You picked ${picked}.` : `You picked ${picked}`;
+      return `<li class="lr-card kind--${sp.kind}"><a href="#/bird/${sp.id}"><span class="lr-card-img">${imgTag(faceSrc(sp.id))}</span>
+        <span class="lr-mark">${I.cross}<span class="sr">Wrong:</span></span><span class="lr-card-txt"><strong>${esc(sp.name)}</strong><span>${esc(sub)}</span></span></a></li>`;
+    }).join('')}</ul>` : ''}
+    ${rights.length ? `<h2 class="lr-h">${wrongs.length ? 'The ones you got' : 'Every one right'}</h2>
+    <ul class="lr-list">${rights.map(q => {
+      const sp = byId.get(q.focus);
       const title = q.type === 'fact' && q.ttype !== 'Calls' ? q.prompt : sp.name;
-      return `<li class="${ok ? 'is-right' : 'is-wrong'}"><span class="lr-mark">${ok ? I.tick : I.cross}<span class="sr">${ok ? 'Right' : 'Wrong'}</span></span>
-        <a class="lr-main" href="#/bird/${sp.id}"><strong>${esc(title)}</strong><span class="small muted">${ok ? (q.type === 'fact' ? esc(q.options.find(o => o.key === q.answer)?.label) : 'Got it') : `You picked ${esc(picked?.label || 'nothing')}`}</span></a></li>`;
-    }).join('')}</ul>
+      return `<li class="is-right"><span class="lr-mark">${I.tick}<span class="sr">Right</span></span>
+        <a class="lr-main" href="#/bird/${sp.id}"><strong>${esc(title)}</strong><span class="small muted">${q.type === 'fact' ? esc(q.options.find(o => o.key === q.answer)?.label) : 'Got it'}</span></a></li>`;
+    }).join('')}</ul>` : ''}
   </div>`;
-  focusHead(view, had);
+  wireFaces(view);
+  drawn(ctx, had);
+  playScore(ctx, big, first);
+  if (first) ctx.stagger?.(view, '.lr-card', { key: `learn-results-${Date.now()}`, max: 8 });
   view.onclick = e => {
     if (e.target.closest('[data-again]')) { game = null; startRound(ctx, ROUTE_MODE()); }
     if (e.target.closest('[data-again-missed]')) {
@@ -764,6 +792,23 @@ function drawResults(ctx) {
     if (e.target.closest('[data-hub]')) { game = null; toHub(); }
   };
   view.onchange = null;
+}
+// The score sits inside a ring that fills to the share she got right; the number counts up the first time.
+function scoreHTML(big, of, frac, note) {
+  return `<section class="lr-hero" aria-label="Your score"><div class="lr-ring">
+      <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" pathLength="100"/><circle class="lr-ring-fg" data-scorering cx="60" cy="60" r="52" pathLength="100" style="stroke-dashoffset:${(100 - frac * 100).toFixed(1)}"/></svg>
+      <p class="lr-score" role="status"><b data-score aria-hidden="true">${big}</b><span aria-hidden="true">${esc(of)}</span><span class="sr">${big} ${esc(of)}</span></p></div>
+    <p class="lr-note">${esc(note)}</p></section>`;
+}
+function playScore(ctx, big, first) {
+  const ring = ctx.view.querySelector('[data-scorering]');
+  if (!first || reduced() || !ring) return;
+  const to = ring.style.strokeDashoffset;
+  ring.style.strokeDashoffset = '100';
+  void ring.getBoundingClientRect();
+  ring.classList.add('is-filling');
+  ring.style.strokeDashoffset = to;
+  ctx.countUp?.(ctx.view.querySelector('[data-score]'), 0, big, { delay: 120 });
 }
 const ROUTE_MODE = () => (location.hash.match(/^#\/learn\/play\/(\w+)/) || [])[1] || 'quick';
 
@@ -777,6 +822,7 @@ function renderDaily(ctx) {
     const picks = D.today.picks;
     picks.forEach((p, i) => { if (qs[i]) qs[i].picked = p.key; });
     game = { route: location.hash, daily: true, date: today, mode: 'daily', qs, i: Math.min(picks.length, qs.length), score: picks.filter(p => p.right).length };
+    barWas = 0;
     if (D.history[today] != null) game.done = true;
   }
   if (game.i >= game.qs.length) return drawResults(ctx);
@@ -790,30 +836,32 @@ function renderDeck(ctx) {
   game = { route: location.hash, deck: true };
   const p = L.prefs, cards = allCards(), due = dueCards();
   const boxes = [1, 2, 3, 4, 5].map(b => cards.filter(c => c.box === b).length);
-  const maxBox = Math.max(1, ...boxes);
   const next = cards.filter(c => c.due > Date.now()).sort((a, b) => a.due - b.due)[0];
   const nextTxt = next ? (startOfDay(next.due) <= startOfDay() ? 'More come due later today.' : `Next ones are due ${new Date(next.due).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' })}.`) : '';
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/learn" aria-label="Back to Learn">${I.back}</a><h1 class="lh-title">Review deck</h1></header>
     <div class="learn">
-      <div class="ld-summary">
-        <span class="lh-boxes lh-boxes--big" aria-hidden="true">${boxes.map((n, i) => `<span class="lh-box"><b>${n}</b><i style="--h:${Math.round(n / maxBox * 100)}%"></i><em>${i + 1}</em></span>`).join('')}</span>
+      <div class="ld-summary"${reduced() ? '' : ' data-grow'}>
+        ${boxesHTML(boxes, 'lh-boxes--big')}
         <p class="small muted">${cards.length ? `${cards.length} cards. ${boxes[3] + boxes[4]} in box 4 or 5, which count as mastered.` : 'No cards yet.'} Knew it moves a card along a box: it comes back after 1, 3, 7, then 21 days. Missed sends it back to box 1.</p>
       </div>
       ${due.length ? `<button class="btn btn--primary btn--block" data-review>Review ${due.length > 20 ? 20 : due.length} ${due.length === 1 ? 'card' : 'cards'}</button>`
         : `<p class="ld-none" role="status">${cards.length ? `Nothing to review right now. ${esc(nextTxt)}` : 'Add a set to start. Species you miss in any round are added for you.'}</p>`}
       <section class="lh-sec"><div class="lh-sec-h"><h2>Add cards</h2></div>
         <div class="ld-add">
-          <button class="btn btn--block" data-add="month">${I.facts}<span>Add 10 ${esc(p.kind === 'animals' ? 'animals' : KINDS[p.kind].label.toLowerCase())} around in ${esc(monthName())}</span></button>
-          <button class="btn btn--block" data-add="seen">${I.deck}<span>Add the ones I've seen</span></button>
+          <button class="btn btn--block" data-add="month"><span class="ld-add-ic">${I.facts}</span><span>Add 10 ${esc(p.kind === 'animals' ? 'animals' : KINDS[p.kind].label.toLowerCase())} around in ${esc(monthName())}</span></button>
+          <button class="btn btn--block" data-add="seen"><span class="ld-add-ic">${I.deck}</span><span>Add the ones I've seen</span></button>
         </div>
         <p class="small muted">Birds and frogs with recordings get a call card as well as a photo card.</p>
       </section>
     </div>`;
+  growOnView(view);
+  lookAfterDraw(view);
   view.onclick = e => {
     if (e.target.closest('[data-review]')) {
       game.queue = dueCards().slice(0, 20).map(c => ({ id: c.id, skill: c.skill, reps: 0 }));
       game.total = game.queue.length; game.n = 0; game.tally = { knew: 0, unsure: 0, missed: 0 };
+      barWas = 0;
       drawCard(ctx);
     }
     const add = e.target.closest('[data-add]');
@@ -842,13 +890,13 @@ function drawCard(ctx) {
   game.revealed = false;
   const photos = Q.photosFor(sp.id);
   const front = c.skill === 'call'
-    ? `<div class="lq-call"><button class="lq-play" data-play aria-label="Play the call"><span data-ic>${I.play}</span></button><p class="lq-status" data-status aria-live="polite">Tap to listen</p></div>`
+    ? callPlayerHTML(sp, { play: null })
     : photoHTML(photos, { alt: `Mystery ${KINDS[sp.kind].one}`, missing: `This photo needs a connection. Its field notes: ${clueHTML(Q.blankNotes(sp))}` });
   const mates = Q.lookalikesOf(sp.id).map(id => byId.get(id)).filter(Boolean);
   const peaks = Q.peaksOf(sp.id), cw = Q.callWords(sp);
-  view.innerHTML = `<div class="lq-screen">
+  view.innerHTML = `<div class="lq-screen lq-screen--deck" data-own-topbar>
     <header class="lq-head"><a class="iconbtn" href="#/learn/deck" data-quit aria-label="Stop reviewing">${I.close}</a>
-      <span class="lq-bar" role="progressbar" aria-label="Card ${game.n + 1} of ${game.total}" aria-valuemin="1" aria-valuemax="${game.total}" aria-valuenow="${game.n + 1}"><span style="transform:scaleX(${(game.n / Math.max(1, game.total)).toFixed(3)})"></span></span>
+      <span class="lq-bar" role="progressbar" aria-label="Card ${game.n + 1} of ${game.total}" aria-valuemin="1" aria-valuemax="${game.total}" aria-valuenow="${game.n + 1}">${barSpan(game.n / Math.max(1, game.total))}</span>
       <span class="lq-count" aria-hidden="true">${game.queue.length}<span> left</span></span></header>
     <p class="lq-kicker">Review deck<span>Box ${L.cards[sp.id]?.[c.skill]?.box || 1}, ${c.skill === 'call' ? 'by call' : 'by sight'}</span></p>
     <div class="lq ld-card">
@@ -870,7 +918,8 @@ function drawCard(ctx) {
       </div>
     </div></div>`;
   wireImages(view);
-  focusHead(view, had);
+  drawn(ctx, had);
+  fillBar(view);
   const nextC = game.queue[1] && byId.get(game.queue[1].id);
   if (nextC && game.queue[1].skill === 'look') preload({ photos: Q.photosFor(nextC.id) });
   view.onclick = e => {
@@ -913,12 +962,14 @@ function drawDeckDone(ctx) {
   const had = focusWithin(view);
   cleanup();
   const t = game.tally || { knew: 0, unsure: 0, missed: 0 };
+  const seen = t.knew + t.unsure + t.missed, first = !game.shown;
+  game.shown = true;
   view.innerHTML = `<div class="lr">
     <header class="page-head"><h1 class="lh-title" tabindex="-1">Deck reviewed</h1></header>
-    <div class="lr-score" role="status"><b>${t.knew}</b><span>knew it</span></div>
-    <p class="lr-note">${t.unsure ? `${t.unsure} unsure. ` : ''}${t.missed ? `${t.missed} missed, and they'll come back soon. ` : ''}Cards you knew come back in a few days.</p>
+    ${scoreHTML(t.knew, 'knew it', seen ? t.knew / seen : 0, `${t.unsure ? `${t.unsure} unsure. ` : ''}${t.missed ? `${t.missed} missed, and they'll come back soon. ` : ''}Cards you knew come back in a few days.`)}
     <div class="lr-actions"><a class="btn btn--primary btn--block" href="#/learn">Back to Learn</a><button class="btn btn--block" data-deck>Deck overview</button></div>
   </div>`;
-  focusHead(view, had);
+  drawn(ctx, had);
+  playScore(ctx, t.knew, first);
   view.onclick = e => { if (e.target.closest('[data-deck]')) { game = null; renderDeck(ctx); } };
 }
