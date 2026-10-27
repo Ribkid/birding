@@ -75,7 +75,6 @@
   background: var(--sun); box-shadow: 0 0 0 2px rgba(6, 14, 12, .55);
 }
 .hit .hit-photo { align-self: stretch; position: relative; width: auto; height: auto; border-radius: 0; background: var(--surface-2); }
-@media (max-width: 360px) { .hit { grid-template-columns: 64px minmax(0, 1fr) auto; gap: var(--sp-2); } .frog-row { grid-template-columns: 92px minmax(0, 1fr); gap: var(--sp-3); } }
 .hit-photo img, .hit-photo .img-missing { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
 .hit-nophoto { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-2); }
 .hit-nophoto svg { width: 26px; height: 26px; }
@@ -168,6 +167,9 @@
 :root[data-theme="outdoor"] .listen-stage { box-shadow: 0 0 0 2px var(--ink), var(--shadow-2); }
 :root[data-theme="outdoor"] .hit, :root[data-theme="outdoor"] .frog-row { box-shadow: var(--shadow-1); }
 :root[data-theme="outdoor"] .frog-row.is-playing { box-shadow: 0 0 0 3px var(--kc); }
+
+/* narrow phones: smaller photos leave the words room */
+@media (max-width: 360px) { .hit { grid-template-columns: 64px minmax(0, 1fr) auto; gap: var(--sp-2); } .frog-row { grid-template-columns: 92px minmax(0, 1fr); gap: var(--sp-3); } }
 
 /* ---------- species page ---------- */
 .call-credit { overflow-wrap: anywhere; }
