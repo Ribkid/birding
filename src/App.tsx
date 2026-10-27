@@ -29,6 +29,7 @@ import { Welcome } from './components/Welcome';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
 import { closeAllLayers } from './lib/layers';
+import { syncTitle, watchTitle } from './lib/title';
 import { initProfile } from './core/profile.js';
 import { initAccount, onStatus, syncStatus } from './core/account.js';
 import { useState } from 'react';
@@ -43,16 +44,22 @@ function ScrollReset() {
   return null;
 }
 
-/** The frosted bar takes its title and back control from whatever the screen just drew. */
+/**
+ * The frosted bar takes its title and back control from whatever the screen just drew. The page title follows the
+ * screen's heading, including one that renders after the route change (lib/title.ts).
+ */
 function TopBar() {
   const location = useLocation();
+  useEffect(() => {
+    const view = document.getElementById('view');
+    return view ? watchTitle(view) : undefined;
+  }, []);
   useEffect(() => {
     initLook();
     const view = document.getElementById('view');
     const id = requestAnimationFrame(() => {
       lookAfterDraw(view);
-      const heading = view?.querySelector('h1')?.textContent?.trim();
-      document.title = heading ? `${heading} – BirdyDex` : "Sarah's BirdyDex";
+      if (view) syncTitle(view, { force: true });
     });
     return () => cancelAnimationFrame(id);
   }, [location.pathname, location.search]);
