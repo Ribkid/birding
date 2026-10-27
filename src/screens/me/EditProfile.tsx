@@ -49,11 +49,15 @@ export default function EditProfile() {
   cropState.current = crop;
 
   useEffect(() => {
-    void initProfile(() => setTick((n) => n + 1)).then((p: any) => {
+    let alive = true;
+    const off = initProfile(() => setTick((n) => n + 1));
+    void off.ready.then((p: any) => {
+      if (!alive) return;
       setName(p.displayName || '');
       setShowLb(p.showOnLeaderboard !== false);
       setShowDex(!!getMyCloud()?.showDex);
     });
+    return () => { alive = false; off(); };
   }, []);
 
   const [sync, setSync] = useState(syncStatus());

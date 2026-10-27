@@ -24,18 +24,26 @@ export const getMyCloud = () => (cloud && configured && user() && cloud.uid === 
 export const myName = () => prof?.displayName || user()?.name || (user()?.email || '').split('@')[0] || 'You';
 export const getPublicProfileCache = id => others.get(id) || null;
 
-export async function initProfile(onChange) {
+async function loadProfile() {
+  prof = await localProfile();
+  if (!cloud) cloud = (await db.kvGet('me:cloud').catch(() => null)) || null;
+  if (signedIn()) await fetchCloud();
+  notify();
+  return prof;
+}
+
+// Loads the profile and, when onChange is given, calls it after every load, sign-in or sign-out and synced
+// profile change. Returns an unsubscribe for an effect's cleanup; its `ready` resolves with the loaded profile.
+export function initProfile(onChange) {
   if (onChange) subscribers.add(onChange);
   if (!bound) {
     bound = true;
     onAuth(async () => { prof = await localProfile(); if (user()) await fetchCloud(true); notify(); });
     onRemoteChange(async () => { prof = await localProfile(); notify(); });
   }
-  prof = await localProfile();
-  if (!cloud) cloud = (await db.kvGet('me:cloud').catch(() => null)) || null;
-  if (signedIn()) await fetchCloud();
-  notify();
-  return prof;
+  const off = () => { if (onChange) subscribers.delete(onChange); };
+  off.ready = loadProfile().catch(() => prof);
+  return off;
 }
 
 export async function refreshProfile() {

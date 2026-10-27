@@ -54,12 +54,12 @@ export default function Me() {
   useMedia();
 
   useEffect(() => {
-    void initProfile(() => force());
+    const offProfile = initProfile(() => force());
     void learnReady().then(() => force()).catch(() => {});
     let alive = true;
     void db.kvGet('me:notnow').then((value) => { if (alive) setNotNow(!!value); }).catch(() => {});
     const off = db.onChange((name: string) => { if (name === 'kv:me:notnow') void db.kvGet('me:notnow').then((value) => { if (alive) setNotNow(!!value); }); });
-    return () => { alive = false; off(); };
+    return () => { alive = false; off(); offProfile(); };
   }, []);
 
   useEffect(() => { const off = onStatus((state: typeof sync) => setSync(state)); return () => { off(); }; }, []);
