@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { KINDS, type ScanResult } from '../../lib/data';
 import { useSeen } from '../../lib/hooks';
 import { resizeImage } from '../../core/profile.js';
+import { Icon } from '../../components/Icon';
 import {
   photoIdInfo, identifyScan, modelCached, ensureModel, photoModelMb, scanSubject, scanFootnote,
   topResults, scanHeadline, scanAdvice, bandLevel, bandWord, pct, words, article, firstSentence,
@@ -14,6 +15,10 @@ import './scan.css';
 
 type Chosen = ScanPhoto;
 type Box = ScanBox;
+
+const GalleryIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M6.5 16.5l4-4.5 3 3 2-2 2.5 3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="15.5" cy="9" r="1.5" fill="currentColor" /></svg>
+);
 
 const shortOf = (p: Chosen) => Math.min(p.W, p.H);
 function boxPct(photo: Chosen, b: Box) {
@@ -333,11 +338,11 @@ export default function Scan() {
               <>
                 <div className="scan-frame">
                   <span className="scan-corners" aria-hidden="true" />
-                  <div className="scan-entry"><span className="scan-entry-icon">◱</span><p>Works best when {subject ? `the ${subject}` : 'it'} fills a good part of the frame.</p></div>
+                  <div className="scan-entry"><span className="scan-entry-icon"><Icon name="scan" /></span><p>Works best when {subject ? `the ${subject}` : 'it'} fills a good part of the frame.</p></div>
                 </div>
                 <div className="scan-pick">
-                  <label className="scan-pickbtn scan-pickbtn--main"><span className="scan-shutter">◉</span><span>Take a photo</span><input type="file" accept="image/*" capture="environment" className="scan-file" onChange={(e) => void pick(e.target.files?.[0])} /></label>
-                  <label className="scan-pickbtn scan-pickbtn--side"><span className="scan-pickicon">▣</span><span>Choose from gallery</span><input type="file" accept="image/*" className="scan-file" onChange={(e) => void pick(e.target.files?.[0])} /></label>
+                  <label className="scan-pickbtn scan-pickbtn--main"><span className="scan-shutter"><Icon name="cam" /></span><span>Take a photo</span><input type="file" accept="image/*" capture="environment" className="scan-file" onChange={(e) => void pick(e.target.files?.[0])} /></label>
+                  <label className="scan-pickbtn scan-pickbtn--side"><span className="scan-pickicon"><GalleryIcon /></span><span>Choose from gallery</span><input type="file" accept="image/*" className="scan-file" onChange={(e) => void pick(e.target.files?.[0])} /></label>
                 </div>
               </>
             ) : (
@@ -366,7 +371,7 @@ export default function Scan() {
                 <p className="scan-hint">{whole ? 'The whole photo will be identified.' : subject ? `Drag the box onto the ${subject}. Pull a corner to resize.` : 'Drag the box onto what you want named. Pull a corner to resize.'}</p>
                 <div className="scan-tool-row">
                   <button type="button" className="scan-chip scan-chip--whole" data-whole aria-pressed={whole} onClick={() => setWhole((v) => !v)}><i aria-hidden="true" />Whole photo</button>
-                  <label className="scan-chip scan-change"><span>Change photo</span><input type="file" accept="image/*" className="scan-file" disabled={busy} onChange={(e) => void pick(e.target.files?.[0])} /></label>
+                  <label className="scan-chip scan-change"><span><GalleryIcon /> Change photo</span><input type="file" accept="image/*" className="scan-file" disabled={busy} onChange={(e) => void pick(e.target.files?.[0])} /></label>
                 </div>
               </div>
               {multi && (
@@ -375,7 +380,7 @@ export default function Scan() {
                   {covered.map((k) => <button key={k} type="button" className={`scan-chip kind--${k}`} aria-pressed={kind === k} onClick={() => setKind(k)}>{KINDS[k].label}</button>)}
                 </div>
               )}
-              <button type="button" className="scan-go" disabled={busy} onClick={() => void identify()} aria-disabled={busy}><span>◱</span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
+              <button type="button" className="scan-go" disabled={busy} onClick={() => void identify()} aria-disabled={busy}><span className="scan-go-ico"><Icon name="scan" /></span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
             </>
           )}
           <div ref={workRef} className="scan-work">
