@@ -301,7 +301,8 @@ span.bird-photo { display: block; }
 .btn--primary { background: var(--azure); color: var(--on-azure); box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--azure) 70%, transparent); }
 .btn--danger { color: var(--danger); }
 .btn--quiet { background: transparent; box-shadow: none; }
-.btn--small { min-height: 38px; padding: 6px 14px; font-size: var(--fs-2); }
+.btn--small { position: relative; min-height: 38px; padding: 6px 14px; font-size: var(--fs-2); white-space: nowrap; }
+.btn--small::after { content: ''; position: absolute; inset: -3px 0; } /* a 44px touch height around the smaller pill */
 .btn--block { width: 100%; min-height: 52px; font-size: 1.0625rem; }
 .btn[disabled] { opacity: .5; cursor: default; }
 .row-end, .row-start { display: flex; gap: 10px; align-items: center; justify-content: flex-end; flex-wrap: wrap; margin-top: 8px; }
@@ -366,8 +367,10 @@ span.bird-photo { display: block; }
 /* ---------- pages, lists ---------- */
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: calc(16px + env(safe-area-inset-top)) 16px 8px; }
 .page-head h1 { margin: 0; font: 400 var(--fs-6)/1.08 var(--display); letter-spacing: 0; }
-.page-head--back { justify-content: flex-start; }
+/* The back button lines up with the title's first line, also when a subtitle or a long title adds lines below. */
+.page-head--back { justify-content: flex-start; align-items: flex-start; }
 .page-head--back .iconbtn { margin-left: -10px; flex: none; }
+.page-head.page-head--back > .iconbtn { margin-top: calc((clamp(2rem, 8vw, 2.5rem) * 1.04 - var(--tap)) / 2); }
 .page-head p { margin: 4px 0 0; }
 .totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 10px 16px 4px; }
 .totals a {
@@ -781,6 +784,7 @@ body.has-sheet .tabbar .tab-plus { rotate: 45deg; }
 .acct-status[data-state="error"] { color: var(--danger); }
 .acct-status[data-state="offline"], .acct-status[data-state="syncing"], .acct-status[data-state="migrating"] { color: var(--ink-2); font-weight: 600; }
 .acct-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 0; }
+.acct-row > .btn { flex: none; }
 .acct-google { margin: 6px 0 14px; background: var(--surface); }
 .acct-email, .acct-code { display: grid; gap: 10px; margin-bottom: 8px; }
 .acct-email .btn, .acct-code .btn { justify-self: start; }

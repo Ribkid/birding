@@ -19,13 +19,18 @@ export async function initAccount(appCtx) {
   if (!configured) return;
   onStatus(st => { paintStatus(st); paintBanner(st); });
   onRemoteChange(async () => { prof = await localProfile(); ctx.refresh(); });
+  // Opening the app with a saved session also reports SIGNED_IN; only a real sign-in (the form, or back from
+  // the email link or Google with ?code=) gets the toast.
+  let restoring = !new URLSearchParams(location.search).has('code');
   onAuth(async (u, event) => {
+    const quiet = restoring;
     prof = await localProfile();
-    if (u) { startSync(); syncNow(); if (event === 'SIGNED_IN') ctx.toast('Signed in'); }
+    if (u) { startSync(); syncNow(); if (event === 'SIGNED_IN' && !quiet) ctx.toast('Signed in'); }
     ctx.refresh({ force: true });
   });
   prof = await localProfile();
   const u = await startAuth();
+  restoring = false;
   if (u) { startSync(); syncNow(); ctx.refresh({ force: true }); }
 }
 
@@ -92,7 +97,7 @@ export async function renderAccountSection(el) {
     </div>
     <label class="field"><span>Display name (shown on the leaderboard)</span><input name="displayName" maxlength="40" value="${esc(prof.displayName || '')}" placeholder="${esc(shownName())}" data-name></label>
     <div class="acct-row"><span class="small muted">Photo, name and who sees your profile</span><a class="btn btn--small" href="#/me/edit">Edit profile</a></div>
-    <label class="check check--card"><input type="checkbox" data-lb ${prof.showOnLeaderboard !== false ? 'checked' : ''}><span>Show me on the leaderboard. Only your name, avatar and counts are shown, never your sightings, places, notes or photos. Groups you join always show you to their members.</span></label>
+    <label class="check check--card me-check"><input type="checkbox" data-lb ${prof.showOnLeaderboard !== false ? 'checked' : ''}><span><strong>Show me on the leaderboard</strong><span class="small muted">Only your name, picture and counts are shown, never your sightings, places, notes or photos. Groups you join always show you to their members.</span></span></label>
     <div class="row-start"><a class="btn" href="#/leaderboard">${trophy} Leaderboard</a><button class="btn" data-syncnow>Sync now</button><button class="btn" data-signout>Sign out</button></div>
     ${pending ? `<p class="small muted">${pending} change${pending === 1 ? '' : 's'} waiting to sync.</p>` : ''}
     <button class="btn btn--danger btn--quiet" data-delete-account>Delete my account and cloud data</button>`;
@@ -316,7 +321,7 @@ function paintBoard(rows) {
       <span class="lb-rank">${r.rank}</span>
       ${avatar(r.avatar_species_id, 'acct-av', r.avatar_path, r.display_name)}
       <span class="row-main"><strong>${esc(r.display_name)}${r.is_me ? ' <span class="lb-you">You</span>' : ''}</strong>
-        <span class="small muted">${plural(r.outings, 'outing')} · ${plural(r.badges, 'badge')}${kindLine(r)}</span></span>
+        <span class="small muted">${plural(r.outings, 'outing')}, ${plural(r.badges, 'badge')}</span>${kindLine(r)}</span>
       <span class="row-n" aria-label="${r.species} ${what}">${r.species}</span></${r.public_id ? 'a' : 'span'}></li>`;
   el.innerHTML = top.map(row).join('') + (me ? `<li class="lb-gap" aria-hidden="true">⋯</li>${row(me)}` : '');
   if (!rows.some(r => r.is_me) && !lb.group) {
@@ -325,8 +330,9 @@ function paintBoard(rows) {
 }
 function kindLine(r) {
   if (lb.kind || kindsPresent.length < 2) return '';
-  const parts = kindsPresent.filter(k => r[k] > 0 && k !== 'bird').map(k => `${r[k]} ${KINDS[k].label.toLowerCase()}`);
-  return parts.length ? ` · ${r.bird} birds, ${parts.join(', ')}` : '';
+  const word = k => (r[k] === 1 ? KINDS[k].one : KINDS[k].label.toLowerCase());
+  const parts = kindsPresent.filter(k => r[k] > 0 && k !== 'bird').map(k => `${r[k]} ${word(k)}`);
+  return parts.length ? `<span class="small muted">${r.bird} ${word('bird')}, ${parts.join(', ')}</span>` : '';
 }
 
 async function loadGroups() {
