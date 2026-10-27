@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate, type NavigateOptions, type To } from 'react-router-dom';
-import { countUp, motionOK } from '../lib/motion';
+import { countUp, vt } from '../lib/motion';
 import { applyTint, stagger } from '../lib/look';
 
 /** A number that counts up once, with the stamp. Reduced motion shows the final value. */
@@ -46,18 +46,8 @@ export function useTint<T extends HTMLElement>(url: string | null, fallback: str
 export function useViewTransitionNavigate() {
   const navigate = useNavigate();
   return useCallback((to: To, options?: NavigateOptions & { nav?: 'forward' | 'back' | 'swap' }) => {
-    const start = (document as any).startViewTransition;
-    if (!start || !motionOK() || document.hidden) return navigate(to, options);
-    const root = document.documentElement;
-    root.dataset.nav = options?.nav ?? 'forward';
-    try {
-      const t = start.call(document, () => flushSync(() => navigate(to, options)));
-      t.finished.finally(() => { delete root.dataset.nav; }).catch(() => {});
-    } catch {
-      delete root.dataset.nav;
-      navigate(to, options);
-    }
-    return undefined;
+    const { nav = 'forward', ...rest } = options ?? {};
+    void vt(() => flushSync(() => navigate(to, rest)), { nav });
   }, [navigate]);
 }
 

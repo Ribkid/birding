@@ -24,7 +24,7 @@ if (!root) throw new Error('#root missing from index.html');
 
 createRoot(root).render(
   <StrictMode>
-    <HashRouter>
+    <HashRouter useTransitions={false}>
       <App />
     </HashRouter>
   </StrictMode>,
