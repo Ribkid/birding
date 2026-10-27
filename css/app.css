@@ -341,7 +341,7 @@ span.bird-photo { display: block; }
 .sheet-scrim { position: absolute; inset: 0; background: var(--scrim); opacity: 0; transition: opacity var(--dur-3) var(--ease-out); }
 .sheet {
   position: relative; width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto; overscroll-behavior: contain;
-  background: var(--surface); border-radius: var(--r-3) var(--r-3) 0 0; padding: 8px 16px calc(20px + env(safe-area-inset-bottom));
+  background: var(--surface); border-radius: 28px 28px 0 0; padding: 8px 16px calc(20px + env(safe-area-inset-bottom)); /* same top radius as every other sheet */
   box-shadow: var(--shadow-2);
   transform: translateY(100%); transition: transform var(--dur-3) var(--ease-out);
 }
