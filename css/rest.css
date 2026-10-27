@@ -358,3 +358,60 @@ body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
 .locpick-pin--lift { translate: 0 -12px; transition-duration: var(--dur-2); transition-timing-function: var(--ease-out); }
 .locpick-dot:has(+ .locpick-pin--lift) { scale: 1.6; opacity: .6; }
 @media (prefers-reduced-motion: reduce) { .locpick-pin, .locpick-dot { transition: none; } .locpick-pin--lift { translate: none; } .locpick-dot:has(+ .locpick-pin--lift) { scale: none; } }
+
+/* ---------- the celebration: a big photo card that springs in ---------- */
+.celebrate { padding: 16px; -webkit-backdrop-filter: blur(6px) saturate(1.2); backdrop-filter: blur(6px) saturate(1.2); }
+.celebrate-card {
+  position: relative; width: min(380px, 100%); max-height: calc(100dvh - 32px); overflow: hidden auto; padding-bottom: 0;
+  border-radius: 28px; box-shadow: var(--shadow-float); animation: card-spring var(--dur-4) var(--ease-spring) both;
+}
+@keyframes card-spring { from { opacity: 0; transform: translateY(56px) scale(.84) rotate(-1.5deg); } 35% { opacity: 1; } }
+.celebrate-photo { position: relative; width: 100%; aspect-ratio: 4 / 5; max-height: 54dvh; background: var(--tint-deep, #0C1F1A) 50% 30% / cover no-repeat; }
+.celebrate-photo > img, .celebrate-photo > .img-missing { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+.celebrate-photo > .img-missing { background: none; }
+.celebrate-photo > img.img-missing { opacity: 0; }
+.celebrate-photo > img { animation: photo-settle 1100ms var(--ease-out) both; }
+@keyframes photo-settle { from { transform: scale(1.16); } }
+.celebrate-over {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 84px 20px 36px; color: #fff;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--tint-deep, #06120F) 78%, transparent) 55%, var(--tint-deep, #06120F));
+}
+.celebrate .celebrate-over p { margin: 0; }
+.celebrate .celebrate-kicker { color: var(--sun); font-weight: 700; letter-spacing: .01em; }
+.celebrate .celebrate-over h2 { margin: 4px 0 0; color: #fff; font: 400 clamp(1.75rem, 8.5vw, 2.3rem)/1.05 var(--display); text-wrap: balance; }
+.celebrate-photo .band { z-index: 2; bottom: -18px; box-shadow: 0 8px 18px -8px rgba(0, 0, 0, .5); }
+.celebrate-body { padding: 32px 16px 18px; }
+.celebrate .celebrate-body p { margin: 0 0 8px; }
+.celebrate .celebrate-body .celebrate-total { margin-bottom: 12px; }
+.celebrate-body .row-center { margin-top: 14px; }
+@media (prefers-reduced-motion: reduce) {
+  .celebrate-card { animation: fade var(--dur-2) both; }
+  .celebrate-photo > img { animation: none; }
+}
+
+/* ---------- the welcome: a photo hero card ---------- */
+.welcome { -webkit-backdrop-filter: blur(6px) saturate(1.2); backdrop-filter: blur(6px) saturate(1.2); }
+.welcome-card {
+  width: min(420px, 100%); max-height: calc(100dvh - 32px); overflow: hidden auto; padding: 0;
+  border-radius: 28px; box-shadow: var(--shadow-float); animation: card-spring var(--dur-4) var(--ease-spring) both;
+}
+.welcome--out { opacity: 0; transition: opacity var(--dur-2) var(--ease-out); }
+.welcome-hero { position: relative; height: clamp(210px, 36dvh, 300px); background: var(--tint-deep, #16302A); overflow: hidden; }
+.welcome-hero > img, .welcome-hero > .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 38%; }
+.welcome-hero > .img-missing { background: linear-gradient(165deg, #2B5A45, #0C1F1A 85%); }
+.welcome-hero > img.img-missing { opacity: 0; }
+.welcome-hero > img { animation: photo-settle 1400ms var(--ease-out) both; }
+.welcome-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, color-mix(in srgb, var(--tint-deep, #06120F) 88%, transparent)); pointer-events: none; }
+.welcome-card h1 { position: absolute; z-index: 1; left: 20px; right: 20px; bottom: 14px; margin: 0; color: #fff; font: 400 clamp(2.3rem, 11vw, 2.9rem)/1 var(--display); }
+.welcome-body { padding: 16px 20px 20px; }
+.welcome-body > p { margin: 0 0 14px; }
+.welcome-list { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 12px; }
+.welcome-list li { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; align-items: start; }
+.welcome-ico { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft, var(--azure-soft)); color: var(--accent, var(--azure)); }
+.welcome-ico svg { width: 20px; height: 20px; }
+.welcome-body .row-center .btn--primary { min-width: 12rem; min-height: 52px; }
+@media (prefers-reduced-motion: reduce) {
+  .welcome-card { animation: fade var(--dur-2) both; }
+  .welcome-hero > img { animation: none; }
+}
+@media (prefers-reduced-transparency: reduce) { .celebrate, .welcome { -webkit-backdrop-filter: none; backdrop-filter: none; } }

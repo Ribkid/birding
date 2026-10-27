@@ -503,7 +503,7 @@ async function deleteSighting(id) {
   state.sightings = state.sightings.filter(x => x.id !== id);
 }
 
-// New for the dex: a dialog with the photo settling in, the band clamping on and the count stamping up by one.
+// New for the dex: a big photo card that springs in, the band clamping on and the count stamping up by one.
 function celebrate(sp, newBadges) {
   navigator.vibrate?.([60, 40, 120]);
   confetti();
@@ -518,19 +518,22 @@ function celebrate(sp, newBadges) {
   const id = `cel-${sp.id}-${Date.now()}`;
   const el = document.createElement('div');
   el.className = 'celebrate';
-  el.innerHTML = `<div class="celebrate-card">
-    <div class="celebrate-photo">${birdImg(sp, 'large', '', { whole: true })}<span class="band band--${sp.kind} band--on band--big band--clamp">${dexNo(sp.id)}</span></div>
-    <p class="celebrate-kicker" id="${id}-k">New for your dex</p>
-    <h2 id="${id}-h">${esc(sp.name)}</h2>
-    <p class="celebrate-count"><b class="celebrate-n" data-count>${got}</b> of ${ofIt.length} ${KINDS[sp.kind].label.toLowerCase()} ${verb}</p>
-    ${total ? `<p class="celebrate-total small muted"><span data-count-all>${animalsGot}</span> of ${ANIMALS.length} animals in your dex</p>` : ''}
-    ${newBadges.length ? `<p class="celebrate-badges">Badge earned: ${newBadges.map(b => `<strong>${esc(b.name)}</strong>`).join(', ')}</p>` : ''}
-    <div class="row-center"><button class="btn" data-share>${icon.share} Share</button><button class="btn" data-card>See card</button><button class="btn btn--primary" data-dismiss>Nice</button></div></div>`;
+  el.innerHTML = `<div class="celebrate-card kind--${sp.kind}">
+    <div class="celebrate-photo">${birdImg(sp, 'large', '', { alt: '' })}
+      <div class="celebrate-over"><p class="celebrate-kicker" id="${id}-k">New for your dex</p><h2 id="${id}-h">${esc(sp.name)}</h2></div>
+      <span class="band band--${sp.kind} band--on band--big band--clamp">${dexNo(sp.id)}</span></div>
+    <div class="celebrate-body">
+      <p class="celebrate-count"><b class="celebrate-n" data-count>${got}</b> of ${ofIt.length} ${KINDS[sp.kind].label.toLowerCase()} ${verb}</p>
+      ${total ? `<p class="celebrate-total small muted"><span data-count-all>${animalsGot}</span> of ${ANIMALS.length} animals in your dex</p>` : ''}
+      ${newBadges.length ? `<p class="celebrate-badges">Badge earned: ${newBadges.map(b => `<strong>${esc(b.name)}</strong>`).join(', ')}</p>` : ''}
+      <div class="row-center"><button class="btn" data-share>${icon.share} Share</button><button class="btn" data-card>See card</button><button class="btn btn--primary" data-dismiss>Nice</button></div>
+    </div></div>`;
   document.body.append(el);
   settleImages(el);
   // While the large photo loads, show the small one she has just seen in the dex.
-  const small = sized(sp.id, 'small'), frame = $('.celebrate-photo .whole', el);
+  const small = sized(sp.id, 'small'), frame = $('.celebrate-photo', el), card = $('.celebrate-card', el);
   if (frame && small && shown.has(small)) frame.style.backgroundImage = `url("${small.replace(/"/g, '%22')}")`;
+  applyTint(card, small || sized(sp.id, 'large'), getComputedStyle(card).getPropertyValue('--kc').trim() || null);
   let layer;
   const done = (reason, then) => {
     if (!closeLayer(layer, { restore: !then && reason !== 'nav' })) return;
@@ -539,7 +542,7 @@ function celebrate(sp, newBadges) {
     setTimeout(() => el.remove(), 220);
     then?.();
   };
-  layer = openLayer(el, { dialog: $('.celebrate-card', el), labelledBy: `${id}-k ${id}-h`, close: reason => done(reason) });
+  layer = openLayer(el, { dialog: card, labelledBy: `${id}-k ${id}-h`, close: reason => done(reason) });
   const info = { seen: true, isNew: true, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
   el.addEventListener('click', e => {
     if (e.target.closest('[data-share]')) { shareCard(sp, info); return; }
@@ -547,9 +550,9 @@ function celebrate(sp, newBadges) {
     if (e.target.closest('[data-dismiss]') || e.target === el) done('button');
   });
   $('[data-dismiss]', el).focus({ preventScroll: true });
-  // Count lands after the card has popped in.
-  countUp($('[data-count]', el), got - 1, got, { delay: 380 });
-  if (total) countUp($('[data-count-all]', el), animalsGot - 1, animalsGot, { delay: 520 });
+  // Count lands after the card has sprung in.
+  countUp($('[data-count]', el), got - 1, got, { delay: 420 });
+  if (total) countUp($('[data-count-all]', el), animalsGot - 1, animalsGot, { delay: 560 });
 }
 
 // ---------- sighting sheet ----------
@@ -2867,33 +2870,40 @@ function showUpdateBanner() {
 }
 async function showWelcome() {
   if ($('.welcome')) return;
+  const robin = byId.get(165);
   const ov = document.createElement('div');
   ov.className = 'welcome';
+  const plusIco = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>';
   ov.innerHTML = `<div class="welcome-card">
-    <div class="welcome-model" data-wm></div>
-    <h1>Hi Sarah</h1>
-    <p>This is your BirdyDex: ${BIRDS.length} South East Queensland birds to find${ANIMALS.length > BIRDS.length ? `, plus ${ANIMALS.length - BIRDS.length} other native animals` : ''}${ofKind('plant').length ? ` and ${ofKind('plant').length} native plants` : ''}, starting with this Eastern Yellow Robin.</p>
-    <ul class="welcome-list">
-      <li><strong>Log</strong> anything you find with the + button, or press and hold a tile in the dex.</li>
-      <li><strong>Scan</strong> names any species in your dex from a photo, and <strong>Listen</strong> names birds by their calls.</li>
-      <li><strong>Learn</strong> has a daily challenge and look-alike games, and <strong>badges</strong> and <strong>targets</strong> show where to go next.</li>
-    </ul>
-    <div class="row-center">${state.installPrompt ? '<button class="btn" data-winstall>Install app</button>' : ''}<button class="btn btn--primary" data-wgo>Start exploring</button></div>
+    <div class="welcome-hero">${birdImg(robin, 'large', '', { alt: robin.name })}<h1>Hi Sarah</h1></div>
+    <div class="welcome-body">
+      <p>This is your BirdyDex: ${BIRDS.length} South East Queensland birds to find${ANIMALS.length > BIRDS.length ? `, plus ${ANIMALS.length - BIRDS.length} other native animals` : ''}${ofKind('plant').length ? ` and ${ofKind('plant').length} native plants` : ''}, starting with this Eastern Yellow Robin.</p>
+      <ul class="welcome-list">
+        <li><span class="welcome-ico">${plusIco}</span><span><strong>Log</strong> anything you find with the + button, or press and hold a tile in the dex.</span></li>
+        <li><span class="welcome-ico">${icon.scan}</span><span><strong>Scan</strong> names any species in your dex from a photo, and <strong>Listen</strong> names birds by their calls.</span></li>
+        <li><span class="welcome-ico">${icon.learn}</span><span><strong>Learn</strong> has a daily challenge and look-alike games, and <strong>badges</strong> and <strong>targets</strong> show where to go next.</span></li>
+      </ul>
+      <div class="row-center">${state.installPrompt ? '<button class="btn" data-winstall>Install app</button>' : ''}<button class="btn btn--primary" data-wgo>Start exploring</button></div>
+    </div>
   </div>`;
   document.body.append(ov);
-  let dispose = null, layer;
+  settleImages(ov);
+  const card = $('.welcome-card', ov);
+  applyTint(card, sized(robin.id, 'large'), null);
+  let layer;
   // Escape, Back and Start birding all mean the same thing: she has seen it.
   const done = reason => {
     if (!closeLayer(layer, { restore: reason !== 'nav' })) return;
-    dispose?.(); ov.remove(); db.kvSet('welcomed', true);
+    ov.classList.add('welcome--out');
+    setTimeout(() => ov.remove(), 220);
+    db.kvSet('welcomed', true);
   };
-  layer = openLayer(ov, { dialog: $('.welcome-card', ov), close: done });
+  layer = openLayer(ov, { dialog: card, close: done });
   ov.addEventListener('click', async e => {
     if (e.target.closest('[data-winstall]')) await promptInstall();
     if (e.target.closest('[data-wgo]')) done('button');
   });
   $('[data-wgo]', ov).focus({ preventScroll: true });
-  try { const { mountBird } = await import('./model3d.js'); if (ov.isConnected) dispose = mountBird($('[data-wm]', ov), byId.get(165)); } catch (_) {}
 }
 
 // ---------- boot ----------
