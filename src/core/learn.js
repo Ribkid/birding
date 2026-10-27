@@ -137,7 +137,8 @@ export function learnStats() {
 export const packState = key => (L.packs[key] ||= { best: null, of: 0, plays: 0, perfect: 0, got: [] });
 export const packProgress = () => Q.PACKS.map(p => {
   const list = Q.packSpecies(p.key), st = L?.packs?.[p.key] || {};
-  return { ...p, total: list.length, got: (st.got || []).filter(id => byId.has(id)).length, best: st.best, of: st.of, plays: st.plays || 0, perfect: st.perfect || 0 };
+  const ids = new Set(list.map(s => s.id));
+  return { ...p, total: list.length, got: (st.got || []).filter(id => ids.has(id)).length, best: st.best, of: st.of, plays: st.plays || 0, perfect: st.perfect || 0 };
 });
 export const accuracyForKinds = () => kindsPresent.map(k => ({ k, all: ofKind(k).length, mastered: ofKind(k).filter(s => isMastered(s.id)).length, acc: accuracy(k) }));
 
