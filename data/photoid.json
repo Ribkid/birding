@@ -690,7 +690,7 @@
   "wText": 1.0,
   "wProto": 0.75,
   "protoAgg": "mean",
-  "temperature": 1.0,
+  "temperature": 3.55,
   "noProto": "text-as-proto"
  },
  "views": {
@@ -708,9 +708,28 @@
   "floor": 0.15
  },
  "bands": {
-  "likely": 0.75,
+  "likely": 0.6,
   "possibly": 0.6
  },
- "metrics": null,
+ "metrics": {
+  "tested": "held-out iNaturalist photos never used as references, 2 per species, all 335 species",
+  "n": 652,
+  "top1": 0.712,
+  "top3": 0.85,
+  "byKind": {
+   "bird": 0.722,
+   "mammal": 0.619,
+   "reptile": 0.66,
+   "frog": 0.525,
+   "butterfly": 0.81,
+   "plant": 0.782
+  },
+  "likelyShare": 0.618,
+  "likelyPrecision": 0.908,
+  "possiblyShare": 0.184,
+  "possiblyPairPrecision": 0.783,
+  "sameAnswerWhenReframed": 0.807,
+  "reframedN": 275
+ },
  "note": "BioCLIP text (taxonomic, scientific and common names, with older synonyms) plus image prototypes from reference photos, all embedded with the shipped 4-bit model. Rebuild with scripts/build_photoid.py."
 }

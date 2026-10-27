@@ -35,11 +35,12 @@ UA = {'User-Agent': 'birdydex-photoid-build/1.0 (personal, non-commercial)'}
 
 # Chosen on the validation split (docs/photo-id.md). Change them only with new measurements.
 SETTINGS = {
-    'K': 3,                     # prototypes per species
-    'protoAgg': 'max',          # score against the closest prototype
-    'wText': 1.0, 'wProto': 1.0, 'scale': 100.0, 'temperature': 1.0,
+    'K': 1,                     # prototypes per species (one average; 2-3 k-means centres measured no better)
+    'protoAgg': 'mean',
+    'wText': 1.0, 'wProto': 0.75, 'scale': 100.0,
+    'temperature': 3.55,        # fitted by log-likelihood on held-out photos: undoes the raw scores' over-confidence
     'views': {'whole': ['centre', 'centreF'], 'crop': ['box', 'boxF']},
-    'bands': {'likely': 0.8, 'possibly': 0.6},
+    'bands': {'likely': 0.6, 'possibly': 0.6},   # 'Likely' was right 91% of the time on held-out photos
     'prior': {'month': 0.0, 'floor': 0.15},
 }
 TEMPLATES = ['a photo of {}.', 'a photo of a {}.', 'a bad photo of a {}.', 'a close-up photo of a {}.', 'a bright photo of a {}.',
@@ -117,7 +118,7 @@ def text_embeddings(sp, tax, seq):
     return np.stack(rows).astype('float32')
 
 
-def fetch_photos(sp, work, per=10):
+def fetch_photos(sp, work, per=5):
     """Gallery photos from data/gallery.json plus top-voted iNaturalist photos (Australia, research grade)."""
     import requests
     os.makedirs(os.path.join(work, 'protos'), exist_ok=True)
