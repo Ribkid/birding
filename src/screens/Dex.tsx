@@ -208,7 +208,7 @@ export default function Dex() {
             <button
               role="tab"
               aria-selected={kind === 'animals'}
-              className={`kind-tab ${kind === 'animals' ? 'on' : ''}`}
+              className="kind-tab kind--all"
               onClick={() => {
                 setKind('animals');
                 setGroup('');
