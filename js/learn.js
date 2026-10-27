@@ -128,7 +128,7 @@ export function learnTeaser(_ctx) {
   const streak = currentStreak(), due = dueCards().length;
   return `<div class="lt-wrap"><a class="lt" href="#/learn/daily">${pipsHTML(picks, 5, 'lt-pips')}
     <span class="lt-main"><strong>Today's challenge</strong><span>${esc(status)}</span></span>
-    ${streak ? `<span class="lt-streak"><b>${streak}</b><span>day streak</span></span>` : ''}</a>
+    ${streak ? `<span class="lt-streak"><b>${streak}</b><span>${streak === 1 ? 'day' : 'days'} in a row</span></span>` : ''}</a>
     ${due ? `<a class="lt-due" href="#/learn/deck">${I.deck}<span><b>${due}</b> ${due === 1 ? 'card' : 'cards'} to review</span></a>` : ''}</div>`;
 }
 
