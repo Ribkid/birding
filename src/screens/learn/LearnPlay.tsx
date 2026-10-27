@@ -61,11 +61,12 @@ function Options({ q, picked, onPick, rapid, round }: { q: QuizQuestion; picked:
       <div className={`lq-duel${n > 2 ? ' lq-duel--four' : ''}`}>
         {q.options.map((o, i) => {
           const cls = disabled ? (o.key === q.answer ? ' is-right' : o.key === picked ? ' is-wrong' : ' is-dim') : '';
+          const named = q.named || disabled;
           const suffix = disabled ? (o.key === q.answer ? ' (right answer)' : o.key === picked ? ' (your answer)' : '') : '';
           return (
-            <button key={o.key} type="button" className={`lq-side${cls}`} data-pick={o.key} aria-disabled={disabled || undefined} aria-label={`${q.named ? o.label : SIDES[n]?.[i] || `Photo ${i + 1}`}${suffix}`} onClick={() => onPick(o.key)}>
+            <button key={o.key} type="button" className={`lq-side${cls}`} data-pick={o.key} aria-disabled={disabled || undefined} aria-label={named ? `${o.label}${suffix}` : SIDES[n]?.[i] || `Photo ${i + 1}`} onClick={() => onPick(o.key)}>
               <PhotoBox key={`${round}-${o.key}`} photos={o.photos} alt="" cls="lq-photo lq-photo--duel" missing="Photo not saved on this phone" />
-              <span className="lq-side-name" data-name>{q.named ? o.label : ''}</span>
+              <span className="lq-side-name" data-name>{named ? o.label : ''}</span>
               <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24">{QI.cross}</svg> : null}</span>
               <span className="sr-only">{suffix}</span>
             </button>
