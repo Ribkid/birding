@@ -12,6 +12,7 @@ const galleryIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y
 let S = { kind: null }; // the current scan: { at, file, storeBlob, url, W, H, box: { cx, cy, s }, whole, kind, result, yours, logAt }
 let info = null;   // what photo ID covers, from data/photoid.json
 let mod = null;    // js/photoid.js, loaded on first visit
+let picks = 0;     // newest photo pick, so a slow earlier one can't replace it
 
 const words = (list, and = 'or') => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} ${and} ${list[list.length - 1]}`);
 const article = w => (/^[aeiou]/i.test(w) ? 'an' : 'a');
@@ -173,10 +174,10 @@ export async function renderScan(ctx) {
   }
 
   // ---------- picking a photo ----------
+  // The current photo and result stay until the new one has opened, so a file that won't open loses nothing.
   async function pick(file) {
     if (!file) return;
-    resetScan();
-    out.innerHTML = ''; prog.innerHTML = '';
+    const ticket = ++picks;
     status.textContent = 'Opening the photo…';
     let blob, img;
     try {
@@ -186,9 +187,12 @@ export async function renderScan(ctx) {
       await img.decode();
     } catch (_) {
       if (img?.src) URL.revokeObjectURL(img.src);
-      status.textContent = 'That file couldn\'t be opened as a photo. Try a JPEG or PNG.';
+      if (ticket === picks) status.textContent = 'That file couldn\'t be opened as a photo. Try a JPEG or PNG.';
       return;
     }
+    if (ticket !== picks) { URL.revokeObjectURL(img.src); return; } // a later pick won
+    resetScan();
+    out.innerHTML = ''; prog.innerHTML = '';
     const W = img.naturalWidth, H = img.naturalHeight;
     S = { at: Date.now(), file, storeBlob: blob, url: img.src, W, H, box: { cx: W / 2, cy: H / 2, s: Math.min(W, H) * 0.75 }, whole: false, kind: S.kind, result: null };
     drawVF();
