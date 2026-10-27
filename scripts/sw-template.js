@@ -41,6 +41,14 @@ self.addEventListener('activate', (event) => {
       for (const name of await caches.keys()) {
         if (!keep.has(name) && name.startsWith('birdydex-')) await caches.delete(name);
       }
+      // These used to be caught by the runtime cache; photoid.js owns the model cache now.
+      const runtime = await caches.open(RUNTIME);
+      for (const req of await runtime.keys()) {
+        const path = new URL(req.url).pathname;
+        if ((path.startsWith('/models/bioclip/') && path.endsWith('.bin')) || path.startsWith('/vendor/ort/')) {
+          await runtime.delete(req);
+        }
+      }
       await self.clients.claim();
     })(),
   );
@@ -57,13 +65,14 @@ async function trim(cacheName, limit) {
   for (const key of keys.slice(0, keys.length - limit)) await cache.delete(key);
 }
 
-async function cacheFirst(request, cacheName) {
+async function cacheFirst(request, cacheName, event) {
   const hit = await caches.match(request, MATCH);
   if (hit) return hit;
   const res = await fetch(request);
   if (res.ok) {
-    const cache = await caches.open(cacheName);
-    await cache.put(request, res.clone()).catch(() => {});
+    const put = caches.open(cacheName).then((cache) => cache.put(request, res.clone())).catch(() => {});
+    if (event) event.waitUntil(put);
+    else await put;
   }
   return res;
 }
@@ -181,8 +190,16 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Everything else same-origin (fonts, vendor, models): cache first, then network.
-  event.respondWith(cacheFirst(request, RUNTIME).catch(() => Response.error()));
+  // The photo-ID parts are joined and cached by src/core/photoid.js; never store them twice.
+  if (url.pathname.startsWith('/models/bioclip/') && url.pathname.endsWith('.bin')) return;
+  // Models and vendor bundles (the ORT wasm, BirdNET files): one entry in birddex-models.
+  if (url.pathname.startsWith('/models/') || url.pathname.startsWith('/vendor/')) {
+    event.respondWith(cacheFirst(request, 'birddex-models', event).catch(() => Response.error()));
+    return;
+  }
+
+  // Everything else same-origin (fonts): cache first, then network.
+  event.respondWith(cacheFirst(request, RUNTIME, event).catch(() => Response.error()));
 });
 
 self.addEventListener('message', (event) => {
