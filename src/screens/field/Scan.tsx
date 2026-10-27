@@ -48,7 +48,11 @@ export default function Scan() {
   const resultRef = useRef<HTMLElement>(null);
   const kindsRef = useRef<HTMLDivElement>(null);
   const [freshResult, setFreshResult] = useState(false);
-  const drag = useRef<{ mode: 'move' | 'resize'; id: number; start: { x: number; y: number; cx: number; cy: number; s: number } } | null>(null);
+  const pts = useRef(new Map<number, { x: number; y: number }>());
+  const gesture = useRef<{ mode: 'move' | 'resize' | 'pinch'; start: any } | null>(null);
+  const [activeHandle, setActiveHandle] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const [stageW, setStageW] = useState(0);
   const picks = useRef(0);
   const currentFile = useRef<File | null>(null);
   const identifyRun = useRef(0);
@@ -85,9 +89,9 @@ export default function Scan() {
     if (!stage) return;
     const onKey = (e: KeyboardEvent) => {
       if (!photo || whole || busy) return;
-      const step = 0.02;
+      const step = shortOf(photo) * (e.shiftKey ? 0.01 : 0.05);
       const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-      if (moves[e.key]) setBox((b) => clampBox(photo, { ...b, cx: b.cx + moves[e.key][0], cy: b.cy + moves[e.key][1] }));
+      if (moves[e.key]) setBox((b) => clampBox(photo, { ...b, cx: b.cx + moves[e.key][0] / photo.W, cy: b.cy + moves[e.key][1] / photo.H }));
       else if (e.key === '+' || e.key === '=') setBox((b) => clampBox(photo, { ...b, s: b.s * 1.1 }));
       else if (e.key === '-' || e.key === '_') setBox((b) => clampBox(photo, { ...b, s: b.s / 1.1 }));
       else return;
@@ -200,33 +204,78 @@ export default function Scan() {
   };
   const none = (why: string) => { void markChosen(logAt, 'none'); setStatus(why); };
 
+  const toImg = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * (photo?.W || 1), y: (e.clientY - r.top) / r.height * (photo?.H || 1) };
+  };
+
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!photo || whole || busy) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
-    const r = e.currentTarget.getBoundingClientRect();
-    const p = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+    const p = toImg(e);
+    pts.current.set(e.pointerId, p);
+    const b = box;
     const handle = (e.target as HTMLElement).closest('[data-handle]') as HTMLElement | null;
     const inside = (e.target as HTMLElement).closest('[data-box]');
-    if (handle) drag.current = { mode: 'resize', id: e.pointerId, start: { ...p, cx: box.cx, cy: box.cy, s: box.s } };
-    else {
-      if (!inside) setBox((b) => clampBox(photo, { ...b, cx: p.x, cy: p.y }));
-      drag.current = { mode: 'move', id: e.pointerId, start: { ...p, cx: inside ? box.cx : p.x, cy: inside ? box.cy : p.y, s: box.s } };
+    setActiveHandle('');
+    if (pts.current.size === 2) {
+      const [a, c] = [...pts.current.values()];
+      gesture.current = { mode: 'pinch', start: { d: Math.hypot(a.x - c.x, a.y - c.y) || 1, s: b.s } };
+    } else if (handle) {
+      const corner = handle.dataset.handle || '';
+      const sx = corner.includes('e') ? 1 : -1;
+      const sy = corner.includes('s') ? 1 : -1;
+      const side = b.s * shortOf(photo);
+      gesture.current = {
+        mode: 'resize',
+        start: { sx, sy, ax: b.cx * photo.W - sx * side / 2, ay: b.cy * photo.H - sy * side / 2 },
+      };
+      setActiveHandle(corner);
+    } else {
+      const cx = inside ? b.cx * photo.W : p.x;
+      const cy = inside ? b.cy * photo.H : p.y;
+      if (!inside) setBox(clampBox(photo, { ...b, cx: p.x / photo.W, cy: p.y / photo.H }));
+      gesture.current = { mode: 'move', start: { dx: p.x - cx, dy: p.y - cy } };
     }
+    setDragging(true);
   };
+
   const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const d = drag.current;
-    if (!photo || !d || d.id !== e.pointerId) return;
-    const r = e.currentTarget.getBoundingClientRect();
-    const p = { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
-    if (d.mode === 'move') setBox((b) => clampBox(photo, { ...b, cx: d.start.cx + (p.x - d.start.x), cy: d.start.cy + (p.y - d.start.y) }));
-    else {
-      const sideX = Math.abs(p.x - d.start.cx) * 2 * photo.W / shortOf(photo);
-      const sideY = Math.abs(p.y - d.start.cy) * 2 * photo.H / shortOf(photo);
-      setBox((b) => clampBox(photo, { ...b, s: Math.max(sideX, sideY) }));
+    const g = gesture.current;
+    if (!photo || !g || !pts.current.has(e.pointerId)) return;
+    const p = toImg(e);
+    pts.current.set(e.pointerId, p);
+    const b = box;
+    const short = shortOf(photo);
+    if (g.mode === 'pinch' && pts.current.size >= 2) {
+      const [a, c] = [...pts.current.values()];
+      const d = Math.hypot(a.x - c.x, a.y - c.y);
+      setBox(clampBox(photo, { ...b, s: g.start.s * (d / g.start.d) }));
+    } else if (g.mode === 'resize') {
+      const { sx, sy, ax, ay } = g.start;
+      const side = Math.max((p.x - ax) * sx, (p.y - ay) * sy);
+      const maxSide = Math.min(sx > 0 ? photo.W - ax : ax, sy > 0 ? photo.H - ay : ay);
+      const sPx = Math.min(side, maxSide);
+      setBox(clampBox(photo, { s: sPx / short, cx: (ax + sx * sPx / 2) / photo.W, cy: (ay + sy * sPx / 2) / photo.H }));
+    } else if (g.mode === 'move') {
+      setBox(clampBox(photo, { ...b, cx: (p.x - g.start.dx) / photo.W, cy: (p.y - g.start.dy) / photo.H }));
     }
   };
-  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => { if (drag.current?.id === e.pointerId) drag.current = null; };
+
+  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    pts.current.delete(e.pointerId);
+    if (pts.current.size === 1 && gesture.current?.mode === 'pinch' && photo) {
+      const p = [...pts.current.values()][0];
+      gesture.current = { mode: 'move', start: { dx: p.x - box.cx * photo.W, dy: p.y - box.cy * photo.H } };
+      return;
+    }
+    if (!pts.current.size) {
+      gesture.current = null;
+      setDragging(false);
+      setActiveHandle('');
+    }
+  };
 
   const top = result ? topResults(result).slice(0, 3) : [];
   const lead = result?.band === 'likely' ? 1 : result?.band === 'possibly' ? 2 : 0;
@@ -234,6 +283,17 @@ export default function Scan() {
   const advice = result ? scanAdvice(result, { whole: result.whole, multi, kind, known: info }) : '';
   const sure = result ? Math.min(99, Math.max(1, Math.round((result.results[0]?.p || 0) * 100))) : 0;
   const boxAt = photo ? boxPct(photo, box) : undefined;
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const observer = new ResizeObserver(() => setStageW(stage.clientWidth));
+    observer.observe(stage);
+    setStageW(stage.clientWidth);
+    return () => observer.disconnect();
+  }, [photo]);
+
+  const boxScreenPx = photo ? (box.s * shortOf(photo) / photo.W) * stageW : 0;
 
   const renderCard = (x: any, i: number) => {
     if (!result) return null;
@@ -281,7 +341,7 @@ export default function Scan() {
                 </div>
               </>
             ) : (
-              <div ref={stageRef} className={`scan-stage${whole ? ' scan-stage--whole' : ''}`} tabIndex={0} role="application"
+              <div ref={stageRef} className={`scan-stage${whole ? ' scan-stage--whole' : ''}${dragging ? ' scan-stage--drag' : ''}`} tabIndex={0} role="application"
                 aria-label={whole ? 'Your photo. The whole photo will be identified.' : 'Your photo with the identify box. Arrow keys move the box, plus and minus change its size.'}
                 onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
                 <div className="scan-photo">
@@ -291,9 +351,9 @@ export default function Scan() {
                   <span className="scan-sweep scan-sweep--whole" aria-hidden="true" />
                 </div>
                 {!whole && (
-                  <div className="scan-box" data-box style={boxAt}>
+                  <div className={`scan-box${boxScreenPx > 0 && boxScreenPx < 110 ? ' scan-box--small' : ''}`} data-box style={boxAt}>
                     <span className="scan-sweep" aria-hidden="true" />
-                    {['nw', 'ne', 'sw', 'se'].map((c) => <span key={c} className={`scan-handle scan-handle--${c}`} data-handle={c} />)}
+                    {['nw', 'ne', 'sw', 'se'].map((c) => <span key={c} className={`scan-handle scan-handle--${c}${activeHandle === c ? ' is-active' : ''}`} data-handle={c} />)}
                   </div>
                 )}
                 <span className="scan-pips" aria-hidden="true">{progress?.phase === 'view' && Array.from({ length: progress.count || 0 }, (_, i) => <i key={i} className={i < (progress.index || 0) - 1 ? 'on' : i === (progress.index || 0) - 1 ? 'now' : ''} />)}</span>
@@ -350,15 +410,16 @@ export default function Scan() {
                 <h3 id="scan-none-h">None of these?</h3>
                 <div className="scan-none-acts">
                   <button type="button" className="btn" onClick={() => {
-                    none('Move the box onto just the part you want named, then choose Identify.');
+                    const wasWhole = whole;
+                    if (!wasWhole) setBox((b) => clampBox(photo!, { ...b, s: b.s * 0.75 }));
                     setWhole(false);
-                    setBox((b) => clampBox(photo!, { ...b, s: b.s * 0.75 }));
+                    setStatus(`Move the ${wasWhole ? '' : 'smaller '}box onto just the part you want named, then choose Identify.`);
                     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
                     stageRef.current?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
                     stageRef.current?.focus({ preventScroll: true });
                   }}>Try a tighter box</button>
                   {multi && <button type="button" className="btn" onClick={() => {
-                    none('Choose what kind it is, then try again.');
+                    setStatus('Choose what kind it is, then try again.');
                     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
                     kindsRef.current?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
                     (kindsRef.current?.querySelector('[aria-pressed="true"]') as HTMLElement | null)?.focus();
