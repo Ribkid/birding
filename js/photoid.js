@@ -330,13 +330,18 @@ function padView(img) {
   }
   return resize({ px: sq, w: s, h: s, ch: 3 }, SIZE, SIZE);
 }
-// The crop box in full-resolution pixels: a square of side min(w*W, h*H) (times grow, at most the short
-// side), centred where the box is centred, then shifted to sit inside the photo. Rounding is floor(v + 0.5).
+// The crop box in full-resolution pixels, as the reference does it: x = round(crop.x * W), w = round(crop.w * W),
+// and the same for y and h (Python rounding). The Scan screen keeps the box square, so w and h agree.
+// For 'wide', the fractions first grow around the box's centre (capped at the whole side) and shift to stay inside.
 export function boxPixels(crop, W, H, grow = 1) {
-  const r = v => Math.floor(v + 0.5);
-  const s = Math.max(1, Math.min(r(Math.min(crop.w * W, crop.h * H) * grow), W, H));
-  const cx = (crop.x + crop.w / 2) * W, cy = (crop.y + crop.h / 2) * H;
-  return { x: Math.min(Math.max(r(cx - s / 2), 0), W - s), y: Math.min(Math.max(r(cy - s / 2), 0), H - s), s };
+  let { x, y, w, h } = crop;
+  if (grow !== 1) {
+    const g = Math.min(grow, 1 / w, 1 / h), cx = x + w / 2, cy = y + h / 2;
+    w *= g; h *= g;
+    x = Math.min(Math.max(cx - w / 2, 0), 1 - w); y = Math.min(Math.max(cy - h / 2, 0), 1 - h);
+  }
+  const px = Math.min(Math.max(pyRound(x * W), 0), W - 1), py = Math.min(Math.max(pyRound(y * H), 0), H - 1);
+  return { x: px, y: py, w: Math.max(1, Math.min(pyRound(w * W), W - px)), h: Math.max(1, Math.min(pyRound(h * H), H - py)) };
 }
 
 // One photo being analysed: the decoded original, plus lazily built bases for each view.
@@ -354,7 +359,7 @@ async function prepare(src, crop) {
   const boxImg = grow => {
     if (!crop) throw new Error('This view needs a crop box.');
     const b = boxPixels(crop, W, H, grow);
-    return resize(pixels(bmp, b.x, b.y, b.s, b.s), SIZE, SIZE);
+    return resize(pixels(bmp, b.x, b.y, b.w, b.h), SIZE, SIZE);
   };
   const make = { pad: () => padView(wholeImg()), centre: () => centreView(wholeImg()), box: () => boxImg(1), wide: () => boxImg(WIDE) };
   return {
