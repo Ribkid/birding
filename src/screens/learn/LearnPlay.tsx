@@ -13,7 +13,7 @@ import {
   roundNote, testSet, allCards, dueCards, boxes, nextDue, addCards, gradeCard, dayStr, monthName,
   packBy, ROUND, RAPID_MS, kindLabel, emptyMessage, startOfDay, getLearn, getActive, setActive, activeFor,
 } from '../../core/learn.js';
-import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, type CallClip } from './QuizMedia';
+import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, usePlayButtons, PlayButton, type CallClip, type PlayButtonState } from './QuizMedia';
 import './learn.css';
 
 const SIDES: Record<number, string[]> = {
@@ -115,9 +115,9 @@ function Options({ q, picked, onPick, rapid, round, still = false }: { q: QuizQu
   );
 }
 
-function Feedback({ q, right, game, onNext, onPlay, restore = false }: {
+function Feedback({ q, right, game, onNext, onPlay, playing, restore = false }: {
   q: QuizQuestion; right: boolean; game: RoundState; onNext: () => void;
-  onPlay: (which: string) => void; restore?: boolean;
+  onPlay: (which: string) => void; playing: PlayButtonState; restore?: boolean;
 }) {
   const ans = byId.get(q.focus);
   if (!ans) return null;
@@ -157,8 +157,8 @@ function Feedback({ q, right, game, onNext, onPlay, restore = false }: {
         <p className="lq-source">Source: {q.source.url ? <a href={q.source.url} target="_blank" rel="noopener">{q.source.title}</a> : q.source.title}</p>
       )}
       <div className="lq-actions">
-        {Q.hasCall(ans.id) && q.type !== 'fact' && <button type="button" className="btn lq-act" onClick={() => onPlay(q.type === 'call' ? 'answer' : String(ans.id))}><span><svg viewBox="0 0 24 24">{QI.play}</svg></span><span>{q.type === 'call' ? 'Hear it again' : 'Hear its call'}</span></button>}
-        {!right && pickedSp && Q.hasCall(pickedSp.id) && q.type !== 'fact' && <button type="button" className="btn lq-act" onClick={() => onPlay(String(pickedSp.id))}><span><svg viewBox="0 0 24 24">{QI.play}</svg></span><span>Hear the one you picked</span></button>}
+        {Q.hasCall(ans.id) && q.type !== 'fact' && <PlayButton on={playing} which={q.type === 'call' ? 'answer' : String(ans.id)} label={q.type === 'call' ? 'Hear it again' : 'Hear its call'} onPlay={onPlay} />}
+        {!right && pickedSp && Q.hasCall(pickedSp.id) && q.type !== 'fact' && <PlayButton on={playing} which={String(pickedSp.id)} label="Hear the one you picked" onPlay={onPlay} />}
         {!right && pickedSp && pickedSp.kind === ans.kind && <Link className="btn lq-act" to={`/compare/${ans.id}/${pickedSp.id}`}><svg viewBox="0 0 24 24">{QI.compare}</svg><span>Compare the two</span></Link>}
       </div>
       <button type="button" className="btn btn--primary btn--block lq-next" onClick={onNext}>{last ? (game.daily ? "See today's result" : 'See how you went') : 'Next question'}</button>
@@ -258,19 +258,14 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const [deckGame, setDeckGame] = useState<RoundState | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [rapidLeft, setRapidLeft] = useState(RAPID_MS);
-  const [playingKey, setPlayingKey] = useState<string | null>(null);
-  const inlineAudio = useRef<HTMLAudioElement | null>(null);
+  // The answer's play buttons; they share one clip with the big call player (QuizMedia).
+  const buttons = usePlayButtons();
   useMedia();
   const startRef = useRef(0);
   const promptRef = useRef<HTMLHeadingElement>(null);
   const wantHeadFocus = useRef(false);
 
-  const stopInline = () => {
-    inlineAudio.current?.pause();
-    inlineAudio.current = null;
-    setPlayingKey(null);
-  };
-  useEffect(() => () => { inlineAudio.current?.pause(); inlineAudio.current = null; }, []);
+  const stopInline = buttons.stop;
 
   const isDeck = pack === 'deck';
   const isDaily = pack === 'daily';
@@ -451,18 +446,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (!sp) return;
     const list = which === 'answer' && q.call ? [q.call as CallClip] : Q.callsOf(sp.id);
     const clip = list[Math.floor(Math.random() * list.length)] as CallClip | undefined;
-    if (!clip) return;
-    if (playingKey === which && inlineAudio.current) {
-      stopInline();
-      return;
-    }
-    stopInline();
-    const audio = new Audio(clip.local || clip.src);
-    inlineAudio.current = audio;
-    setPlayingKey(which);
-    audio.onended = () => { inlineAudio.current = null; setPlayingKey(null); };
-    audio.onerror = () => { inlineAudio.current = null; setPlayingKey(null); };
-    void audio.play().catch(() => { inlineAudio.current = null; setPlayingKey(null); });
+    buttons.toggle(which, clip);
   };
 
   if (isDeck) return <Deck onBack={() => navigate('/learn')} />;
@@ -511,7 +495,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         {safety && <p className="lq-safety"><svg viewBox="0 0 24 24">{QI.warn}</svg><span>{safety}</span></p>}
         <Media key={game.i} q={q} still={resumed} />
         <Options q={q} picked={picked} onPick={pick} rapid={game.mode === 'rapid'} round={game.i} still={resumed} />
-        {picked != null && game.mode !== 'rapid' && <Feedback q={q} right={right} game={game} onNext={next} onPlay={play} restore={resumed} />}
+        {picked != null && game.mode !== 'rapid' && <Feedback q={q} right={right} game={game} onNext={next} onPlay={play} playing={buttons.on} restore={resumed} />}
         {picked != null && game.mode === 'rapid' && <p className={`lq-verdict lq-fb ${right ? 'is-right' : 'is-wrong'} lq-fb--brief${resumed ? ' no-anim' : ''}`}><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{right ? 'Correct.' : `Not quite. It's the ${speciesName(q.focus)}.`}</span></p>}
       </div>
     </div>

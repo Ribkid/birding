@@ -72,12 +72,20 @@ function Wave({ seed }: { seed: string }) {
 
 export interface CallClip { src: string; local?: string; artist?: string; license?: string; seconds?: number }
 
-/** Every player currently holding audio, so a question change can silence the old clip. */
-const live = new Set<HTMLAudioElement>();
+/** How to stop each player holding a clip (the big call player and the feedback's play buttons). Like v1's single
+ * audio, only one clip plays at a time: starting one stops the others, and a question change stops them all. */
+const live = new Set<() => void>();
 export function stopCalls() {
-  for (const a of live) { a.pause(); }
+  for (const stop of [...live]) stop();
   live.clear();
 }
+/** Stop every other player before this one plays. */
+function claim(stop: () => void) {
+  for (const s of [...live]) if (s !== stop) s();
+  live.clear();
+  live.add(stop);
+}
+const failText = () => (navigator.onLine ? 'That recording would not play.' : 'This recording needs a connection.');
 
 /** The big call player: progress ring, play/pause and a moving waveform. */
 export function CallPlayer({ call, seed, extra, onFail }: { call?: CallClip | null; seed: string | number; extra?: ReactNode; onFail?: () => void }) {
@@ -85,37 +93,44 @@ export function CallPlayer({ call, seed, extra, onFail }: { call?: CallClip | nu
   const [state, setState] = useState<'idle' | 'loading' | 'playing'>('idle');
   const [progress, setProgress] = useState(0);
   const [failMsg, setFailMsg] = useState('');
-  useEffect(() => () => {
-    audio.current?.pause();
-    if (audio.current) live.delete(audio.current);
+  // Stopped by another clip, a new question or leaving: back to the start, as v1's stopAudio resets the button and ring.
+  const [halt] = useState(() => function halt() {
+    const a = audio.current;
+    if (a) { a.onended = null; a.onerror = null; a.ontimeupdate = null; a.pause(); }
     audio.current = null;
+    live.delete(halt);
     setState('idle');
     setProgress(0);
-    setFailMsg('');
-  }, [call?.src, call?.local]);
+  });
+  useEffect(() => () => { halt(); setFailMsg(''); }, [call?.src, call?.local, halt]);
   const toggle = async () => {
     if (!call?.src && !call?.local) return;
     if (state === 'loading') return;
     setFailMsg('');
-    if (audio.current && state === 'playing') { audio.current.pause(); setState('idle'); return; }
-    if (audio.current && state === 'idle') { await audio.current.play().catch(() => {}); setState('playing'); return; }
+    const cur = audio.current;
+    if (cur && state === 'playing') { cur.pause(); setState('idle'); return; }
+    if (cur) {
+      claim(halt);
+      await cur.play().catch(() => {});
+      if (audio.current === cur) setState('playing');
+      return;
+    }
+    claim(halt);
     setState('loading');
     const a = new Audio(call.local || call.src);
     audio.current = a;
-    live.add(a);
-    a.onended = () => { setState('idle'); setProgress(0); live.delete(a); };
-    a.onerror = () => {
+    const fail = () => {
+      if (audio.current !== a) return; // stopped on purpose (Next, another clip): not a failure
+      audio.current = null;
+      live.delete(halt);
       setState('idle');
-      live.delete(a);
-      setFailMsg(navigator.onLine ? 'That recording would not play.' : 'This recording needs a connection.');
+      setFailMsg(failText());
       onFail?.();
     };
+    a.onended = () => { setState('idle'); setProgress(0); live.delete(halt); };
+    a.onerror = fail;
     a.ontimeupdate = () => { if (a.duration) setProgress(a.currentTime / a.duration); };
-    try { await a.play(); setState('playing'); } catch {
-      setState('idle');
-      setFailMsg(navigator.onLine ? 'That recording would not play.' : 'This recording needs a connection.');
-      onFail?.();
-    }
+    try { await a.play(); if (audio.current === a) setState('playing'); } catch { fail(); }
   };
   return (
     <div className="lq-call">
@@ -133,5 +148,63 @@ export function CallPlayer({ call, seed, extra, onFail }: { call?: CallClip | nu
       {call?.artist && <p className="lq-credit">Recording: {String(call.artist || 'Unknown').slice(0, 50)}{call.license ? `, ${call.license}` : ''}</p>}
       {extra}
     </div>
+  );
+}
+
+export type PlayButtonState = { key: string; state: 'loading' | 'playing' | 'paused' } | null;
+/** The answer's 'Hear it again', 'Hear its call' and 'Hear the one you picked' buttons (v1 playCall on a [data-play]
+ * button). A tap stops any other clip, the big player included, and plays this one at once; the button shows it
+ * loading, then the pause icon while it plays. Tapping the same button again pauses it, and again carries on. */
+export function usePlayButtons() {
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const [on, setOn] = useState<PlayButtonState>(null);
+  const [halt] = useState(() => function halt() {
+    const a = audio.current;
+    if (a) { a.onended = null; a.onerror = null; a.pause(); }
+    audio.current = null;
+    live.delete(halt);
+    setOn(null);
+  });
+  useEffect(() => halt, [halt]);
+  const toggle = (key: string, clip?: CallClip | null) => {
+    const cur = audio.current;
+    if (cur && on?.key === key) {
+      if (on.state === 'loading') return;
+      if (cur.paused) {
+        claim(halt);
+        cur.play().then(() => { if (audio.current === cur) setOn({ key, state: 'playing' }); }).catch(() => {});
+      } else {
+        cur.pause();
+        setOn({ key, state: 'paused' });
+      }
+      return;
+    }
+    if (!clip?.src && !clip?.local) return;
+    halt();
+    claim(halt);
+    const a = new Audio(clip.local || clip.src);
+    audio.current = a;
+    setOn({ key, state: 'loading' });
+    const done = () => {
+      if (audio.current !== a) return;
+      audio.current = null;
+      live.delete(halt);
+      setOn(null);
+    };
+    a.onended = done;
+    a.onerror = done;
+    a.play().then(() => { if (audio.current === a) setOn({ key, state: 'playing' }); }).catch(done);
+  };
+  return { on, toggle, stop: halt };
+}
+
+/** One of the answer's play buttons, drawn as v1's: the icon swaps to pause while it plays. */
+export function PlayButton({ on, which, label, onPlay }: { on: PlayButtonState; which: string; label: string; onPlay: (which: string) => void }) {
+  const st = on?.key === which ? on.state : null;
+  return (
+    <button type="button" className={`btn lq-act${st === 'playing' ? ' is-playing' : st === 'loading' ? ' is-loading' : ''}`} data-play={which} onClick={() => onPlay(which)}>
+      <span data-ic><svg viewBox="0 0 24 24" aria-hidden="true">{st === 'playing' ? QI.pause : QI.play}</svg></span>
+      <span data-label>{label}</span>
+    </button>
   );
 }
