@@ -234,7 +234,7 @@ function exitSheet(w, reason) {
   const anims = w.getAnimations({ subtree: true });
   Promise.race([Promise.allSettled(anims.map(a => a.finished)), new Promise(r => setTimeout(r, 450))]).then(() => w.remove());
 }
-// Route changes and fresh sheets don't wait for a sheet that is still sliding away.
+// A route change doesn't wait for a sheet that is still sliding away.
 const flushClosingSheets = () => $$('.sheet-wrap[data-closing]').forEach(w => w.remove());
 
 // Drag a sheet down to dismiss it: from the grip and the top 56px, or from anywhere once it is scrolled to the top.
