@@ -1,6 +1,9 @@
 // 3D collector cards (tilt + holographic foil), feather confetti and shareable card images.
 import { sized } from './media.js';
 import { RARITY, KINDS, dexCode } from './species.js';
+import { openLayer, closeLayer } from './layers.js';
+
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const pad = n => String(n).padStart(3, '0');
@@ -27,20 +30,29 @@ export function cardHTML(sp, { seen, firstSeen, count, place } = {}) {
   </div>`;
 }
 
-// Make a card element respond to finger drag and phone tilt.
-export function enableTilt(card) {
+// Make a card element respond to finger drag and phone tilt. The frame loop runs only while the card is still
+// moving towards where the finger or phone points, so a card lying still costs nothing.
+// Reduced motion: no tilt from the phone moving; a deliberate drag still turns it.
+export function enableTilt(card, { phone = !reducedMotion() } = {}) {
   const inner = card.querySelector('.card-inner');
-  let tx = 0, ty = 0, cx = 0, cy = 0, raf;
-  const set = (x, y) => { tx = Math.max(-1, Math.min(1, x)); ty = Math.max(-1, Math.min(1, y)); };
-  const tick = () => {
-    cx += (tx - cx) * 0.12; cy += (ty - cy) * 0.12;
+  let tx = 0, ty = 0, cx = 0, cy = 0, raf = 0;
+  const paint = () => {
     inner.style.transform = `rotateY(${cx * 18}deg) rotateX(${-cy * 18}deg)`;
     card.style.setProperty('--mx', `${50 + cx * 40}%`);
     card.style.setProperty('--my', `${50 + cy * 40}%`);
     card.style.setProperty('--angle', `${cx * 60 + cy * 40}deg`);
-    raf = requestAnimationFrame(tick);
   };
-  tick();
+  const tick = () => {
+    cx += (tx - cx) * 0.12; cy += (ty - cy) * 0.12;
+    if (Math.abs(tx - cx) < 0.001 && Math.abs(ty - cy) < 0.001) { cx = tx; cy = ty; raf = 0; }
+    else raf = requestAnimationFrame(tick);
+    paint();
+  };
+  const set = (x, y) => {
+    tx = Math.max(-1, Math.min(1, x)); ty = Math.max(-1, Math.min(1, y));
+    if (!raf) raf = requestAnimationFrame(tick);
+  };
+  paint();
   const move = e => {
     const r = card.getBoundingClientRect();
     set(((e.clientX - r.left) / r.width) * 2 - 1, ((e.clientY - r.top) / r.height) * 2 - 1);
@@ -49,27 +61,37 @@ export function enableTilt(card) {
   card.addEventListener('pointermove', move);
   card.addEventListener('pointerleave', leave);
   const orient = e => { if (e.gamma == null) return; set(e.gamma / 30, (e.beta - 45) / 30); };
-  window.addEventListener('deviceorientation', orient);
-  return () => { cancelAnimationFrame(raf); window.removeEventListener('deviceorientation', orient); };
+  if (phone) window.addEventListener('deviceorientation', orient);
+  return () => {
+    cancelAnimationFrame(raf); raf = 0;
+    window.removeEventListener('deviceorientation', orient);
+    card.removeEventListener('pointermove', move);
+    card.removeEventListener('pointerleave', leave);
+  };
 }
 
-export function openCard(sp, info) {
+// The card is a layer: Escape, Close, a tap outside or a route change (Android Back) close it, which stops the
+// tilt loop and the motion listener. Focus goes back to whatever opened it.
+export function openCard(sp, info, { returnTo } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'card-overlay';
-  wrap.setAttribute('role', 'dialog');
-  wrap.setAttribute('aria-label', `${sp.name} card`);
-  wrap.innerHTML = `${cardHTML(sp, info)}<p class="card-hint">Tilt your phone or drag across the card</p>
+  wrap.innerHTML = `${cardHTML(sp, info)}<p class="card-hint">${reducedMotion() ? 'Drag across the card to turn it' : 'Tilt your phone or drag across the card'}</p>
     <div class="row-center">${info.seen ? '<button class="btn" data-share>Share card</button>' : ''}<button class="btn btn--primary" data-close-card>Close</button></div>`;
   document.body.append(wrap);
   // iOS needs permission for motion; Android just works.
-  if (typeof DeviceOrientationEvent?.requestPermission === 'function') DeviceOrientationEvent.requestPermission().catch(() => {});
+  if (!reducedMotion() && typeof DeviceOrientationEvent?.requestPermission === 'function') DeviceOrientationEvent.requestPermission().catch(() => {});
   const stop = enableTilt(wrap.querySelector('[data-card]'));
-  const close = () => { stop(); wrap.remove(); };
+  let layer;
+  const close = (reason = 'button') => {
+    if (!closeLayer(layer, { restore: reason !== 'nav' })) return;
+    stop(); wrap.remove();
+  };
+  layer = openLayer(wrap, { label: `${sp.name} card`, close, ...(returnTo ? { returnTo } : {}) });
   wrap.addEventListener('click', e => {
     if (e.target.closest('[data-close-card]') || e.target === wrap) close();
     if (e.target.closest('[data-share]')) shareCard(sp, info);
   });
-  setTimeout(() => wrap.querySelector('[data-close-card]')?.focus(), 50);
+  wrap.querySelector('[data-close-card]')?.focus({ preventScroll: true });
   return close;
 }
 

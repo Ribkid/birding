@@ -11,6 +11,8 @@ import { renderStats } from './statsview.js';
 import { renderScan } from './scan.js';
 import { describeArea } from './mapinfo.js';
 import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
+import { vt, nameFor, flip, countUp, motionOK, settle } from './motion.js';
+import { openLayer, closeLayer, closeAllLayers, onLayerKey, topLayer, layers, keepFocus } from './layers.js';
 
 const relRate = (id, month) => { const m = monthRates(id); return m ? m.rel[month - 1] : null; };
 const targetOpts = () => seq()?.hotspots?.length ? { score: likelihood, rel: relRate } : {};
@@ -67,10 +69,18 @@ async function photoUrl(id) {
   photoUrls.set(id, url);
   return url;
 }
-async function hydratePhotos(root = document) {
-  for (const img of $$('img[data-photo]', root)) {
-    const url = await photoUrl(Number(img.dataset.photo));
-    if (url) img.src = url;
+// Her own photos load only as they come near the screen, so a long log doesn't decode hundreds of full-size JPEGs.
+const photoWatch = new Set();
+const fillPhoto = async img => { const url = await photoUrl(Number(img.dataset.photo)); if (url && img.isConnected) img.src = url; };
+const photoIO = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
+  for (const e of entries) if (e.isIntersecting) { photoIO.unobserve(e.target); photoWatch.delete(e.target); fillPhoto(e.target); }
+}, { rootMargin: '400px 0px' }) : null;
+function hydratePhotos(root = document) {
+  for (const img of photoWatch) if (!img.isConnected) { photoIO.unobserve(img); photoWatch.delete(img); }
+  for (const img of $$('img[data-photo]:not([src])', root)) {
+    img.loading = 'lazy'; img.decoding = 'async';
+    if (!photoIO) { fillPhoto(img); continue; }
+    if (!photoWatch.has(img)) { photoWatch.add(img); photoIO.observe(img); }
   }
 }
 async function resizeImage(file, max = 1600) {
@@ -86,15 +96,48 @@ async function resizeImage(file, max = 1600) {
 // ---------- small UI pieces ----------
 const band = (id, seen) => `<span class="band band--${kindOf(id)} ${seen ? 'band--on' : ''}" aria-label="Dex number ${dexNo(id)}">${dexNo(id)}</span>`;
 const pips = r => `<span class="pips pips--${r}" title="${RARITY[r].label}">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= r ? 'on' : ''}"></i>`).join('')}</span>`;
+// Photos fade in the first time they arrive. Ones already shown this session come back at full strength, so a
+// redraw (a filter, a sync) doesn't make the whole grid blink.
+const shown = new Set();
+document.addEventListener('load', e => { if (e.target.tagName === 'IMG' && e.target.classList.contains('fade')) shown.add(e.target.getAttribute('src')); }, true);
+const fade = url => shown.has(url) ? 'fade in' : 'fade';
+const ONLOAD = `onload="this.classList.add('in')"`;
+// Images that were already complete when inserted (memory cache) show at once, with no fade.
+function settleImages(root) {
+  for (const img of $$('img.fade:not(.in)', root)) if (img.complete && img.naturalWidth) { img.classList.add('in'); shown.add(img.getAttribute('src')); }
+}
 // whole: show the entire photo (no cropping) over a soft blurred copy, for big views.
+// data-sp/data-size let a later photo index swap in a better picture without redrawing the page.
 function birdImg(sp, size = 'small', cls = '', { whole = false } = {}) {
   const url = sized(sp.id, size);
   if (url && whole) return wholeImg(url, sp.name, cls);
   return url
-    ? `<img class="${cls}" src="${esc(url)}" alt="${esc(sp.name)}" loading="lazy" decoding="async" onerror="this.classList.add('img-missing')">`
-    : `<span class="${cls} img-missing" role="img" aria-label="${esc(sp.name)}"></span>`;
+    ? `<img class="${cls} ${fade(url)}" src="${esc(url)}" alt="${esc(sp.name)}" loading="lazy" decoding="async" data-sp="${sp.id}" data-size="${size}" ${ONLOAD} onerror="this.classList.add('img-missing')">`
+    : `<span class="${cls} img-missing" role="img" aria-label="${esc(sp.name)}" data-sp="${sp.id}" data-size="${size}"></span>`;
 }
-const wholeImg = (url, alt, cls = '') => `<span class="whole ${cls}"><img class="whole-bg" src="${esc(url)}" alt="" aria-hidden="true" decoding="async"><img class="whole-fg" src="${esc(url)}" alt="${esc(alt)}" decoding="async" onerror="this.closest('.whole').classList.add('img-missing')"></span>`;
+const wholeImg = (url, alt, cls = '') => `<span class="whole ${cls}"><img class="whole-bg ${fade(url)}" src="${esc(url)}" alt="" aria-hidden="true" loading="lazy" decoding="async" ${ONLOAD}><img class="whole-fg ${fade(url)}" src="${esc(url)}" alt="${esc(alt)}" loading="lazy" decoding="async" ${ONLOAD} onerror="this.closest('.whole').classList.add('img-missing')"></span>`;
+// The first hero photo on a page (marked data-hero-frame) is the one thing worth fetching first.
+function prioritiseHero(root) {
+  for (const img of $$('[data-hero-frame] img', root)) { img.loading = 'eager'; img.fetchPriority = 'high'; }
+}
+// After the photo index arrives: swap better pictures into place instead of redrawing (a call keeps playing,
+// the gallery keeps its slide).
+function patchSpeciesImages(root = document) {
+  for (const el of $$('[data-sp]', root)) {
+    const sp = byId.get(Number(el.dataset.sp));
+    const url = sp && sized(sp.id, el.dataset.size || 'small');
+    if (!url) continue;
+    if (el.tagName === 'IMG') {
+      if (el.getAttribute('src') === url) continue;
+      // A photo already on screen stays until its replacement is ready, so the tile never blanks.
+      if (el.complete && el.naturalWidth) {
+        const next = new Image(); next.src = url;
+        next.decode().then(() => { if (el.isConnected) { shown.add(url); el.src = url; } }, () => {});
+      } else { el.classList.remove('img-missing'); el.src = url; }
+    }
+    else el.outerHTML = birdImg(sp, el.dataset.size || 'small', [...el.classList].filter(c => c !== 'img-missing').join(' '));
+  }
+}
 const icon = {
   back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
@@ -114,45 +157,163 @@ const icon = {
   learn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
+// Screen readers hear status through one live region that is always in the page (a region created together with
+// its text is often missed). Clearing it first lets the same message be announced twice.
+let announceT = 0;
+function announce(msg) {
+  const el = document.getElementById('announce');
+  if (!el) return;
+  clearTimeout(announceT);
+  el.textContent = '';
+  announceT = setTimeout(() => { el.textContent = msg; }, 60);
+}
+// One toast at a time, about 4.5 s, tap to dismiss. It is announced through the live region, not read twice.
+let toastEl = null, toastT = 0;
 function toast(msg) {
-  const t = document.createElement('div');
-  t.className = 'toast'; t.textContent = msg; t.setAttribute('role', 'status');
+  announce(msg);
+  clearTimeout(toastT);
+  toastEl?.remove();
+  const t = toastEl = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg; t.setAttribute('aria-hidden', 'true');
+  const hide = () => {
+    if (t.classList.contains('toast--out')) return;
+    t.classList.add('toast--out');
+    if (toastEl === t) toastEl = null;
+    setTimeout(() => t.remove(), 260);
+  };
+  t.addEventListener('click', hide);
   document.body.append(t);
-  setTimeout(() => t.classList.add('toast--out'), 2600);
-  setTimeout(() => t.remove(), 3100);
+  toastT = setTimeout(hide, 4500);
 }
 
-// ---------- sheets (modal) ----------
-function openSheet(html, { onOpen, wide } = {}) {
-  closeSheet();
+// ---------- sheets ----------
+// A sheet is a layer (js/layers.js). It slides up, and on a user dismiss (scrim, Cancel, Escape, drag) slides back
+// down before it is removed. Replacing it with another sheet, or a route change, removes it at once.
+// modal: false is for the patch sheet over the map, which leaves the map usable.
+const openSheetLayer = () => layers().reverse().find(l => l.kind === 'sheet') || null;
+const sheetOpen = () => !!$('.sheet-wrap:not([data-closing])');
+function openSheet(html, { onOpen, wide, modal = true, cls = '' } = {}) {
+  const prev = openSheetLayer();
+  const returnTo = prev ? prev.returnTo : document.activeElement;
+  if (prev) closeSheet({ reason: 'replace' });
   const wrap = document.createElement('div');
-  wrap.className = 'sheet-wrap';
+  wrap.className = `sheet-wrap ${cls} ${prev ? 'sheet-wrap--swap' : ''}`;
   wrap.innerHTML = `<div class="sheet-scrim" data-close></div>
-    <div class="sheet ${wide ? 'sheet--wide' : ''}" role="dialog" aria-modal="true">
+    <div class="sheet ${wide ? 'sheet--wide' : ''}" role="dialog">
       <div class="sheet-grip" aria-hidden="true"></div>${html}</div>`;
   document.body.append(wrap);
-  document.body.classList.add('has-sheet');
-  wrap.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeSheet(); });
-  requestAnimationFrame(() => wrap.classList.add('open'));
-  const first = $('input:not([type=hidden]):not([type=file]), select, textarea, button', $('.sheet', wrap));
-  onOpen?.($('.sheet', wrap));
-  if (first && !first.matches('[data-noautofocus]')) setTimeout(() => first.focus({ preventScroll: true }), 50);
-  return $('.sheet', wrap);
+  const sheet = $('.sheet', wrap);
+  const layer = openLayer(wrap, { dialog: sheet, modal, lock: true, returnTo, close: reason => closeSheet({ reason }) });
+  layer.kind = 'sheet';
+  // @starting-style gives the entry slide; older browsers get it from the class arriving a frame later.
+  if (window.CSSStartingStyleRule) wrap.classList.add('open');
+  else requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('open')));
+  wrap.addEventListener('click', e => {
+    const c = e.target.closest('[data-close]');
+    if (c) closeSheet({ reason: c.matches('.sheet-scrim') ? 'scrim' : 'button' });
+  });
+  wireSheetDrag(wrap, sheet);
+  const first = $('input:not([type=hidden]):not([type=file]), select, textarea, button, a[href]', sheet);
+  onOpen?.(sheet);
+  if (first && !first.matches('[data-noautofocus]')) setTimeout(() => { if (!wrap.hasAttribute('data-closing')) first.focus({ preventScroll: true }); }, 50);
+  return sheet;
 }
-function closeSheet() {
-  const w = $('.sheet-wrap');
-  if (!w) return;
-  w.remove();
-  document.body.classList.remove('has-sheet');
-  state.onSheetClose?.(); state.onSheetClose = null;
+function closeSheet({ reason = 'button' } = {}) {
+  const layer = openSheetLayer();
+  if (!layer) return;
+  const w = layer.el, instant = reason === 'replace' || reason === 'nav';
+  const done = state.onSheetClose; state.onSheetClose = null;
+  w.setAttribute('data-closing', ''); w.inert = true;
+  closeLayer(layer, { restore: !instant });
+  done?.();
+  if (instant) w.remove(); else exitSheet(w, reason);
 }
+function exitSheet(w, reason) {
+  const sheet = $('.sheet', w), scrim = $('.sheet-scrim', w);
+  // Hand over from wherever a drag left the sheet to the CSS exit (under reduced motion it fades where it is).
+  sheet.style.transition = ''; scrim.style.opacity = '';
+  if (motionOK() || reason !== 'drag') sheet.style.transform = '';
+  getComputedStyle(sheet).transform;
+  const anims = w.getAnimations({ subtree: true });
+  Promise.race([Promise.allSettled(anims.map(a => a.finished)), new Promise(r => setTimeout(r, 450))]).then(() => w.remove());
+}
+// A route change doesn't wait for a sheet that is still sliding away.
+const flushClosingSheets = () => $$('.sheet-wrap[data-closing]').forEach(w => w.remove());
+
+// Drag a sheet down to dismiss it: from the grip and the top 56px, or from anywhere once it is scrolled to the top.
+// It follows the finger 1:1, resists upward, and closes past 30% of its height or on a quick flick.
+function wireSheetDrag(wrap, sheet) {
+  const scrim = $('.sheet-scrim', wrap);
+  const rubber = d => 56 * (1 - 1 / (d / 140 + 1));
+  let g = null;
+  // Moves are followed on the window, so a mouse that leaves the sheet (dragging up past its top) still counts.
+  const move = e => {
+    if (!g || e.pointerId !== g.id) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!g.on) {
+      if (Math.hypot(dx, dy) < 8) return;
+      // Sideways is a chip row scrolling; upward in the body is ordinary scrolling.
+      if (Math.abs(dx) > Math.abs(dy) || (!g.handle && (dy < 0 || sheet.scrollTop > 0))) { stop(); return; }
+      g.on = true;
+      sheet.style.transition = 'none';
+      wrap.classList.add('sheet-wrap--drag');
+    }
+    g.dy = dy;
+    sheet.style.transform = `translateY(${dy >= 0 ? dy : -rubber(-dy)}px)`;
+    scrim.style.opacity = String(1 - Math.min(1, Math.max(0, dy) / g.h) * 0.8);
+    g.pts.push([e.timeStamp, e.clientY]);
+    if (g.pts.length > 8) g.pts.shift();
+  };
+  const end = e => {
+    if (!g || e.pointerId !== g.id) return;
+    const s = g;
+    stop();
+    if (!s.on) return;
+    // The tap that ends a drag is not a click on whatever is under the finger.
+    const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); };
+    window.addEventListener('click', swallow, true);
+    setTimeout(() => window.removeEventListener('click', swallow, true), 0);
+    wrap.classList.remove('sheet-wrap--drag');
+    const [t0, y0] = s.pts.find(([t]) => e.timeStamp - t <= 100) || s.pts[0];
+    const v = (e.clientY - y0) / Math.max(1, e.timeStamp - t0);
+    if (e.type === 'pointerup' && (s.dy > s.h * 0.3 || v > 0.5)) { closeSheet({ reason: 'drag' }); return; }
+    sheet.style.transition = motionOK() ? 'transform var(--dur-3) var(--ease-spring)' : 'none';
+    sheet.style.transform = ''; scrim.style.opacity = '';
+    setTimeout(() => { if (!g) sheet.style.transition = ''; }, 400);
+  };
+  const stop = () => {
+    g = null;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+  };
+  sheet.addEventListener('pointerdown', e => {
+    if (g || e.button > 0 || wrap.hasAttribute('data-closing')) return;
+    if (e.target.closest('input, textarea, select, [contenteditable], .leaflet-container')) return;
+    const r = sheet.getBoundingClientRect();
+    const handle = e.clientY - r.top < 56;
+    if (!handle && sheet.scrollTop > 0) return;
+    g = { id: e.pointerId, x: e.clientX, y: e.clientY, h: r.height, handle, on: false, dy: 0, pts: [[e.timeStamp, e.clientY]] };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  });
+  // On touch, once the sheet is being dragged the page must not scroll or pull to refresh underneath.
+  sheet.addEventListener('touchmove', e => { if (g?.on && e.cancelable) e.preventDefault(); }, { passive: false });
+}
+
+// Resolves true for the confirm button, false for Cancel or any other way of closing.
 function confirmSheet(title, body, okLabel, danger = false) {
   return new Promise(resolve => {
     const s = openSheet(`<h2 class="sheet-title">${esc(title)}</h2><p class="muted">${esc(body)}</p>
       <div class="row-end"><button class="btn" data-no>Cancel</button><button class="btn ${danger ? 'btn--danger' : 'btn--primary'}" data-yes>${esc(okLabel)}</button></div>`);
     s.addEventListener('click', e => {
-      if (e.target.closest('[data-yes]')) { closeSheet(); resolve(true); }
-      if (e.target.closest('[data-no]')) { closeSheet(); resolve(false); }
+      const yes = e.target.closest('[data-yes]');
+      if (!yes && !e.target.closest('[data-no]')) return;
+      // Answer first: closing fires onSheetClose, which would otherwise answer false before the true got through.
+      state.onSheetClose = null;
+      resolve(!!yes);
+      closeSheet();
     });
     state.onSheetClose = () => resolve(false);
   });
@@ -238,9 +399,16 @@ function openLocationPicker(init = {}) {
         <div class="row-end"><button type="button" class="btn" data-lclose>Cancel</button><button type="button" class="btn btn--primary" data-luse>Use this place</button></div>
       </div>`;
     document.body.append(ov);
-    const close = val => { map?.remove(); ov.remove(); resolve(val); };
-    let map;
+    let map, closed = false;
+    const close = (val, reason) => {
+      if (closed) return;
+      closed = true; map?.remove(); ov.remove(); closeLayer(layer, { restore: reason !== 'nav' }); resolve(val);
+    };
+    // Escape closes only this picker; the sighting sheet underneath stays as it was.
+    const layer = openLayer(ov, { label: 'Choose a place', close: reason => close(null, reason) });
+    ov.focus({ preventScroll: true });
     try { await loadLeaflet(); } catch (_) { toast('The map needs an internet connection the first time.'); close(null); return; }
+    if (closed) return;
     const L = window.L;
     const start = init.lat != null ? [init.lat, init.lng] : state.lastPos ? [state.lastPos.lat, state.lastPos.lng] : [-27.47, 153.02];
     map = L.map($('[data-lmap]', ov), { zoomControl: false }).setView(start, init.lat != null || state.lastPos ? 15 : 10);
@@ -284,7 +452,8 @@ function openLocationPicker(init = {}) {
         close({ lat: c.lat, lng: c.lng, place });
       }
     });
-    q.focus();
+    // On a phone the main path is dragging the map, so don't pop the keyboard over it.
+    if (!matchMedia('(pointer: coarse)').matches && (document.activeElement === ov || document.activeElement === document.body)) q.focus();
   });
 }
 
@@ -316,30 +485,53 @@ async function deleteSighting(id) {
   state.sightings = state.sightings.filter(x => x.id !== id);
 }
 
+// New for the dex: a dialog with the photo settling in, the band clamping on and the count stamping up by one.
 function celebrate(sp, newBadges) {
   navigator.vibrate?.([60, 40, 120]);
   confetti();
   const hist = sightingsOf(sp.id);
   const first = hist[hist.length - 1];
+  const seen = seenSet();
+  const ofIt = ofKind(sp.kind), got = ofIt.filter(x => seen.has(x.id)).length;
+  const animalsGot = ANIMALS.filter(x => seen.has(x.id)).length;
+  const verb = sp.kind === 'plant' ? 'found' : 'seen';
+  // The overall animal tally only adds something once the dex holds more than birds.
+  const total = sp.kind !== 'plant' && ANIMALS.length > ofIt.length;
+  const id = `cel-${sp.id}-${Date.now()}`;
   const el = document.createElement('div');
   el.className = 'celebrate';
-  el.setAttribute('role', 'status');
   el.innerHTML = `<div class="celebrate-card">
-    <div class="celebrate-photo">${birdImg(sp, 'large', '', { whole: true })}<span class="band band--on band--big band--clamp">${dexNo(sp.id)}</span></div>
-    <p class="celebrate-kicker">New for your dex</p>
-    <h2>${esc(sp.name)}</h2>
-    <p class="muted">${sp.kind === 'plant' ? `${ofKind('plant').filter(x => seenSet().has(x.id)).length} of ${ofKind('plant').length} plants found` : `${ANIMALS.filter(x => seenSet().has(x.id)).length} of ${ANIMALS.length} animals seen`}</p>
+    <div class="celebrate-photo">${birdImg(sp, 'large', '', { whole: true })}<span class="band band--${sp.kind} band--on band--big band--clamp">${dexNo(sp.id)}</span></div>
+    <p class="celebrate-kicker" id="${id}-k">New for your dex</p>
+    <h2 id="${id}-h">${esc(sp.name)}</h2>
+    <p class="celebrate-count"><b class="celebrate-n" data-count>${got}</b> of ${ofIt.length} ${KINDS[sp.kind].label.toLowerCase()} ${verb}</p>
+    ${total ? `<p class="celebrate-total small muted"><span data-count-all>${animalsGot}</span> of ${ANIMALS.length} animals in your dex</p>` : ''}
     ${newBadges.length ? `<p class="celebrate-badges">Badge earned: ${newBadges.map(b => `<strong>${esc(b.name)}</strong>`).join(', ')}</p>` : ''}
     <div class="row-center"><button class="btn" data-share>${icon.share} Share</button><button class="btn" data-card>See card</button><button class="btn btn--primary" data-dismiss>Nice</button></div></div>`;
   document.body.append(el);
-  const done = () => { el.classList.add('celebrate--out'); setTimeout(() => el.remove(), 250); };
+  settleImages(el);
+  // While the large photo loads, show the small one she has just seen in the dex.
+  const small = sized(sp.id, 'small'), frame = $('.celebrate-photo .whole', el);
+  if (frame && small && shown.has(small)) frame.style.backgroundImage = `url("${small.replace(/"/g, '%22')}")`;
+  let layer;
+  const done = (reason, then) => {
+    if (!closeLayer(layer, { restore: !then && reason !== 'nav' })) return;
+    if (reason === 'nav') { el.remove(); return; }
+    el.classList.add('celebrate--out');
+    setTimeout(() => el.remove(), 220);
+    then?.();
+  };
+  layer = openLayer(el, { dialog: $('.celebrate-card', el), labelledBy: `${id}-k ${id}-h`, close: reason => done(reason) });
   const info = { seen: true, isNew: true, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
   el.addEventListener('click', e => {
     if (e.target.closest('[data-share]')) { shareCard(sp, info); return; }
-    if (e.target.closest('[data-card]')) { done(); openCard(sp, info); return; }
-    if (e.target.closest('[data-dismiss]') || e.target === el) done();
+    if (e.target.closest('[data-card]')) { const back = layer.returnTo; done('button', () => openCard(sp, info, { returnTo: back })); return; }
+    if (e.target.closest('[data-dismiss]') || e.target === el) done('button');
   });
-  setTimeout(() => $('[data-dismiss]', el)?.focus(), 50);
+  $('[data-dismiss]', el).focus({ preventScroll: true });
+  // Count lands after the card has popped in.
+  countUp($('[data-count]', el), got - 1, got, { delay: 380 });
+  if (total) countUp($('[data-count-all]', el), animalsGot - 1, animalsGot, { delay: 520 });
 }
 
 // ---------- sighting sheet ----------
@@ -690,20 +882,120 @@ const routes = [
   [/^#\/scan$/, () => renderScan(ctx)],
 ];
 let lastRoute = '';
+// Draw the current route. Synchronous: async screens fill in later and are tidied up when they finish.
+// Redrawing the same route (a sync, a save) keeps keyboard focus on the same control.
 function render() {
   const hash = location.hash || '#/dex';
+  return hash === lastRoute ? keepFocus(() => drawRoute(hash), { fallback: '#view h1' }) : drawRoute(hash);
+}
+function drawRoute(hash) {
+  const fresh = hash !== lastRoute;
   if (state.map && !hash.startsWith('#/map')) { state.map.remove(); state.map = null; }
   state.cleanup?.(); state.cleanup = null;
+  let out;
   for (const [re, fn] of routes) {
     const m = hash.match(re);
-    if (m) { fn(m); break; }
+    if (m) { out = fn(m); break; }
   }
   const tab = hash.split('/')[1] || 'dex';
-  const tabFor = { bird: 'dex', dex: 'dex', compare: 'dex', listen: 'dex', scan: 'dex', lists: 'lists', list: 'lists', patch: 'lists', targets: 'lists', outing: 'lists', log: 'lists', stats: 'lists', map: 'map', badges: 'badges', settings: 'badges', quiz: 'badges', learn: 'badges' }[tab] || 'dex';
+  const tabFor = { bird: 'dex', dex: 'dex', compare: 'dex', listen: 'dex', scan: 'dex', lists: 'lists', list: 'lists', patch: 'lists', targets: 'lists', outing: 'lists', log: 'lists', stats: 'lists', map: 'map', badges: 'badges', settings: 'badges', quiz: 'badges', learn: 'badges', leaderboard: 'badges' }[tab] || 'dex';
   $$('.tabbar a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === tabFor ? 'page' : 'false'));
   renderOutingBar();
-  if (hash !== lastRoute) { if (!hash.startsWith('#/dex') || !lastRoute.startsWith('#/bird')) window.scrollTo(0, 0); lastRoute = hash; }
+  // A new route starts at the top, except going back, which returns to where she was.
+  if (fresh) { window.scrollTo(0, state.navScroll || 0); state.navScroll = 0; lastRoute = hash; }
+  afterDraw();
+  if (out && typeof out.then === 'function') out.then(() => { if ((location.hash || '#/dex') === hash) afterDraw(); }, () => {});
+  return out;
+}
+// Page title from the screen's heading, the hero photo first in line, cached photos shown at once, her photos lazily.
+function afterDraw() {
+  const h1 = $('h1', view);
+  let t = '';
+  if (h1) { const c = h1.cloneNode(true); c.querySelectorAll('small').forEach(n => n.remove()); t = c.textContent.replace(/\s+/g, ' ').trim(); }
+  document.title = !t || /BirdyDex/.test(t) ? "Sarah's BirdyDex" : `${t} – BirdyDex`;
+  prioritiseHero(view);
+  settleImages(view);
   hydratePhotos(view);
+}
+
+// ---------- navigation motion ----------
+// How deep each screen sits. Deeper is 'forward' (the new page rises), shallower is 'back', level is a tab 'swap'.
+const DEPTH = { dex: 0, lists: 0, map: 0, badges: 0, learn: 0, bird: 1, list: 1, patch: 1, targets: 1, stats: 1, log: 1, listen: 1, scan: 1, settings: 1, quiz: 1, leaderboard: 1, compare: 2, outing: 2 };
+const routeDepth = h => DEPTH[(h || '#/dex').split('/')[1] || 'dex'] ?? 1;
+const navKind = (from, to) => { const a = routeDepth(from), b = routeDepth(to); return b > a ? 'forward' : b < a ? 'back' : 'swap'; };
+const scrollMem = new Map();
+const THUMB = '.tile-img, .row-thumb, .botd-img, .cmp-img';
+let morph = null; // { id, url } of a photo just tapped on its way to a species page
+// The photo itself flies, not its frame: the seen ring and tick stay behind and fade with the page.
+const pic = thumb => $(':scope > img, :scope > .whole', thumb) || thumb;
+const inView = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.bottom > 56 && r.top < innerHeight - 64; };
+
+// Tapping a photo that links to a species names it, so the view transition grows it into that page's hero.
+function nameTappedPhoto(e) {
+  if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || state.suppressClick || !motionOK()) return;
+  const a = e.target.closest?.('a[href^="#/bird/"]');
+  if (!a || a.getAttribute('href') === location.hash) return;
+  const thumb = a.matches(THUMB) ? a : $(THUMB, a);
+  if (!thumb) return;
+  const el = pic(thumb);
+  const m = morph = { id: Number(a.getAttribute('href').split('/')[2]), url: $('img', thumb)?.currentSrc || '' };
+  nameFor(el, 'sp-hero');
+  // If no navigation follows (a long press, a cancelled tap), take the name off again.
+  setTimeout(() => { if (morph === m) { morph = null; if (!document.documentElement.dataset.nav) el.style.viewTransitionName = ''; } }, 700);
+}
+
+function onRouteChange() {
+  const from = lastRoute, to = location.hash || '#/dex';
+  scrollMem.set(from, scrollY);
+  const nav = navKind(from, to);
+  const toId = Number(to.match(/^#\/bird\/(\d+)$/)?.[1]) || null;
+  const fromId = Number(from.match(/^#\/bird\/(\d+)$/)?.[1]) || null;
+  const tapped = morph && morph.id === toId ? morph : null;
+  morph = null;
+  // Going back from a species page: its hero shrinks back into the photo it came from, if that is on screen.
+  let shrinkTo = null;
+  if (!tapped && fromId && nav === 'back' && motionOK()) {
+    const hero = $('[data-hero-frame]', view);
+    if (hero && inView(hero)) { nameFor(hero, 'sp-hero'); shrinkTo = fromId; }
+  }
+  state.navScroll = nav === 'back' ? scrollMem.get(to) || 0 : 0;
+  vt(() => {
+    closeAllLayers('nav');
+    flushClosingSheets();
+    const out = render();
+    const waits = [out];
+    if (tapped) {
+      const frame = $('[data-hero-frame]', view);
+      if (frame) {
+        // The small photo is already decoded, so the hero shows it while the large one loads.
+        const box = $('.whole, .img-missing', frame) || frame;
+        if (tapped.url) Object.assign(box.style, { backgroundImage: `url("${tapped.url.replace(/"/g, '%22')}")`, backgroundSize: 'cover', backgroundPosition: '50% 30%' });
+        nameFor(frame, 'sp-hero');
+      }
+    }
+    if (shrinkTo) {
+      const t = $(`[data-tile="${shrinkTo}"] :is(.tile-img, .row-thumb)`, view) || $(`a[href="#/bird/${shrinkTo}"] :is(${THUMB}), a[href="#/bird/${shrinkTo}"]:is(${THUMB})`, view);
+      if (t) {
+        if (!inView(t) && t.closest('[data-tile]')) t.scrollIntoView({ block: 'center' });
+        if (inView(t)) {
+          nameFor(pic(t), 'sp-hero');
+          const img = $('img', t);
+          if (img?.decode) waits.push(img.decode());
+        }
+      }
+    }
+    return settle(Promise.all(waits), 150);
+  }, { nav }).then(focusPageHeading);
+}
+
+// After a route change, focus the new screen's heading so a screen reader announces where she is.
+// Left alone if she is already typing in the page, or a layer has opened meanwhile.
+function focusPageHeading() {
+  if (topLayer()) return;
+  const a = document.activeElement;
+  if (a && a.isConnected && view.contains(a) && a.matches('input, textarea, select')) return;
+  const h = $('h1', view);
+  if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } else view.focus({ preventScroll: true });
 }
 
 function renderOutingBar() {
@@ -962,8 +1254,8 @@ function renderBird(id) {
       <div class="bird-hero" data-hero-box>
         <div class="hero-photo">
           <div class="gallery" data-gallery tabindex="0" aria-label="Photos of the ${esc(sp.name)}${photos.length > 1 ? '. Swipe for more.' : ''}">
-            ${photos.length ? photos.map((ph, i) => `<figure class="slide">${wholeImg(ph.src, `${sp.name}${photos.length > 1 ? `, photo ${i + 1} of ${photos.length}` : ''}`, 'bird-photo')}</figure>`).join('')
-              : `<figure class="slide"><span class="bird-photo img-missing" role="img" aria-label="${esc(sp.name)}"></span></figure>`}
+            ${photos.length ? photos.map((ph, i) => `<figure class="slide"${i ? '' : ' data-hero-frame'}>${wholeImg(ph.src, `${sp.name}${photos.length > 1 ? `, photo ${i + 1} of ${photos.length}` : ''}`, 'bird-photo')}</figure>`).join('')
+              : `<figure class="slide" data-hero-frame><span class="bird-photo img-missing" role="img" aria-label="${esc(sp.name)}"></span></figure>`}
           </div>
           ${photos.length > 1 ? `<div class="dots" aria-hidden="true">${photos.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}
           <p class="credit" data-credit>${photos[0]?.credit ? creditHTML(photos[0]) : ''}</p>
@@ -1396,7 +1688,7 @@ function renderOuting(id) {
       e.preventDefault();
       await tally(o, Number((inc || dec).dataset.inc || (inc || dec).dataset.dec), inc ? 1 : -1);
       if (inc && state.tallyQ) state.tallyQ = '';
-      renderOuting(id);
+      keepFocus(() => renderOuting(id), { fallback: '[data-tq], #view h1' });
     }
     if (e.target.closest('[data-finish]')) openFinishOuting(o);
     if (e.target.closest('[data-editbirds]')) { state.editOuting = editing ? null : id; state.tallyQ = ''; renderOuting(id); }
@@ -1470,6 +1762,7 @@ async function renderMap(spId = null, at = null) {
   const hotOn = focus ? f.hotFocus : f.hot;
   if (state.map) { state.map.remove(); state.map = null; }
   view.innerHTML = `
+    <h1 class="sr-only">Map</h1>
     <div class="mapwrap">
       <div id="map" aria-label="Map of your sightings and SEQ birding hotspots"></div>
       <div class="map-top">
@@ -1481,9 +1774,9 @@ async function renderMap(spId = null, at = null) {
         ${focus ? `<a class="chip chip--on" href="#/map" aria-label="Stop showing ${esc(focus.name)}">${esc(focus.name)} ✕</a>` : ''}
         <button class="chip ${hotOn ? 'chip--on' : ''}" data-hot aria-pressed="${hotOn}">Hotspots</button>
         ${!focus ? `<button class="chip ${f.need ? 'chip--on' : ''}" data-need aria-pressed="${f.need}">Birds I need</button>` : ''}
-        <button class="chip ${f.show === 'all' ? 'chip--on' : ''}" data-mshow="all">My sightings</button>
-        <button class="chip ${f.show === 'photos' ? 'chip--on' : ''}" data-mshow="photos">With photos</button>
-        <button class="chip ${f.show === 'none' ? 'chip--on' : ''}" data-mshow="none">Hide mine</button>
+        <button class="chip ${f.show === 'all' ? 'chip--on' : ''}" data-mshow="all" aria-pressed="${f.show === 'all'}">My sightings</button>
+        <button class="chip ${f.show === 'photos' ? 'chip--on' : ''}" data-mshow="photos" aria-pressed="${f.show === 'photos'}">With photos</button>
+        <button class="chip ${f.show === 'none' ? 'chip--on' : ''}" data-mshow="none" aria-pressed="${f.show === 'none'}">Hide mine</button>
         <button class="chip" data-locate>${icon.pin} Me</button>
       </div>
       <button class="btn btn--primary map-patch" data-patch>New patch here</button>
@@ -1568,8 +1861,7 @@ async function renderMap(spId = null, at = null) {
         <label class="field"><span>Name</span><input name="name" placeholder="e.g. Our yard" required autocomplete="off"></label>
         <label class="field"><span>Radius: <output data-rout>1</output> km</span><input type="range" name="r" min="0.1" max="8" step="0.1" value="1"></label>
         <div class="row-end"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn--primary">Save patch</button></div>
-      </form>`);
-    s.closest('.sheet-wrap').classList.add('sheet-wrap--map');
+      </form>`, { modal: false, cls: 'sheet-wrap--map' });
     const form = $('[data-form]', s);
     form.r.addEventListener('input', () => { circle.setRadius(form.r.value * 1000); $('[data-rout]', s).textContent = form.r.value; });
     state.onSheetClose = () => { map.off('move', move); circle.remove(); $('.map-cross')?.classList.add('hidden'); };
@@ -1627,7 +1919,7 @@ async function renderMap(spId = null, at = null) {
   // Tap anywhere on the map for a short description of that spot.
   map.on('click', async e => {
     if (!mres.classList.contains('hidden')) { mres.classList.add('hidden'); return; }
-    if ($('.sheet-wrap')) return;
+    if (sheetOpen()) return;
     const { lat, lng } = e.latlng;
     const pop = L.popup({ maxWidth: 260 }).setLatLng(e.latlng).setContent('<p class="pop-src">Looking up this spot…</p>').openOn(map);
     const html = await describeArea(lat, lng, { seen }).catch(() => '<p class="pop-desc">Couldn\'t look this spot up. Check the internet connection.</p>');
@@ -1637,10 +1929,10 @@ async function renderMap(spId = null, at = null) {
     const ri = e.target.closest('[data-ri]');
     if (ri) { goTo(results[Number(ri.dataset.ri)]); return; }
     if (e.target.closest('[data-mqx]')) { mq.value = ''; mqx.classList.add('hidden'); tempMarker?.remove(); mq.focus(); showRes(localResults('')); return; }
-    if (e.target.closest('[data-need]')) { f.need = !f.need; renderMap(spId); return; }
+    if (e.target.closest('[data-need]')) { f.need = !f.need; keepFocus(() => renderMap(spId)); return; }
     const ms = e.target.closest('[data-mshow]');
-    if (ms) { f.show = ms.dataset.mshow; renderMap(spId); }
-    if (e.target.closest('[data-hot]')) { if (focus) f.hotFocus = !f.hotFocus; else f.hot = !f.hot; renderMap(spId); }
+    if (ms) { f.show = ms.dataset.mshow; keepFocus(() => renderMap(spId)); }
+    if (e.target.closest('[data-hot]')) { if (focus) f.hotFocus = !f.hotFocus; else f.hot = !f.hot; keepFocus(() => renderMap(spId)); }
     if (e.target.closest('[data-patch]')) startPatch();
     if (e.target.closest('[data-locate]')) {
       try { const p = await getPosition(); map.setView([p.lat, p.lng], 15); L.circleMarker([p.lat, p.lng], { radius: 7, color: '#fff', weight: 3, fillColor: ink, fillOpacity: 1 }).addTo(map); }
@@ -1826,15 +2118,16 @@ function download(name, blob) {
 
 // ---------- global search ----------
 function openSearch() {
+  if ($('.search-ov')) return;
   const ov = document.createElement('div');
   ov.className = 'search-ov';
-  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Search');
   ov.innerHTML = `<div class="search-bar">${icon.search}<input type="search" placeholder="Birds, animals, plants, places, hotspots" aria-label="Search everything" autocomplete="off"><button class="iconbtn" data-x aria-label="Close search">${icon.close}</button></div>
     <div class="search-res" aria-live="polite"><p class="muted pad">Try "kingfisher", "Oxley", "lorikeet" or "wetlands".</p></div>`;
   document.body.append(ov);
-  document.body.classList.add('has-sheet');
   const input = $('input', ov), res = $('.search-res', ov);
-  const close = () => { ov.remove(); document.body.classList.remove('has-sheet'); };
+  let layer;
+  const close = reason => { if (closeLayer(layer, { restore: reason !== 'nav' })) ov.remove(); };
+  layer = openLayer(ov, { label: 'Search', lock: true, close });
   const seen = seenSet();
   const run = () => {
     const q = input.value.trim().toLowerCase();
@@ -1855,9 +2148,12 @@ function openSearch() {
       sec('Your sightings', mine.map(s => `<li><a class="row" href="#/bird/${s.speciesId}"><span class="row-main"><strong>${esc(byId.get(s.speciesId)?.name)}</strong><span class="small muted">${fmtDate(s.date)}${s.place ? `, ${esc(s.place)}` : ''}</span></span></a></li>`).join('')),
     ].join('') || '<p class="muted pad">Nothing found. Check the spelling, or try part of a name.</p>';
   };
-  input.addEventListener('input', run);
-  ov.addEventListener('click', e => { if (e.target.closest('[data-x]') || e.target.closest('a')) close(); });
-  ov.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  input.addEventListener('input', () => { run(); settleImages(res); });
+  // A result link closes search through the route change, so its photo can grow into the species page.
+  ov.addEventListener('click', e => {
+    const a = e.target.closest('a');
+    if (e.target.closest('[data-x]') || (a && a.getAttribute('href') === location.hash)) close('button');
+  });
   input.focus();
 }
 
@@ -2059,9 +2355,9 @@ function showUpdateBanner() {
   document.body.append(b);
 }
 async function showWelcome() {
+  if ($('.welcome')) return;
   const ov = document.createElement('div');
   ov.className = 'welcome';
-  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Welcome');
   ov.innerHTML = `<div class="welcome-card">
     <div class="welcome-model" data-wm></div>
     <h1>Hi Sarah</h1>
@@ -2074,12 +2370,19 @@ async function showWelcome() {
     <div class="row-center">${state.installPrompt ? '<button class="btn" data-winstall>Install app</button>' : ''}<button class="btn btn--primary" data-wgo>Start birding</button></div>
   </div>`;
   document.body.append(ov);
-  let dispose = null;
-  try { const { mountBird } = await import('./model3d.js'); dispose = mountBird($('[data-wm]', ov), byId.get(165)); } catch (_) {}
+  let dispose = null, layer;
+  // Escape, Back and Start birding all mean the same thing: she has seen it.
+  const done = reason => {
+    if (!closeLayer(layer, { restore: reason !== 'nav' })) return;
+    dispose?.(); ov.remove(); db.kvSet('welcomed', true);
+  };
+  layer = openLayer(ov, { dialog: $('.welcome-card', ov), close: done });
   ov.addEventListener('click', async e => {
     if (e.target.closest('[data-winstall]')) await promptInstall();
-    if (e.target.closest('[data-wgo]')) { dispose?.(); ov.remove(); db.kvSet('welcomed', true); }
+    if (e.target.closest('[data-wgo]')) done('button');
   });
+  $('[data-wgo]', ov).focus({ preventScroll: true });
+  try { const { mountBird } = await import('./model3d.js'); if (ov.isConnected) dispose = mountBird($('[data-wm]', ov), byId.get(165)); } catch (_) {}
 }
 
 // ---------- boot ----------
@@ -2088,14 +2391,16 @@ const ctx = {
   seenSet, sightingsOf, openSightingSheet, getCalls, hasCalls, audioUrl,
   openSheet, closeSheet, confirmSheet, refresh: refreshFromSync,
   resizeImage, openSearch,
+  // shell helpers for other screens: motion (js/motion.js), focus and layers (js/layers.js), the live region
+  vt, flip, countUp, keepFocus, announce, openLayer, closeLayer,
 };
 
 // Data changed under us (cloud sync, sign in or out): reload, and redraw unless that would interrupt something.
 async function refreshFromSync({ force = false } = {}) {
   await loadData();
   applyTheme();
-  const busy = $('.sheet-wrap') || document.activeElement?.matches('input, textarea') || /^#\/(listen|scan|quiz|learn)/.test(location.hash);
-  if (force ? !$('.sheet-wrap') : !busy) render();
+  const busy = sheetOpen() || document.activeElement?.matches('input, textarea') || /^#\/(listen|scan|quiz|learn)/.test(location.hash);
+  if (force ? !sheetOpen() : !busy) render();
 }
 
 async function boot() {
@@ -2103,15 +2408,22 @@ async function boot() {
   applyTheme();
   $('#plus').addEventListener('click', e => { e.preventDefault(); openPlusSheet(); });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeSheet();
+    if (onLayerKey(e)) return;
     if (e.key === '/' && !e.target.closest('input, textarea, select')) { e.preventDefault(); openSearch(); }
   });
-  window.addEventListener('hashchange', () => { closeSheet(); render(); });
+  // Scroll is remembered per screen by the app (back returns to it), not restored by the browser mid-transition.
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  document.addEventListener('click', nameTappedPhoto, true);
+  window.addEventListener('hashchange', onRouteChange);
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); state.installPrompt = e; if ((location.hash || '#/dex').startsWith('#/dex')) renderDex(); });
   render();
   initAccount(ctx).catch(() => {});
-  // Photos arriving only change the dex/list pages; don't interrupt Listen or a playing call.
-  onMediaReady(() => { if (!$('.sheet-wrap') && /^(#\/?(dex)?|#\/lists?.*|#\/targets|#\/badges|#\/bird\/\d+|#\/compare\/.*)?$/.test(location.hash)) render(); });
+  // Better photos arriving are swapped in where they show; nothing is redrawn mid-use (a call keeps playing, the
+  // gallery keeps its slide). A species page is redrawn only if its hero had no photo at all.
+  onMediaReady(() => {
+    patchSpeciesImages(document);
+    if (!sheetOpen() && /^#\/(bird|compare)\//.test(location.hash) && $('.bird-hero .img-missing, .cmp-img .img-missing', view)) render();
+  });
   loadIndex();
   loadCallPack();
   if ('serviceWorker' in navigator) {

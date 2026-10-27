@@ -171,7 +171,8 @@ function pickAvatar() {
     s.querySelector('[data-avq]').oninput = e => { s.querySelector('[data-avlist]').innerHTML = list(e.target.value); };
     s.addEventListener('click', e => {
       const b = e.target.closest('[data-pick]');
-      if (b) { closeSheet(); resolve(Number(b.dataset.pick)); }
+      // Answer before closing: closing fires onSheetClose, which would answer null first.
+      if (b) { state.onSheetClose = null; resolve(Number(b.dataset.pick)); closeSheet(); }
     });
     state.onSheetClose = () => resolve(null);
   });
