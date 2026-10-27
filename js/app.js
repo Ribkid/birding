@@ -2629,8 +2629,11 @@ function openSearch(initial = '') {
   if ($('.search-ov')) return;
   const ov = document.createElement('div');
   ov.className = 'search-ov';
+  // Before she types: a few ideas to tap, so the empty screen is a starting point.
+  const ideas = () => `<div class="search-try"><p class="small muted">Try one of these, or type any name, place or habitat.</p>
+    <div class="chips">${['kingfisher', 'koala', 'Oxley', 'wetlands', 'tree frog', 'gum'].map(q => `<button type="button" class="chip" data-try="${q}">${q}</button>`).join('')}</div></div>`;
   ov.innerHTML = `<div class="search-bar">${icon.search}<input type="search" placeholder="Birds, animals, plants, places, hotspots" aria-label="Search everything" autocomplete="off"><button class="iconbtn" data-x aria-label="Close search">${icon.close}</button></div>
-    <div class="search-res" aria-live="polite"><p class="muted pad">Try "kingfisher", "Oxley", "lorikeet" or "wetlands".</p></div>`;
+    <div class="search-res" aria-live="polite">${ideas()}</div>`;
   document.body.append(ov);
   const input = $('input', ov), res = $('.search-res', ov);
   let layer;
@@ -2639,7 +2642,7 @@ function openSearch(initial = '') {
   const seen = seenSet();
   const run = () => {
     const q = input.value.trim().toLowerCase();
-    if (!q) { res.innerHTML = '<p class="muted pad">Try "kingfisher", "Oxley", "lorikeet" or "wetlands".</p>'; return; }
+    if (!q) { res.innerHTML = ideas(); return; }
     const words = q.split(/\s+/);
     const hit = txt => words.every(w => txt.toLowerCase().includes(w));
     const birds = SPECIES.filter(s => hit(`${s.name} ${s.sci} ${dexNo(s.id)} ${GROUPS[s.group]} ${KINDS[s.kind].label} ${KINDS[s.kind].one} ${s.habitats.map(h => HABITATS[h]).join(' ')}`))
@@ -2651,15 +2654,17 @@ function openSearch(initial = '') {
     const sec = (title, items) => items ? `<h2 class="h2 pad-x">${title}</h2><ul class="rows pad-x">${items}</ul>` : '';
     res.innerHTML = [
       sec(kindsPresent.length > 1 ? 'Species' : 'Birds', birds.map(s => `<li><a class="row row--sp kind--${s.kind}" href="#/bird/${s.id}"><span class="row-thumb ${seen.has(s.id) ? 'row-thumb--seen' : ''}">${birdImg(s)}</span><span class="row-main"><strong>${esc(s.name)}</strong><span class="small muted">${esc(GROUPS[s.group])}</span></span>${band(s.id, seen.has(s.id))}</a></li>`).join('')),
-      sec('Hotspots', hs.map(h => `<li><a class="row" href="#/map/at/${h.lat},${h.lng}"><span class="row-main"><strong>${esc(h.name)}</strong><span class="small muted">${h.rich} dex birds recorded</span></span></a></li>`).join('')),
-      sec('Your patches', pats.map(p => `<li><a class="row" href="#/patch/${p.id}"><span class="row-main"><strong>${esc(p.name)}</strong></span></a></li>`).join('')),
-      sec('Your sightings', mine.map(s => `<li><a class="row" href="#/bird/${s.speciesId}"><span class="row-main"><strong>${esc(byId.get(s.speciesId)?.name)}</strong><span class="small muted">${fmtDate(s.date)}${s.place ? `, ${esc(s.place)}` : ''}</span></span></a></li>`).join('')),
+      sec('Hotspots', hs.map(h => `<li><a class="row" href="#/map/at/${h.lat},${h.lng}"><span class="row-ic" aria-hidden="true">${icon.pin}</span><span class="row-main"><strong>${esc(h.name)}</strong><span class="small muted">${h.rich} dex birds recorded</span></span></a></li>`).join('')),
+      sec('Your patches', pats.map(p => `<li><a class="row" href="#/patch/${p.id}"><span class="row-ic" aria-hidden="true">${icon.outing}</span><span class="row-main"><strong>${esc(p.name)}</strong></span></a></li>`).join('')),
+      sec('Your sightings', mine.map(s => `<li><a class="row" href="#/bird/${s.speciesId}">${byId.get(s.speciesId) ? `<span class="row-thumb">${birdImg(byId.get(s.speciesId), 'small', '', { alt: '' })}</span>` : ''}<span class="row-main"><strong>${esc(byId.get(s.speciesId)?.name)}</strong><span class="small muted">${fmtDate(s.date)}${s.place ? `, ${esc(s.place)}` : ''}</span></span></a></li>`).join('')),
     ].join('') || '<p class="muted pad">Nothing found. Check the spelling, or try part of a name.</p>';
   };
   input.addEventListener('input', () => { run(); settleImages(res); });
   if (initial) { input.value = initial; run(); settleImages(res); }
   // A result link closes search through the route change, so its photo can grow into the species page.
   ov.addEventListener('click', e => {
+    const t = e.target.closest('[data-try]');
+    if (t) { input.value = t.dataset.try; run(); settleImages(res); input.focus(); return; }
     const a = e.target.closest('a');
     if (e.target.closest('[data-x]') || (a && a.getAttribute('href') === location.hash)) close('button');
   });
