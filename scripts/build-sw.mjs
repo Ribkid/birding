@@ -1,8 +1,10 @@
 // Generates dist/sw.js with a precache list of the built shell.
 //
 // The shell is small (HTML, JS, CSS, fonts, icons); everything heavy is cached at runtime:
-//   - the BioCLIP / BirdNET model files are managed by the app itself (js cache 'birddex-models')
-//   - /data/*.json and gallery photos are cached on first use
+//   - BioCLIP .bin parts bypass the worker; src/core/photoid.js joins them into 'birddex-models'
+//   - BirdNET files and /vendor bundles use 'birddex-models' as well
+//   - header data (/data/*.json) and call clips are cached on first use
+//   - Wikimedia photos go to 'birddex-images', map tiles to 'birddex-tiles'
 //
 // Run after `vite build`. No dependencies.
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
