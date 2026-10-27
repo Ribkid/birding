@@ -31,6 +31,7 @@ export default function PublicProfile() {
 
   useEffect(() => {
     void initProfile();
+    if (!/^[0-9a-f-]{36}$/i.test(publicId)) { setState('error'); setErr("This profile isn't available. It may be private, or the link may be wrong."); return; }
     if (!configured) { setState('error'); setErr('Profiles need accounts, which are not set up in this copy of the app.'); return; }
     if (!signedIn()) { setState(authDone ? 'signedout' : 'loading'); return; }
     if (!navigator.onLine) { setState(row ? 'ready' : 'offline'); return; }
