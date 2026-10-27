@@ -1674,6 +1674,7 @@ async function renderSettings() {
   let usage = '';
   try { const est = await navigator.storage.estimate(); usage = `${(est.usage / 1e6).toFixed(1)} MB used on this phone`; } catch (_) {}
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
+  if (location.hash !== '#/settings') return; // left while the call pack was loading
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/badges" aria-label="Back">${icon.back}</a><h1>Settings</h1></header>
     <section class="block" data-account></section>
@@ -1880,9 +1881,14 @@ function frogBoard(pack, month) {
   </section>`;
 }
 
+let listenGen = 0;
 async function renderListen() {
   const L = state.listen;
+  // The pack can take a few seconds on a weak signal. Only the latest render may draw, and only if Listen is still
+  // open; otherwise it would cover another screen and leave its own timer running.
+  const gen = ++listenGen;
   const pack = await loadCallPack();
+  if (gen !== listenGen || location.hash !== '#/listen') return;
   const month = new Date().getMonth() + 1;
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
