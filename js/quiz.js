@@ -432,20 +432,217 @@ export function factQ(sp, o = {}) {
   return null;
 }
 
+// ---------- more ways to ask (quiz packs and the new quick-play modes) ----------
+const prng = o => o.photoRng || o.rng || Math.random;
+const leadPhotos = (id, o) => photosFor(id, { rng: prng(o), cached: o.cached?.get(id), prefer: 'wiki' });
+const photoOk = (s, o) => (o.offline ? !!o.cached?.has(s.id) : hasPhoto(s));
+export const isIntroduced = sp => /\b(introduced|feral)\b/i.test(sp?.notes || '');
+// Only snakes whose notes say it plainly; 'mildly venomous, not considered dangerous' is left out on purpose.
+export const SNAKE_RULE = "Keep away from any snake you can't identify.";
+export function snakeSafety(sp) {
+  if (sp?.group !== 'reptile:snakes') return null;
+  const t = String(sp.notes || '');
+  if (/mildly venomous|not considered dangerous/i.test(t)) return null;
+  const safe = /\bnon-venomous\b|\bnot dangerous\b|\bharmless\b/i.test(t);
+  const danger = /\bvenomous\b/i.test(t.replace(/non-venomous/gi, ''));
+  return safe === danger ? null : safe ? 'safe' : 'danger';
+}
+// A fact question about one named species, with its photo when there is one. `miss` is what a wrong answer is told.
+const named = (sp, q, o) => ({ type: 'fact', img: sp.id, focus: sp.id, source: NOTES, ...q, photos: leadPhotos(sp.id, o) });
+
+// Silhouette: the photo drawn as a dark shape on a light ground, shown in colour once answered.
+export function silhouetteQ(sp, o = {}) {
+  const q = speciesQ('silhouette', sp, o);
+  if (!q) return null;
+  q.prompt = `Which ${one(sp)} has this shape?`;
+  q.photos = leadPhotos(sp.id, o);
+  return q.photos.length ? q : null;
+}
+// Zoom in: a tight crop near the middle of the photo (where the subject usually is) that pulls back on answer.
+export function zoomQ(sp, o = {}) {
+  const q = speciesQ('zoom', sp, o);
+  if (!q) return null;
+  const rng = prng(o);
+  q.prompt = `Which ${one(sp)} is this, up close?`;
+  q.photos = leadPhotos(sp.id, o);
+  q.zoom = { x: Math.round(38 + rng() * 24), y: Math.round(34 + rng() * 26), scale: o.difficulty === 'hard' ? 3.4 : o.difficulty === 'easy' ? 2.2 : 2.8 };
+  return q.photos.length ? q : null;
+}
+// Odd one out: three from this species' group and one from another group of the same kind, as alike as can be.
+export function oddQ(sp, o = {}) {
+  const rng = o.rng || Math.random;
+  const kin = ofKind(sp.kind).filter(s => photoOk(s, o));
+  const three = [sp, ...shuffle(kin.filter(s => s.group === sp.group && s.id !== sp.id), rng).slice(0, 2)];
+  if (three.length < 3 || !photoOk(sp, o)) return null;
+  const outs = kin.filter(s => s.group !== sp.group && sameClass(sp, s))
+    .map(c => ({ c, s: Math.max(...three.map(t => distractorScore(t, c))) + rng() * 1.5 })).sort((a, b) => b.s - a.s);
+  const odd = outs.length ? pick(outs.slice(0, 4), rng).c : null;
+  if (!odd) return null;
+  const opts = shuffle([...three, odd], rng).map(s => ({ ...optOf(s), photos: leadPhotos(s.id, o) }));
+  if (opts.some(x => !x.photos.length)) return null;
+  const grp = lc(GROUPS[sp.group]);
+  return { type: 'odd', focus: odd.id, answer: String(odd.id), options: opts, prompt: `Three of these are ${grp}. Which one isn't?`, group: sp.group,
+    explain: `The ${odd.name} belongs with the ${lc(GROUPS[odd.group])}. The other three are ${grp}.`, miss: `Not quite. The odd one out is the ${odd.name}.` };
+}
+// Sound-alikes: a call where every wrong answer is a look-alike or a close relative that also calls.
+export function soundAlikeQ(sp, o = {}) {
+  if (!CALL_KINDS.includes(sp.kind)) return null;
+  const list = o.cachedCalls?.get(sp.id) ? [o.cachedCalls.get(sp.id)] : callsOf(sp.id);
+  if (!list.length) return null;
+  const rng = o.rng || Math.random;
+  const ok = s => s && s.id !== sp.id && s.kind === sp.kind && hasCall(s.id);
+  const mates = lookalikesOf(sp.id).map(id => byId.get(id)).filter(ok);
+  const kin = ofKind(sp.kind).filter(s => ok(s) && !mates.includes(s))
+    .map(c => ({ c, s: (c.group === sp.group ? 4 : 0) + distractorScore(sp, c) + rng() })).sort((a, b) => b.s - a.s).map(x => x.c);
+  const wrong = [...shuffle(mates, rng), ...kin].slice(0, 3);
+  if (wrong.length < 3) return null;
+  return { type: 'call', soundalike: true, focus: sp.id, answer: String(sp.id), options: shuffle([sp, ...wrong], rng).map(optOf), wrong,
+    prompt: `Which ${one(sp)} is calling?`, call: pick(list, prng(o)), photos: photosFor(sp.id, { rng: prng(o), cached: o.cached?.get(sp.id) }) };
+}
+export function nativeQ(sp, o = {}) {
+  if (sp.kind === 'plant') return null;
+  const intro = isIntroduced(sp);
+  return named(sp, { ttype: 'Native or introduced', prompt: `Is the ${sp.name} native, or was it introduced?`,
+    options: [tOpt('native', 'Native to Australia'), tOpt('introduced', 'Introduced by people')], answer: intro ? 'introduced' : 'native',
+    miss: intro ? 'Not quite. It was introduced.' : `Not quite. It's a native ${one(sp)}.`,
+    explain: intro ? `The ${sp.name} was brought to Australia by people and now lives wild here. ${fieldMark(sp)}` : `The ${sp.name} belongs here. ${fieldMark(sp)}` }, o);
+}
+// Day or night: left out where the notes make it a dawn-and-dusk animal but the flag says day.
+export function dayNightQ(sp, o = {}) {
+  if (sp.kind === 'plant' || (!sp.nocturnal && /\b(dawn|dusk|early and late)\b/i.test(sp.notes || ''))) return null;
+  const se = sentences(sp.notes).find(s => /\b(night|nocturnal|dusk|dawn|by day|warm days|basks?|sun)\b/i.test(s));
+  return named(sp, { ttype: 'Day or night', prompt: `When is the ${sp.name} most active?`,
+    options: [tOpt('day', 'By day'), tOpt('night', 'At dusk and night')], answer: sp.nocturnal ? 'night' : 'day',
+    miss: sp.nocturnal ? 'Not quite. It comes out at dusk and night.' : 'Not quite. It is active by day.',
+    explain: `${sp.nocturnal ? `The ${sp.name} is out at dusk and through the night.` : `The ${sp.name} is active by day.`}${se ? ` ${se}` : ''}` }, o);
+}
+export function whereQ(sp, o = {}) {
+  const no = Object.keys(HABITATS).filter(h => !sp.habitats.includes(h));
+  if (!sp.habitats.length || no.length < 3) return null;
+  const rng = o.rng || Math.random, h = pick(sp.habitats, rng);
+  const where = sp.habitats.map(x => lc(HABITATS[x])).join(' and ');
+  return named(sp, { ttype: 'Habitats', prompt: sp.kind === 'plant' ? `Where does the ${sp.name} grow?` : `Where would you look for the ${sp.name}?`,
+    options: shuffle([tOpt(h, HABITATS[h]), ...shuffle(no, rng).slice(0, 3).map(x => tOpt(x, HABITATS[x]))], rng), answer: h,
+    miss: `Not quite. Try ${lc(HABITATS[h])}.`, explain: `${sp.kind === 'plant' ? 'It grows in' : 'Look in'} ${where}. ${fieldMark(sp)}` }, o);
+}
+const SEASON_TXT = { s: 'Spring and summer', w: 'Autumn and winter', all: 'All year' };
+export function whenQ(sp, o = {}) {
+  let ans = sp.season;
+  if (!ans) {
+    const m = monthRates(sp.id);
+    if (sp.kind === 'plant' || !m || Math.min(...m.rel) < 0.45) return null; // only call it all-year when the records say so
+    ans = 'all';
+  }
+  const plant = sp.kind === 'plant', peaks = peaksOf(sp.id);
+  const se = sentences(sp.notes).find(s => /\b(spring|summer|autumn|winter|cooler|warm|months|migrat\w*|flowers?)\b/i.test(s));
+  return named(sp, { ttype: 'Seasons', prompt: plant ? `When does the ${sp.name} flower?` : `When are you most likely to find the ${sp.name} in SEQ?`,
+    options: ['s', 'w', 'all'].map(k => tOpt(k, SEASON_TXT[k])), answer: ans, miss: `Not quite. ${SEASON_TXT[ans]}.`,
+    explain: `${plant ? `It flowers mainly in ${lc(SEASON_TXT[ans])}.` : ans === 'all' ? `The ${sp.name} is reported all year.` : `The ${sp.name} is mostly about in ${lc(SEASON_TXT[ans])}${peaks && !plant ? `, with reports peaking in ${peaks}` : ''}.`}${se ? ` ${se}` : ''}`,
+    source: plant ? NOTES : alaSource(sp) }, o);
+}
+// Which is bigger: two photos with names, sizes far enough apart (1.4 times) to be a fair question.
+const BIGGER = { wingspan: 'Which has the bigger wingspan?', height: 'Which grows taller?', shell: 'Which has the bigger shell?' };
+export function biggerQ(sp, o = {}) {
+  const a = sizeOf(sp), rng = o.rng || Math.random;
+  if (!a || !photoOk(sp, o)) return null;
+  const cands = shuffle((o.pool || ofKind(sp.kind)).filter(s => s.id !== sp.id && s.kind === sp.kind && sizeOf(s)?.measure === a.measure && photoOk(s, o)
+    && Math.max(sizeOf(s).cm, a.cm) / Math.max(0.1, Math.min(sizeOf(s).cm, a.cm)) >= 1.4), rng);
+  const b = cands.find(s => s.group === sp.group) || cands[0];
+  if (!b) return null;
+  const big = sizeOf(b).cm > a.cm ? b : sp;
+  const opts = shuffle([sp, b], rng).map(s => ({ ...optOf(s), photos: leadPhotos(s.id, o) }));
+  if (opts.some(x => !x.photos.length)) return null;
+  return { type: 'fact', ttype: 'Size', named: true, img: null, focus: sp.id, also: [b.id], answer: String(big.id), options: opts,
+    prompt: BIGGER[a.measure] || 'Which is bigger?', sub: "The photos aren't to scale.", miss: `Not quite. The ${big.name} is bigger.`,
+    explain: `${sp.name}: ${sp.sizeText}. ${b.name}: ${b.sizeText}.`, source: NOTES };
+}
+export function snakeQ(sp, o = {}) {
+  const s = snakeSafety(sp);
+  if (!s) return null;
+  return named(sp, { ttype: 'Snake safety', prompt: `Is the ${sp.name} dangerous to people?`, safety: SNAKE_RULE,
+    options: [tOpt('danger', 'Yes: venomous, keep away'), tOpt('safe', 'No: not dangerous to people')], answer: s,
+    miss: s === 'danger' ? "Not quite. It's venomous: keep well away." : "Not quite. It's not dangerous to people.",
+    explain: sentences(sp.notes).filter(x => /venomous|dangerous|harmless/i.test(x)).join(' ') || fieldMark(sp) }, o);
+}
+
+// ---------- quiz packs: built from rules over the species data, not hand-typed lists ----------
+const inGroups = (...gs) => s => gs.includes(s.group);
+const birdIn = h => s => s.kind === 'bird' && s.habitats.includes(h);
+export const PACKS = [
+  { key: 'backyard', name: 'Backyard birds', kind: 'bird', blurb: 'Garden and park regulars', test: s => birdIn('g')(s) && s.rarity <= 2, types: ['photo', 'call', 'silhouette', 'native', 'zoom', 'whoami'] },
+  { key: 'mammals', name: 'Mammals of SEQ', kind: 'mammal', blurb: 'Marsupials, bats and the ones at sea', test: s => s.kind === 'mammal', types: ['photo', 'silhouette', 'daynight', 'where', 'bigger', 'whoami'] },
+  { key: 'snakes', name: 'Snakes: dangerous or harmless?', kind: 'reptile', blurb: 'Know which to give a wide berth', test: s => !!snakeSafety(s), types: ['snake', 'photo', 'snake'], safety: true },
+  { key: 'frogcalls', name: 'Frogs by call', kind: 'frog', blurb: 'Croaks, bonks and beeps', test: s => s.kind === 'frog' && hasCall(s.id), types: ['call', 'soundalike', 'photo', 'when'] },
+  { key: 'butterflies', name: 'Butterflies', kind: 'butterfly', blurb: 'Swallowtails to skippers', test: s => s.kind === 'butterfly', types: ['photo', 'zoom', 'when', 'odd', 'whoami'] },
+  { key: 'lookalikes', name: 'Look-alike legends', kind: null, blurb: 'The pairs everyone mixes up', test: s => lookalikesOf(s.id).length > 0, types: ['duel', 'photo', 'duel', 'soundalike'] },
+  { key: 'wetland', name: 'Wetland birds', kind: 'bird', blurb: 'Lakes, swamps and creeks', test: birdIn('w'), types: ['photo', 'zoom', 'odd', 'call', 'bigger', 'whoami'] },
+  { key: 'raptors', name: 'Birds of prey', kind: 'bird', blurb: 'Eagles, kites, hawks and falcons', test: inGroups('raptors'), types: ['photo', 'silhouette', 'zoom', 'bigger', 'whoami'] },
+  { key: 'parrots', name: 'Parrots & cockatoos', kind: 'bird', blurb: 'Loud, bright and everywhere', test: inGroups('parrots'), types: ['photo', 'call', 'zoom', 'odd', 'whoami'] },
+  { key: 'honeyeaters', name: 'Honeyeaters', kind: 'bird', blurb: 'Miners, friarbirds and the rest', test: inGroups('honeyeaters'), types: ['photo', 'odd', 'call', 'zoom', 'soundalike'] },
+  { key: 'shore', name: 'Shorebirds & seabirds', kind: 'bird', blurb: 'Waders, gulls and terns', test: inGroups('shorebirds', 'seabirds'), types: ['photo', 'silhouette', 'bigger', 'when', 'whoami'] },
+  { key: 'rainforest', name: 'Rainforest birds', kind: 'bird', blurb: 'Heard more than seen', test: birdIn('r'), types: ['photo', 'call', 'soundalike', 'zoom', 'whoami'] },
+  { key: 'nightbirds', name: 'Night birds', kind: 'bird', blurb: 'Owls, frogmouths and nightjars', test: s => s.kind === 'bird' && s.nocturnal, types: ['photo', 'call', 'silhouette', 'whoami'] },
+  { key: 'lizards', name: 'Lizards, skinks & turtles', kind: 'reptile', blurb: 'Dragons, geckos and shells', test: s => s.kind === 'reptile' && s.group !== 'reptile:snakes', types: ['photo', 'zoom', 'where', 'daynight', 'bigger', 'whoami'] },
+  { key: 'trees', name: 'Gums, wattles & trees', kind: 'plant', blurb: 'Bark, leaves and blossom', test: inGroups('plant:gums', 'plant:wattles', 'plant:paperbarks', 'plant:rainforest-trees'), types: ['photo', 'zoom', 'when', 'where', 'odd', 'whoami'] },
+  { key: 'flowers', name: 'Flowers & orchids', kind: 'plant', blurb: 'Wildflowers, grasses and orchids', test: inGroups('plant:wildflowers', 'plant:ferns-orchids'), types: ['photo', 'zoom', 'when', 'whoami'] },
+  { key: 'nightshift', name: 'Night shift', kind: null, blurb: 'Everything that comes out after dark', test: s => s.nocturnal, types: ['photo', 'silhouette', 'call', 'where', 'whoami'] },
+  { key: 'seasonal', name: 'Seasonal visitors', kind: null, blurb: 'Here for part of the year', test: s => s.kind !== 'plant' && !!s.season, types: ['photo', 'when', 'call', 'whoami'] },
+  { key: 'rare', name: 'Rare finds', kind: null, blurb: 'Scarce and rare across every kind', test: s => s.rarity >= 4, types: ['photo', 'zoom', 'silhouette', 'whoami'] },
+];
+export const PACK_BY = Object.fromEntries(PACKS.map(p => [p.key, p]));
+export const packSpecies = key => (PACK_BY[key] ? SPECIES.filter(PACK_BY[key].test) : []);
+
 // ---------- rounds ----------
-export const MODES = ['quick', 'photo', 'call', 'whoami', 'duel', 'rapid', 'facts'];
+export const MODES = ['quick', 'photo', 'call', 'whoami', 'duel', 'rapid', 'silhouette', 'zoom', 'facts'];
 const QUICK_PLAN = ['photo', 'photo', 'photo', 'call', 'call', 'whoami', 'whoami', 'duel', 'fact', 'fact'];
 
-function makeOne(type, sp, o) {
-  if (type === 'photo') return photoQ(sp, o);
-  if (type === 'call') return callQ(sp, { ...o, cachedCall: o.cachedCalls?.get(sp.id) });
-  if (type === 'whoami') return whoQ(sp, o);
-  if (type === 'fact') return factQ(sp, o);
-  return null;
-}
-const canAsk = (type, sp, o) => type === 'photo' ? (o.offline ? o.cached?.has(sp.id) : hasPhoto(sp))
-  : type === 'call' ? CALL_KINDS.includes(sp.kind) && (o.offline ? o.cachedCalls?.has(sp.id) : hasCall(sp.id))
+const MAKERS = {
+  photo: photoQ, whoami: whoQ, fact: factQ, silhouette: silhouetteQ, zoom: zoomQ, odd: oddQ, native: nativeQ, daynight: dayNightQ,
+  where: whereQ, when: whenQ, bigger: biggerQ, snake: snakeQ, soundalike: soundAlikeQ,
+  call: (sp, o) => callQ(sp, { ...o, cachedCall: o.cachedCalls?.get(sp.id) }),
+};
+const makeOne = (type, sp, o) => MAKERS[type]?.(sp, o) || null;
+const PHOTO_TYPES = ['photo', 'silhouette', 'zoom', 'odd'];
+const canAsk = (type, sp, o) => PHOTO_TYPES.includes(type) ? photoOk(sp, o)
+  : type === 'call' || type === 'soundalike' ? CALL_KINDS.includes(sp.kind) && (o.offline ? o.cachedCalls?.has(sp.id) : hasCall(sp.id))
   : true;
+// Every species a question shows (duels, odd one out, which is bigger), so a round doesn't show one twice.
+const shows = q => [q.focus, ...(q.also || []), ...(q.options || []).filter(x => x.photos).map(x => x.sp)];
+
+function pairQ(subj, used, o) {
+  const p = shuffle(lookalikePairs().filter(x => (subj.has(x.a) || subj.has(x.b)) && !used.has(x.a) && !used.has(x.b)), o.rng)
+    .find(x => !o.offline || (o.cached?.has(x.a) && o.cached?.has(x.b)));
+  return p ? duelQ(p, o) : null;
+}
+// A pack round: its species, its own mix of question types, falling back through the pack's other types.
+export function buildPackRound(key, { n = 10, rng = Math.random, offline = null, month = new Date().getMonth() + 1, ids = null } = {}) {
+  const pack = PACK_BY[key];
+  if (!pack) return [];
+  const list = ids ? ids.map(id => byId.get(id)).filter(Boolean) : packSpecies(key);
+  const o = { difficulty: 'normal', rng, month, offline: !!offline, cached: offline?.photos || null, cachedCalls: offline?.calls || null };
+  const want = Math.min(n, list.length);
+  const plan = shuffle(Array.from({ length: want }, (_, i) => pack.types[i % pack.types.length]), rng);
+  const order = shuffle(list.slice(), rng);
+  const subj = new Set(list.map(s => s.id)), used = new Set(), qs = [];
+  for (const t of plan) {
+    let q = t === 'duel' ? pairQ(subj, used, o) : null;
+    for (const type of q ? [] : [...new Set([t, ...pack.types, 'photo', 'whoami'])]) {
+      if (type === 'duel') continue;
+      for (const sp of order) {
+        if (used.has(sp.id) || !canAsk(type, sp, o)) continue;
+        q = makeOne(type, sp, o);
+        if (q && !shows(q).some(id => used.has(id))) break;
+        q = null;
+      }
+      if (q) break;
+    }
+    if (!q) continue;
+    shows(q).forEach(id => used.add(id));
+    q.pack = key;
+    qs.push(q);
+  }
+  return qs;
+}
 
 // Build a practice round. `offline` carries the photos and calls saved on this phone (Maps from cachedPhotos/cachedCalls).
 export function buildRound({ mode = 'quick', kind = 'animals', scope = 'all', difficulty = 'normal', seen = new Set(), month = new Date().getMonth() + 1,
@@ -474,12 +671,7 @@ export function buildRound({ mode = 'quick', kind = 'animals', scope = 'all', di
   const subj = new Set(subjects.map(s => s.id));
   const used = new Set();
   for (const want of plan) {
-    let q = null;
-    if (want === 'duel') {
-      const p = shuffle(lookalikePairs().filter(x => (subj.has(x.a) || subj.has(x.b)) && !used.has(x.a) && !used.has(x.b)), rng)
-        .find(x => !offline || (o.cached?.has(x.a) && o.cached?.has(x.b)));
-      q = p ? duelQ(p, o) : null;
-    }
+    let q = want === 'duel' ? pairQ(subj, used, o) : null;
     // Quick mixes types; if a type can't be asked here (no calls for plants, photos not saved offline) fall back.
     const chain = mode === 'quick' || ids ? [want, 'photo', 'whoami', 'fact'] : [want];
     for (const type of q ? [] : [...new Set(chain)]) {

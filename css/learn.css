@@ -483,3 +483,66 @@
   .lh-mode-bg::after, .lh-daily-photo::after, .lr-card-img::after { animation: none !important; }
   @keyframes lq-fade { from { opacity: 0; } }
 }
+
+/* ---------- the hub as a tab: title, lede and three numbers at a glance ---------- */
+.page-head.lh-head { flex-direction: column; align-items: flex-start; gap: var(--sp-1); }
+.lh-lede { margin: 0; max-width: 34ch; color: var(--ink-2); font-size: var(--fs-2); line-height: 1.45; }
+.lh-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-2); }
+.lh-stats li {
+  display: grid; align-content: start; gap: 4px; padding: var(--sp-3); border-radius: var(--r-card);
+  background: var(--surface); box-shadow: var(--shadow-card);
+}
+.lh-stats b { font: 800 var(--fs-6)/1 var(--stamp); font-variant-numeric: tabular-nums; color: var(--ink); }
+.lh-stats span { font-size: var(--fs-1); font-weight: 600; line-height: 1.3; color: var(--ink-2); }
+:root[data-theme="outdoor"] .lh-stats li { box-shadow: 0 0 0 1.5px var(--line-strong); }
+
+/* ---------- quiz packs: photo cards with a ring for how much of the pack she has got right ---------- */
+.lh-pack { min-height: 192px; }
+.lh-pack .lh-mode-txt strong { font-size: var(--fs-3); line-height: 1.2; }
+.lh-pack-n { margin-top: 2px; font: 700 var(--fs-1)/1.2 var(--font); opacity: .92; }
+.lh-ring { position: relative; flex: none; display: grid; place-items: center; width: 44px; height: 44px; }
+.lh-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.lh-ring circle { fill: rgba(7, 11, 16, .45); stroke: rgba(255, 255, 255, .3); stroke-width: 3.5; }
+.lh-ring .lh-ring-fg { fill: none; stroke: #fff; stroke-linecap: round; stroke-dasharray: 100 200; transition: stroke-dashoffset 1s var(--ease-settle) .25s; }
+.lh-ring b { position: relative; font: 800 .875rem/1 var(--stamp); font-variant-numeric: tabular-nums; }
+.lh-ring b span { font-size: .625rem; }
+.lh-packs[data-grow]:not(.is-in) .lh-ring-fg { stroke-dashoffset: 100 !important; }
+.lh-more { margin-top: calc(var(--sp-1) * -1); }
+@media (max-width: 359px) { .lh-pack .lh-mode-desc { display: none; } }
+
+/* ---------- odd one out: four photo cards ---------- */
+.lq-duel--four { gap: var(--sp-2); }
+.lq-duel--four .lq-side .lq-photo .whole { aspect-ratio: 1; }
+.lq-duel--four .lq-side .lq-photo.is-missing { min-height: 132px; }
+.lq-duel--four .lq-side-name { min-height: 0; font-size: var(--fs-1); }
+
+/* ---------- silhouette: a dark shape on a pale ground, colour fades back in on answer ---------- */
+.lq-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.lq-photo--sil .whole { background: rgb(233 239 236); }
+.lq-photo--sil .whole-bg { opacity: 0; transition: opacity var(--dur-4) var(--ease-out); }
+.lq-photo--sil .whole-fg { filter: url(#lq-sil); }
+.lq-photo--sil.is-revealed .whole-bg { opacity: 1; }
+.lq-photo--sil.is-revealed .whole-fg { filter: none; animation: lq-colour var(--dur-4) var(--ease-out); }
+@keyframes lq-colour { from { opacity: .2; } }
+
+/* ---------- zoom in: a tight crop that pulls back on answer ---------- */
+.lq-photo--zoom .whole-bg { display: none; }
+.lq-photo--zoom .whole-fg {
+  object-fit: cover; transform: scale(var(--zs, 2.8)); transform-origin: var(--zx, 50%) var(--zy, 45%);
+  transition: transform 900ms var(--ease-settle);
+}
+.lq-photo--zoom.is-revealed .whole-fg { transform: none; }
+:is(.lq-photo--sil, .lq-photo--zoom).no-anim :is(.whole-fg, .whole-bg) { transition: none; animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .lq-photo--zoom .whole-fg, .lq-photo--sil .whole-bg { transition: none; }
+  .lq-photo--sil.is-revealed .whole-fg { animation: none; }
+  .lh-ring .lh-ring-fg { transition: none; }
+}
+
+/* ---------- snake safety: on every snake question and its answer ---------- */
+.lq-safety {
+  display: flex; align-items: flex-start; gap: var(--sp-2); margin: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--gold) 24%, var(--surface)); color: var(--ink); font-size: var(--fs-2); font-weight: 700; line-height: 1.4;
+}
+.lq-safety svg { flex: none; width: 20px; height: 20px; margin-top: 1px; color: var(--gold-ink); }
+:root[data-theme="outdoor"] .lq-safety { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
