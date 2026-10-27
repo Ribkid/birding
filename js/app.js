@@ -11,7 +11,7 @@ import { renderStats } from './statsview.js';
 import { renderScan } from './scan.js';
 import { describeArea } from './mapinfo.js';
 import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
-import { vt, nameFor, flip, countUp, motionOK, settle } from './motion.js';
+import { vt, nameFor, flip, countUp, motionOK, settle, report } from './motion.js';
 import { openLayer, closeLayer, closeAllLayers, onLayerKey, topLayer, layers, keepFocus } from './layers.js';
 
 const relRate = (id, month) => { const m = monthRates(id); return m ? m.rel[month - 1] : null; };
@@ -293,6 +293,8 @@ function wireSheetDrag(wrap, sheet) {
     const r = sheet.getBoundingClientRect();
     const handle = e.clientY - r.top < 56;
     if (!handle && sheet.scrollTop > 0) return;
+    // A list scrolled inside the sheet (the avatar picker) scrolls back up rather than dragging the sheet away.
+    for (let n = e.target; n && n !== sheet; n = n.parentElement) if (n.scrollTop > 0 && n.scrollHeight > n.clientHeight) return;
     g = { id: e.pointerId, x: e.clientX, y: e.clientY, h: r.height, handle, on: false, dy: 0, pts: [[e.timeStamp, e.clientY]] };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
@@ -904,7 +906,9 @@ function drawRoute(hash) {
   // A new route starts at the top, except going back, which returns to where she was.
   if (fresh) { window.scrollTo(0, state.navScroll || 0); state.navScroll = 0; lastRoute = hash; }
   afterDraw();
-  if (out && typeof out.then === 'function') out.then(() => { if ((location.hash || '#/dex') === hash) afterDraw(); }, () => {});
+  // A screen that fails while it fills in is reported here, as it was before transitions wrapped it, so what this
+  // returns settles without rejecting.
+  if (out && typeof out.then === 'function') return out.then(() => { if ((location.hash || '#/dex') === hash) afterDraw(); }, report);
   return out;
 }
 // Page title from the screen's heading, the hero photo first in line, cached photos shown at once, her photos lazily.
@@ -925,7 +929,10 @@ const routeDepth = h => DEPTH[(h || '#/dex').split('/')[1] || 'dex'] ?? 1;
 const navKind = (from, to) => { const a = routeDepth(from), b = routeDepth(to); return b > a ? 'forward' : b < a ? 'back' : 'swap'; };
 const scrollMem = new Map();
 const THUMB = '.tile-img, .row-thumb, .botd-img, .cmp-img';
-let morph = null; // { id, url } of a photo just tapped on its way to a species page
+let morph = null; // { id, url, kind } of a photo just tapped on its way to a species page
+// Which kind of photo opened each species page (a tile, Bird of the day, a row), so Back shrinks into that one.
+const cameFrom = new Map();
+const thumbKind = thumb => THUMB.split(', ').find(s => thumb.matches(s)) || '';
 // The photo itself flies, not its frame: the seen ring and tick stay behind and fade with the page.
 const pic = thumb => $(':scope > img, :scope > .whole', thumb) || thumb;
 const inView = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.bottom > 56 && r.top < innerHeight - 64; };
@@ -938,7 +945,7 @@ function nameTappedPhoto(e) {
   const thumb = a.matches(THUMB) ? a : $(THUMB, a);
   if (!thumb) return;
   const el = pic(thumb);
-  const m = morph = { id: Number(a.getAttribute('href').split('/')[2]), url: $('img', thumb)?.currentSrc || '' };
+  const m = morph = { id: Number(a.getAttribute('href').split('/')[2]), url: $('img', thumb)?.currentSrc || '', kind: thumbKind(thumb) };
   nameFor(el, 'sp-hero');
   // If no navigation follows (a long press, a cancelled tap), take the name off again.
   setTimeout(() => { if (morph === m) { morph = null; if (!document.documentElement.dataset.nav) el.style.viewTransitionName = ''; } }, 700);
@@ -952,6 +959,7 @@ function onRouteChange() {
   const fromId = Number(from.match(/^#\/bird\/(\d+)$/)?.[1]) || null;
   const tapped = morph && morph.id === toId ? morph : null;
   morph = null;
+  if (tapped) cameFrom.set(to, tapped.kind);
   // Going back from a species page: its hero shrinks back into the photo it came from, if that is on screen.
   let shrinkTo = null;
   if (!tapped && fromId && nav === 'back' && motionOK()) {
@@ -974,14 +982,15 @@ function onRouteChange() {
       }
     }
     if (shrinkTo) {
-      const t = $(`[data-tile="${shrinkTo}"] :is(.tile-img, .row-thumb)`, view) || $(`a[href="#/bird/${shrinkTo}"] :is(${THUMB}), a[href="#/bird/${shrinkTo}"]:is(${THUMB})`, view);
+      // Back returns her to where she was and never scrolls the page to find a target: the photo shrinks into a
+      // copy of it that is already on screen, preferring the kind she tapped, or the page simply fades back.
+      const kind = cameFrom.get(from);
+      const on = $$(`[data-tile="${shrinkTo}"] :is(.tile-img, .row-thumb), a[href="#/bird/${shrinkTo}"] :is(${THUMB}), a[href="#/bird/${shrinkTo}"]:is(${THUMB})`, view).filter(inView);
+      const t = (kind && on.find(el => el.matches(kind))) || on[0];
       if (t) {
-        if (!inView(t) && t.closest('[data-tile]')) t.scrollIntoView({ block: 'center' });
-        if (inView(t)) {
-          nameFor(pic(t), 'sp-hero');
-          const img = $('img', t);
-          if (img?.decode) waits.push(img.decode());
-        }
+        nameFor(pic(t), 'sp-hero');
+        const img = $('img', t);
+        if (img?.decode) waits.push(img.decode());
       }
     }
     return settle(Promise.all(waits), 150);
