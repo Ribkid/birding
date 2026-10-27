@@ -1,6 +1,6 @@
 // Question engine for Learn: who to ask about, look-alike-aware wrong answers, question makers and teaching text.
 // Pure data in, plain question objects out; js/learn.js draws them. Works in Node for the birds (tests).
-import { SPECIES, ANIMALS, GROUPS, HABITATS, KINDS, byId, ofKind, kindsPresent } from './species.js';
+import { SPECIES, ANIMALS, GROUPS, HABITATS, KINDS, byId, ofKind, kindsPresent, parseSize } from './species.js';
 import { sized, photoFor, localCallsNow, loadCallPack } from './media.js';
 import { galleryFor } from './gallery.js';
 import { seq, monthRates, recordCount, spotsFor, hotspots } from './seqdata.js';
@@ -47,17 +47,8 @@ export const tellFor = (a, b) => tells.get(pairKey(a, b)) || null;
 export const lookalikesOf = id => mates.get(id) || [];
 export const lookalikePairs = () => pairs;
 
-// ---------- sizes with units ----------
-// '1–2 m with tail' -> 150 cm, 'Wingspan to 16 cm' -> 16 cm (wingspan), 'Tree to 45 m' -> 4500 cm. Range midpoints.
-export function parseSize(text) {
-  const t = String(text ?? '');
-  const m = t.match(/(\d+(?:\.\d+)?)(?:\s*[–-]\s*(\d+(?:\.\d+)?))?\s*(mm|cm|m)\b/i);
-  if (!m) return null;
-  const lo = Number(m[1]), hi = m[2] ? Number(m[2]) : lo;
-  const cm = ((lo + hi) / 2) * { mm: 0.1, cm: 1, m: 100 }[m[3].toLowerCase()];
-  const measure = /wingspan/i.test(t) ? 'wingspan' : /shell/i.test(t) ? 'shell' : /\bbody\b/i.test(t) ? 'body' : 'length';
-  return { cm: Math.round(cm * 10) / 10, measure };
-}
+// ---------- sizes with units (parsed in species.js) ----------
+export { parseSize };
 export function sizeOf(sp) {
   if (!sp) return null;
   if (sp.kind === 'bird') return sp.size ? { cm: sp.size, measure: 'length' } : null;
