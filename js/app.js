@@ -1847,8 +1847,43 @@ function openSearch() {
 }
 
 // ---------- Listen (BirdNET) ----------
+// Frogs: BirdNET has no SEQ frogs, so Listen lists the frogs calling this month with our clips to match by ear.
+const callLine = sp => {
+  const parts = String(sp.notes || '').match(/[^.]+\./g) || [];
+  return (parts.find(t => /\bcall|bleat|trill|chorus|cackle|"/i.test(t)) || parts[0] || '').trim();
+};
+function frogBoard(pack, month) {
+  const frogs = ofKind('frog').filter(sp => pack[sp.id]?.length)
+    .map(sp => ({ sp, r: relRate(sp.id, month) ?? 0 }))
+    .filter(({ sp, r }) => r >= 0.35 || inSeason(sp, month))
+    .sort((a, b) => b.r - a.r || a.sp.id - b.sp.id);
+  if (!frogs.length) return '';
+  return `<section class="frogboard" aria-labelledby="frogboard-h">
+    <h2 class="h2" id="frogboard-h">Frogs calling in ${MONTHS[month - 1]}</h2>
+    <p class="muted small">BirdNET only knows birds. Match frog calls by ear here.</p>
+    <p class="small frogboard-save hidden" data-fsave>To play these with no signal, <a href="#/settings">save calls in Settings</a>.</p>
+    <ul class="frogboard-list">${frogs.map(({ sp }) => {
+      const clips = pack[sp.id];
+      return `<li class="frog-row kind--frog" data-frog="${sp.id}">
+        <a class="row-thumb" href="#/bird/${sp.id}" tabindex="-1" aria-hidden="true">${birdImg(sp)}</a>
+        <div class="frog-main">
+          <a class="frog-name" href="#/bird/${sp.id}">${esc(sp.name)}</a>
+          <span class="frog-call small">${esc(callLine(sp))}</span>
+          <div class="frog-plays">${clips.map((c, i) => `<button class="fplay" data-fplay="${sp.id}:${i}" aria-pressed="false" aria-label="${esc(sp.name)}, call ${i + 1} of ${clips.length}"><span class="fplay-ico" aria-hidden="true">${icon.play}</span><span class="fplay-eq" aria-hidden="true"><i></i><i></i><i></i></span><span aria-hidden="true">${clips.length > 1 ? `Call <b>${i + 1}</b>` : 'Play call'}</span></button>`).join('')}</div>
+          <span class="frog-prog" aria-hidden="true"><span></span></span>
+          <p class="frog-credit small muted" data-fcredit></p>
+        </div></li>`;
+    }).join('')}</ul>
+    <details class="frog-credits"><summary class="small">Recording credits</summary>
+      <ul class="small muted">${frogs.flatMap(({ sp }) => pack[sp.id].map((c, i) => `<li>${esc(sp.name)}${pack[sp.id].length > 1 ? `, call ${i + 1}` : ''}: ${callCredit({ ...c, local: true })}</li>`)).join('')}</ul>
+    </details>
+  </section>`;
+}
+
 async function renderListen() {
   const L = state.listen;
+  const pack = await loadCallPack();
+  const month = new Date().getMonth() + 1;
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
       <div><h1>Listen</h1><p class="muted small">BirdNET names birds from their calls, right on your phone.</p></div></header>
@@ -1856,12 +1891,13 @@ async function renderListen() {
       <canvas class="spectro" width="600" height="220" aria-label="Live sound picture"></canvas>
       <div class="listen-ctl">
         <button class="micbtn" data-mic aria-pressed="false">${icon.mic}<span>Start listening</span></button>
-        <p class="small muted" data-lstatus>Point your phone towards the birds and keep still. The first time, the sound model downloads (about 60 MB).</p>
+        <p class="small muted" data-lstatus role="status">Point your phone towards the birds and keep still. The first time, the sound model downloads (about 60 MB). After that, Listen works with no signal.</p>
         <div class="meter meter--thin hidden" data-lprog style="--p:0%"><span></span></div>
       </div>
       <div class="block-h"><h2 class="h2">Heard</h2>${L.hits.size ? '<button class="btn btn--small btn--quiet" data-clear>Clear</button>' : ''}</div>
       <ul class="rows" data-hits></ul>
       <p class="small muted">BirdNET by the K. Lisa Yang Center for Conservation Bioacoustics and Chemnitz University of Technology (model CC BY-SA 4.0). Suggestions can be wrong, so check before you log.</p>
+      ${frogBoard(pack, month)}
     </div>`;
   const hitsEl = $('[data-hits]', view), status = $('[data-lstatus]', view), prog = $('[data-lprog]', view), btn = $('[data-mic]', view);
   const seen = seenSet();
@@ -1873,7 +1909,7 @@ async function renderListen() {
       return `<li class="hit ${Date.now() - h.last < 4000 ? 'hit--live' : ''}">
         <span class="row-thumb">${sp ? birdImg(sp) : `<span class="img-missing"></span>`}</span>
         <span class="row-main"><strong>${esc(sp ? sp.name : h.name)}</strong>
-          <span class="small muted">${Math.round(h.best * 100)}% sure, ${ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)} min ago`}${sp ? (seen.has(sp.id) ? '' : '. New for your dex!') : '. Not in the dex'}</span>
+          <span class="small muted">${Math.round(h.best * 100)}% sure, ${ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)} min ago`}${sp ? (seen.has(sp.id) ? '' : '. New for your dex') : '. Not in the dex'}</span>
           <span class="meter meter--thin" style="--p:${Math.round(h.best * 100)}%"><span></span></span></span>
         ${sp ? `<button class="btn btn--small" data-loghit="${sp.id}">Log it</button>` : ''}</li>`;
     }).join('') || '<li class="muted pad">Nothing yet. Calls show up here as they are recognised.</li>';
@@ -1881,14 +1917,18 @@ async function renderListen() {
   drawHits();
   let mod = null;
   const stop = () => { mod?.stopListening(); btn.setAttribute('aria-pressed', 'false'); btn.querySelector('span').textContent = 'Start listening'; btn.classList.remove('on'); };
-  state.cleanup = () => { stop(); clearInterval(L.tickT); };
+  const frogs = wireFrogBoard(pack, () => { if (btn.classList.contains('on')) { stop(); status.textContent = 'Stopped listening while the frog call plays, so BirdNET does not hear it.'; } });
+  state.cleanup = () => { stop(); frogs.stop(); clearInterval(L.tickT); };
   L.tickT = setInterval(drawHits, 2000);
   view.onclick = async e => {
+    const fp = e.target.closest('[data-fplay]');
+    if (fp) { frogs.play(fp); return; }
     const lh = e.target.closest('[data-loghit]');
     if (lh) openSightingSheet({ speciesId: Number(lh.dataset.loghit), autoGps: true, notes: 'Identified by call with BirdNET.' });
     if (e.target.closest('[data-clear]')) { L.hits.clear(); drawHits(); }
     if (!e.target.closest('[data-mic]')) return;
     if (btn.classList.contains('on')) { stop(); status.textContent = 'Stopped.'; return; }
+    frogs.stop();
     try {
       mod = await import('./listen.js');
       btn.classList.add('on'); btn.setAttribute('aria-pressed', 'true'); btn.querySelector('span').textContent = 'Stop';
@@ -1916,6 +1956,59 @@ async function renderListen() {
       stop();
       status.textContent = /denied|NotAllowed/i.test(String(err?.name || err?.message)) ? 'Microphone permission was denied. Allow it in your browser settings and try again.' : `Couldn't start listening: ${err.message || err}`;
     }
+  };
+}
+
+// One player for the whole frog board. The credit for the clip that is playing shows in its row.
+function wireFrogBoard(pack, beforePlay) {
+  const audio = new Audio();
+  let cur = null; // { btn, key }
+  const row = () => cur?.btn.closest('.frog-row');
+  const setPlaying = on => { cur?.btn.setAttribute('aria-pressed', String(on)); row()?.classList.toggle('is-playing', on); };
+  const reset = () => {
+    if (!cur) return;
+    setPlaying(false);
+    const bar = row() && $('.frog-prog span', row());
+    if (bar) bar.style.transform = 'scaleX(0)';
+  };
+  audio.addEventListener('timeupdate', () => {
+    const bar = row() && $('.frog-prog span', row());
+    if (bar && audio.duration) bar.style.transform = `scaleX(${Math.min(1, audio.currentTime / audio.duration)})`;
+  });
+  audio.addEventListener('ended', () => { reset(); cur = null; });
+  audio.addEventListener('error', () => {
+    if (!cur || !audio.getAttribute('src')) return;
+    const cr = $('[data-fcredit]', row());
+    if (cr) cr.textContent = navigator.onLine ? 'That clip would not play.' : 'Not saved on this phone yet. Save calls in Settings to play it with no signal.';
+    reset();
+    cur = null; // a second tap tries the clip again
+  });
+  // Say how to make the board work offline, until the pack is saved.
+  callPackStatus().then(st => { if (st.saved < st.total) $('[data-fsave]', view)?.classList.remove('hidden'); }).catch(() => {});
+  return {
+    play(btn) {
+      const [id, i] = btn.dataset.fplay.split(':').map(Number);
+      const key = `${id}:${i}`;
+      if (cur?.key === key) {
+        if (audio.paused) { beforePlay(); audio.play().catch(() => {}); setPlaying(true); }
+        else { audio.pause(); setPlaying(false); }
+        return;
+      }
+      reset();
+      const c = pack[id]?.[i];
+      if (!c) return;
+      cur = { btn, key };
+      beforePlay();
+      setPlaying(true);
+      const cr = $('[data-fcredit]', row());
+      if (cr) cr.innerHTML = callCredit({ ...c, local: true });
+      localCalls(id).then(list => {
+        if (cur?.key !== key) return;
+        audio.src = list[i].src;
+        audio.play().catch(() => {});
+      });
+    },
+    stop() { audio.pause(); reset(); cur = null; },
   };
 }
 
