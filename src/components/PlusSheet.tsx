@@ -42,7 +42,8 @@ export function PlusSheet({ open, onClose }: { open: boolean; onClose: () => voi
   placeRef.current = place;
 
   useEffect(() => {
-    if (!open) return;
+    // Back to the menu as it closes, so the next open never shows the last step first.
+    if (!open) { setMode('menu'); setPicking(false); return; }
     setMode('menu');
     setDate(todayStr());
     setTime(timeStr());
