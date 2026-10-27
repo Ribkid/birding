@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { inPatch, speciesList, totals, yearTotals } from '../../core/stats.js';
 import { byId, RARITY, type Species } from '../../lib/data';
@@ -88,17 +88,17 @@ export default function Lists() {
     return by;
   }, [sightings]);
 
-  const rootRef = useRef<HTMLDivElement>(null);
+  // v1 drew straight into #view, so the hub's blocks are its direct children here too.
   useEffect(() => {
     if (!ready) return;
     const id = requestAnimationFrame(() =>
-      stagger(rootRef.current, '.lh-stat, .tcard, .pcard, .ocard', { key: 'lists', max: 14 }),
+      stagger(document.getElementById('view'), '.lh-stat, .tcard, .pcard, .ocard', { key: 'lists', max: 14 }),
     );
     return () => cancelAnimationFrame(id);
   }, [ready]);
 
   return (
-    <div ref={rootRef}>
+    <>
       <header className="page-head page-head--back">
         <Link className="iconbtn" to="/me" aria-label="Back to Me">
           <Icon name="back" />
@@ -288,6 +288,6 @@ export default function Lists() {
           )}
         </>
       )}
-    </div>
+    </>
   );
 }

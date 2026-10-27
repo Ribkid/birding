@@ -16,6 +16,7 @@ import Outing from './screens/lists/Outing';
 import Log from './screens/lists/Log';
 import AddSighting from './screens/lists/AddSighting';
 import Stats from './screens/lists/Stats';
+import { OutingBar } from './screens/lists/OutingBar';
 import Learn from './screens/learn/Learn';
 import LearnPlay from './screens/learn/LearnPlay';
 import Me from './screens/me/Me';
@@ -125,6 +126,7 @@ export default function App() {
         </Routes>
         </ErrorBoundary>
       </main>
+      <OutingBar />
       <TabBar />
     </>
   );
