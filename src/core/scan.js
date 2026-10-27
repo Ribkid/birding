@@ -34,12 +34,11 @@ export async function ensureModel(onProgress) {
 }
 export const photoModelMb = () => 104;
 
-// Identify a file. Returns the raw identifyPhoto result plus the log timestamp.
+// Identify a file. The caller logs the scan once it knows the photo is still current.
 export async function identifyScan(file, { crop = null, kinds = null, month = new Date().getMonth() + 1, onProgress } = {}) {
   const m = await ensureModel();
   const res = await m.identifyPhoto(file, { crop, kinds, month, onProgress });
-  const logAt = await logScan(res);
-  return { res, logAt };
+  return { res };
 }
 
 export const topResults = res => (res?.results || []).slice(0, 3).map(x => ({ ...x, sp: byId.get(x.id) })).filter(x => x.sp);

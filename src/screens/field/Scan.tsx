@@ -6,7 +6,7 @@ import { resizeImage } from '../../core/profile.js';
 import {
   photoIdInfo, identifyScan, modelCached, ensureModel, photoModelMb, scanSubject, scanFootnote,
   topResults, scanHeadline, scanAdvice, bandLevel, bandWord, pct, words, article, firstSentence,
-  scanRefs, markChosen,
+  scanRefs, logScan, markChosen,
 } from '../../core/scan.js';
 import { setPending } from './scanHandoff';
 import './scan.css';
@@ -45,6 +45,13 @@ export default function Scan() {
   const [at, setAt] = useState(0);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ mode: 'move' | 'resize'; id: number; start: { x: number; y: number; cx: number; cy: number; s: number } } | null>(null);
+  const picks = useRef(0);
+  const currentFile = useRef<File | null>(null);
+  const identifyRun = useRef(0);
+  const photoRef = useRef<Chosen | null>(null);
+
+  useEffect(() => { photoRef.current = photo; }, [photo]);
+  useEffect(() => () => { if (photoRef.current?.url) URL.revokeObjectURL(photoRef.current.url); }, []);
 
   const covered: string[] = info?.kinds?.filter((k: string) => KINDS[k]) || [];
   const multi = covered.length > 1;
@@ -77,21 +84,29 @@ export default function Scan() {
 
   const pick = async (file?: File) => {
     if (!file) return;
+    const ticket = ++picks.current;
     setStatus('Opening the photo…');
     let img: HTMLImageElement | null = null;
     try {
       const blob = await resizeImage(file, 1600);
       if (!blob) throw new Error('unreadable');
+      if (ticket !== picks.current) return;
       const url = URL.createObjectURL(blob);
       img = new Image();
       img.src = url;
       await img.decode();
-      setPhoto({ file, blob, url, W: img.naturalWidth, H: img.naturalHeight });
+      if (ticket !== picks.current) { URL.revokeObjectURL(url); return; }
+      currentFile.current = file;
+      setPhoto((previous) => {
+        if (previous?.url) URL.revokeObjectURL(previous.url);
+        return { file, blob, url, W: img!.naturalWidth, H: img!.naturalHeight };
+      });
       setAt(Date.now());
       setResult(null); setLogAt(null); setError(''); setYours('');
       setBox({ cx: 0.5, cy: 0.5, s: 0.75 });
       setStatus(`Photo ready. Move the box onto ${subject ? `the ${subject}` : 'what you want named'}, then choose Identify.`);
     } catch {
+      if (ticket !== picks.current) return;
       if (img?.src) URL.revokeObjectURL(img.src);
       setStatus("That file couldn't be opened as a photo. Try a JPEG or PNG.");
     }
@@ -105,6 +120,8 @@ export default function Scan() {
 
   const identify = async () => {
     if (busy || !photo) return;
+    const file = photo.file;
+    const run = ++identifyRun.current;
     setBusy(true); setError(''); setNeedsReload(false); setResult(null); setStatus('Starting photo ID…');
     const MB = photoModelMb();
     try {
@@ -112,21 +129,31 @@ export default function Scan() {
       if (!cached) {
         if (navigator.onLine === false) throw new Error('offline-first-run');
         setStatus(`Getting photo ID ready: a one-time download of about ${MB} MB. Wi-Fi is best.`);
-        await ensureModel((f: number) => setProgress({ phase: 'model', frac: f }));
+        await ensureModel((f: number) => {
+          if (currentFile.current === file && run === identifyRun.current) setProgress({ phase: 'model', frac: f });
+        });
       } else {
         await ensureModel();
       }
+      if (currentFile.current !== file || run !== identifyRun.current) return;
       setProgress(null);
-      const month = new Date(photo.file.lastModified || Date.now()).getMonth() + 1;
-      const { res, logAt: logged } = await identifyScan(photo.file, {
+      const month = new Date(file.lastModified || Date.now()).getMonth() + 1;
+      const { res } = await identifyScan(file, {
         crop: cropFractions(), kinds: kind ? [kind] : null, month,
-        onProgress: (x: any) => { if (x.phase === 'view') { setProgress({ phase: 'view', frac: 0, index: x.index, count: x.count }); setStatus(`Looking closely, ${x.index} of ${x.count}`); } },
+        onProgress: (x: any) => {
+          if (currentFile.current !== file || run !== identifyRun.current) return;
+          if (x.phase === 'view') { setProgress({ phase: 'view', frac: 0, index: x.index, count: x.count }); setStatus(`Looking closely, ${x.index} of ${x.count}`); }
+        },
       } as any);
+      if (currentFile.current !== file || run !== identifyRun.current) return;
+      const logged = await logScan(res);
+      if (currentFile.current !== file || run !== identifyRun.current) return;
       setResult({ ...res, whole, kind });
       setLogAt(logged);
       setYours(makeYours(photo, box, whole));
       setStatus('');
     } catch (err: any) {
+      if (currentFile.current !== file || run !== identifyRun.current) return;
       const raw = String(err?.message || err);
       if (/dynamically imported module|Importing a module script failed|module script failed/i.test(raw)) {
         setError('BirdyDex was updated. Reload to use Scan.');
@@ -138,7 +165,7 @@ export default function Scan() {
         setError(msg);
       }
       setStatus('');
-    } finally { setBusy(false); setProgress(null); }
+    } finally { if (run === identifyRun.current) { setBusy(false); setProgress(null); } }
   };
 
   const chosen = async (id: number) => {
@@ -229,7 +256,7 @@ export default function Scan() {
                 <p className="scan-hint">{whole ? 'The whole photo will be identified.' : subject ? `Drag the box onto the ${subject}. Pull a corner to resize.` : 'Drag the box onto what you want named. Pull a corner to resize.'}</p>
                 <div className="scan-tool-row">
                   <button type="button" className="scan-chip scan-chip--whole" data-whole aria-pressed={whole} onClick={() => setWhole((v) => !v)}><i aria-hidden="true" />Whole photo</button>
-                  <label className="scan-chip scan-change"><span>Change photo</span><input type="file" accept="image/*" className="scan-file" onChange={(e) => void pick(e.target.files?.[0])} /></label>
+                  <label className="scan-chip scan-change"><span>Change photo</span><input type="file" accept="image/*" className="scan-file" disabled={busy} onChange={(e) => void pick(e.target.files?.[0])} /></label>
                 </div>
               </div>
               {multi && (
