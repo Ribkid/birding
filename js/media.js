@@ -225,8 +225,70 @@ export async function calls(species) {
   return list;
 }
 
+// Our own call pack (scripts/build_calls.py): short, level-matched clips served from this site, so they can be
+// cached and played offline. The ALA originals can't be: that server sends no CORS header.
+export const CALLS_CACHE = 'birddex-calls';
+let pack = null, packPromise = null;
+export function loadCallPack() {
+  return packPromise ||= fetch('data/calls.json').then(r => (r.ok ? r.json() : {})).catch(() => ({}))
+    .then(p => (pack = p));
+}
+const clipUrl = c => new URL(`data/${c.file}${c.v ? `?v=${c.v}` : ''}`, location.href).href;
+// Sync check, true once the pack has loaded.
+export const hasLocalCall = id => !!pack?.[id]?.length;
+export async function localCalls(id) {
+  const list = (await loadCallPack())[id] || [];
+  return list.map(c => ({
+    src: clipUrl(c), orig: c.src, local: true, seconds: c.seconds,
+    artist: c.artist, license: c.license, page: c.page, from: c.from,
+    title: `${Math.max(1, Math.round(c.seconds || 0))}-second clip`,
+  }));
+}
+const isSameOrigin = src => { try { return new URL(src, location.href).origin === location.origin; } catch (_) { return false; } };
+
+async function packFiles() {
+  const p = await loadCallPack();
+  return Object.values(p).flat().map(c => ({ url: clipUrl(c), bytes: c.bytes || 0 }));
+}
+// How much of the pack is in Cache Storage on this phone.
+export async function callPackStatus() {
+  const files = await packFiles();
+  const total = files.length, bytes = files.reduce((a, f) => a + f.bytes, 0);
+  let saved = 0, savedBytes = 0;
+  try {
+    const cache = await caches.open(CALLS_CACHE);
+    const have = new Set((await cache.keys()).map(r => r.url));
+    for (const f of files) if (have.has(f.url)) { saved++; savedBytes += f.bytes; }
+  } catch (_) {}
+  return { total, saved, bytes, savedBytes };
+}
+// Fetch every clip into the calls cache. Clips from older builds of the pack are removed.
+export async function saveCallPack(onProgress) {
+  const files = await packFiles();
+  const cache = await caches.open(CALLS_CACHE);
+  const want = new Set(files.map(f => f.url));
+  for (const r of await cache.keys()) if (!want.has(r.url)) await cache.delete(r);
+  let done = 0, failed = 0;
+  for (const part of chunk(files, 6)) {
+    await Promise.all(part.map(async f => {
+      try {
+        if (!(await cache.match(f.url))) {
+          const res = await fetch(f.url);
+          if (!res.ok) throw new Error(res.status);
+          await cache.put(f.url, res);
+        }
+      } catch (_) { failed++; }
+      done++;
+    }));
+    onProgress?.(done, files.length);
+  }
+  return { done, failed, total: files.length };
+}
+
 // Audio is fetched whole and kept in the cache so it plays offline later.
+// Our own clips are just returned: the service worker keeps them in the calls cache.
 export async function audioUrl(src) {
+  if (isSameOrigin(src)) return src;
   try {
     const cache = await caches.open('birddex-audio');
     let res = await cache.match(src);

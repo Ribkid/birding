@@ -1,7 +1,7 @@
 import { SPECIES, GROUPS, HABITATS, RARITY, byId, KINDS, ANIMAL_KINDS, ANIMALS, BIRDS, ofKind, dexCode, kindsPresent } from './species.js';
 import { loadExtras, galleryFor, infoFor } from './gallery.js';
 import { db } from './db.js';
-import { loadIndex, photoFor, sized, details, calls, audioUrl, downloadAll, onMediaReady } from './media.js';
+import { loadIndex, photoFor, sized, details, calls, audioUrl, downloadAll, onMediaReady, loadCallPack, localCalls, hasLocalCall, callPackStatus, saveCallPack } from './media.js';
 import { speciesList, periodFilter, totals, yearTotals, targets, badges, inPatch, haversineKm, MONTHS, inSeason } from './stats.js';
 import { toEbirdCsv } from './ebird.js';
 import { loadSeq, seq, monthRates, likelihood, recordCount, spotsFor, pointsFor, hotspots, nearbyTargets } from './seqdata.js';
@@ -875,16 +875,23 @@ function wireLongPress(root) {
   root.oncontextmenu = e => { if (e.target.closest('[data-tile]')) e.preventDefault(); };
 }
 
-// Calls: Atlas of Living Australia recordings first, then Wikimedia Commons.
+// Calls: our own clips first (they play offline), then the full Atlas of Living Australia recordings (streamed,
+// online only: that server can't be cached from here), then Wikimedia Commons. Commons is only searched when there
+// is no local clip, because its two searches take a couple of seconds on mobile data.
 async function getCalls(sp) {
-  const ala = (seq()?.species?.[sp.id]?.calls || []).map(c => ({
-    ...c, title: `${c.from === 'iNaturalist Australia' ? 'iNaturalist' : c.from} recording`,
-  }));
+  const local = await localCalls(sp.id);
+  const used = new Set(local.map(c => c.orig));
+  const ala = navigator.onLine ? (seq()?.species?.[sp.id]?.calls || []).filter(c => !used.has(c.src)).map(c => ({
+    ...c, title: `Full ${c.from === 'iNaturalist Australia' ? 'iNaturalist' : c.from} recording`,
+  })) : [];
   let commons = [];
-  try { commons = await calls(sp); } catch (_) {}
-  return [...ala, ...commons].slice(0, 4);
+  if (!local.length) try { commons = await calls(sp); } catch (_) {}
+  return [...local, ...ala, ...commons].slice(0, 4);
 }
-const hasCalls = id => !!seq()?.species?.[id]?.calls?.length;
+// Offline, only species with a local clip can be played.
+const hasCalls = id => hasLocalCall(id) || (navigator.onLine && !!seq()?.species?.[id]?.calls?.length);
+// Credit line for a recording. Our clips are cut down from the original, which the licence asks us to say.
+const callCredit = c => `By ${c.page ? `<a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(String(c.artist || 'Unknown').slice(0, 50))}</a>` : esc(String(c.artist || 'Unknown').slice(0, 50))}${c.license ? `, ${esc(c.license)}` : ''}.${c.local ? ` Trimmed from the ${c.from === 'iNaturalist Australia' ? 'iNaturalist' : 'original'} recording.` : ''}`;
 
 // Species detail
 function similarBirds(sp) {
@@ -1051,14 +1058,20 @@ function renderBird(id) {
     if (location.hash !== `#/bird/${id}`) return;
     const box = $('[data-calls]', view);
     if (!box) return;
-    if (!list.length) { box.innerHTML = isBird ? `<p class="muted small">No free recording found for this bird. Try the xeno-canto link below.</p>` : ''; return; }
+    if (!list.length) {
+      box.innerHTML = !navigator.onLine ? '<p class="muted small">Calls for this one need an internet connection.</p>'
+        : isBird ? '<p class="muted small">No free recording found for this bird. Try the xeno-canto link below.</p>' : '';
+      return;
+    }
     box.innerHTML = `<h2 class="h2">Calls</h2><canvas class="viz" data-viz aria-hidden="true"></canvas>` + list.map((c, i) => `<div class="call-row">
       <button class="playbtn" data-play="${i}" aria-label="Play recording ${i + 1}">${icon.play}</button>
       <div class="call-meta"><span class="call-title">${esc(c.title.slice(0, 70))}</span>
-      <span class="small muted">By <a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.artist.slice(0, 50))}</a>${c.license ? `, ${esc(c.license)}` : ''}</span>
+      <span class="small muted call-credit">${callCredit(c)}</span>
       <span class="call-progress"><span></span></span></div></div>`).join('');
-    const audio = new Audio();
-    let playing = -1, actx = null, analyser = null, raf = null, srcNode = null;
+    // Two players: our clips (and downloaded Commons files) can feed the visualiser; streamed ALA recordings can't,
+    // and an element wired to the visualiser plays them silent, so they get a plain one.
+    const fx = new Audio(), plain = new Audio();
+    let audio = fx, playing = -1, actx = null, analyser = null, raf = null, srcNode = null;
     const canvas = $('[data-viz]', box);
     const draw = () => {
       const g = canvas.getContext('2d');
@@ -1081,15 +1094,20 @@ function renderBird(id) {
       cancelAnimationFrame(raf); tick();
     };
     const setIcons = () => $$('[data-play]', box).forEach(b => { const on = Number(b.dataset.play) === playing && !audio.paused; b.innerHTML = on ? icon.pause : icon.play; b.setAttribute('aria-label', on ? 'Pause' : `Play recording ${Number(b.dataset.play) + 1}`); });
-    audio.addEventListener('timeupdate', () => {
-      const bar = $$('.call-progress span', box)[playing];
-      if (bar && audio.duration) bar.style.width = `${audio.currentTime / audio.duration * 100}%`;
-    });
-    ['play', 'pause', 'ended'].forEach(ev => audio.addEventListener(ev, setIcons));
-    audio.addEventListener('play', () => canvas.classList.add('on'));
-    audio.addEventListener('ended', () => { canvas.classList.remove('on'); cancelAnimationFrame(raf); });
     let stopped = false;
-    audio.addEventListener('error', () => { if (!stopped && audio.src) toast('That recording would not play. Try another.'); });
+    for (const el of [fx, plain]) {
+      el.addEventListener('timeupdate', () => {
+        const bar = $$('.call-progress span', box)[playing];
+        if (el === audio && bar && el.duration) bar.style.width = `${el.currentTime / el.duration * 100}%`;
+      });
+      ['play', 'pause', 'ended'].forEach(ev => el.addEventListener(ev, setIcons));
+      el.addEventListener('ended', () => { canvas.classList.remove('on'); cancelAnimationFrame(raf); });
+      el.addEventListener('error', () => {
+        if (stopped || el !== audio || !el.getAttribute('src')) return;
+        toast(navigator.onLine ? 'That recording would not play. Try another.' : 'That call is not saved on this phone yet. Save calls in Settings.');
+      });
+    }
+    fx.addEventListener('play', () => canvas.classList.add('on'));
     box.addEventListener('click', async e => {
       const b = e.target.closest('[data-play]');
       if (!b) return;
@@ -1098,17 +1116,23 @@ function renderBird(id) {
       playing = i; b.classList.add('loading');
       const url = await audioUrl(list[i].src);
       b.classList.remove('loading');
-      // The visualiser can only read audio we downloaded ourselves (blob URLs).
-      if (url.startsWith('blob:')) {
+      if (playing !== i) return;
+      // The visualiser can only read audio from this site or downloaded blobs.
+      const readable = url.startsWith('blob:') || list[i].local;
+      audio.pause();
+      audio = readable ? fx : plain;
+      if (readable) {
         try {
-          if (!actx) { actx = new AudioContext(); analyser = actx.createAnalyser(); analyser.fftSize = 256; srcNode = actx.createMediaElementSource(audio); srcNode.connect(analyser); analyser.connect(actx.destination); }
+          if (!actx) { actx = new AudioContext(); analyser = actx.createAnalyser(); analyser.fftSize = 256; srcNode = actx.createMediaElementSource(fx); srcNode.connect(analyser); analyser.connect(actx.destination); }
           actx.resume(); draw();
         } catch (_) {}
-      } else if (actx) { canvas.classList.remove('on'); }
+      } else { canvas.classList.remove('on'); cancelAnimationFrame(raf); }
+      $$('.call-progress span', box).forEach(x => { x.style.width = '0'; });
       audio.src = url;
       audio.play().catch(() => {});
+      setIcons();
     });
-    audioStops.push(() => { stopped = true; audio.pause(); audio.removeAttribute('src'); cancelAnimationFrame(raf); actx?.close(); });
+    audioStops.push(() => { stopped = true; for (const el of [fx, plain]) { el.pause(); el.removeAttribute('src'); } cancelAnimationFrame(raf); actx?.close(); });
   }).catch(() => { const box = $('[data-calls]', view); if (box) box.innerHTML = '<p class="muted small">Calls need an internet connection the first time.</p>'; });
 }
 
@@ -2008,6 +2032,7 @@ async function boot() {
   // Photos arriving only change the dex/list pages; don't interrupt Listen or a playing call.
   onMediaReady(() => { if (!$('.sheet-wrap') && /^(#\/?(dex)?|#\/lists?.*|#\/targets|#\/badges|#\/bird\/\d+|#\/compare\/.*)?$/.test(location.hash)) render(); });
   loadIndex();
+  loadCallPack();
   if ('serviceWorker' in navigator) {
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').then(reg => {
