@@ -134,6 +134,8 @@ export function learnTeaser(_ctx) {
 
 // ---------- audio ----------
 let audio = null, audioBtn = null, ticker = null;
+// Cached clips come back from ctx.audioUrl as blob: URLs; let each one go when its player is done with it.
+const dropUrl = u => { if (typeof u === 'string' && u.startsWith('blob:')) URL.revokeObjectURL(u); };
 function setPlay(btn, state) {
   if (!btn) return;
   btn.classList.toggle('is-loading', state === 'loading');
@@ -142,7 +144,7 @@ function setPlay(btn, state) {
   if (ic) ic.innerHTML = state === true ? I.pause : I.play;
 }
 function stopAudio() {
-  if (audio) { audio.onended = audio.onerror = null; audio.pause(); }
+  if (audio) { audio.onended = audio.onerror = null; audio.pause(); dropUrl(audio.src); }
   setPlay(audioBtn, false);
   audio = null; audioBtn = null;
 }
@@ -157,7 +159,10 @@ async function playCall(ctx, call, btn, status, onFail) {
   audioBtn = btn;
   setPlay(btn, 'loading');
   if (status) status.textContent = 'Loading the call…';
+  const src = call.local || call.src;
+  let url = src;
   const fail = () => {
+    dropUrl(url);
     if (audioBtn !== btn) return;
     setPlay(btn, false); audio = null; audioBtn = null;
     const msg = navigator.onLine ? 'That recording would not play.' : 'This recording needs a connection.';
@@ -166,12 +171,10 @@ async function playCall(ctx, call, btn, status, onFail) {
   };
   // ALA's server refuses the download that would cache a clip (no CORS), so stream those directly instead of
   // logging a failed fetch every time; same-origin clips (call.local) and other hosts go through the audio cache.
-  const src = call.local || call.src;
-  let url = src;
   if (call.local || !/^https:\/\/images\.ala\.org\.au\//.test(src)) { try { url = await ctx.audioUrl(src); } catch (_) {} }
-  if (audioBtn !== btn) return;
+  if (audioBtn !== btn) { dropUrl(url); return; }
   const a = audio = new Audio(url);
-  a.onended = () => { setPlay(btn, false); if (status) status.textContent = 'Tap to hear it again'; audio = null; audioBtn = null; };
+  a.onended = () => { setPlay(btn, false); if (status) status.textContent = 'Tap to hear it again'; dropUrl(url); audio = null; audioBtn = null; };
   a.onerror = fail;
   a.play().then(() => { if (audio === a) { setPlay(btn, true); if (status) status.textContent = 'Playing'; } }).catch(fail);
 }
