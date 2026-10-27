@@ -224,8 +224,16 @@ export function mountBird(container, sp) {
   container.append(renderer.domElement);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, w / h, 0.1, 50);
-  camera.position.set(0, 0.5, 7.4);
-  camera.lookAt(0, -0.35, 0);
+  // In a tall frame (the species hero) the name sits over the foot of the picture, so stand back a little and
+  // aim lower, which lifts the bird into the clear middle.
+  const frame = (W, H) => {
+    const tall = H > W * 1.1;
+    camera.aspect = W / H;
+    camera.position.set(0, 0.5, tall ? 8.4 : 7.4);
+    camera.lookAt(0, tall ? -0.95 : -0.35, 0);
+    camera.updateProjectionMatrix();
+  };
+  frame(w, h);
   scene.add(new THREE.HemisphereLight('#ffffff', '#5a6b5f', 1.6));
   const sun = new THREE.DirectionalLight('#fff3dd', 2.2); sun.position.set(3, 5, 4); scene.add(sun);
   const rim = new THREE.DirectionalLight('#9fc2ff', 0.8); rim.position.set(-4, 2, -3); scene.add(rim);
@@ -243,14 +251,28 @@ export function mountBird(container, sp) {
   el.addEventListener('pointermove', e => { if (!dragging) return; const dx = e.clientX - lastX; lastX = e.clientX; rig.rotation.y += dx * 0.012; vel = dx * 0.0006; });
   el.addEventListener('pointerup', () => { dragging = false; });
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Only draw while it can be seen: scrolled away, the loop stops (and the battery rests) until it is back.
+  let visible = true;
   const loop = () => {
+    if (!visible) { raf = 0; return; }
     if (!dragging) { rig.rotation.y += reduce ? 0 : vel; vel += (0.004 - vel) * 0.02; }
     bird.position.y += Math.sin(performance.now() / 600) * 0.0006;
     renderer.render(scene, camera);
     raf = requestAnimationFrame(loop);
   };
+  const seen = 'IntersectionObserver' in window ? new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible && !raf) loop(); }) : null;
+  seen?.observe(container);
+  // Keep the picture sharp and in proportion if the frame changes size (rotation, a resized window).
+  const ro = 'ResizeObserver' in window ? new ResizeObserver(() => {
+    const W = container.clientWidth, H = container.clientHeight;
+    if (!W || !H) return;
+    renderer.setSize(W, H); frame(W, H);
+    if (!raf) renderer.render(scene, camera);
+  }) : null;
+  ro?.observe(container);
   loop();
   return () => {
+    seen?.disconnect(); ro?.disconnect();
     cancelAnimationFrame(raf);
     scene.traverse(o => { o.geometry?.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); });
     // Give the WebGL context back now rather than at garbage collection, or browsing many species runs out of them.
