@@ -18,6 +18,14 @@ const I = {
   search: <><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M15 15l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></>,
 };
 
+// The photo being framed: its natural size W x H, the stage side S, zoom z and offset tx/ty (v1 me.js openCrop).
+type Crop = { url: string; img: HTMLImageElement; W: number; H: number; S: number; z: number; tx: number; ty: number };
+const baseFor = (S: number, W: number, H: number) => S / Math.min(W, H);
+const clampCrop = (c: Crop): Crop => {
+  const sc = baseFor(c.S, c.W, c.H) * c.z;
+  return { ...c, tx: Math.min(0, Math.max(c.S - c.W * sc, c.tx)), ty: Math.min(0, Math.max(c.S - c.H * sc, c.ty)) };
+};
+
 export default function EditProfile() {
   const navigate = useNavigate();
   const seen = useSeen();
@@ -31,7 +39,7 @@ export default function EditProfile() {
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
   const [q, setQ] = useState('');
-  const [crop, setCrop] = useState<{ url: string; img: HTMLImageElement; W: number; H: number; S: number; z: number; tx: number; ty: number } | null>(null);
+  const [crop, setCrop] = useState<Crop | null>(null);
   const [cropErr, setCropErr] = useState('');
   const [cropBusy, setCropBusy] = useState(false);
   const cropRef = useRef<HTMLDivElement>(null);
@@ -48,36 +56,11 @@ export default function EditProfile() {
     });
   }, []);
 
+  const [sync, setSync] = useState(syncStatus());
   useEffect(() => { const off = onStatus((state: typeof sync) => setSync(state)); return () => { off(); }; }, []);
 
-  const prof = getProfile();
-  const m = getMyCloud();
-  const [sync, setSync] = useState(syncStatus());
-  const u = signedIn();
-
-  if (!configured) return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link><h1>Edit profile</h1></header><div className="me-msg"><p>Profiles need accounts, which are not set up in this copy of the app.</p></div></div>;
-  if (!u) return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link><h1>Edit profile</h1></header><div className="me-msg"><p>Sign in to edit your profile.</p><Link className="btn btn--primary" to="/me/signin">Sign in</Link></div></div>;
-
-  const baseFor = (S: number, W: number, H: number) => S / Math.min(W, H);
-  const clampCrop = (c: NonNullable<typeof crop>) => {
-    const sc = baseFor(c.S, c.W, c.H) * c.z;
-    return { ...c, tx: Math.min(0, Math.max(c.S - c.W * sc, c.tx)), ty: Math.min(0, Math.max(c.S - c.H * sc, c.ty)) };
-  };
-  const zoomTo = (nz: number, cx?: number, cy?: number) => {
-    setCrop((cur) => {
-      if (!cur) return cur;
-      const next = Math.min(4, Math.max(1, nz));
-      const k = next / cur.z;
-      const ax = cx ?? cur.S / 2;
-      const ay = cy ?? cur.S / 2;
-      return clampCrop({ ...cur, z: next, tx: ax - (ax - cur.tx) * k, ty: ay - (ay - cur.ty) * k });
-    });
-  };
-  const closeCrop = () => {
-    if (cropState.current) URL.revokeObjectURL(cropState.current.url);
-    setCrop(null);
-    setCropErr('');
-  };
+  // Every hook sits above the early returns below: signing in or out while this screen is open changes which
+  // branch renders, and a hook after a return would then crash the screen (React #300 / #310).
   useEffect(() => () => { if (cropState.current) URL.revokeObjectURL(cropState.current.url); }, []);
 
   useEffect(() => {
@@ -99,6 +82,29 @@ export default function EditProfile() {
     observer.observe(stage);
     return () => { cancelAnimationFrame(raf); observer.disconnect(); };
   }, [crop?.url]);
+
+  const prof = getProfile();
+  const m = getMyCloud();
+  const u = signedIn();
+
+  if (!configured) return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link><h1>Edit profile</h1></header><div className="me-msg"><p>Profiles need accounts, which are not set up in this copy of the app.</p></div></div>;
+  if (!u) return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link><h1>Edit profile</h1></header><div className="me-msg"><p>Sign in to edit your profile.</p><Link className="btn btn--primary" to="/me/signin">Sign in</Link></div></div>;
+
+  const zoomTo = (nz: number, cx?: number, cy?: number) => {
+    setCrop((cur) => {
+      if (!cur) return cur;
+      const next = Math.min(4, Math.max(1, nz));
+      const k = next / cur.z;
+      const ax = cx ?? cur.S / 2;
+      const ay = cy ?? cur.S / 2;
+      return clampCrop({ ...cur, z: next, tx: ax - (ax - cur.tx) * k, ty: ay - (ay - cur.ty) * k });
+    });
+  };
+  const closeCrop = () => {
+    if (cropState.current) URL.revokeObjectURL(cropState.current.url);
+    setCrop(null);
+    setCropErr('');
+  };
 
   const cropMid = () => {
     const [a, b] = [...cropPts.current.values()];
