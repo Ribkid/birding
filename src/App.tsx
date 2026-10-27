@@ -116,7 +116,7 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
 
-          <Route path="*" element={<Placeholder title="Not found" owner="—" />} />
+          <Route path="*" element={<Placeholder title="Not found" />} />
         </Routes>
         </ErrorBoundary>
       </main>
