@@ -48,7 +48,12 @@ function TopBar() {
   const location = useLocation();
   useEffect(() => {
     initLook();
-    const id = requestAnimationFrame(() => lookAfterDraw(document.getElementById('view')));
+    const view = document.getElementById('view');
+    const id = requestAnimationFrame(() => {
+      lookAfterDraw(view);
+      const heading = view?.querySelector('h1')?.textContent?.trim();
+      document.title = heading ? `${heading} – BirdyDex` : "Sarah's BirdyDex";
+    });
     return () => cancelAnimationFrame(id);
   }, [location.pathname, location.search]);
   return null;
