@@ -286,7 +286,7 @@ function renderHub(ctx) {
 
       <section class="lh-sec" aria-labelledby="lh-deck-h">
         <div class="lh-sec-h"><h2 id="lh-deck-h">Review deck</h2><a href="#/learn/deck">${cards.length ? 'Open' : 'Set up'}</a></div>
-        ${cards.length ? `<a class="lh-deck" href="#/learn/deck" aria-label="${due} cards due. Open the review deck">
+        ${cards.length ? `<a class="lh-deck" href="#/learn/deck" aria-label="${due} ${due === 1 ? 'card' : 'cards'} due. Open the review deck">
           <span class="lh-boxes" aria-hidden="true">${boxes.map((n, i) => `<span class="lh-box"><b>${n}</b><i style="--h:${Math.round(n / maxBox * 100)}%"></i><em>${i + 1}</em></span>`).join('')}</span>
           <span class="lh-deck-txt"><strong>${due ? `${due} ${due === 1 ? 'card' : 'cards'} to review` : 'Nothing due right now'}</strong><span class="small muted">Know a card and it moves along a box. Box 4 and 5 count as mastered.</span></span></a>`
           : '<p class="small muted lh-empty">Species you miss in a round land here, so they come back until you know them. You can also add a set yourself.</p>'}
@@ -337,7 +337,8 @@ function progressHTML() {
 }
 
 // ---------- practice rounds ----------
-function emptyMessage(mode, p) {
+function emptyMessage(mode, p, offline) {
+  if (mode === 'duel' && offline) return 'Duels need photos saved on this phone, and none match yet. Try Who am I? for now.';
   if (p.scope === 'seen') return "Not enough of the ones you've seen for this. Log a few more, or choose Everything.";
   if (mode === 'duel') return 'No look-alike pairs match that choice. Try Everything or another kind.';
   if (mode === 'call') return 'No calls for these. Calls are for birds and frogs.';
@@ -363,7 +364,7 @@ async function startRound(ctx, mode, { ids = null } = {}) {
   }
   const qs = Q.buildRound({ mode: playMode, kind: p.kind, scope: ids ? 'all' : p.scope, difficulty: mode === 'rapid' ? 'normal' : p.difficulty,
     seen: ctx.seenSet(), month, n: mode === 'rapid' ? 60 : ids ? Math.min(ROUND, ids.length) : ROUND, ids, offline });
-  if (qs.length < (ids ? 1 : 3)) { ctx.toast(emptyMessage(mode, p)); return toHub(); }
+  if (qs.length < (ids ? 1 : 3)) { ctx.toast(emptyMessage(mode, p, !!offline)); return toHub(); }
   game = { route, mode, qs, i: 0, score: 0, prefs: { ...p }, practice: !!ids };
   if (mode === 'rapid') Object.assign(game, { endsAt: Date.now() + RAPID_MS, streak: 0, top: 0 });
   drawQuestion(ctx);
@@ -571,7 +572,7 @@ function drawResults(ctx) {
   } else if (game.mode === 'rapid') {
     note = `${game.score} right out of ${total} in 60 seconds.${game.newBest ? ' A new best streak.' : ''}`;
   } else {
-    note = `${game.score === total ? 'A perfect round.' : game.score >= total * 0.7 ? 'Sharp eyes and ears.' : 'Keep at it. The misses are in your review deck now.'}${game.newBest ? ' A new personal best.' : ''}`;
+    note = `${game.score === total ? 'A perfect round.' : game.score >= total * 0.7 ? 'Sharp eyes and ears.' : missed.some(q => q.type !== 'fact') ? 'Keep at it. The misses are in your review deck now.' : 'Keep at it.'}${game.newBest ? ' A new personal best.' : ''}`;
   }
   const big = game.mode === 'rapid' ? game.top : game.score;
   const of = game.mode === 'rapid' ? 'in a row' : `of ${total}`;
@@ -668,7 +669,8 @@ function renderDeck(ctx) {
       let n = 0;
       for (const s of list) { if (addCard(s.id, 'look')) n++; if (Q.CALL_KINDS.includes(s.kind) && Q.hasCall(s.id) && addCard(s.id, 'call')) n++; }
       saveL();
-      ctx.toast(n ? `Added ${n} ${n === 1 ? 'card' : 'cards'}.` : add.dataset.add === 'seen' ? 'Everything you have seen is already in the deck.' : 'Those are all in the deck already.');
+      ctx.toast(n ? `Added ${n} ${n === 1 ? 'card' : 'cards'}.` : add.dataset.add !== 'seen' ? 'Those are all in the deck already.'
+        : ctx.seenSet().size ? 'Everything you have seen is already in the deck.' : 'Nothing logged yet. Log a sighting and it can go in the deck.');
       game = null; renderDeck(ctx);
     }
   };
