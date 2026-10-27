@@ -14,6 +14,7 @@ import { initLook, lookAfterDraw, applyTint, tintFrom, stagger } from './look.js
 import { describeArea } from './mapinfo.js';
 import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
 import { vt, nameFor, flip, countUp, motionOK, settle, report } from './motion.js';
+import { initMe, renderMe, renderProfile, nudgeAfterSave, profileRow } from './me.js';
 import { openLayer, closeLayer, closeAllLayers, onLayerKey, topLayer, layers, keepFocus } from './layers.js';
 
 const relRate = (id, month) => { const m = monthRates(id); return m ? m.rel[month - 1] : null; };
@@ -494,6 +495,7 @@ async function saveSighting(rec) {
   state.lastSaveNew = !before.has(rec.speciesId);
   if (state.lastSaveNew) celebrate(byId.get(rec.speciesId), newBadges);
   else if (newBadges.length) toast(`Badge earned: ${newBadges.map(b => b.name).join(', ')}`);
+  nudgeAfterSave(state.sightings.length);
   return rec;
 }
 async function deleteSighting(id) {
@@ -907,6 +909,8 @@ const routes = [
   [/^#\/map\/sp\/(\d+)$/, m => renderMap(Number(m[1]))],
   [/^#\/badges$/, () => renderBadges()],
   [/^#\/leaderboard$/, () => renderLeaderboard()],
+  [/^#\/me(?:\/(edit|signup|signin))?$/, m => renderMe(m[1])],
+  [/^#\/u\/([0-9a-f-]{36})$/, m => renderProfile(m[1])],
   [/^#\/settings$/, () => renderSettings()],
   [/^#\/map\/at\/(-?[\d.]+),(-?[\d.]+)$/, m => renderMap(null, [Number(m[1]), Number(m[2])])],
   [/^#\/compare\/(\d+)\/(\d+)$/, m => renderCompare(Number(m[1]), Number(m[2]))],
@@ -933,7 +937,8 @@ function drawRoute(hash) {
     if (m) { out = fn(m); break; }
   }
   const tab = hash.split('/')[1] || 'dex';
-  const tabFor = { bird: 'dex', dex: 'dex', compare: 'dex', listen: 'dex', scan: 'dex', lists: 'lists', list: 'lists', patch: 'lists', targets: 'lists', outing: 'lists', log: 'lists', stats: 'lists', map: 'map', badges: 'badges', settings: 'badges', quiz: 'badges', learn: 'badges', leaderboard: 'badges' }[tab] || 'dex';
+  // Tabs: Dex, Learn, (+), Map, Me. Lists, badges, stats, settings, the leaderboard and profiles live under Me.
+  const tabFor = { bird: 'dex', dex: 'dex', compare: 'dex', listen: 'dex', scan: 'dex', learn: 'learn', quiz: 'learn', map: 'map', me: 'me', u: 'me', lists: 'me', list: 'me', patch: 'me', targets: 'me', outing: 'me', log: 'me', stats: 'me', badges: 'me', settings: 'me', leaderboard: 'me' }[tab] || 'dex';
   $$('.tabbar a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === tabFor ? 'page' : 'false'));
   renderOutingBar();
   // A new route starts at the top, except going back, which returns to where she was.
@@ -958,7 +963,7 @@ function afterDraw() {
 
 // ---------- navigation motion ----------
 // How deep each screen sits. Deeper is 'forward' (the new page rises), shallower is 'back', level is a tab 'swap'.
-const DEPTH = { dex: 0, lists: 0, map: 0, badges: 0, learn: 0, bird: 1, list: 1, patch: 1, targets: 1, stats: 1, log: 1, listen: 1, scan: 1, settings: 1, quiz: 1, leaderboard: 1, compare: 2, outing: 2 };
+const DEPTH = { dex: 0, learn: 0, map: 0, me: 0, lists: 1, badges: 1, bird: 1, list: 2, patch: 2, targets: 2, stats: 1, log: 2, listen: 1, scan: 1, settings: 1, quiz: 1, leaderboard: 1, u: 2, compare: 2, outing: 2 };
 const routeDepth = h => DEPTH[(h || '#/dex').split('/')[1] || 'dex'] ?? 1;
 const navKind = (from, to) => { const a = routeDepth(from), b = routeDepth(to); return b > a ? 'forward' : b < a ? 'back' : 'swap'; };
 const scrollMem = new Map();
@@ -2455,7 +2460,8 @@ async function renderSettings() {
   const chev = '<svg class="set-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const installed = matchMedia('(display-mode: standalone)').matches;
   view.innerHTML = `
-    <header class="page-head page-head--back"><a class="iconbtn" href="#/badges" aria-label="Back">${icon.back}</a><h1>Settings</h1></header>
+    <header class="page-head page-head--back"><a class="iconbtn" href="#/me" aria-label="Back to Me">${icon.back}</a><h1>Settings</h1></header>
+    ${profileRow()}
     <section class="set-card set-ready" aria-labelledby="field-h">
       <div class="ready-head">
         <span class="ready-ring" data-field-ring style="--p:0" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="ready-ring-track" cx="24" cy="24" r="20"/><circle class="ready-ring-fill" cx="24" cy="24" r="20" pathLength="100"/></svg><b data-field-n>0</b></span>
@@ -3036,7 +3042,7 @@ async function showWelcome() {
 const ctx = {
   state, view, $, $$, esc, icon, birdImg, band, pips, toast, fmtDate, plural, GROUPS,
   seenSet, sightingsOf, openSightingSheet, getCalls, hasCalls, audioUrl,
-  openSheet, closeSheet, confirmSheet, refresh: refreshFromSync,
+  openSheet, closeSheet, confirmSheet, refresh: refreshFromSync, redraw: () => render(),
   resizeImage, openSearch,
   // shell helpers for other screens: motion (js/motion.js), focus and layers (js/layers.js), the live region
   vt, flip, countUp, keepFocus, announce, openLayer, closeLayer,
@@ -3078,6 +3084,7 @@ async function boot() {
   document.addEventListener('click', nameTappedPhoto, true);
   window.addEventListener('hashchange', onRouteChange);
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); state.installPrompt = e; if ((location.hash || '#/dex').startsWith('#/dex')) renderDex(); });
+  initMe(ctx);
   render();
   // Arrived after the first paint: photos fill in wherever they show, and a screen built from this data draws once
   // more, without a transition, unless a sheet is open over it.
@@ -3085,7 +3092,7 @@ async function boot() {
     patchSpeciesImages(document);
     if (!sheetOpen() && EXTRAS_SCREENS.test(location.hash || '#/dex')) render();
   });
-  initAccount(ctx).catch(() => {});
+  initAccount(ctx).catch(() => {}).then(() => initMe(ctx));
   // Better photos arriving are swapped in where they show; nothing is redrawn mid-use (a call keeps playing, the
   // gallery keeps its slide). A species page is redrawn only if its hero had no photo at all.
   onMediaReady(() => {

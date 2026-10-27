@@ -3,6 +3,7 @@
 import { SPECIES, byId, KINDS, kindsPresent } from './species.js';
 import { db, raw } from './db.js';
 import { configured, client, startAuth, user, onAuth, sendEmailLink, verifyEmailCode, signInWithGoogle, signOut } from './cloud.js';
+import { SUPABASE_URL } from './config.js';
 import { startSync, syncNow, schedule, syncStatus, onStatus, onRemoteChange, localProfile, saveProfile, forgetSync, pendingCount, deleteCloudPhotos } from './sync.js';
 
 let ctx = null;
@@ -28,17 +29,24 @@ export async function initAccount(appCtx) {
   if (u) { startSync(); syncNow(); ctx.refresh({ force: true }); }
 }
 
-// ---------- dex header chip ----------
-const avatarSp = () => byId.get(prof?.avatarSpeciesId) || null;
-const shownName = () => prof?.displayName || user()?.name || (user()?.email || '').split('@')[0] || 'You';
-function avatar(spId, cls = 'acct-av') {
+// ---------- avatars: a profile photo (public 'avatars' bucket), else a species, else a letter ----------
+let myPhoto = null; // the signed-in person's photo path, set by js/me.js from its cached copy of the profile row
+export const setMyPhoto = path => { myPhoto = path || null; };
+export const avatarUrl = path => path ? `${SUPABASE_URL}/storage/v1/object/public/avatars/${path.split('/').map(encodeURIComponent).join('/')}` : '';
+export function avatarHtml({ spId = null, path = null, name = '', cls = 'acct-av', size = 'small' } = {}) {
   const sp = byId.get(spId);
-  return `<span class="${cls}">${sp ? ctx.birdImg(sp) : `<span class="acct-av-letter">${ctx.esc(shownName().slice(0, 1).toUpperCase())}</span>`}</span>`;
+  const inner = path ? `<img src="${ctx.esc(avatarUrl(path))}" alt="" loading="lazy" decoding="async" onerror="this.remove()">`
+    : sp ? ctx.birdImg(sp, size) : `<span class="acct-av-letter">${ctx.esc((name || '?').slice(0, 1).toUpperCase())}</span>`;
+  return `<span class="${cls}${path ? ' acct-av--photo' : ''}" aria-hidden="true">${inner}</span>`; // the name always sits beside it
 }
+// ---------- dex header chip ----------
+const shownName = () => prof?.displayName || user()?.name || (user()?.email || '').split('@')[0] || 'You';
+export const myName = shownName;
+const avatar = (spId, cls = 'acct-av', path = null, name = shownName()) => avatarHtml({ spId, path, name, cls });
 export function accountChip() {
   if (!configured || !user()) return '';
   const st = syncStatus().state;
-  return `<a class="acct-chip" href="#/settings" aria-label="Account: ${ctx.esc(shownName())}">${avatar(prof?.avatarSpeciesId)}<span class="acct-chip-name">${ctx.esc(shownName())}</span><i class="acct-dot acct-dot--${st}" aria-hidden="true"></i></a>`;
+  return `<a class="acct-chip" href="#/me" aria-label="Your profile: ${ctx.esc(shownName())}">${avatar(prof?.avatarSpeciesId, 'acct-av', myPhoto)}<span class="acct-chip-name">${ctx.esc(shownName())}</span><i class="acct-dot acct-dot--${st}" aria-hidden="true"></i></a>`;
 }
 
 // ---------- status bits ----------
@@ -68,7 +76,43 @@ export async function renderAccountSection(el) {
   if (!u) {
     el.innerHTML = `<h2 class="h2">Account</h2>
       <p class="muted small">Optional. Sign in to back up your sightings and photos, have them on your other devices, and join the leaderboard. Without an account everything still works, offline too.</p>
-      <button class="btn btn--block acct-google" data-google>${googleMark} Continue with Google</button>
+      <div data-signin></div>`;
+    el.onclick = null;
+    renderSignIn(el.querySelector('[data-signin]'));
+    return;
+  }
+
+  prof = await localProfile();
+  const pending = await pendingCount();
+  el.innerHTML = `<h2 class="h2">Account</h2>
+    <div class="acct-card">
+      ${avatar(prof.avatarSpeciesId, 'acct-av acct-av--big', myPhoto)}
+      <div class="acct-who"><strong>${esc(shownName())}</strong><span class="small muted">${esc(u.email)}</span>
+        <span class="small acct-status" data-sync-status></span></div>
+    </div>
+    <label class="field"><span>Display name (shown on the leaderboard)</span><input name="displayName" maxlength="40" value="${esc(prof.displayName || '')}" placeholder="${esc(shownName())}" data-name></label>
+    <div class="acct-row"><span class="small muted">Photo, name and who sees your profile</span><a class="btn btn--small" href="#/me/edit">Edit profile</a></div>
+    <label class="check check--card"><input type="checkbox" data-lb ${prof.showOnLeaderboard !== false ? 'checked' : ''}><span>Show me on the leaderboard. Only your name, avatar and counts are shown, never your sightings, places, notes or photos. Groups you join always show you to their members.</span></label>
+    <div class="row-start"><a class="btn" href="#/leaderboard">${trophy} Leaderboard</a><button class="btn" data-syncnow>Sync now</button><button class="btn" data-signout>Sign out</button></div>
+    ${pending ? `<p class="small muted">${pending} change${pending === 1 ? '' : 's'} waiting to sync.</p>` : ''}
+    <button class="btn btn--danger btn--quiet" data-delete-account>Delete my account and cloud data</button>`;
+  paintStatus();
+  const nameInput = el.querySelector('[data-name]');
+  nameInput.onchange = async () => { prof = await saveProfile({ displayName: nameInput.value.trim().slice(0, 40) }); ctx.toast('Name saved'); };
+  el.querySelector('[data-lb]').onchange = async e => { prof = await saveProfile({ showOnLeaderboard: e.target.checked }); };
+  el.onclick = async e => {
+    if (e.target.closest('[data-syncnow]')) {
+      if (!navigator.onLine) { ctx.toast('Offline, will sync when you are back online'); return; }
+      await syncNow();
+    }
+    if (e.target.closest('[data-signout]')) startSignOut();
+    if (e.target.closest('[data-delete-account]')) startDeleteAccount();
+  };
+}
+
+// Google and email-code sign-in (also the Me tab's sign-up sheet). onDone runs once the emailed code is accepted.
+export function renderSignIn(el, { onDone } = {}) {
+  el.innerHTML = `<button class="btn btn--block acct-google" data-google>${googleMark} Continue with Google</button>
       <form class="form acct-email" data-email-form novalidate>
         <label class="field"><span>Or sign in with your email</span><input type="email" name="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></label>
         <button class="btn btn--primary">Email me a sign-in link</button>
@@ -80,68 +124,34 @@ export async function renderAccountSection(el) {
       </form>
       <p class="form-error" data-acct-error role="alert"></p>
       <p class="small muted">By signing in you agree to the <a href="terms.html">terms</a>. See <a href="privacy.html">privacy</a> for what is kept.</p>`;
-    let email = '';
-    const err = el.querySelector('[data-acct-error]');
-    const fail = e => { err.textContent = friendly(e); };
-    el.onclick = async e => {
-      if (e.target.closest('[data-google]')) {
-        if (!navigator.onLine) { err.textContent = 'Signing in needs a connection.'; return; }
-        try { await signInWithGoogle(); } catch (x) { fail(x); }
-      }
-      if (e.target.closest('[data-restart]')) renderAccountSection(el);
-    };
-    el.querySelector('[data-email-form]').onsubmit = async e => {
-      e.preventDefault();
-      email = e.target.email.value.trim();
-      if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Type the email address you want to sign in with.'; return; }
-      if (!navigator.onLine) { err.textContent = 'Signing in needs a connection.'; return; }
-      err.textContent = '';
-      const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Sending…';
-      try {
-        await sendEmailLink(email);
-        e.target.classList.add('hidden');
-        el.querySelector('[data-code-form]').classList.remove('hidden');
-        el.querySelector('[name=code]').focus();
-      } catch (x) { fail(x); btn.disabled = false; btn.textContent = 'Email me a sign-in link'; }
-    };
-    el.querySelector('[data-code-form]').onsubmit = async e => {
-      e.preventDefault();
-      err.textContent = '';
-      try { await verifyEmailCode(email, e.target.code.value); } catch (x) { fail(x); }
-    };
-    return;
-  }
-
-  prof = await localProfile();
-  const sp = avatarSp();
-  const pending = await pendingCount();
-  el.innerHTML = `<h2 class="h2">Account</h2>
-    <div class="acct-card">
-      ${avatar(prof.avatarSpeciesId, 'acct-av acct-av--big')}
-      <div class="acct-who"><strong>${esc(shownName())}</strong><span class="small muted">${esc(u.email)}</span>
-        <span class="small acct-status" data-sync-status></span></div>
-    </div>
-    <label class="field"><span>Display name (shown on the leaderboard)</span><input name="displayName" maxlength="40" value="${esc(prof.displayName || '')}" placeholder="${esc(shownName())}" data-name></label>
-    <div class="acct-row"><span class="small muted">Avatar</span><button class="btn btn--small" data-avatar>${sp ? `${esc(sp.name)}, change` : 'Choose a species'}</button></div>
-    <label class="check check--card"><input type="checkbox" data-lb ${prof.showOnLeaderboard !== false ? 'checked' : ''}><span>Show me on the leaderboard. Only your name, avatar and counts are shown, never your sightings, places, notes or photos. Groups you join always show you to their members.</span></label>
-    <div class="row-start"><a class="btn" href="#/leaderboard">${trophy} Leaderboard</a><button class="btn" data-syncnow>Sync now</button><button class="btn" data-signout>Sign out</button></div>
-    ${pending ? `<p class="small muted">${pending} change${pending === 1 ? '' : 's'} waiting to sync.</p>` : ''}
-    <button class="btn btn--danger btn--quiet" data-delete-account>Delete my account and cloud data</button>`;
-  paintStatus();
-  const nameInput = el.querySelector('[data-name]');
-  nameInput.onchange = async () => { prof = await saveProfile({ displayName: nameInput.value.trim().slice(0, 40) }); ctx.toast('Name saved'); };
-  el.querySelector('[data-lb]').onchange = async e => { prof = await saveProfile({ showOnLeaderboard: e.target.checked }); };
+  let email = '';
+  const err = el.querySelector('[data-acct-error]');
+  const fail = e => { err.textContent = friendly(e); };
   el.onclick = async e => {
-    if (e.target.closest('[data-avatar]')) {
-      const id = await pickAvatar();
-      if (id) { prof = await saveProfile({ avatarSpeciesId: id }); renderAccountSection(el); }
+    if (e.target.closest('[data-google]')) {
+      if (!navigator.onLine) { err.textContent = 'Signing in needs a connection.'; return; }
+      try { await signInWithGoogle(); } catch (x) { fail(x); }
     }
-    if (e.target.closest('[data-syncnow]')) {
-      if (!navigator.onLine) { ctx.toast('Offline, will sync when you are back online'); return; }
-      await syncNow();
-    }
-    if (e.target.closest('[data-signout]')) startSignOut();
-    if (e.target.closest('[data-delete-account]')) startDeleteAccount();
+    if (e.target.closest('[data-restart]')) renderSignIn(el, { onDone });
+  };
+  el.querySelector('[data-email-form]').onsubmit = async e => {
+    e.preventDefault();
+    email = e.target.email.value.trim();
+    if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = 'Type the email address you want to sign in with.'; return; }
+    if (!navigator.onLine) { err.textContent = 'Signing in needs a connection.'; return; }
+    err.textContent = '';
+    const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      await sendEmailLink(email);
+      e.target.classList.add('hidden');
+      el.querySelector('[data-code-form]').classList.remove('hidden');
+      el.querySelector('[name=code]').focus();
+    } catch (x) { fail(x); btn.disabled = false; btn.textContent = 'Email me a sign-in link'; }
+  };
+  el.querySelector('[data-code-form]').onsubmit = async e => {
+    e.preventDefault();
+    err.textContent = '';
+    try { await verifyEmailCode(email, e.target.code.value); onDone?.(); } catch (x) { fail(x); }
   };
 }
 
@@ -155,7 +165,7 @@ function friendly(e) {
   return m || 'Something went wrong. Try again.';
 }
 
-function pickAvatar() {
+export function pickAvatar() {
   const { esc, openSheet, closeSheet, state } = ctx;
   const seen = new Set(state.sightings.map(s => s.speciesId));
   return new Promise(resolve => {
@@ -211,6 +221,7 @@ async function startDeleteAccount() {
     const u = user();
     toast('Deleting your account…');
     await deleteCloudPhotos(c, u.id);
+    await deleteAvatars(c, u.id);
     const { error } = await c.rpc('delete_my_account');
     if (error) throw error;
     await signOut();
@@ -223,16 +234,24 @@ async function startDeleteAccount() {
   } catch (e) { toast(`Couldn't delete the account: ${e?.message || e}`); }
 }
 
+// Profile photos: everything in avatars/<uid>/ except `keep`.
+export async function deleteAvatars(c, userId, keep = null) {
+  const { data, error } = await c.storage.from('avatars').list(userId, { limit: 100 });
+  if (error) throw error;
+  const gone = (data || []).map(f => `${userId}/${f.name}`).filter(p => p !== keep);
+  if (gone.length) { const { error: e2 } = await c.storage.from('avatars').remove(gone); if (e2) throw e2; }
+}
+
 // ---------- leaderboard ----------
 const lb = { period: 'life', kind: '', group: '' };
 let groupsCache = [];
 
 export async function renderLeaderboard() {
   const { view, esc, icon } = ctx;
-  const head = `<header class="page-head page-head--back"><a class="iconbtn" href="#/badges" aria-label="Back to badges">${icon.back}</a><h1>Leaderboard</h1></header>`;
-  if (!configured) { location.hash = '#/badges'; return; }
+  const head = `<header class="page-head page-head--back"><a class="iconbtn" href="#/me" aria-label="Back to Me">${icon.back}</a><h1>Leaderboard</h1></header>`;
+  if (!configured) { location.hash = '#/me'; return; }
   if (!user()) {
-    view.innerHTML = `${head}<div class="empty"><p>Sign in to see how your dex compares with other birders and with your family.</p><a class="btn btn--primary" href="#/settings">Sign in</a></div>`;
+    view.innerHTML = `${head}<div class="empty"><p>Sign in to see how your dex compares with other birders and with your family.</p><a class="btn btn--primary" href="#/me/signin">Sign in</a></div>`;
     view.onclick = null; view.onchange = null;
     return;
   }
@@ -292,15 +311,16 @@ function paintBoard(rows) {
   if (!rows.length) { el.innerHTML = `<li class="muted small lb-msg">No one has logged any ${what} ${lb.period === 'life' ? 'yet' : lb.period === 'year' ? 'this year' : 'this month'}.</li>`; return; }
   const top = rows.filter(r => r.rank <= 50 || !r.is_me);
   const me = rows.find(r => r.is_me && r.rank > 50);
-  const row = r => `<li class="lb-row ${r.is_me ? 'lb-row--me' : ''}" ${r.is_me ? 'aria-current="true"' : ''}>
+  // Each row opens that person's profile (#/u/<public id>).
+  const row = r => `<li class="lb-row ${r.is_me ? 'lb-row--me' : ''}" ${r.is_me ? 'aria-current="true"' : ''}><${r.public_id ? `a href="#/u/${esc(r.public_id)}"` : 'span'} class="lb-link">
       <span class="lb-rank">${r.rank}</span>
-      ${avatar(r.avatar_species_id, 'acct-av')}
+      ${avatar(r.avatar_species_id, 'acct-av', r.avatar_path, r.display_name)}
       <span class="row-main"><strong>${esc(r.display_name)}${r.is_me ? ' <span class="lb-you">You</span>' : ''}</strong>
         <span class="small muted">${plural(r.outings, 'outing')} · ${plural(r.badges, 'badge')}${kindLine(r)}</span></span>
-      <span class="row-n" aria-label="${r.species} ${what}">${r.species}</span></li>`;
+      <span class="row-n" aria-label="${r.species} ${what}">${r.species}</span></${r.public_id ? 'a' : 'span'}></li>`;
   el.innerHTML = top.map(row).join('') + (me ? `<li class="lb-gap" aria-hidden="true">⋯</li>${row(me)}` : '');
   if (!rows.some(r => r.is_me) && !lb.group) {
-    el.insertAdjacentHTML('afterend', '<p class="small muted">You are hidden from the Everyone board. Turn on "Show me on the leaderboard" in Settings to appear.</p>');
+    el.insertAdjacentHTML('afterend', '<p class="small muted">You are hidden from the Everyone board. Turn on "Show me on the leaderboard" in <a href="#/me/edit">Edit profile</a> to appear.</p>');
   }
 }
 function kindLine(r) {
@@ -323,10 +343,14 @@ async function loadGroups() {
   }
 }
 
+// The Me tab's Groups button: the leaderboard, scrolled to its groups.
+export function openGroups() { lb.toGroups = true; if (location.hash === '#/leaderboard') renderLeaderboard(); else location.hash = '#/leaderboard'; }
+
 function renderGroups() {
   const { view, esc } = ctx;
   const el = view.querySelector('[data-groups]');
   if (!el) return;
+  if (lb.toGroups) { lb.toGroups = false; requestAnimationFrame(() => el.scrollIntoView({ block: 'start' })); }
   el.innerHTML = `<h2 class="h2">Groups</h2>
     <p class="muted small">Make a group for family or friends. Share its code; anyone with it can join and see the group's board.</p>
     ${groupsCache.length ? `<ul class="rows">${groupsCache.map(g => `<li class="row lb-group"><span class="row-main"><strong>${esc(g.name)}</strong><span class="small muted">Code <b class="lb-code">${esc(g.code)}</b> · ${g.members} member${g.members === 1 ? '' : 's'}</span></span>

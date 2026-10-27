@@ -1,17 +1,17 @@
 // Sarah's BirdyDex service worker.
 // App files: network first (so updates arrive straight away), cache when offline or when the signal is too weak.
 // Bird photos, map tiles, the ID models and our call clips: cache first, so they work in the bush.
-const VERSION = 'v11-d';
+const VERSION = 'v12-a';
 const SHELL = `birddex-shell-${VERSION}`;
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
 const MODELS = 'birddex-models';
 const CALLS = 'birddex-calls';
 const ASSETS = [
-  './', 'index.html', 'css/app.css', 'css/motion.css', 'css/learn.css', 'css/calls.css', 'css/scan.css', 'css/field.css', 'css/look.css', 'css/screens.css', 'css/species.css', 'manifest.webmanifest', 'css/rest.css',
+  './', 'index.html', 'css/app.css', 'css/motion.css', 'css/learn.css', 'css/calls.css', 'css/scan.css', 'css/field.css', 'css/look.css', 'css/screens.css', 'css/species.css', 'manifest.webmanifest', 'css/rest.css', 'css/me.css',
   'js/app.js', 'js/motion.js', 'js/layers.js', 'js/look.js', 'js/db.js', 'js/media.js', 'js/species.js', 'js/stats.js', 'js/ebird.js', 'js/seqdata.js',
   'js/card3d.js', 'js/quiz.js', 'js/learn.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js', 'js/scan.js', 'js/gallery.js',
-  'js/config.js', 'js/cloud.js', 'js/sync.js', 'js/account.js', 'vendor/supabase/supabase.js',
+  'js/config.js', 'js/cloud.js', 'js/sync.js', 'js/account.js', 'js/me.js', 'vendor/supabase/supabase.js',
   // Listen's worker and audio worklet: kept with each release, so Listen still starts offline after an update.
   'js/birdnet-worker.js', 'js/audio-processor.js',
   'data/species-new.json', 'data/tiers.json', 'data/info.json', 'data/gallery.json',
