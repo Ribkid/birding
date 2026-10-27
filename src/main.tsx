@@ -1,12 +1,23 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
-import App from './App';
+// v1's stylesheet order (birding-refresh index.html): globals first, then screens.
 import './styles/app.css';
-import './styles/look.css';
+import './screens/field/field.css';
+import './screens/learn/learn.css';
 import './styles/motion.css';
+import './styles/look.css';
 import './screens/screens.css';
+import './screens/species.css';
 import './screens/rest.css';
+import './screens/field/calls.css';
+import './screens/field/scan.css';
+import './screens/me/me.css';
+// React-only screens that v1 did not have as separate files.
+import './screens/lists/lists.css';
+import './screens/map/map.css';
+import './screens/progress/progress.css';
+import App from './App';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root missing from index.html');
