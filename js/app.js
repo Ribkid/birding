@@ -1086,8 +1086,10 @@ function dayPick(seen, scope) {
     const sp = pool[(Number(today.replace(/-/g, '')) * 2654435761 >>> 0) % pool.length];
     const spot = spotsFor(sp.id, 1)[0];
     const when = k === 'plant' && sp.season && inSeason(sp, month) ? 'Flowering now' : relRate(sp.id, month) >= 0.8 ? 'Often reported right now' : 'Around this month';
-    const why = seen.has(sp.id) ? 'One of yours. Say hello again today.' : `${when}${spot ? `. Try ${spot.h.name}.` : '.'}`;
-    pick = { sp, label: `${cap(KINDS[k].one)} of the day`, why };
+    // The hero already names it; the Today card says why today and where to look.
+    const why = seen.has(sp.id) ? 'One of yours' : when;
+    const where = spot ? `Try ${spot.h.name}` : seen.has(sp.id) ? 'Say hello again today' : 'Keep an eye out this month';
+    pick = { sp, label: `${cap(KINDS[k].one)} of the day`, why, where };
   }
   dayMemo = { key: memo, pick };
   return pick;
@@ -1149,7 +1151,7 @@ function todayRail(seen, scope, day) {
     ${learnTeaser(ctx)}
     ${day ? `<a class="today-card today-day kind--${day.sp.kind}" href="#/bird/${day.sp.id}">
       <span class="botd-img">${birdImg(day.sp, 'small', '', { alt: '' })}</span>
-      <span class="today-day-txt"><span class="today-day-k">${day.label}</span><strong>${esc(day.sp.name)}</strong><span>${esc(day.why)}</span></span></a>` : ''}
+      <span class="today-day-txt"><span class="today-day-k">${esc(day.why)}</span><strong>${esc(day.sp.name)}</strong><span>${esc(day.where)}</span><span class="sr-only">, ${day.label.toLowerCase()}</span></span></a>` : ''}
   </section>`;
 }
 
@@ -2317,8 +2319,8 @@ function renderBadges() {
     <section class="trophy${first ? ' rings-in' : ''}" aria-label="Badges earned">
       <div class="trophy-top">
         <div class="trophy-ring">${ring(earned / Math.max(1, list.length))}<p class="trophy-n"><b data-earned>${earned}</b><span>of ${list.length}</span></p></div>
-        <div class="trophy-txt"><p class="trophy-h">${earned ? `${plural(earned, 'badge', 'badges')} earned` : 'No badges yet'}</p>
-          ${next ? `<p class="trophy-next"><span>Closest:</span> <strong>${esc(next.name)}</strong>. ${esc(next.desc)}${next.have ? ` (${next.have} so far)` : ''}.</p>` : '<p class="trophy-next">Every badge earned. The whole shelf is yours.</p>'}</div>
+        <div class="trophy-txt"><p class="trophy-h">${!earned ? 'No badges yet' : earned === list.length ? 'Every badge earned' : `${list.length - earned} more to earn`}</p>
+          ${next ? `<p class="trophy-next"><span>Closest:</span> <strong>${esc(next.name)}</strong>. ${esc(next.desc)}${next.have ? ` (${next.have} so far)` : ''}.</p>` : '<p class="trophy-next">The whole shelf is yours.</p>'}</div>
       </div>
       <div class="trophy-links"><a class="btn" href="#/learn">${icon.learn} Learn</a><a class="btn" href="#/stats">${icon.chart} Stats</a>${leaderboardLink()}</div>
     </section>

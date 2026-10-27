@@ -123,7 +123,7 @@
 .today-ic svg { width: 22px; height: 22px; }
 .today-t { display: grid; gap: 1px; line-height: 1.25; }
 .today-t strong { font-size: var(--fs-2); font-weight: 700; white-space: nowrap; }
-.today-t span, .today .lt-main span, .today-day-txt > span:last-child {
+.today-t span, .today .lt-main span {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: var(--fs-1); color: var(--ink-2);
 }
 .today .lt {
@@ -142,7 +142,7 @@
 .today-day-txt { position: relative; z-index: 1; display: grid; gap: 1px; min-width: 0; line-height: 1.2; text-shadow: 0 1px 6px rgba(0, 0, 0, .4); }
 .today-day-k { font-size: var(--fs-1); font-weight: 600; opacity: .92; }
 .today-day-txt strong { font-size: var(--fs-3); font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.today-day-txt > span:last-child { color: inherit; opacity: .92; -webkit-line-clamp: 1; }
+.today-day-txt > span:nth-child(3) { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-1); opacity: .92; }
 :root[data-theme="outdoor"] :is(.kind-tab:not(.kind-tab--quiet), .today-card, .today .lt, .today .lt-due) { box-shadow: var(--shadow-1); }
 
 /* Sticky search tools: on paper at rest, frosted glass once stuck over the tiles. Group headings scroll away. */
