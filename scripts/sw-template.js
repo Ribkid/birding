@@ -29,10 +29,21 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL);
-      // One by one: a single missing file must not fail the whole install.
-      await Promise.all(
-        PRECACHE.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => {})),
-      );
+      // Keep the previous release's copy of a file that fails now; content-hashed
+      // assets have no older copy, so a missing index or asset fails the install and
+      // leaves the working worker in charge until the next update.
+      await Promise.all(PRECACHE.map(async (url) => {
+        try {
+          await cache.add(new Request(url, { cache: 'reload' }));
+        } catch {
+          const old = await caches.match(url, MATCH);
+          if (old) await cache.put(url, old).catch(() => {});
+        }
+      }));
+      const have = new Set((await cache.keys()).map((req) => new URL(req.url).pathname));
+      if (PRECACHE.some((url) => (url === '/index.html' || url.startsWith('/assets/')) && !have.has(url))) {
+        throw new Error('shell incomplete');
+      }
       await self.skipWaiting();
     })(),
   );
