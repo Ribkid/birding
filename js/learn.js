@@ -9,7 +9,8 @@ const ROUND = 10, RAPID_MS = 60000, DAY = 864e5;
 const INTERVAL_DAYS = { 1: 0, 2: 1, 3: 3, 4: 7, 5: 21 };
 const pad = n => String(n).padStart(2, '0');
 const dayStr = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-const yesterdayStr = () => { const d = new Date(); d.setDate(d.getDate() - 1); return dayStr(d); };
+const dayBefore = s => { const [y, m, d] = s.split('-').map(Number); return dayStr(new Date(y, m - 1, d - 1)); };
+const yesterdayStr = () => dayBefore(dayStr());
 const startOfDay = (t = Date.now()) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -550,7 +551,7 @@ function drawResults(ctx) {
       const today = game.date;
       if (D.history[today] == null) {
         D.history[today] = game.score;
-        D.streak = D.lastDate === yesterdayStr() ? D.streak + 1 : D.lastDate === today ? D.streak : 1;
+        D.streak = D.lastDate === dayBefore(today) ? D.streak + 1 : D.lastDate === today ? D.streak : 1;
         D.best = Math.max(D.best, D.streak);
         D.lastDate = today; D.done++;
         const keep = Object.keys(D.history).sort().slice(-90);
