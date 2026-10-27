@@ -18,23 +18,25 @@ function qs(params) {
     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 }
 
-async function api(base, params) {
-  const r = await fetch(`${base}?${qs(params)}`);
+async function api(base, params, signal) {
+  const r = await fetch(`${base}?${qs(params)}`, { signal });
   if (!r.ok) throw new Error(`Wikipedia returned ${r.status}`);
   return r.json();
 }
+// Gives up on a lookup that takes too long (one bar of signal), so nothing waits on it forever.
+const timeoutSignal = ms => (AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined);
 
 const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
 const sentenceCase = s => s.charAt(0) + s.slice(1).toLowerCase();
 
 // Resolve a batch of titles -> page info, following normalisation and redirects.
-async function lookup(titles) {
+async function lookup(titles, signal) {
   const out = new Map();
   for (const part of chunk(titles, 50)) {
     const data = await api(WP, {
       action: 'query', redirects: 1, prop: 'pageimages|info', inprop: 'url',
       piprop: 'thumbnail|name|original', pithumbsize: 500, pilimit: 50, titles: part.join('|'),
-    });
+    }, signal);
     const q = data.query || {};
     const step = new Map();
     (q.normalized || []).forEach(n => step.set(n.from, n.to));
@@ -50,7 +52,7 @@ async function lookup(titles) {
   return out;
 }
 
-async function buildIndex(list = SPECIES) {
+async function buildIndex(list = SPECIES, signal) {
   const result = {};
   let todo = list.slice();
   const attempts = [
@@ -62,7 +64,7 @@ async function buildIndex(list = SPECIES) {
   for (const pick of attempts) {
     const titles = [...new Set(todo.map(pick).filter(Boolean))];
     if (!titles.length) continue;
-    const found = await lookup(titles);
+    const found = await lookup(titles, signal);
     const next = [];
     for (const s of todo) {
       const t = pick(s);
@@ -78,50 +80,67 @@ async function buildIndex(list = SPECIES) {
 }
 
 export function onMediaReady(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+const notify = () => listeners.forEach(fn => fn(index));
+// Species looked up and not found are remembered ('tried'), so they aren't looked up again on every start.
+const save = (at, data) => db.kvSet(INDEX_KEY, { at, data, tried: SPECIES.filter(s => !data[s.id]).map(s => s.id) });
 
-export async function loadIndex({ force = false } = {}) {
-  if (index && !force) return index;
+// The saved index, straight from IndexedDB (no network): the first paint can use the right photos.
+let savedP = null;
+const readSaved = () => (savedP ||= db.kvGet(INDEX_KEY).catch(() => null));
+export async function cachedIndex() {
+  const saved = await readSaved();
+  if (!index && saved?.data) index = saved.data;
+  return index;
+}
+
+// Returns at once when an index is saved; anything to look up online happens afterwards, and onMediaReady
+// listeners hear only about an index that changed.
+export function loadIndex({ force = false } = {}) {
   if (indexPromise && !force) return indexPromise;
   indexPromise = (async () => {
-    const cached = await db.kvGet(INDEX_KEY);
-    if (cached && !force) {
-      index = cached.data;
-      if (Date.now() - cached.at > MAX_AGE && navigator.onLine) refresh();
-      else if (navigator.onLine) {
-        // Species added since the index was built (new animals and plants): look up just those.
-        const tried = new Set(cached.tried || []);
-        const missing = SPECIES.filter(s => !index[s.id] && !tried.has(s.id));
-        if (missing.length) {
-          try {
-            const more = await buildIndex(missing);
-            index = { ...index, ...more };
-            await db.kvSet(INDEX_KEY, { at: cached.at, data: index, tried: [...tried, ...missing.map(s => s.id)] });
-          } catch (_) {}
-        }
+    const saved = await readSaved();
+    if (saved?.data && !force) {
+      index ||= saved.data;
+      if (navigator.onLine) {
+        if (Date.now() - saved.at > MAX_AGE) refresh();
+        else lookupMissing(saved);
       }
       return index;
     }
-    if (!navigator.onLine) return (index = cached?.data || {});
+    if (!navigator.onLine) { indexPromise = null; return (index ||= saved?.data || {}); }
     try {
-      index = await buildIndex();
-      await db.kvSet(INDEX_KEY, { at: Date.now(), data: index });
+      index = await buildIndex(SPECIES, timeoutSignal(30000));
+      save(Date.now(), index).catch(() => {});
+      notify();
     } catch (e) {
       console.warn('Photo index failed', e);
-      index = cached?.data || {};
+      index ||= saved?.data || {};
+      indexPromise = null; // try again next time it's asked for
     }
     return index;
   })();
-  const res = await indexPromise;
-  listeners.forEach(fn => fn(res));
-  return res;
+  return indexPromise;
+}
+
+// Species added since the index was built (new animals and plants): look up just those, in the background.
+async function lookupMissing(saved) {
+  const tried = new Set(saved.tried || []);
+  const missing = SPECIES.filter(s => !index[s.id] && !tried.has(s.id));
+  if (!missing.length) return;
+  try {
+    const more = await buildIndex(missing, timeoutSignal(10000));
+    index = { ...index, ...more };
+    await db.kvSet(INDEX_KEY, { at: saved.at, data: index, tried: [...tried, ...missing.filter(s => !more[s.id]).map(s => s.id)] });
+    if (Object.keys(more).length) notify();
+  } catch (_) {}
 }
 
 async function refresh() {
   try {
-    const fresh = await buildIndex();
+    const fresh = await buildIndex(SPECIES, timeoutSignal(30000));
     index = fresh;
-    await db.kvSet(INDEX_KEY, { at: Date.now(), data: fresh });
-    listeners.forEach(fn => fn(fresh));
+    await save(Date.now(), fresh);
+    notify();
   } catch (_) { /* keep old */ }
 }
 
