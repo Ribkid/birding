@@ -409,7 +409,9 @@ function MapView() {
   const hotspotMarkersRef = useRef<{ h: Hotspot; mk: L.CircleMarker }[]>([]);
   const tempMarkerRef = useRef<L.Marker | null>(null);
   const previewRef = useRef<L.Circle | null>(null);
-  const settingsRef = useRef<Settings>({});
+  // Set once Sarah taps Map or Satellite. Her choice then wins over the stored layer, even
+  // when the first settings read is slow and lands after the tap.
+  const layerPickedRef = useRef(false);
 
   const focusFittedRef = useRef(false);
   const sightingsFittedRef = useRef(false);
@@ -586,10 +588,8 @@ function MapView() {
     let alive = true;
     void Promise.resolve(db.kvGet('settings'))
       .then((stored: unknown) => {
-        if (!alive) return;
-        settingsRef.current =
-          stored && typeof stored === 'object' ? (stored as Settings) : ({} as Settings);
-        if (settingsRef.current.mapLayer === 'sat') setLayer('sat');
+        if (!alive || layerPickedRef.current) return;
+        if ((stored as Settings | null)?.mapLayer === 'sat') setLayer('sat');
       })
       .catch(() => {});
 
@@ -1132,13 +1132,12 @@ function MapView() {
   };
 
   const pickLayer = (next: Layer) => {
+    layerPickedRef.current = true;
     setLayer(next);
     void (async () => {
       // Read first: a tap before the initial settings load must not replace the whole object.
       const current = ((await db.kvGet('settings')) as Settings | null) || {};
-      const merged = { ...current, mapLayer: next };
-      settingsRef.current = merged;
-      await db.kvSet('settings', merged);
+      await db.kvSet('settings', { ...current, mapLayer: next });
     })().catch(() => {});
   };
 
