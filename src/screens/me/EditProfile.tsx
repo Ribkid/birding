@@ -34,7 +34,8 @@ export default function EditProfile() {
   const [tick, setTick] = useState(0);
   const [name, setName] = useState('');
   const [showLb, setShowLb] = useState(true);
-  const [showDex, setShowDex] = useState(false);
+  // The found-species switch shows the cached cloud value, or the choice being saved while that is pending.
+  const [dexPending, setDexPending] = useState<boolean | null>(null);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -55,7 +56,6 @@ export default function EditProfile() {
       if (!alive) return;
       setName(p.displayName || '');
       setShowLb(p.showOnLeaderboard !== false);
-      setShowDex(!!getMyCloud()?.showDex);
     });
     return () => { alive = false; off(); };
   }, []);
@@ -253,12 +253,14 @@ export default function EditProfile() {
           <span><strong>Show me on the leaderboard</strong><span className="small muted">Only your name, picture and counts are shown, never your sightings, places, notes or photos. Groups you join always show you to their members.</span></span>
         </label>
         <label className="check check--card me-check">
-          <input type="checkbox" checked={showDex} disabled={busy || !navigator.onLine} onChange={async (e) => {
+          <input type="checkbox" checked={dexPending ?? !!m?.showDex} disabled={dexPending !== null} onChange={async (e) => {
             const on = e.target.checked;
-            setShowDex(on); setBusy(true);
+            // v1 me.js: offline the switch stays where it was and says why.
+            if (!navigator.onLine) { setMsg('Changing this needs a connection.'); return; }
+            setDexPending(on);
             try { await setCloud({ show_dex: on }); setMsg(on ? 'Your found species show on your profile.' : 'Your found species are hidden.'); }
-            catch (x) { setShowDex(!on); setMsg(problem(x)); }
-            finally { setBusy(false); }
+            catch (x) { setMsg(problem(x)); }
+            finally { setDexPending(null); }
           }} />
           <span><strong>Show the species I've found on my profile</strong><span className="small muted">People who can open your profile see which species you have found. Never where or when, your notes or your photos.</span></span>
         </label>
