@@ -142,7 +142,7 @@ export const packProgress = () => Q.PACKS.map(p => {
 export const accuracyForKinds = () => kindsPresent.map(k => ({ k, all: ofKind(k).length, mastered: ofKind(k).filter(s => isMastered(s.id)).length, acc: accuracy(k) }));
 
 // ---------- rounds ----------
-const bestKey = (mode, p) => `${mode}|${p.kind}|${p.scope}|${p.difficulty}`;
+export const bestKey = (mode, p) => `${mode}|${p.kind}|${p.scope}|${p.difficulty}`;
 export const roundModes = Q.MODES;
 export const packs = Q.PACKS;
 export const packBy = Q.PACK_BY;

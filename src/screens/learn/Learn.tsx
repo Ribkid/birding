@@ -8,7 +8,7 @@ import * as Q from '../../core/quiz.js';
 import {
   learnReady, getLearn, getDaily, learnStats, masteryOf, dueCards, boxes, currentStreak, setActive,
   dayStr, monthName, accuracyForKinds, packProgress, setPrefs, saveLearn, kindLabel,
-  packs as PACKS, isMastered,
+  packs as PACKS, isMastered, bestKey, ROUND,
 } from '../../core/learn.js';
 import './learn.css';
 
@@ -208,11 +208,12 @@ export default function Learn() {
               const [title, desc] = MODE_INFO[m];
               const off = m === 'call' && !callOk;
               const id = faces[m];
+              const b = (L?.best as Record<string, number> | undefined)?.[bestKey(m, prefs)];
               return (
                 <li key={m} className={m === 'quick' ? 'lh-mode--wide' : ''}>
                   <Link className={`lh-mode lh-mode--${m}${off ? ' is-off' : ''}`} to={off ? '#' : `/learn/play/${m}`} aria-disabled={off || undefined} onClick={(e) => { if (off) e.preventDefault(); }}>
                     <span className="lh-mode-bg" aria-hidden="true">{id ? <img src={faceSrc(id, m === 'quick' ? 'large' : 'small')} alt="" /> : null}</span>
-                    <span className="lh-mode-top"><span className="lh-mode-ic" aria-hidden="true"><svg viewBox="0 0 24 24">{MODE_ICONS[m]}</svg></span></span>
+                    <span className="lh-mode-top"><span className="lh-mode-ic" aria-hidden="true"><svg viewBox="0 0 24 24">{MODE_ICONS[m]}</svg></span>{b != null && <span className="lh-best">{m === 'rapid' ? 'Best streak' : 'Best'} <b>{b}</b>{m === 'rapid' ? null : <span>/{ROUND}</span>}</span>}</span>
                     <span className="lh-mode-txt"><strong>{title}</strong><span className="lh-mode-desc">{off ? 'Calls are for birds and frogs. Choose All animals, Birds or Frogs.' : desc}</span></span>
                   </Link>
                 </li>
