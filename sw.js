@@ -7,9 +7,9 @@ const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
 const MODELS = 'birddex-models';
 const ASSETS = [
-  './', 'index.html', 'css/app.css', 'manifest.webmanifest',
+  './', 'index.html', 'css/app.css', 'css/scan.css', 'manifest.webmanifest',
   'js/app.js', 'js/db.js', 'js/media.js', 'js/species.js', 'js/stats.js', 'js/ebird.js', 'js/seqdata.js',
-  'js/card3d.js', 'js/quiz.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js', 'js/gallery.js',
+  'js/card3d.js', 'js/quiz.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js', 'js/scan.js', 'js/gallery.js',
   'js/config.js', 'js/cloud.js', 'js/sync.js', 'js/account.js', 'vendor/supabase/supabase.js',
   'data/photoid.json', 'data/photoid.bin', 'models/bioclip/manifest.json',
   'data/species-new.json', 'data/tiers.json', 'data/info.json', 'data/gallery.json',
