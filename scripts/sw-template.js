@@ -1,14 +1,34 @@
-// BirdyDex service worker.
+// BirdyDex service worker. scripts/build-sw.mjs fills in VERSION (the build time) and PRECACHE (the
+// shell file list) and writes the result to dist/sw.js.
 //
-// Shell and data are precached at install. Wikimedia photos ('birddex-images') and map tiles
-// ('birddex-tiles') are cached on first use; call clips ('birddex-calls') are stored whole. The
-// BioCLIP .bin parts bypass the worker and are joined by src/core/photoid.js into
-// 'birddex-models'; BirdNET files and /vendor bundles use the same model cache.
+// Where things are kept:
+//   birdydex-shell-<VERSION>  this release's files, saved at install: PRECACHE, with Listen's worker under
+//                             the address src/core/listen.js asks for. Pages (the app, privacy, terms)
+//                             and /js/ scripts are stored here again whenever they load online.
+//   birdydex-older-<VERSION>  the previous release's own /assets/ chunks, for a page still running it.
+//   birdydex-runtime-v3       other same-origin files fetched at runtime. It outlives releases, so what an
+//                             earlier release kept here (main kept the BirdNET model there) still works.
+//   birdydex-photos-v3        same-origin images (icons, /photos/, other .png/.jpg/.webp), about 400.
+//   birddex-images            Wikimedia photos, under their plain address. src/core/quiz.js and the
+//                             Ready for the field card read it.
+//   birddex-tiles             map tiles, about 3000.
+//   birddex-calls             call clips, stored whole. src/core/media.js saves clips into it too.
+//   birddex-models            BirdNET files and the /vendor libraries (not the Supabase client), on first
+//                             use. The photo model's .bin parts never pass through here:
+//                             src/core/photoid.js fetches them and keeps the joined model and the ONNX
+//                             runtime's .wasm in this cache itself.
+// activate deletes every other birdydex-* cache (earlier shells and older caches, main's calls cache).
+// The birddex-* caches are never deleted.
 //
 // Rule learned the hard way: never rebuild a cached Response (no new Response(res.body, …), no
 // forged url/type). Cached responses are served as they are. Rebuilding them makes CORS-mode
-// requests — module scripts and modulepreload — fail with net::ERR_FAILED while plain requests
-// such as CSS still work, which is a very confusing way to go offline.
+// requests (module scripts and modulepreload) fail with net::ERR_FAILED while plain requests
+// such as CSS still work, which is a very confusing way to go offline. The only responses made
+// here are new ones: a call clip's 206 slice, a 416, and the offline page.
+//
+// A response is copied with clone() before it is handed to respondWith, never after: by then the
+// page is reading its body, and clone() throws. event.waitUntil keeps the worker alive while the copy
+// is stored.
 const VERSION = __VERSION__;
 const SHELL = 'birdydex-shell-' + VERSION;
 const OLDER = 'birdydex-older-' + VERSION;
@@ -27,7 +47,8 @@ const PRECACHE = __PRECACHE__;
 // Listen's worker reads its settings from its own query string, and a worker's address is the address of
 // the response it is given. A copy saved without the query would start the worker without its settings
 // (it then looks for /js/js/tfjs-4.14.0.min.js), so the shell keeps the worker under the exact address
-// src/core/listen.js builds, fetched with that query. src/__tests__/sw.test.ts checks the two agree.
+// src/core/listen.js builds, fetched with that query, in place of the plain /js/birdnet-worker.js.
+// src/__tests__/sw.test.ts checks the two addresses agree.
 const ROOT = new URL('/', self.location.href).href;
 const LISTEN_WORKER = `/js/birdnet-worker.js?tf=${encodeURIComponent(ROOT + 'vendor/tfjs/tf.min.js')}&root=${encodeURIComponent(ROOT + 'models')}&lang=en_uk`;
 const SHELL_FILES = PRECACHE.map((path) => (path === '/js/birdnet-worker.js' ? LISTEN_WORKER : path));
@@ -50,10 +71,10 @@ function waitFor(event, promise) {
   } catch {}
 }
 
-// Returns a step for fetch(...).then() that stores a good answer under `key` and hands the answer on.
-// The copy is cloned at once: once the answer has gone back to respondWith its body is being read,
-// and clone() throws. An HTML answer is the host's fallback page for a missing file, so it is not
-// kept. Caches with a limit are trimmed now and then, as v1 does.
+// Returns a step for fetch(...).then() that stores a good answer in `cacheName` under `key` and hands
+// the answer on. The copy is cloned at once, before the answer goes back to respondWith. An HTML
+// answer to a file request is the host's fallback page for a missing file, so it is not kept. A cache
+// with a limit is trimmed after about one store in fifty, as v1 does.
 function keep(event, cacheName, key, limit = 0) {
   return (res) => {
     if (res.ok && !isHtml(res)) {
@@ -151,6 +172,7 @@ const isCallClip = (url) => url.pathname.startsWith('/data/calls/');
 const isData = (url) => url.pathname.startsWith('/data/');
 const isPhoto = (url) => /(^\/icons\/)|(^\/photos\/)/.test(url.pathname) || /\.(png|jpe?g|webp)$/i.test(url.pathname);
 
+// Delete the oldest entries (Cache Storage lists them in the order they were stored) beyond `limit`.
 async function trim(cacheName, limit) {
   const cache = await caches.open(cacheName);
   const keys = await cache.keys();
@@ -168,9 +190,10 @@ async function cacheFirst(event, cacheName, limit = 0) {
   return fetch(request).then(keep(event, cacheName, request.url, limit));
 }
 
-// Cross-origin photos and map tiles, as v1 does. Ask for a CORS response so Cache Storage can keep
-// it, saved under the plain URL so src/core/quiz.js and Settings find it. When the host refuses
-// CORS, answer with the original request and keep nothing.
+// Cross-origin photos and map tiles, as v1 does: any saved copy, else a CORS request (an opaque
+// no-cors answer has no status, so it could never pass the res.ok check), kept under the plain address
+// so src/core/quiz.js and Settings find it. When the CORS request fails (no signal, or the host
+// refuses CORS), the page's own request goes to the network and nothing is kept.
 async function cacheFirstCross(event, cacheName, limit = 0) {
   const { request } = event;
   const hit = await caches.match(request.url, MATCH);
@@ -277,7 +300,7 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  // v1 caches Wikipedia photos and map tiles so the field guide, quizzes and map work offline.
+  // Wikimedia photos and map tiles, as v1 keeps them, so the field guide, quizzes and map work offline.
   if ((url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org') && request.destination !== 'audio') {
     event.respondWith(cacheFirstCross(event, IMAGES).catch(() => Response.error()));
     return;
@@ -286,7 +309,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(cacheFirstCross(event, TILES, TILE_LIMIT).catch(() => Response.error()));
     return;
   }
-  if (url.origin !== self.location.origin) return; // other third-party requests are the app's business
+  if (url.origin !== self.location.origin) return; // other third-party requests go straight to the network
 
   if (request.mode === 'navigate') {
     event.respondWith(navigation(event, url));
@@ -298,11 +321,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Regional data: cached copy straight away, refreshed in the background.
+  // /data/ files: this release's shell copy (build-sw.mjs precaches the .json files the app needs), else
+  // a saved copy refreshed in the background into the runtime cache, else the network.
   if (isData(url)) {
     event.respondWith(
       (async () => {
-        // Prefer this release's shell: the persistent runtime cache is older after a deploy.
         const own = await (await caches.open(SHELL)).match(request, MATCH);
         if (own) return own;
         const cached = await caches.match(request, MATCH);
@@ -323,34 +346,40 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Same-origin images (the icons are in the shell too): cache first.
   if (isPhoto(url)) {
     event.respondWith(cacheFirst(event, PHOTOS, PHOTO_LIMIT).catch(() => Response.error()));
     return;
   }
 
-  // The BirdNET worker carries a ?tf=&root=&lang= query; a newer worker must reach existing users.
+  // Listen's BirdNET worker and audio worklet (/js/), and any other worker script: network first, so a
+  // newer copy reaches people who already have one.
   if (request.destination === 'worker' || url.pathname.startsWith('/js/')) {
     event.respondWith(networkFirstScript(event).catch(() => Response.error()));
     return;
   }
-  // The Supabase client is a per-release vendor file, like v1's shell.
+  // The Supabase client is precached with each release, as in v1; cacheFirst answers from this shell.
   if (url.pathname.startsWith('/vendor/supabase/')) {
     event.respondWith(cacheFirst(event, SHELL).catch(() => Response.error()));
     return;
   }
 
-  // The photo-ID parts are joined and cached by src/core/photoid.js; never store them twice.
+  // The photo model's parts are joined and cached by src/core/photoid.js; never store them twice.
   if (url.pathname.startsWith('/models/bioclip/') && url.pathname.endsWith('.bin')) return;
-  // Models and vendor bundles (the ORT wasm, BirdNET files): one entry in birddex-models.
+  // BirdNET files and the other /vendor libraries (tf.js, the ONNX runtime's modules and .wasm): cache
+  // first into birddex-models. photoid.js keeps the .wasm there too, under the same address.
   if (url.pathname.startsWith('/models/') || url.pathname.startsWith('/vendor/')) {
     event.respondWith(cacheFirst(event, MODELS).catch(() => Response.error()));
     return;
   }
 
-  // Everything else same-origin (fonts): cache first, then network.
+  // Everything else same-origin (the fonts and web manifest are in the shell): cache first, then the
+  // network, kept in the runtime cache.
   event.respondWith(cacheFirst(event, RUNTIME).catch(() => Response.error()));
 });
 
+// "Ready for the field" in Settings asks how many shell files are saved ('shell-status') and can ask for
+// the missing ones ('shell-fill'). Both answer { version, total, saved } on the message's port.
 async function shellStatus() {
   const have = await keysOf(await caches.open(SHELL));
   return {

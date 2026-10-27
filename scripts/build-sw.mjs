@@ -1,22 +1,30 @@
-// Generates dist/sw.js with a precache list of the built shell.
+// Writes dist/sw.js from scripts/sw-template.js, with the build time as its version and the list of
+// files to precache at install (the shell).
 //
-// The shell is small (HTML, JS, CSS, fonts, icons); everything heavy is cached at runtime:
-//   - BioCLIP .bin parts bypass the worker; src/core/photoid.js joins them into 'birddex-models'
-//   - BirdNET files and /vendor bundles use 'birddex-models' as well
-//   - header data (/data/*.json) and call clips are cached on first use
+// The shell is every built file with a SHELL_EXT extension outside /data/, /models/, /vendor/ and
+// /photos/ (the page, the hashed /assets/, /js/, fonts, icons, privacy and terms), plus EXTRA_SHELL:
+// the /data/ files the app needs on a cold start offline, the photo model's manifest and the Supabase
+// client. Everything heavy is kept at runtime by the service worker:
+//   - the photo model's .bin parts bypass it; src/core/photoid.js joins them into 'birddex-models'
+//   - BirdNET files and the other /vendor libraries go to 'birddex-models' on first use
+//   - call clips (/data/calls/) go to 'birddex-calls' when played or saved from Settings
 //   - Wikimedia photos go to 'birddex-images', map tiles to 'birddex-tiles'
 //
-// Run after `vite build`. No dependencies.
+// Run after `vite build` (npm run build does). No dependencies.
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { join, relative, extname, sep } from 'node:path';
 
 const DIST = new URL('../dist/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const SHELL_EXT = new Set(['.html', '.js', '.css', '.woff2', '.svg', '.png', '.webmanifest']);
 
-/** Directories that are cached on demand rather than at install time. */
+/** Folders kept at runtime rather than at install, apart from the EXTRA_SHELL files in them. */
 const RUNTIME_ONLY = ['vendor/', 'photos/'];
 
-/** Data the app needs on a cold start offline. Call clips stay on the calls route. */
+/**
+ * Files precached although their folder or type is not part of the shell: the data the app needs on
+ * a cold start offline, the photo model's manifest and the Supabase client. Call clips stay on the
+ * calls route.
+ */
 const EXTRA_SHELL = new Set([
   '/data/species-new.json', '/data/tiers.json', '/data/info.json', '/data/gallery.json',
   '/data/seq.json', '/data/birdnet-map.json', '/data/lookalikes.json', '/data/calls.json',
@@ -25,9 +33,9 @@ const EXTRA_SHELL = new Set([
   // Saved with each release, as in v1, so a signed-in phone still loads it offline after an update.
   '/vendor/supabase/supabase.js',
 ]);
-// The 88 MB int4 vision model is deliberately NOT precached: src/core/photoid.js downloads it
-// on demand with progress and stores it in its own 'birddex-models' cache. Precaching it here
-// too would download it before first use and keep a second copy (about 177 MB on the phone).
+// The 93 MB int4 vision model (the two .bin parts) is deliberately NOT precached: src/core/photoid.js
+// downloads it on demand with progress and stores the joined model in 'birddex-models'. Precaching it
+// here too would download it before first use and keep a second 93 MB copy on the phone.
 
 async function walk(dir, out = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
