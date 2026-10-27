@@ -47,11 +47,16 @@ npm run preview   # serve the production build
 
 ## Offline behaviour
 
-`npm run build` writes a service worker with a precache list of the built shell (19 files,
-~1 MB). Data, photos and vendor bundles are cached on first use; the 87 MB BioCLIP and
-~60 MB BirdNET models are managed by the app itself in the `birddex-models` cache. A navigation
-is network-first so deploys land promptly, then falls back to the cached shell — verified by
-loading the app with the server stopped.
+`npm run build` writes a service worker with a precache list of the built shell plus the regional
+data (34 files, ~3.5 MB). Photos, map tiles, call clips and vendor bundles are cached on first
+use. The 88 MB int4 photo model is deliberately **not** precached — `src/core/photoid.js`
+downloads it on demand with progress and keeps it in its own `birddex-models` cache, so it is
+never fetched before she asks for it and never stored twice.
+
+A navigation is network-first so deploys land promptly, then falls back to the cached shell.
+Cached responses are served exactly as stored: rebuilding them, or matching without
+`ignoreVary`, makes module scripts fail offline while CSS still loads. Verified with
+`node scripts/offline-check.mjs warm`, stopping the server, then `… offline`.
 
 ## Deploying
 
@@ -67,8 +72,9 @@ gh repo create Birdy-React --private --source . --remote origin --push
 
 ## Status
 
-Ported and rendering: Dex, species page, Lists, list views, patches, targets, outings, sighting
-log, add sighting, Stats, Map, Scan, Listen, Badges, Quiz, Compare, Settings, Leaderboard.
+Ported and rendering: Dex, species page, Learn (including play/daily/deck), Lists, list views,
+patches, targets, outings, sighting log, add sighting, Stats, Map, Scan, Listen, Me (profile,
+sign-in, public profile), Badges, Compare, Settings, Leaderboard.
 
 Not yet ported from v1: the 3D collectable card and confetti, the card share image, the global
 search overlay, the persistent outing bar, and the install prompt. There are no automated tests
