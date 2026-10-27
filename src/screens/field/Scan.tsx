@@ -72,7 +72,9 @@ export default function Scan() {
   const [dragging, setDragging] = useState(false);
   const [stageW, setStageW] = useState(0);
   const picks = useRef(0);
-  const currentFile = useRef<File | null>(null);
+  // The photo a run belongs to. A scan restored from the session (after a species page, a tab switch or
+  // This one → Cancel) brings its file back with it, so Identify works without picking the photo again.
+  const currentFile = useRef<File | null>(S.photo?.file ?? null);
   const identifyRun = useRef(0);
   useEffect(() => {
     S.at = at; S.photo = photo; S.box = box; S.whole = whole; S.kind = kind;
@@ -111,6 +113,7 @@ export default function Scan() {
   useEffect(() => {
     if (S.at && Date.now() - S.at > KEEP_MS) {
       resetScan();
+      currentFile.current = null;
       setPhoto(null); setBox(S.box); setWhole(false); setResult(null); setLogAt(null); setYours(''); setAt(0);
     }
     void photoIdInfo().then((i: any) => setInfo(i));
