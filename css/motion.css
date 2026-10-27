@@ -1,0 +1,119 @@
+/* Motion for the app shell (js/motion.js, js/layers.js): route transitions, the tile-to-hero morph, sheets that
+   leave the way they came, and the celebration. Motion only ever answers something Sarah did, and each piece has
+   its own reduced-motion rule beside it. */
+
+:root {
+  /* route timing: the new page arrives in 260ms, the old one is gone in 160ms, tab swaps cross-fade in 160ms */
+  --dur-route: 260ms; --dur-route-out: 160ms; --dur-swap: 160ms;
+  /* glide for shared elements: the out curve with a hint of settle, never a bounce */
+  --ease-morph: var(--ease-out);
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  :root { --ease-morph: linear(0, .24 10%, .46 20%, .64 30%, .78 40%, .875 50%, .94 60%, .985 70%, 1.008 80%, 1.006 90%, 1); }
+}
+
+/* ---------- route transitions ----------
+   <html data-nav="forward|back|swap"> is set by vt() for the length of a transition. */
+::view-transition { pointer-events: none; }
+
+/* Things that stay put while the page changes under them. */
+.tabbar { view-transition-name: tabbar; }
+#outing-bar { view-transition-name: outing-bar; }
+.toast { view-transition-name: toast; }
+.update-bar { view-transition-name: update-bar; }
+.sync-banner { view-transition-name: sync-banner; }
+/* The species page's floating controls arrive after the photo lands rather than riding up with the page. */
+.bird-hero > .iconbtn--float:not(.iconbtn--right) { view-transition-name: sp-back; }
+.bird-hero > .iconbtn--right { view-transition-name: sp-search; }
+.bird-hero > .hero-tabs { view-transition-name: sp-tabs; }
+
+::view-transition-group(root) { animation-duration: var(--dur-route); }
+::view-transition-old(root), ::view-transition-new(root) { mix-blend-mode: normal; }
+/* Deeper: the new page rises into place while the old one lifts away. Back: the reverse. */
+html[data-nav="forward"]::view-transition-old(root) { animation: var(--dur-route-out) var(--ease-in) both vt-leave-up; }
+html[data-nav="forward"]::view-transition-new(root) { animation: var(--dur-route) var(--ease-out) both vt-enter-up; }
+html[data-nav="back"]::view-transition-old(root) { animation: var(--dur-route-out) var(--ease-in) both vt-leave-down; }
+html[data-nav="back"]::view-transition-new(root) { animation: var(--dur-route) var(--ease-out) both vt-enter-down; }
+/* Sideways between tabs: a quick cross-fade, so the gliding tab pill is what explains the move. */
+html[data-nav="swap"]::view-transition-old(root) { animation: var(--dur-swap) var(--ease-out) both vt-fade-out; }
+html[data-nav="swap"]::view-transition-new(root) { animation: var(--dur-swap) var(--ease-out) both vt-fade-in; }
+@keyframes vt-enter-up { from { opacity: 0; transform: translateY(16px); } }
+@keyframes vt-leave-up { to { opacity: 0; transform: translateY(-8px); } }
+@keyframes vt-enter-down { from { opacity: 0; transform: translateY(-8px); } }
+@keyframes vt-leave-down { to { opacity: 0; transform: translateY(16px); } }
+@keyframes vt-fade-in { from { opacity: 0; } }
+@keyframes vt-fade-out { to { opacity: 0; } }
+
+/* The tab bar holds still; only its labels cross-fade. The tinted pill (named tab-pill in app.css) glides from the
+   old tab to the new one. It is drawn over the bar's snapshot, so it blends instead of hiding the icons. */
+::view-transition-group(tabbar), ::view-transition-old(tabbar), ::view-transition-new(tabbar) { animation-duration: var(--dur-2); }
+::view-transition-group(tab-pill) { animation-duration: var(--dur-route); animation-timing-function: var(--ease-morph); mix-blend-mode: multiply; }
+::view-transition-old(tab-pill), ::view-transition-new(tab-pill) { animation-duration: var(--dur-route); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="outdoor"])::view-transition-group(tab-pill) { mix-blend-mode: screen; }
+}
+:root[data-theme="dark"]::view-transition-group(tab-pill) { mix-blend-mode: screen; }
+::view-transition-group(outing-bar), ::view-transition-group(toast) { animation-duration: var(--dur-2); }
+
+/* The signature moment: the tapped photo grows into the species hero, and shrinks back on the way out. */
+::view-transition-group(sp-hero) { animation-duration: var(--dur-3); animation-timing-function: var(--ease-morph); }
+::view-transition-old(sp-hero), ::view-transition-new(sp-hero) { height: 100%; object-fit: cover; animation-duration: var(--dur-3); }
+::view-transition-old(sp-hero):only-child { animation: var(--dur-route-out) var(--ease-in) both vt-fade-out; }
+::view-transition-new(sp-back):only-child, ::view-transition-new(sp-search):only-child, ::view-transition-new(sp-tabs):only-child {
+  animation: var(--dur-2) var(--ease-out) 140ms both vt-fade-in;
+}
+::view-transition-old(sp-back):only-child, ::view-transition-old(sp-search):only-child, ::view-transition-old(sp-tabs):only-child {
+  animation: 90ms linear both vt-fade-out;
+}
+/* The flying photo keeps its frame's rounded corners. */
+.tile-img > img, .row-thumb > img, .botd-img > img { border-radius: inherit; }
+
+/* Reduced motion: vt() already skips the transition; this covers anything else that starts one. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
+/* ---------- sheets ----------
+   Enter from below (@starting-style), leave the same way on a user dismiss, follow the finger when dragged.
+   A sheet replacing another keeps the scrim up so the page behind doesn't flash. */
+@starting-style {
+  .sheet-wrap.open .sheet { transform: translateY(100%); }
+  .sheet-wrap.open .sheet-scrim { opacity: 0; }
+  .sheet-wrap--swap.open .sheet-scrim { opacity: 1; }
+}
+.sheet-wrap[data-closing] { pointer-events: none; }
+.sheet-wrap[data-closing] .sheet { pointer-events: none; transform: translateY(100%); transition: transform var(--dur-2) var(--ease-in); }
+.sheet-wrap[data-closing] .sheet-scrim { opacity: 0; transition: opacity var(--dur-2) var(--ease-in); }
+.sheet-wrap--drag .sheet { -webkit-user-select: none; user-select: none; cursor: grabbing; }
+.sheet-grip { touch-action: none; cursor: grab; }
+@media (prefers-reduced-motion: reduce) {
+  @starting-style { .sheet-wrap.open .sheet { transform: none; opacity: 0; } }
+  .sheet-wrap[data-closing] .sheet { transform: none; opacity: 0; transition: opacity var(--dur-2) linear; }
+}
+/* A layer with nothing focusable takes focus itself; it is not a control, so no ring. */
+[role="dialog"][tabindex="-1"]:focus { outline: none; }
+
+/* ---------- toast ---------- */
+.toast { cursor: pointer; }
+.toast--out { opacity: 0; transform: translate(-50%, 8px); transition: opacity var(--dur-2) var(--ease-in), transform var(--dur-2) var(--ease-in); }
+@media (prefers-reduced-motion: reduce) { .toast--out { transform: translateX(-50%); } }
+
+/* ---------- focus after a route change ----------
+   The new page's heading takes focus so screen readers announce it; it isn't a control, so no ring. */
+h1[tabindex="-1"]:focus { outline: none; }
+
+/* ---------- celebration ---------- */
+.celebrate-count { margin: 0 16px 2px; font-weight: 500; }
+.celebrate-n { display: inline-block; min-width: 1ch; font: 800 1.75rem/1 var(--stamp); color: var(--ink); font-variant-numeric: tabular-nums; vertical-align: -.1em; }
+.celebrate .celebrate-total { margin: 0 16px 12px; }
+.celebrate-total [data-count-all] { display: inline-block; font-variant-numeric: tabular-nums; }
+.celebrate--out { pointer-events: none; }
+.celebrate-photo .whole { background-size: cover; background-position: 50% 30%; }
+/* The photo settles into its frame with a soft spring while the card pops and the band clamps on. */
+.celebrate-photo .whole > img { animation: celebrate-photo var(--dur-4) var(--ease-spring) both; }
+@keyframes celebrate-photo { from { transform: scale(1.14); } }
+.celebrate--out .celebrate-card { transform: scale(.97); transition: transform var(--dur-2) var(--ease-in); }
+@media (prefers-reduced-motion: reduce) {
+  .celebrate-photo .whole > img { animation: none; }
+  .celebrate--out .celebrate-card { transform: none; }
+}
