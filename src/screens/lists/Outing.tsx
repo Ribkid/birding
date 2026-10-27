@@ -385,10 +385,12 @@ export default function Outing() {
         </div>
       </header>
 
-      <p className="list-count">
-        <b>{tally.length}</b> {plural(tally.length, 'species')}
-        {!live && outing.distanceKm ? `, ${outing.distanceKm} km` : ''}
-      </p>
+      <div className="tally-sum">
+        <p className="list-count">
+          <b>{tally.length}</b> species{!live && outing.distanceKm ? `, ${outing.distanceKm} km` : ''}
+        </p>
+        {live && <span className="ocard-live">In progress</span>}
+      </div>
 
       {editing && (
         <>
