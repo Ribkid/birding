@@ -9,6 +9,7 @@ import { openCard, confetti, shareCard } from './card3d.js';
 import { renderLearn, learnStats, learnReady } from './learn.js';
 import { renderStats } from './statsview.js';
 import { renderScan } from './scan.js';
+import { initLook, lookAfterDraw, applyTint, tintFrom, stagger } from './look.js';
 import { describeArea } from './mapinfo.js';
 import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
 import { vt, nameFor, flip, countUp, motionOK, settle, report } from './motion.js';
@@ -920,6 +921,7 @@ function afterDraw() {
   prioritiseHero(view);
   settleImages(view);
   hydratePhotos(view);
+  lookAfterDraw(view);
 }
 
 // ---------- navigation motion ----------
@@ -2402,6 +2404,8 @@ const ctx = {
   resizeImage, openSearch,
   // shell helpers for other screens: motion (js/motion.js), focus and layers (js/layers.js), the live region
   vt, flip, countUp, keepFocus, announce, openLayer, closeLayer,
+  // the photo-first look (js/look.js): colour from a photo, one-time entrances
+  applyTint, tintFrom, stagger,
 };
 
 // Data changed under us (cloud sync, sign in or out): reload, and redraw unless that would interrupt something.
@@ -2413,6 +2417,7 @@ async function refreshFromSync({ force = false } = {}) {
 }
 
 async function boot() {
+  initLook();
   await Promise.all([loadData(), loadSeq(), loadExtras()]);
   applyTheme();
   $('#plus').addEventListener('click', e => { e.preventDefault(); openPlusSheet(); });
