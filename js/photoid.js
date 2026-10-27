@@ -87,9 +87,17 @@ async function freshFetch(url, timeout = 3500) {
 }
 const fetchJSON = async url => JSON.parse(new TextDecoder().decode(await freshFetch(url)));
 
+// Once per app session: on a weak signal every fetch can wait out the timeout, so don't repeat it per scan.
+let manifestP = null;
+function getManifest() {
+  if (!manifestP) manifestP = fetchJSON(MODEL_DIR + 'manifest.json').catch(err => { manifestP = null; throw err; });
+  return manifestP;
+}
+
 export async function isPhotoModelCached() {
+  if (session) return true;
   try {
-    const m = await fetchJSON(MODEL_DIR + 'manifest.json');
+    const m = await getManifest();
     const c = await openCache();
     return !!(c && await c.match(MODEL_DIR + m.version + '.onnx') && await c.match(WASM_URL));
   } catch (_) { return false; }
@@ -145,13 +153,23 @@ function loadData() {
 }
 
 // ---------- model ----------
+// Everyone waiting on the one download hears its progress (say Scan was left and opened again meanwhile).
+const listeners = new Set();
+let lastReport = null;
 export function loadPhotoModel(onProgress) {
   if (session) return loadData().then(() => {});
+  if (onProgress) {
+    listeners.add(onProgress);
+    if (loading && lastReport) { try { onProgress(...lastReport); } catch (_) {} }
+  }
   if (loading) return loading;
   loading = (async () => {
-    const report = (f, label) => { try { onProgress?.(Math.max(0, Math.min(1, f)), label); } catch (_) {} };
+    const report = (f, label) => {
+      lastReport = [Math.max(0, Math.min(1, f)), label];
+      for (const fn of listeners) { try { fn(...lastReport); } catch (_) {} }
+    };
     report(0, 'Starting');
-    manifest = await fetchJSON(MODEL_DIR + 'manifest.json');
+    manifest = await getManifest();
     const [ortMod] = await Promise.all([import(ORT_DIR + 'ort.wasm.min.mjs'), loadData()]);
     ort = ortMod.default || ortMod;
     ort.env.wasm.wasmPaths = ORT_DIR;
@@ -187,7 +205,7 @@ export function loadPhotoModel(onProgress) {
     session = await ort.InferenceSession.create(new Uint8Array(modelBuf), { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
     report(1, 'Ready');
   })();
-  loading.catch(() => { loading = null; });
+  loading.then(() => { listeners.clear(); lastReport = null; }, () => { loading = null; listeners.clear(); lastReport = null; });
   return loading;
 }
 
