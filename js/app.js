@@ -111,12 +111,33 @@ const icon = {
   chart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
 };
 
+// Screen readers hear status through one live region that is always in the page (a region created together with
+// its text is often missed). Clearing it first lets the same message be announced twice.
+let announceT = 0;
+function announce(msg) {
+  const el = document.getElementById('announce');
+  if (!el) return;
+  clearTimeout(announceT);
+  el.textContent = '';
+  announceT = setTimeout(() => { el.textContent = msg; }, 60);
+}
+// One toast at a time, about 4.5 s, tap to dismiss. It is announced through the live region, not read twice.
+let toastEl = null, toastT = 0;
 function toast(msg) {
-  const t = document.createElement('div');
-  t.className = 'toast'; t.textContent = msg; t.setAttribute('role', 'status');
+  announce(msg);
+  clearTimeout(toastT);
+  toastEl?.remove();
+  const t = toastEl = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg; t.setAttribute('aria-hidden', 'true');
+  const hide = () => {
+    if (t.classList.contains('toast--out')) return;
+    t.classList.add('toast--out');
+    if (toastEl === t) toastEl = null;
+    setTimeout(() => t.remove(), 260);
+  };
+  t.addEventListener('click', hide);
   document.body.append(t);
-  setTimeout(() => t.classList.add('toast--out'), 2600);
-  setTimeout(() => t.remove(), 3100);
+  toastT = setTimeout(hide, 4500);
 }
 
 // ---------- sheets (modal) ----------
