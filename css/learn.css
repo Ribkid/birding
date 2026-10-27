@@ -24,17 +24,22 @@
 /* ---------- today's challenge: a photo-backed hero card tinted from the photo ---------- */
 .lh-daily {
   /* tinted from the photo when it can be read, otherwise from the species' kind colour (azure without one) */
-  --deep: var(--tint-deep, color-mix(in srgb, var(--kc, #1A5CCB) 34%, #06120F));
+  --deep: var(--tint-deep, color-mix(in srgb, var(--kc, #1A5CCB) 24%, #06120F));
   position: relative; isolation: isolate; overflow: hidden;
   display: grid; grid-template-rows: auto 1fr auto; gap: var(--sp-3);
   min-height: clamp(256px, 70vw, 300px); padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-5);
   border-radius: 28px; color: #fff; text-decoration: none;
-  background: linear-gradient(150deg, var(--tint, color-mix(in srgb, var(--kc, #1A5CCB) 70%, #06120F)), var(--deep) 75%);
+  background: linear-gradient(150deg, var(--tint, color-mix(in srgb, var(--kc, #1A5CCB) 55%, #06120F)), var(--deep) 75%);
   box-shadow: var(--shadow-card), 0 24px 44px -26px var(--deep);
 }
 .lh-daily-photo { position: absolute; inset: 0; z-index: -2; }
 .lh-daily-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .lh-daily-photo img.is-gone { visibility: hidden; }
+.lh-daily-photo:has(img.fade:not(.in):not(.is-gone))::after, .lh-mode-bg:has(img.fade:not(.in):not(.is-gone))::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, .14) 50%, transparent 80%); background-size: 220% 100%;
+  animation: shimmer 1.3s linear infinite;
+}
 /* Scrim: deep at the top behind the date, clear through the middle, deep again behind the words. */
 .lh-daily::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
@@ -158,11 +163,6 @@
 .lh-mode-bg img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .lh-mode-bg img.is-gone { visibility: hidden; }
 .lh-mode-bg.is-split { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
-.lh-mode-bg:has(img.fade:not(.in):not(.is-gone))::after {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, .14) 50%, transparent 80%); background-size: 220% 100%;
-  animation: shimmer 1.3s linear infinite;
-}
 .lh-mode::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
   background: linear-gradient(180deg, rgba(6, 18, 15, .34) 0%, rgba(6, 18, 15, 0) 28%, rgba(6, 18, 15, .5) 50%, rgba(6, 18, 15, .9) 100%);
@@ -307,6 +307,7 @@
 .lq-opt[aria-disabled], .lq-side[aria-disabled] { cursor: default; }
 :root[data-theme="outdoor"] .lq-opt { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
 :root[data-theme="outdoor"] .lq-opt:is(.is-right, .is-wrong) { box-shadow: none; }
+:root[data-theme="outdoor"] .lq-opt.is-dim { opacity: .72; }
 /* right: a small spring and the tick drops in; wrong: a short shake */
 .lq-opt.is-right:not(.no-anim), .lq-side.is-right:not(.no-anim) { animation: lq-pop var(--dur-4) var(--ease-spring); }
 :is(.lq-opt, .lq-side):is(.is-right, .is-wrong):not(.no-anim) .lq-opt-mark svg { animation: lq-mark var(--dur-4) var(--ease-spring) both; animation-delay: 60ms; }
@@ -482,6 +483,6 @@
   :is(.lq-opt, .lq-side) .lq-opt-mark svg, .lq-verdict svg, .lq-call .lq-wave i { animation: none !important; }
   .lq-fb:not(.no-anim), .ld-back:not([hidden]):not(.no-anim) { animation: lq-fade var(--dur-1) linear; }
   .lq-bar > span, .lh-seg-thumb, .lh-box-bar i, .lh-meter > span, .lr-ring .lr-ring-fg.is-filling { transition: none; }
-  .lh-mode-bg::after, .lr-card-img::after { animation: none !important; }
+  .lh-mode-bg::after, .lh-daily-photo::after, .lr-card-img::after { animation: none !important; }
   @keyframes lq-fade { from { opacity: 0; } }
 }
