@@ -38,13 +38,13 @@
 /* Scrim: deep at the top behind the date, clear through the middle, deep again behind the words. */
 .lh-daily::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--deep) 66%, transparent) 0%, color-mix(in srgb, var(--deep) 22%, transparent) 36%,
-    color-mix(in srgb, var(--deep) 82%, transparent) 62%, var(--deep) 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--deep) 72%, transparent) 0%, color-mix(in srgb, var(--deep) 42%, transparent) 40%,
+    color-mix(in srgb, var(--deep) 84%, transparent) 64%, var(--deep) 100%);
 }
 .lh-daily-top { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-3); }
 .lh-date { display: grid; justify-items: start; text-shadow: 0 2px 14px rgba(0, 0, 0, .35); }
 .lh-date b { font: 800 clamp(4.25rem, 21vw, 5.5rem)/.78 var(--stamp); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-.lh-date span { margin-top: var(--sp-2); font-weight: 700; font-size: var(--fs-2); letter-spacing: .01em; }
+.lh-date span { margin-top: var(--sp-2); font-weight: 700; font-size: var(--fs-3); letter-spacing: .01em; }
 .lh-streak {
   display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 12px 7px; border-radius: var(--r-pill);
   background: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .32);
@@ -261,7 +261,7 @@
 .lq-player { position: relative; display: grid; place-items: center; width: 136px; height: 136px; }
 .lq-ring { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); pointer-events: none; }
 .lq-ring circle { fill: none; stroke: color-mix(in srgb, var(--pc) 20%, transparent); stroke-width: 6; }
-.lq-ring .lq-ring-fg { stroke: var(--pc); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 100; }
+.lq-ring .lq-ring-fg { stroke: var(--pc); stroke-linecap: butt; stroke-dasharray: 100; stroke-dashoffset: 100; }
 .lq-play {
   display: grid; place-items: center; width: 100px; height: 100px; border: 0; border-radius: var(--r-pill);
   background: var(--pc); color: var(--on-kind); cursor: pointer; box-shadow: 0 14px 28px -12px var(--pc), var(--shadow-1);
