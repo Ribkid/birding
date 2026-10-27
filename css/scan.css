@@ -1,158 +1,337 @@
 /* ---------- Scan a photo ----------
-   A camera tool: one dark viewfinder well, framed by sun-yellow corner brackets. The same brackets become
-   the identify box once there's a photo, so what you frame is visibly what gets analysed. Everything
-   below the viewfinder stays quiet: chips, one primary button, a status line, then the comparison. */
+   A camera, not a form. A dark viewfinder runs full-bleed under the status bar with glass controls on it and
+   sun-yellow brackets that frame what gets analysed (they are the crop handles). While the model works in its
+   worker a light sweeps the framed area and a pip per view fills in. Results sit on a sheet that slides over the
+   viewfinder: a verdict with a confidence ring, then photo cards that rise in one after another. */
 .scan {
-  --vf: var(--ink); --vf-ink: var(--paper);
-  --bracket: var(--sun); --bracket-l: 26px; --bracket-t: 3px;
-  display: grid; gap: var(--sp-4); padding-bottom: var(--sp-6);
+  /* The viewfinder is dark in every theme, like any camera. Its own ink and glass, all 7:1 or better on --cam. */
+  --cam: #07120F; --cam-2: #0F1D19;
+  --cam-ink: #F1F6F3; --cam-ink-2: #B5C5BF;
+  --cam-glass: rgba(255, 255, 255, .11); --cam-glass-2: rgba(255, 255, 255, .2); --cam-edge: rgba(255, 255, 255, .2);
+  --cam-on-sun: #142A24;
+  --bracket: #F5C518;
+  padding-bottom: var(--sp-6);
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-theme="outdoor"]) .scan { --vf: var(--surface-2); --vf-ink: var(--ink); }
-}
-:root[data-theme="dark"] .scan { --vf: var(--surface-2); --vf-ink: var(--ink); }
 
-.page-head.scan-head h1 { font: 400 var(--fs-6)/1.05 var(--display); letter-spacing: 0; }
-.scan-head p { max-width: 46ch; }
+/* ---------- the camera zone ---------- */
+.scan-cam {
+  position: relative; color: var(--cam-ink); background: var(--cam);
+  padding-bottom: calc(var(--sp-5) + 28px); /* the results sheet overlaps the bottom 28px */
+  /* kind dots read on the dark ground */
+  --k-bird: #7EADF8; --k-mammal: #E5A385; --k-reptile: #F2B04C; --k-frog: #5ED0D6; --k-butterfly: #D99BEC; --k-plant: #7BC77F;
+}
+.scan-cam :focus-visible { outline-color: var(--bracket); }
+.page-head.scan-head { align-items: flex-start; padding-bottom: var(--sp-4); }
+.page-head.scan-head h1 { color: var(--cam-ink); }
+.scan-head p { max-width: 40ch; margin-top: 6px; color: var(--cam-ink-2); font-size: var(--fs-2); line-height: 1.45; }
+.scan-head .iconbtn {
+  margin-top: 2px; margin-right: var(--sp-1); background: var(--cam-glass); color: var(--cam-ink);
+  box-shadow: inset 0 0 0 1px var(--cam-edge);
+}
+.scan-cam-body { display: grid; gap: var(--sp-4); padding: 0 var(--sp-4); }
 
 /* corner brackets, drawn as eight short bars */
-.scan-corners, .scan-box {
+.scan-corners {
+  --l: 28px; --t: 4px;
+  position: absolute; inset: var(--sp-4); pointer-events: none;
   background:
-    linear-gradient(var(--bracket) 0 0) top left / var(--bracket-l) var(--bracket-t),
-    linear-gradient(var(--bracket) 0 0) top left / var(--bracket-t) var(--bracket-l),
-    linear-gradient(var(--bracket) 0 0) top right / var(--bracket-l) var(--bracket-t),
-    linear-gradient(var(--bracket) 0 0) top right / var(--bracket-t) var(--bracket-l),
-    linear-gradient(var(--bracket) 0 0) bottom left / var(--bracket-l) var(--bracket-t),
-    linear-gradient(var(--bracket) 0 0) bottom left / var(--bracket-t) var(--bracket-l),
-    linear-gradient(var(--bracket) 0 0) bottom right / var(--bracket-l) var(--bracket-t),
-    linear-gradient(var(--bracket) 0 0) bottom right / var(--bracket-t) var(--bracket-l);
+    linear-gradient(var(--bracket) 0 0) top left / var(--l) var(--t),
+    linear-gradient(var(--bracket) 0 0) top left / var(--t) var(--l),
+    linear-gradient(var(--bracket) 0 0) top right / var(--l) var(--t),
+    linear-gradient(var(--bracket) 0 0) top right / var(--t) var(--l),
+    linear-gradient(var(--bracket) 0 0) bottom left / var(--l) var(--t),
+    linear-gradient(var(--bracket) 0 0) bottom left / var(--t) var(--l),
+    linear-gradient(var(--bracket) 0 0) bottom right / var(--l) var(--t),
+    linear-gradient(var(--bracket) 0 0) bottom right / var(--t) var(--l);
   background-repeat: no-repeat;
 }
-.scan-corners { position: absolute; inset: var(--sp-4); pointer-events: none; }
 
-/* ---------- viewfinder ---------- */
-.scan-vf {
-  position: relative; display: grid; place-items: center; min-height: 260px; padding: var(--sp-3);
-  border-radius: var(--r-3); background: var(--vf); color: var(--vf-ink); overflow: hidden;
+/* ---------- empty viewfinder: frame plus shutter ---------- */
+.scan-vf { position: relative; display: grid; place-items: center; min-height: 220px; }
+.scan-vf--empty { place-items: stretch; gap: var(--sp-5); }
+.scan-frame {
+  position: relative; display: grid; place-items: center; min-height: min(42vh, 340px); padding: var(--sp-6) var(--sp-5);
+  border-radius: var(--r-card); background-color: var(--cam-2);
+  /* rule-of-thirds lines, as on a camera screen */
+  background-image:
+    linear-gradient(to right, transparent calc(33.33% - .5px), rgba(255, 255, 255, .06) 0 calc(33.33% + .5px), transparent 0 calc(66.67% - .5px), rgba(255, 255, 255, .06) 0 calc(66.67% + .5px), transparent 0),
+    linear-gradient(to bottom, transparent calc(33.33% - .5px), rgba(255, 255, 255, .06) 0 calc(33.33% + .5px), transparent 0 calc(66.67% - .5px), rgba(255, 255, 255, .06) 0 calc(66.67% + .5px), transparent 0);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
 }
-.scan-vf--empty { min-height: 360px; padding: var(--sp-6) var(--sp-5); }
-.scan-entry { display: grid; justify-items: center; gap: var(--sp-4); text-align: center; width: min(100%, 300px); }
-.scan-entry-icon svg { width: 56px; height: 56px; color: var(--bracket); }
-.scan-entry p { margin: 0; font-size: var(--fs-2); line-height: 1.45; }
-.scan-pick { display: grid; gap: var(--sp-3); width: 100%; }
-.scan-pickbtn { position: relative; min-height: 52px; font-size: var(--fs-3); border-radius: var(--r-2); }
-.scan-pickbtn--ghost { background: transparent; color: var(--vf-ink); border-color: color-mix(in srgb, var(--vf-ink) 55%, transparent); }
-.scan-pickbtn svg, .scan-change svg { width: 20px; height: 20px; }
+.scan-entry { position: relative; display: grid; justify-items: center; gap: var(--sp-3); text-align: center; max-width: 260px; }
+.scan-entry-icon svg { display: block; width: 52px; height: 52px; color: var(--bracket); }
+.scan-entry p { margin: 0; font-size: var(--fs-2); line-height: 1.45; color: var(--cam-ink-2); }
+
+.scan-pick { display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; justify-items: center; gap: var(--sp-2); }
+.scan-pickbtn {
+  position: relative; display: grid; justify-items: center; gap: var(--sp-2); padding: var(--sp-1);
+  border-radius: var(--r-2); cursor: pointer; text-align: center; color: var(--cam-ink); font-weight: 700; font-size: var(--fs-2); line-height: 1.25;
+  -webkit-tap-highlight-color: transparent;
+}
+.scan-pickbtn--main { grid-column: 2; }
+.scan-pickbtn--side { grid-column: 3; justify-self: start; font-weight: 600; font-size: var(--fs-1); max-width: 96px; padding-top: 14px; }
+.scan-shutter, .scan-pickicon { display: grid; place-items: center; border-radius: 50%; transition: transform var(--dur-3) var(--ease-spring); }
+.scan-shutter {
+  width: 72px; height: 72px; background: var(--cam-ink); color: var(--cam);
+  box-shadow: 0 0 0 4px var(--cam), 0 0 0 7px var(--cam-ink), 0 16px 30px -12px rgba(0, 0, 0, .8);
+  margin: 7px;
+}
+.scan-shutter svg { width: 30px; height: 30px; }
+.scan-pickicon { width: 52px; height: 52px; background: var(--cam-glass); box-shadow: inset 0 0 0 1px var(--cam-edge); }
+.scan-pickicon svg { width: 22px; height: 22px; }
+.scan-pickbtn:active .scan-shutter, .scan-pickbtn:active .scan-pickicon { transform: scale(.9); transition-duration: var(--dur-1); transition-timing-function: var(--ease-out); }
 
 /* File inputs stay in the label and keyboard-focusable; the label shows the focus ring. */
 .scan-file { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; opacity: 0; }
 .scan label:has(.scan-file:focus-visible) { outline: 3px solid var(--azure); outline-offset: 2px; }
-.scan-vf label:has(.scan-file:focus-visible) { outline-color: var(--bracket); }
+.scan-cam label:has(.scan-file:focus-visible) { outline-color: var(--bracket); }
 
-/* the photo and its box */
+/* ---------- the photo and its box ---------- */
 .scan-stage {
-  position: relative; max-width: 100%; border-radius: var(--r-1); overflow: hidden;
+  position: relative; max-width: 100%; border-radius: var(--r-card);
   touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair;
 }
-.scan-stage:focus-visible { outline: 3px solid var(--bracket); outline-offset: 4px; }
-.scan-stage img { display: block; max-width: 100%; max-height: min(58vh, 520px); width: auto; height: auto; pointer-events: none; -webkit-user-drag: none; }
-.scan-box {
-  position: absolute; cursor: move;
-  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--vf) 58%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--vf-ink) 55%, transparent);
-}
-.scan-handle {
-  position: absolute; right: -22px; bottom: -22px; width: 44px; height: 44px; cursor: nwse-resize;
-  display: grid; place-items: center;
-}
+.scan-stage:focus-visible { outline: 3px solid var(--bracket); outline-offset: 6px; }
+.scan-photo { position: relative; border-radius: var(--r-card); overflow: hidden; background: var(--cam-2); box-shadow: 0 24px 48px -20px rgba(0, 0, 0, .9); }
+.scan-photo img { display: block; max-width: 100%; max-height: min(46vh, 480px); width: auto; height: auto; pointer-events: none; -webkit-user-drag: none; }
+/* Shade everything outside the box; the photo's rounded edge clips it. */
+.scan-dim { position: absolute; pointer-events: none; border-radius: 4px; box-shadow: 0 0 0 100vmax rgba(4, 10, 8, .58); }
+.scan-box { position: absolute; cursor: move; border-radius: 4px; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .72); }
+/* The four corners are the handles: a 44px grab area each, drawn as a sun bracket that grows when held. */
+.scan-handle { position: absolute; width: 44px; height: 44px; z-index: 1; }
+.scan-handle--nw { left: -22px; top: -22px; cursor: nwse-resize; }
+.scan-handle--ne { right: -22px; top: -22px; cursor: nesw-resize; }
+.scan-handle--sw { left: -22px; bottom: -22px; cursor: nesw-resize; }
+.scan-handle--se { right: -22px; bottom: -22px; cursor: nwse-resize; }
 .scan-handle::after {
-  content: ''; width: 18px; height: 18px; border-radius: 50%;
-  background: var(--bracket); box-shadow: 0 0 0 2px var(--vf), var(--shadow-1);
+  content: ''; position: absolute; width: 24px; height: 24px; border: 4px solid var(--bracket);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .55));
+  transition: transform var(--dur-3) var(--ease-spring);
 }
-.scan-stage--drag .scan-handle::after { transform: scale(1.2); }
-.scan-corners--photo { display: none; inset: 0; }
+.scan-handle--nw::after { left: 19px; top: 19px; border-right: 0; border-bottom: 0; border-top-left-radius: 9px; transform-origin: 0 0; }
+.scan-handle--ne::after { right: 19px; top: 19px; border-left: 0; border-bottom: 0; border-top-right-radius: 9px; transform-origin: 100% 0; }
+.scan-handle--sw::after { left: 19px; bottom: 19px; border-right: 0; border-top: 0; border-bottom-left-radius: 9px; transform-origin: 0 100%; }
+.scan-handle--se::after { right: 19px; bottom: 19px; border-left: 0; border-top: 0; border-bottom-right-radius: 9px; transform-origin: 100% 100%; }
+.scan-handle.is-active::after { transform: scale(1.35); }
+.scan-stage--drag .scan-box { box-shadow: inset 0 0 0 1.5px #fff; }
+/* A small box keeps one handle so the middle can still be dragged. */
+.scan-box--small .scan-handle:not(.scan-handle--se) { display: none; }
+/* A new photo: the box lands on it with a small spring. */
+.scan-box--land { animation: scan-land 640ms var(--ease-spring) both; }
+@keyframes scan-land { from { opacity: 0; transform: scale(1.18); } }
+
+.scan-corners--photo { display: none; inset: 10px; }
 .scan-stage--whole { cursor: default; touch-action: auto; }
-.scan-stage--whole .scan-box { display: none; }
+.scan-stage--whole .scan-box, .scan-stage--whole .scan-dim { display: none; }
 .scan-stage--whole .scan-corners--photo { display: block; }
 
-.scan-tools { display: grid; gap: var(--sp-2); margin-top: calc(var(--sp-2) * -1); }
+/* ---------- scanning: a light sweeps the framed area while the model works ---------- */
+.scan-sweep { position: absolute; inset: 0; overflow: hidden; pointer-events: none; border-radius: inherit; display: none; }
+.scan-vf--busy .scan-stage:not(.scan-stage--whole) .scan-box .scan-sweep,
+.scan-vf--busy .scan-stage--whole .scan-sweep--whole { display: block; }
+.scan-sweep::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 30%;
+  background: linear-gradient(to bottom, transparent, color-mix(in srgb, var(--bracket) 26%, transparent) 42%, rgba(255, 255, 255, .9) 50%, color-mix(in srgb, var(--bracket) 26%, transparent) 58%, transparent);
+  animation: scan-sweep 1.6s cubic-bezier(.45, 0, .55, 1) infinite alternate;
+}
+@keyframes scan-sweep { from { transform: translateY(-50%); } to { transform: translateY(283%); } }
+.scan-vf--busy .scan-stage { cursor: progress; }
+
+/* progress per view: one pip for each way the model looks at the photo */
+.scan-pips {
+  position: absolute; left: 50%; bottom: var(--sp-3); translate: -50% 0;
+  display: flex; gap: 6px; padding: 9px 12px; border-radius: var(--r-pill);
+  background: rgba(6, 14, 12, .7); box-shadow: inset 0 0 0 1px var(--cam-edge);
+  animation: scan-pips-in var(--dur-3) var(--ease-out) both;
+}
+.scan-pips:empty { display: none; }
+.scan-pips i { width: 18px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .3); transition: background-color var(--dur-2); }
+.scan-pips i.on { background: var(--bracket); }
+.scan-pips i.now { background: var(--bracket); animation: scan-pulse .7s ease-in-out infinite alternate; }
+@keyframes scan-pips-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes scan-pulse { to { opacity: .35; } }
+
+/* ---------- tools under the photo: glass chips ---------- */
+.scan-tools { display: grid; gap: var(--sp-3); }
 .scan-tools:empty { display: none; }
-.scan-hint { margin: 0; font-size: var(--fs-2); color: var(--ink-2); }
-.scan-tool-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
-.scan-change { position: relative; min-height: var(--tap); padding-inline: var(--sp-2); color: var(--azure); }
-
-/* ---------- kind chips and toggles ---------- */
-.scan-kinds { display: flex; gap: var(--sp-2); overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 2px 16px; }
-.scan-kinds::-webkit-scrollbar { display: none; }
-.scan-chip { min-height: var(--tap); border-color: var(--line-strong); }
+.scan-hint { margin: 0; font-size: var(--fs-2); line-height: 1.45; color: var(--cam-ink-2); text-align: center; }
+.scan-tool-row { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); flex-wrap: wrap; }
+.scan-chip {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-2); flex: none;
+  min-height: var(--tap); padding: 0 var(--sp-4); border: 0; border-radius: var(--r-pill);
+  background: var(--cam-glass); color: var(--cam-ink); box-shadow: inset 0 0 0 1px var(--cam-edge);
+  font: 600 var(--fs-2)/1.2 var(--font); white-space: nowrap; cursor: pointer;
+  transition: transform var(--dur-3) var(--ease-spring), background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.scan-chip:active { transform: scale(.95); transition-duration: var(--dur-1); }
+.scan-chip svg { width: 18px; height: 18px; flex: none; }
 .scan-chip i { width: 10px; height: 10px; border-radius: 50%; background: var(--kc); flex: none; }
-.scan-chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.scan-chip[aria-pressed="true"] i { box-shadow: 0 0 0 2px var(--paper); }
+.scan-chip[aria-pressed="true"] { background: var(--cam-ink); color: var(--cam); box-shadow: none; }
+.scan-chip[aria-pressed="true"] i { box-shadow: 0 0 0 2px var(--cam-ink), 0 0 0 3.5px var(--cam); }
+/* Whole photo is an on/off switch: a ring that fills when it's on. */
+.scan-chip--whole i { width: 16px; height: 16px; background: transparent; box-shadow: inset 0 0 0 2px currentColor; }
+.scan-chip--whole[aria-pressed="true"] i { background: currentColor; box-shadow: inset 0 0 0 2px currentColor, inset 0 0 0 4.5px var(--cam-ink); }
+.scan-kinds {
+  display: flex; gap: var(--sp-2); overflow-x: auto; scrollbar-width: none; margin: 0 calc(var(--sp-4) * -1); padding: 2px var(--sp-4);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--sp-4), #000 calc(100% - var(--sp-4)), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 var(--sp-4), #000 calc(100% - var(--sp-4)), transparent);
+}
+.scan-kinds::-webkit-scrollbar { display: none; }
+.scan-kinds .scan-chip { padding: 0 14px; }
 
-.scan-go { border-radius: var(--r-2); }
-.scan-go[aria-disabled="true"] { opacity: .7; cursor: progress; }
+/* ---------- identify ---------- */
+.scan-go {
+  overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+  min-height: 56px; padding: 0 var(--sp-5); border: 0; border-radius: var(--r-pill); cursor: pointer;
+  background: var(--bracket); color: var(--cam-on-sun); font: 700 1.0625rem/1 var(--font);
+  box-shadow: 0 16px 32px -16px color-mix(in srgb, var(--bracket) 75%, transparent), 0 10px 24px -8px rgba(0, 0, 0, .55);
+  transition: transform var(--dur-3) var(--ease-spring);
+  /* A tall photo pushes Identify below the fold: it waits above the tab bar until the viewfinder scrolls away. */
+  position: sticky; bottom: calc(var(--chrome-bottom) + var(--sp-2)); z-index: 3;
+}
+body.has-outing .scan-go { bottom: calc(var(--chrome-bottom) + 66px); }
+.scan-go:active { transform: scale(.96); transition-duration: var(--dur-1); }
+.scan-go-ico svg { display: block; width: 22px; height: 22px; }
+.scan-go[aria-disabled="true"] { cursor: progress; }
+.scan-go[aria-disabled="true"]:active { transform: none; }
+/* while it works, a sheen runs along the button */
+.scan-go[aria-disabled="true"]::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .55) 50%, transparent 70%) no-repeat;
+  background-size: 50% 100%; animation: scan-sheen 1.3s linear infinite;
+}
+@keyframes scan-sheen { from { background-position: -100% 0; } to { background-position: 200% 0; } }
+.scan-go:focus-visible { outline: 3px solid var(--cam-ink); outline-offset: 3px; }
 
 /* ---------- working ---------- */
-.scan-work { display: grid; gap: var(--sp-2); }
+.scan-work { display: grid; gap: var(--sp-2); text-align: center; }
 /* The status line is a live region: keep it in the accessibility tree even when empty, just out of the layout. */
 .scan-work:has(.scan-status:empty):has(.scan-progress:empty) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.scan-status { margin: 0; font-weight: 500; }
+.scan-status { margin: 0; font-weight: 500; font-size: var(--fs-2); line-height: 1.45; color: var(--cam-ink); }
 .scan-progress:empty { display: none; }
-.scan-progress .meter { height: 8px; }
-.scan-mb { margin: var(--sp-1) 0 0; font-size: var(--fs-1); color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.scan-steps { display: flex; gap: var(--sp-1); }
-.scan-steps i { flex: 1; height: 6px; border-radius: var(--r-pill); background: var(--surface-2); }
-.scan-steps i.on { background: var(--sun); }
-.scan-steps i.now { background: color-mix(in srgb, var(--sun) 55%, var(--surface-2)); animation: scan-pulse 1s var(--ease-out) infinite alternate; }
-@keyframes scan-pulse { to { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { .scan-steps i.now { animation: none; } }
+.scan-progress .meter { height: 6px; background: var(--cam-glass-2); }
+.scan-progress .meter span { box-shadow: none; }
+.scan-mb { margin: var(--sp-1) 0 0; font-size: var(--fs-1); color: var(--cam-ink-2); font-variant-numeric: tabular-nums; }
 
-/* ---------- result ---------- */
-.scan-result { display: grid; gap: var(--sp-4); }
-.scan-result:empty { display: none; }
-.scan-verdict { margin: 0; font: 400 var(--fs-6)/1.1 var(--display); overflow-wrap: anywhere; }
-.scan-verdict--possibly { font-size: var(--fs-5); }
-.scan-verdict:focus-visible { outline-offset: 4px; }
-.scan-next { margin: var(--sp-2) 0 0; color: var(--ink-2); max-width: 52ch; }
-.scan-reveal { animation: scan-in var(--dur-3) var(--ease-out) both; }
-@keyframes scan-in { from { opacity: 0; transform: translateY(10px); } }
-@media (prefers-reduced-motion: reduce) { .scan-reveal { animation: scan-fade var(--dur-2) linear both; } }
-@keyframes scan-fade { from { opacity: 0; } }
-
-.scan-cards { display: grid; gap: var(--sp-3); }
-.scan-also { margin: var(--sp-2) 0 0; font-size: var(--fs-3); font-weight: 700; }
-.scan-card {
-  display: grid; gap: var(--sp-2); padding: var(--sp-3); border-radius: var(--r-2);
-  background: var(--surface); box-shadow: inset 0 3px 0 var(--kc, var(--line-strong));
+/* ---------- the results sheet ---------- */
+.scan-sheet {
+  position: relative; display: grid; gap: var(--sp-4);
+  margin-top: -28px; padding-top: var(--sp-5); border-radius: 28px 28px 0 0; background: var(--paper);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 -10px 30px -12px rgba(0, 0, 0, .5);
 }
-.scan-card--lead { padding: var(--sp-4) var(--sp-3) var(--sp-3); box-shadow: inset 0 5px 0 var(--kc, var(--line-strong)), var(--shadow-1); }
-.scan-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-1); }
-.scan-strip > *, .scan-yours img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: var(--r-1); background: var(--surface-2); display: block; }
+.scan-result { display: grid; gap: var(--sp-4); scroll-margin-top: var(--sp-3); }
+.scan-result:empty { display: none; }
+
+/* verdict: a confidence ring and the headline */
+.scan-verdict-wrap {
+  --band: var(--line-strong);
+  display: grid; grid-template-columns: auto 1fr; align-items: center; gap: var(--sp-4);
+  padding: var(--sp-4); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card);
+}
+.scan-verdict-wrap--likely { --band: var(--seen); --band-ink: var(--seen); }
+.scan-verdict-wrap--possibly { --band: var(--sun); --band-ink: var(--sun-ink); }
+.scan-ring { position: relative; width: 84px; height: 84px; display: grid; place-items: center; }
+.scan-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; rotate: -90deg; }
+.scan-ring circle { fill: none; stroke-width: 8; }
+.scan-ring-track { stroke: var(--surface-2); }
+.scan-ring-fill { stroke: var(--band); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: calc(100 - var(--p, 0)); }
+.scan-verdict-wrap--unsure .scan-ring-fill { display: none; }
+.scan-ring-n { position: relative; display: flex; align-items: baseline; font: 800 1.875rem/1 var(--stamp); font-variant-numeric: tabular-nums; color: var(--ink); }
+.scan-ring-n span { display: inline-block; }
+.scan-ring-n small { font-size: .875rem; margin-left: 1px; color: var(--ink-2); }
+.scan-ring-q { position: relative; font: 400 2rem/1 var(--display); color: var(--ink-2); }
+.scan-verdict { margin: 0; overflow-wrap: anywhere; }
+.scan-verdict:focus-visible { outline-offset: 4px; }
+.scan-band { display: block; margin-bottom: 2px; font: 700 var(--fs-2)/1.3 var(--font); color: var(--band-ink, var(--ink-2)); }
+.scan-verdict-name { display: block; font: 400 var(--fs-5)/1.12 var(--display); color: var(--ink); }
+.scan-verdict--possibly .scan-verdict-name { font-size: var(--fs-4); }
+.scan-verdict--unsure .scan-verdict-name { font-size: var(--fs-4); }
+.scan-next { margin: var(--sp-2) 0 0; font-size: var(--fs-2); line-height: 1.45; color: var(--ink-2); max-width: 52ch; }
+
+/* match cards: your crop and two reference photos across the top, then the name and a confidence bar */
+.scan-cards { display: grid; gap: var(--sp-4); }
+.scan-also { margin: var(--sp-2) 0 calc(var(--sp-1) * -1); font-size: var(--fs-3); font-weight: 700; }
+.scan-card { display: grid; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; }
+.scan-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; background: var(--surface); }
+.scan-strip > img, .scan-strip > .scan-tile-missing, .scan-yours img, .scan-yours .scan-tile-missing {
+  display: block; width: 100%; aspect-ratio: 1; object-fit: cover; background: var(--surface-2);
+}
+.scan-card:not(.scan-card--lead) .scan-strip > img, .scan-card:not(.scan-card--lead) .scan-strip > .scan-tile-missing,
+.scan-card:not(.scan-card--lead) .scan-yours img, .scan-card:not(.scan-card--lead) .scan-yours .scan-tile-missing { aspect-ratio: 3 / 2; }
+/* reference photos shimmer until they arrive (they come from the photo sites, so they can be slow) */
+.scan-strip > img:not(.in) {
+  background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, #fff 40%, transparent) 50%, transparent 80%) var(--surface-2);
+  background-size: 220% 100%; animation: shimmer 1.3s linear infinite;
+}
+.scan-strip > img.in { animation: scan-fade var(--dur-3) var(--ease-out); }
 .scan-yours { position: relative; margin: 0; }
-.scan-yours img { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--sun); }
+.scan-yours::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px var(--bracket); pointer-events: none; }
 .scan-yours figcaption {
-  position: absolute; left: var(--sp-1); bottom: var(--sp-1); padding: 1px 7px; border-radius: var(--r-pill);
-  font-size: var(--fs-1); font-weight: 700; background: var(--ink); color: var(--paper);
+  position: absolute; left: var(--sp-2); bottom: var(--sp-2); padding: 2px 9px; border-radius: var(--r-pill);
+  font-size: var(--fs-1); font-weight: 700; background: rgba(6, 14, 12, .72); color: #fff;
 }
 .scan-tile-missing { display: block; }
-.scan-card:not(.scan-card--lead) .scan-strip { grid-template-columns: repeat(3, minmax(0, 88px)); }
-.scan-credit { margin: 0; font-size: var(--fs-1); color: var(--ink-2); }
-.scan-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); margin-top: var(--sp-1); }
-.scan-card-head h3 { margin: 0; font-size: var(--fs-3); font-weight: 700; line-height: 1.25; }
+.scan-card-body { display: grid; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4) var(--sp-4); }
+.scan-credit { margin: 0; font-size: var(--fs-1); color: var(--ink-2); overflow-wrap: anywhere; }
+.scan-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-1) var(--sp-2); }
+.scan-card-head h3 { margin: 0; font-size: 1.0625rem; font-weight: 800; line-height: 1.25; letter-spacing: -.01em; }
 .scan-card--lead .scan-card-head h3 { font-size: var(--fs-4); }
-.scan-card-head a { color: var(--ink); text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
-.scan-kind { padding: 1px 9px; border-radius: var(--r-pill); font-size: var(--fs-1); font-weight: 700; background: var(--kc); color: var(--on-kind); }
-.scan-new { font-size: var(--fs-1); font-weight: 700; color: var(--lori); }
+.scan-card-head a { color: var(--ink); text-decoration: none; }
+.scan-card-head a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.scan-kind { padding: 2px 9px; border-radius: var(--r-pill); font-size: var(--fs-1); font-weight: 700; background: var(--kc); color: var(--on-kind); }
+.scan-new { padding: 2px 9px; border-radius: var(--r-pill); font-size: var(--fs-1); font-weight: 700; color: var(--lori); background: color-mix(in srgb, var(--lori) 12%, var(--surface)); }
 .scan-tip { margin: 0; font-size: var(--fs-2); color: var(--ink-2); line-height: 1.45; }
-.scan-card-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); margin-top: var(--sp-1); }
-.scan-conf { margin: 0; display: flex; align-items: baseline; gap: var(--sp-2); }
-.scan-conf span { font-size: var(--fs-2); color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.scan-this { min-width: 112px; border-radius: var(--r-2); }
+.scan-card-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-4); margin-top: var(--sp-1); }
+.scan-conf { flex: 1; min-width: 0; display: grid; gap: 6px; --lvl: var(--line-strong); }
+.scan-conf--strong { --lvl: var(--seen); }
+.scan-conf--possible { --lvl: var(--sun); }
+.scan-conf--outside { --lvl: color-mix(in srgb, var(--sun) 55%, var(--line-strong)); }
+.scan-conf p { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--sp-2); font-size: var(--fs-2); }
+.scan-conf p > * { white-space: nowrap; }
+.scan-conf p span { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.scan-bar { display: block; height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.scan-bar i { display: block; height: 100%; border-radius: inherit; background: var(--lvl); transform: scaleX(var(--p, 0)); transform-origin: 0 50%; }
+.scan-this { flex: none; min-width: 112px; min-height: 48px; border-radius: var(--r-pill); font-size: var(--fs-3); }
+.scan-this--soft { background: var(--azure-soft); color: var(--azure); box-shadow: none; }
 
-.scan-none { display: grid; gap: var(--sp-2); padding: var(--sp-4); border-radius: var(--r-2); background: var(--surface-2); }
+.scan-none { display: grid; gap: var(--sp-3); padding: var(--sp-4); border-radius: var(--r-card); background: var(--surface-2); }
 .scan-none h3 { margin: 0; font-size: var(--fs-3); font-weight: 700; }
 .scan-none-acts { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-.scan-none-acts .btn { border-color: var(--line-strong); }
+.scan-none-acts .btn { border-radius: var(--r-pill); box-shadow: none; background: var(--surface); }
 
-.scan-foot { margin: var(--sp-2) 0 0; font-size: var(--fs-1); line-height: 1.5; color: var(--ink-2); max-width: 62ch; }
+.scan-foot { margin: 0; font-size: var(--fs-1); line-height: 1.5; color: var(--ink-2); max-width: 62ch; }
 
-:root[data-theme="outdoor"] .scan-card { box-shadow: inset 0 4px 0 var(--kc, var(--line-strong)), var(--shadow-1); }
+/* ---------- first appearance of a result: rise in one after another, ring and bars fill ---------- */
+.scan-rise { animation: scan-rise 620ms var(--ease-spring) both; animation-delay: calc(var(--i, 0) * 90ms + 40ms); }
+@keyframes scan-rise { from { opacity: 0; transform: translateY(32px) scale(.96); } }
+.scan-rise .scan-ring-fill { animation: scan-ring 900ms var(--ease-out) 260ms both; }
+@keyframes scan-ring { from { stroke-dashoffset: 100; } }
+.scan-rise .scan-bar i { animation: scan-bar 760ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 90ms + 380ms); }
+@keyframes scan-bar { from { transform: scaleX(0); } }
+
+/* ---------- motion preferences ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .scan-box--land, .scan-pips { animation: none; }
+  .scan-handle::after, .scan-shutter, .scan-pickicon, .scan-chip, .scan-go { transition: none; }
+  .scan-handle.is-active::after { transform: none; }
+  .scan-pickbtn:active .scan-shutter, .scan-pickbtn:active .scan-pickicon, .scan-chip:active, .scan-go:active { transform: none; }
+  /* no moving light: the area brightens a little instead, and the pips and status say how far it has got */
+  .scan-sweep::before { animation: none; top: 0; height: 100%; background: color-mix(in srgb, var(--bracket) 14%, transparent); }
+  .scan-pips i.now { animation: none; opacity: .6; }
+  .scan-go[aria-disabled="true"]::after { animation: none; background: rgba(255, 255, 255, .25); background-size: 100% 100%; }
+  .scan-rise { animation: scan-fade var(--dur-2) linear both; animation-delay: 0ms; }
+  .scan-rise .scan-ring-fill, .scan-rise .scan-bar i, .scan-strip > img { animation: none; }
+}
+@keyframes scan-fade { from { opacity: 0; } }
+
+/* ---------- outdoor, and less transparency: firmer edges, solid chips ---------- */
+:root[data-theme="outdoor"] .scan { --cam-glass: rgba(255, 255, 255, .16); --cam-edge: rgba(255, 255, 255, .62); --cam-ink-2: #D3DED9; }
+:root[data-theme="outdoor"] .scan-chip, :root[data-theme="outdoor"] .scan-pickicon, :root[data-theme="outdoor"] .scan-head .iconbtn { box-shadow: inset 0 0 0 1.5px var(--cam-edge); }
+:root[data-theme="outdoor"] .scan-card, :root[data-theme="outdoor"] .scan-verdict-wrap { box-shadow: var(--shadow-1); }
+@media (prefers-reduced-transparency: reduce) {
+  .scan { --cam-glass: #24322E; --cam-glass-2: #2E3F3A; }
+  .scan-pips { background: var(--cam-2); }
+}
+@media (min-width: 761px) {
+  .scan-cam { border-radius: 0 0 28px 28px; }
+}

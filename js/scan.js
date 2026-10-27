@@ -34,65 +34,95 @@ export async function renderScan(ctx) {
   const subject = () => (S.kind ? KINDS[S.kind].one : covered.length === 1 ? KINDS[covered[0]].one : null);
   const intro = covered.length ? `Name ${article(KINDS[covered[0]].one)} ${words(covered.map(k => KINDS[k].one))} from a photo, right on your phone.` : 'Find out what you photographed, right on your phone.';
 
+  // A dark camera zone runs under the status bar (the viewfinder and its controls); the results sit on a sheet that
+  // slides up over it. The zone is the screen's hero, so the frosted top bar only takes over once it has scrolled away.
   view.innerHTML = `
-    <header class="page-head page-head--back scan-head"><a class="iconbtn" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
-      <div><h1>Scan a photo</h1><p class="muted small">${esc(intro)}</p></div></header>
-    <div class="scan pad-x">
-      <section class="scan-vf" data-vf aria-label="Photo"></section>
-      <div class="scan-tools" data-tools></div>
-      ${multi ? `<div class="scan-kinds" role="group" aria-label="What kind is it?" data-kinds></div>` : ''}
-      <button type="button" class="btn btn--primary btn--block scan-go" data-identify>Identify</button>
-      <div class="scan-work">
-        <p class="scan-status" role="status" aria-live="polite" data-status></p>
-        <div class="scan-progress" data-progress aria-hidden="true"></div>
+    <div class="scan">
+      <section class="scan-cam" data-hero-zone>
+        <header class="page-head page-head--back scan-head"><a class="iconbtn" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
+          <div><h1>Scan a photo</h1><p class="small">${esc(intro)}</p></div></header>
+        <div class="scan-cam-body">
+          <section class="scan-vf" data-vf aria-label="Photo"></section>
+          <div class="scan-tools" data-tools></div>
+          ${multi ? `<div class="scan-kinds" role="group" aria-label="What kind is it?" data-kinds></div>` : ''}
+          <button type="button" class="scan-go" data-identify><span class="scan-go-ico">${icon.scan}</span><span data-golabel>Identify</span></button>
+          <div class="scan-work">
+            <p class="scan-status" role="status" aria-live="polite" data-status></p>
+            <div class="scan-progress" data-progress aria-hidden="true"></div>
+          </div>
+        </div>
+      </section>
+      <div class="scan-sheet pad-x">
+        <section class="scan-result" data-result aria-labelledby="scan-verdict"></section>
+        <p class="scan-foot" data-foot></p>
       </div>
-      <section class="scan-result" data-result aria-labelledby="scan-verdict"></section>
-      <p class="scan-foot" data-foot></p>
     </div>`;
 
   const vf = $('[data-vf]', view), tools = $('[data-tools]', view), kindsEl = $('[data-kinds]', view);
-  const go = $('[data-identify]', view), status = $('[data-status]', view), prog = $('[data-progress]', view);
+  const go = $('[data-identify]', view), goLabel = $('[data-golabel]', view), status = $('[data-status]', view), prog = $('[data-progress]', view);
   const out = $('[data-result]', view);
   let busy = false;
+  let step = null; // { index, count } while the model looks at the photo, shown over the photo
 
   // ---------- footnote ----------
   $('[data-foot]', view).textContent = `Photo ID runs on your phone with BioCLIP, a model from the Imageomics Institute (MIT licence). The first scan downloads about ${mod?.PHOTO_MODEL_MB ?? 104} MB once, best on Wi-Fi. After that it works offline.${accuracyLine(known.metrics)}`;
 
   // ---------- viewfinder ----------
-  function drawVF() {
+  // fresh: a photo that has just been picked, so the box lands on it with a small spring.
+  function drawVF(fresh = false) {
     if (!S.url) {
       vf.className = 'scan-vf scan-vf--empty';
-      vf.innerHTML = `<span class="scan-corners" aria-hidden="true"></span>
-        <div class="scan-entry">
-          <span class="scan-entry-icon">${icon.scan}</span>
-          <p>Works best when ${subject() ? `the ${esc(subject())}` : 'it'} fills a good part of the frame.</p>
-          <div class="scan-pick">
-            <label class="btn btn--primary scan-pickbtn">${icon.cam}<span>Take a photo</span><input type="file" accept="image/*" capture="environment" class="scan-file" data-file></label>
-            <label class="btn scan-pickbtn scan-pickbtn--ghost">${galleryIcon}<span>Choose from gallery</span><input type="file" accept="image/*" class="scan-file" data-file></label>
+      // A camera's controls: the shutter in the middle, the gallery beside it.
+      vf.innerHTML = `<div class="scan-frame">
+          <span class="scan-corners" aria-hidden="true"></span>
+          <div class="scan-entry">
+            <span class="scan-entry-icon">${icon.scan}</span>
+            <p>Works best when ${subject() ? `the ${esc(subject())}` : 'it'} fills a good part of the frame.</p>
           </div>
+        </div>
+        <div class="scan-pick">
+          <label class="scan-pickbtn scan-pickbtn--main"><span class="scan-shutter">${icon.cam}</span><span>Take a photo</span><input type="file" accept="image/*" capture="environment" class="scan-file" data-file></label>
+          <label class="scan-pickbtn scan-pickbtn--side"><span class="scan-pickicon">${galleryIcon}</span><span>Choose from gallery</span><input type="file" accept="image/*" class="scan-file" data-file></label>
         </div>`;
       tools.innerHTML = '';
       go.classList.add('hidden');
       kindsEl?.classList.add('hidden');
       return;
     }
-    vf.className = 'scan-vf';
+    vf.className = `scan-vf ${busy ? 'scan-vf--busy' : ''}`;
+    const handle = c => `<span class="scan-handle scan-handle--${c}" data-handle="${c}"></span>`;
     vf.innerHTML = `<div class="scan-stage ${S.whole ? 'scan-stage--whole' : ''}" data-stage tabindex="0" role="application" aria-roledescription="photo"
         aria-label="${S.whole ? 'Your photo. The whole photo will be identified.' : 'Your photo with the identify box. Arrow keys move the box, plus and minus change its size.'}">
-        <img src="${S.url}" alt="" draggable="false">
-        <div class="scan-box" data-box><span class="scan-handle" data-handle></span></div>
-        <span class="scan-corners scan-corners--photo" aria-hidden="true"></span>
+        <div class="scan-photo">
+          <img src="${S.url}" alt="" draggable="false">
+          <span class="scan-dim" data-dim aria-hidden="true"></span>
+          <span class="scan-corners scan-corners--photo" aria-hidden="true"></span>
+          <span class="scan-sweep scan-sweep--whole" aria-hidden="true"></span>
+        </div>
+        <div class="scan-box ${fresh ? 'scan-box--land' : ''}" data-box><span class="scan-sweep" aria-hidden="true"></span>${['nw', 'ne', 'sw', 'se'].map(handle).join('')}</div>
+        <span class="scan-pips" data-pips aria-hidden="true"></span>
       </div>`;
     tools.innerHTML = `<p class="scan-hint">${S.whole ? 'The whole photo will be identified.'
-      : subject() ? `Drag the box onto the ${esc(subject())}. Pull its corner to resize.` : 'Drag the box onto what you want named. Pull its corner to resize.'}</p>
+      : subject() ? `Drag the box onto the ${esc(subject())}. Pull a corner to resize.` : 'Drag the box onto what you want named. Pull a corner to resize.'}</p>
       <div class="scan-tool-row">
-        <button type="button" class="chip scan-chip" data-whole aria-pressed="${S.whole}">Whole photo</button>
-        <label class="btn btn--quiet scan-change">${galleryIcon}<span>Change photo</span><input type="file" accept="image/*" class="scan-file" data-file></label>
+        <button type="button" class="scan-chip scan-chip--whole" data-whole aria-pressed="${S.whole}"><i aria-hidden="true"></i>Whole photo</button>
+        <label class="scan-chip scan-change">${galleryIcon}<span>Change photo</span><input type="file" accept="image/*" class="scan-file" data-file></label>
       </div>`;
     go.classList.remove('hidden');
     kindsEl?.classList.remove('hidden');
     drawBox();
+    drawPips();
+    const img = $('[data-stage] img', vf);
+    if (!img.complete) img.addEventListener('load', drawBox, { once: true }); // the small-box check needs the laid-out size
     wireStage($('[data-stage]', vf));
+  }
+
+  // Progress per view while the model works: one pip over the photo for each way it looks at it (the status line
+  // under Identify says the same in words).
+  function drawPips() {
+    const el = $('[data-pips]', vf);
+    if (!el) return;
+    el.innerHTML = step ? Array.from({ length: step.count }, (_, i) => `<i class="${i < step.index - 1 ? 'on' : i === step.index - 1 ? 'now' : ''}"></i>`).join('') : '';
   }
 
   function clampBox() {
@@ -106,7 +136,14 @@ export async function renderScan(ctx) {
     if (!el) return;
     clampBox();
     const b = S.box;
-    Object.assign(el.style, { left: `${(b.cx - b.s / 2) / S.W * 100}%`, top: `${(b.cy - b.s / 2) / S.H * 100}%`, width: `${b.s / S.W * 100}%`, height: `${b.s / S.H * 100}%` });
+    const at = { left: `${(b.cx - b.s / 2) / S.W * 100}%`, top: `${(b.cy - b.s / 2) / S.H * 100}%`, width: `${b.s / S.W * 100}%`, height: `${b.s / S.H * 100}%` };
+    // The box and its handles may hang over the photo's edge; the shade around the box stays clipped to the photo.
+    Object.assign(el.style, at);
+    const dim = $('[data-dim]', vf);
+    if (dim) Object.assign(dim.style, at);
+    // On a small box, four 44px handles would cover it; keep just the bottom-right one so the middle can still be dragged.
+    const px = b.s / S.W * (el.parentElement?.clientWidth || 0);
+    el.classList.toggle('scan-box--small', px > 0 && px < 110);
   }
   const cropFractions = () => { const b = S.box; return { x: (b.cx - b.s / 2) / S.W, y: (b.cy - b.s / 2) / S.H, w: b.s / S.W, h: b.s / S.H }; };
 
@@ -121,11 +158,16 @@ export async function renderScan(ctx) {
       stage.setPointerCapture(e.pointerId);
       pts.set(e.pointerId, toImg(e));
       const b = S.box, p = toImg(e);
+      const h = e.target.closest('[data-handle]');
+      stage.querySelector('.scan-handle.is-active')?.classList.remove('is-active');
       if (pts.size === 2) {
         const [a, c] = [...pts.values()];
         mode = 'pinch'; start = { d: Math.hypot(a.x - c.x, a.y - c.y) || 1, s: b.s };
-      } else if (e.target.closest('[data-handle]')) {
-        mode = 'resize'; start = { x0: b.cx - b.s / 2, y0: b.cy - b.s / 2 };
+      } else if (h) {
+        // Resize from the corner that was grabbed; the opposite corner stays put.
+        const c = h.dataset.handle, sx = c.includes('e') ? 1 : -1, sy = c.includes('s') ? 1 : -1;
+        mode = 'resize'; start = { sx, sy, ax: b.cx - sx * b.s / 2, ay: b.cy - sy * b.s / 2 };
+        h.classList.add('is-active');
       } else {
         if (!e.target.closest('[data-box]')) { b.cx = p.x; b.cy = p.y; drawBox(); }
         mode = 'move'; start = { dx: p.x - b.cx, dy: p.y - b.cy };
@@ -140,16 +182,17 @@ export async function renderScan(ctx) {
         const [a, c] = [...pts.values()];
         b.s = start.s * (Math.hypot(a.x - c.x, a.y - c.y) / start.d);
       } else if (mode === 'resize') {
-        const s = Math.max(p.x - start.x0, p.y - start.y0);
-        b.s = Math.min(s, S.W - start.x0, S.H - start.y0);
-        b.cx = start.x0 + b.s / 2; b.cy = start.y0 + b.s / 2;
+        const { sx, sy, ax, ay } = start;
+        const s = Math.max((p.x - ax) * sx, (p.y - ay) * sy);
+        b.s = Math.min(s, sx > 0 ? S.W - ax : ax, sy > 0 ? S.H - ay : ay);
+        b.cx = ax + sx * b.s / 2; b.cy = ay + sy * b.s / 2;
       } else if (mode === 'move') { b.cx = p.x - start.dx; b.cy = p.y - start.dy; }
       drawBox();
     });
     const end = e => {
       pts.delete(e.pointerId);
       if (pts.size === 1 && mode === 'pinch') { const p = [...pts.values()][0]; mode = 'move'; start = { dx: p.x - S.box.cx, dy: p.y - S.box.cy }; }
-      if (!pts.size) { mode = null; stage.classList.remove('scan-stage--drag'); }
+      if (!pts.size) { mode = null; stage.classList.remove('scan-stage--drag'); stage.querySelector('.scan-handle.is-active')?.classList.remove('is-active'); }
     };
     stage.addEventListener('pointerup', end);
     stage.addEventListener('pointercancel', end);
@@ -169,7 +212,7 @@ export async function renderScan(ctx) {
   // ---------- kinds ----------
   function drawKinds() {
     if (!kindsEl) return;
-    const chip = (k, label) => `<button type="button" class="chip scan-chip ${k ? `kind--${k}` : ''}" data-kind="${k || ''}" aria-pressed="${(S.kind || '') === (k || '')}">${k ? '<i aria-hidden="true"></i>' : ''}${esc(label)}</button>`;
+    const chip = (k, label) => `<button type="button" class="scan-chip ${k ? `kind--${k}` : ''}" data-kind="${k || ''}" aria-pressed="${(S.kind || '') === (k || '')}">${k ? '<i aria-hidden="true"></i>' : ''}${esc(label)}</button>`;
     kindsEl.innerHTML = chip(null, 'Anything') + covered.map(k => chip(k, KINDS[k].label)).join('');
   }
 
@@ -195,7 +238,7 @@ export async function renderScan(ctx) {
     out.innerHTML = ''; prog.innerHTML = '';
     const W = img.naturalWidth, H = img.naturalHeight;
     S = { at: Date.now(), file, storeBlob: blob, url: img.src, W, H, box: { cx: W / 2, cy: H / 2, s: Math.min(W, H) * 0.75 }, whole: false, kind: S.kind, result: null };
-    drawVF();
+    drawVF(true);
     status.textContent = `Photo ready. Move the box onto ${subject() ? `the ${subject()}` : 'what you want named'}, then choose Identify.`;
     $('[data-stage]', vf)?.focus({ preventScroll: true });
   }
@@ -205,7 +248,8 @@ export async function renderScan(ctx) {
     if (busy || !S.file) return;
     busy = true;
     const { file, whole, kind } = S;
-    go.setAttribute('aria-disabled', 'true'); go.textContent = 'Identifying…';
+    go.setAttribute('aria-disabled', 'true'); goLabel.textContent = 'Identifying…';
+    vf.classList.add('scan-vf--busy');
     out.innerHTML = ''; prog.innerHTML = '';
     status.textContent = 'Starting photo ID…';
     status.closest('.scan-work').scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
@@ -233,11 +277,14 @@ export async function renderScan(ctx) {
         onProgress: x => {
           if (x.phase !== 'view' || S.file !== file) return;
           status.textContent = `Looking closely, ${x.index} of ${x.count}`;
-          prog.innerHTML = `<div class="scan-steps">${Array.from({ length: x.count }, (_, i) => `<i class="${i < x.index - 1 ? 'on' : i === x.index - 1 ? 'now' : ''}"></i>`).join('')}</div>`;
+          prog.innerHTML = '';
+          step = { index: x.index, count: x.count };
+          drawPips();
         },
       });
       if (location.hash !== '#/scan' || S.file !== file) return; // left Scan or chose another photo meanwhile
       prog.innerHTML = '';
+      done();
       S.result = { ...res, whole, kind };
       S.yours = yoursImage();
       S.logAt = await logScan(res);
@@ -248,9 +295,14 @@ export async function renderScan(ctx) {
         ? `Photo ID needs a one-time download of about ${MB} MB. Connect to the internet (Wi-Fi is best) and try again.`
         : `Photo ID couldn't run: ${err?.message || err}`;
     } finally {
-      busy = false;
-      go.removeAttribute('aria-disabled'); go.textContent = 'Identify';
+      done();
     }
+  }
+  function done() {
+    busy = false; step = null;
+    go.removeAttribute('aria-disabled'); goLabel.textContent = 'Identify';
+    vf.classList.remove('scan-vf--busy');
+    drawPips();
   }
 
   // The analysed area as a small square image for the comparison cards.
@@ -261,7 +313,7 @@ export async function renderScan(ctx) {
     const cx = c.getContext('2d'); cx.imageSmoothingQuality = 'high';
     if (S.whole) {
       const k = n / Math.max(S.W, S.H), w = S.W * k, h = S.H * k;
-      cx.fillStyle = getComputedStyle(vf).backgroundColor || '#000'; cx.fillRect(0, 0, n, n);
+      cx.fillStyle = getComputedStyle($('.scan-cam', view)).backgroundColor || '#000'; cx.fillRect(0, 0, n, n);
       cx.drawImage(img, (n - w) / 2, (n - h) / 2, w, h);
     } else {
       const b = S.box;
@@ -278,51 +330,74 @@ export async function renderScan(ctx) {
     if (!top.length) { out.innerHTML = ''; return; }
     const [a, b] = top, seen = ctx.seenSet();
     const subj = r.kind ? KINDS[r.kind].one : covered.length === 1 ? KINDS[covered[0]].one : null;
-    const headline = r.band === 'likely' ? `Likely: ${a.sp.name}`
-      : r.band === 'possibly' && b ? `Possibly ${a.sp.name} or ${b.sp.name}` : 'Can\'t tell from this photo';
+    const band = r.band === 'possibly' && !b ? 'unsure' : r.band;
+    // The headline reads "Likely: name" as one heading; the band word sits on its own line above the name.
+    const headline = band === 'likely' ? `<span class="scan-band">Likely<span class="sr-only">:</span></span> <span class="scan-verdict-name">${esc(a.sp.name)}</span>`
+      : band === 'possibly' ? `<span class="scan-band">Possibly</span> <span class="scan-verdict-name">${esc(a.sp.name)} or ${esc(b.sp.name)}</span>`
+      : '<span class="scan-verdict-name">Can\'t tell from this photo</span>';
+    const sure = Math.min(99, Math.max(1, Math.round(a.p * 100)));
     const next = r.band === 'likely' ? 'Check the markings against the photos below, then log it.'
       : r.band === 'possibly' ? (r.whole ? `Compare the two below. A box around just the ${subj || 'subject'} often settles it.` : 'Compare the two below. A tighter box or another angle often settles it.')
       : r.whole ? `Draw a box around the ${subj || 'subject'} and try again.`
       : multi && !r.kind ? 'Choose what kind it is, or try a tighter box or a photo from another angle.'
       : 'Try a tighter box, or a photo from another angle.';
     const lead = r.band === 'likely' ? 1 : r.band === 'possibly' ? 2 : 0;
-    const word = p => (p >= (r.bands?.likely ?? 0.8) ? 'Strong match' : p >= 0.3 ? 'Possible' : p >= 0.08 ? 'Outside chance' : 'Unlikely');
+    const level = p => (p >= (r.bands?.likely ?? 0.8) ? 'strong' : p >= 0.3 ? 'possible' : p >= 0.08 ? 'outside' : 'unlikely');
+    const word = p => ({ strong: 'Strong match', possible: 'Possible', outside: 'Outside chance', unlikely: 'Unlikely' })[level(p)];
     const refs = id => {
       const g = galleryFor(id).slice(0, 2).map(p => ({ src: p.thumb || p.src, credit: p.credit, from: p.from }));
       if (g.length < 2) { const w = sized(id); if (w && !g.some(p => p.src === w)) g.unshift({ src: w, credit: '', from: 'Wikipedia' }); }
       return g.slice(0, 2);
     };
+    // On a fresh result the cards rise in one after another (--i); a redraw on return just shows them.
+    // rise() goes at the end of a class attribute: it adds the class, closes the attribute and sets the order.
+    let n = 0;
+    const rise = () => (fresh ? ` scan-rise" style="--i:${n++}` : '');
     const card = (x, i) => {
       const sp = x.sp, ph = refs(sp.id), isLead = i < lead;
       const credits = ph.filter(p => p.credit).map(p => p.credit);
-      const tile = p => (p ? `<img src="${esc(p.src)}" alt="${esc(sp.name)}, reference photo" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'scan-tile-missing'}))">` : '<span class="scan-tile-missing"></span>');
-      return `<article class="scan-card kind--${sp.kind} ${isLead ? 'scan-card--lead' : ''}">
+      const tile = p => (p ? `<img src="${esc(p.src)}" alt="${esc(sp.name)}, reference photo" loading="lazy" decoding="async" onload="this.classList.add('in')" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'scan-tile-missing'}))">` : '<span class="scan-tile-missing"></span>');
+      return `<article class="scan-card kind--${sp.kind} ${isLead ? 'scan-card--lead' : ''}${rise()}">
         <div class="scan-strip">
           <figure class="scan-yours">${S.yours ? `<img src="${S.yours}" alt="Your photo">` : '<span class="scan-tile-missing"></span>'}<figcaption>Yours</figcaption></figure>
           ${tile(ph[0])}${tile(ph[1])}
         </div>
-        ${credits.length ? `<p class="scan-credit">Photos: ${esc(words(credits.map(c => String(c).slice(0, 40)), 'and'))}${ph.some(p => p.from && p.credit) ? ` (${esc(ph.find(p => p.credit)?.from || '')})` : ''}</p>` : ''}
-        <div class="scan-card-head">
-          <h3><a href="#/bird/${sp.id}">${esc(sp.name)}</a></h3>
-          <span class="scan-kind">${esc(KINDS[sp.kind].one)}</span>
-          ${seen.has(sp.id) ? '' : '<span class="scan-new">New for your dex</span>'}
-        </div>
-        ${sp.notes ? `<p class="scan-tip">${esc(firstSentence(sp.notes))}</p>` : ''}
-        <div class="scan-card-foot">
-          <p class="scan-conf"><strong>${word(x.p)}</strong> <span>${pct(x.p)}</span></p>
-          <button type="button" class="btn ${isLead ? 'btn--primary' : ''} scan-this" data-this="${sp.id}" aria-label="This one: ${esc(sp.name)}">This one</button>
+        <div class="scan-card-body">
+          ${credits.length ? `<p class="scan-credit">Photos: ${esc(words(credits.map(c => String(c).slice(0, 40)), 'and'))}${ph.some(p => p.from && p.credit) ? ` (${esc(ph.find(p => p.credit)?.from || '')})` : ''}</p>` : ''}
+          <div class="scan-card-head">
+            <h3><a href="#/bird/${sp.id}">${esc(sp.name)}</a></h3>
+            <span class="scan-kind">${esc(KINDS[sp.kind].one)}</span>
+            ${seen.has(sp.id) ? '' : '<span class="scan-new">New for your dex</span>'}
+          </div>
+          ${sp.notes ? `<p class="scan-tip">${esc(firstSentence(sp.notes))}</p>` : ''}
+          <div class="scan-card-foot">
+            <div class="scan-conf scan-conf--${level(x.p)}">
+              <p><strong>${word(x.p)}</strong> <span>${pct(x.p)}</span></p>
+              <span class="scan-bar" aria-hidden="true"><i style="--p:${Math.max(0.02, Math.min(1, x.p)).toFixed(3)}"></i></span>
+            </div>
+            <button type="button" class="btn scan-this ${isLead ? 'btn--primary' : 'scan-this--soft'}" data-this="${sp.id}" aria-label="This one: ${esc(sp.name)}">This one</button>
+          </div>
         </div>
       </article>`;
     };
-    out.innerHTML = `<div class="scan-verdict-wrap ${fresh ? 'scan-reveal' : ''}">
-        <h2 class="scan-verdict scan-verdict--${r.band}" id="scan-verdict" tabindex="-1">${esc(headline)}</h2>
-        <p class="scan-next">${esc(next)}</p>
+    const ring = band === 'unsure'
+      ? '<b class="scan-ring-q">?</b>'
+      : `<b class="scan-ring-n"><span data-ringn>${sure}</span><small>%</small></b>`;
+    out.innerHTML = `<div class="scan-verdict-wrap scan-verdict-wrap--${band}${rise()}">
+        <div class="scan-ring" aria-hidden="true" style="--p:${band === 'unsure' ? 0 : sure}">
+          <svg viewBox="0 0 80 80"><circle class="scan-ring-track" cx="40" cy="40" r="34" pathLength="100"/><circle class="scan-ring-fill" cx="40" cy="40" r="34" pathLength="100"/></svg>
+          ${ring}
+        </div>
+        <div class="scan-verdict-text">
+          <h2 class="scan-verdict scan-verdict--${band}" id="scan-verdict" tabindex="-1">${headline}</h2>
+          <p class="scan-next">${esc(next)}</p>
+        </div>
       </div>
       <div class="scan-cards">
         ${top.slice(0, Math.max(lead, 0)).map(card).join('')}
-        ${top.length > lead ? `<h3 class="scan-also">${lead ? 'Also worth comparing' : 'Closest matches'}</h3>${top.slice(lead).map((x, i) => card(x, i + lead)).join('')}` : ''}
+        ${top.length > lead ? `<h3 class="scan-also${rise()}">${lead ? 'Also worth comparing' : 'Closest matches'}</h3>${top.slice(lead).map((x, i) => card(x, i + lead)).join('')}` : ''}
       </div>
-      <section class="scan-none" aria-labelledby="scan-none-h">
+      <section class="scan-none${rise()}" aria-labelledby="scan-none-h">
         <h3 id="scan-none-h">None of these?</h3>
         <div class="scan-none-acts">
           <button type="button" class="btn" data-tighter>Try a tighter box</button>
@@ -333,7 +408,9 @@ export async function renderScan(ctx) {
     if (fresh) {
       status.textContent = '';
       $('#scan-verdict', out)?.focus({ preventScroll: true });
-      $('.scan-verdict-wrap', out)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      // The result section, not the verdict card: the card is still rising in, so its position is off by the offset.
+      out.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      ctx.countUp?.($('[data-ringn]', out), 0, sure, { delay: 260, duration: 820 });
     }
   }
 
@@ -359,7 +436,7 @@ export async function renderScan(ctx) {
     if (t.closest('[data-tighter]')) {
       markChosen(S.logAt, 'none');
       const wasWhole = S.whole;
-      if (S.url) { if (!S.whole) S.box.s *= 0.75; S.whole = false; drawVF(); }
+      if (S.url) { if (!S.whole) S.box.s *= 0.75; S.whole = false; drawVF(true); }
       vf.scrollIntoView({ block: 'center' });
       $('[data-stage]', vf)?.focus({ preventScroll: true });
       status.textContent = `Move the ${wasWhole ? '' : 'smaller '}box onto just the part you want named, then choose Identify.`;
