@@ -32,6 +32,9 @@ const I = {
   duel: svg('M3.5 6.5h7v11h-7zM13.5 6.5h7v11h-7z'),
   rapid: svg('M12 21a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15zM12 9.5v4l2.5 1.5M10 3h4'),
   facts: svg('M5 6h14v14H5zM5 10h14M9 3.5V7M15 3.5V7'),
+  silhouette: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/></svg>',
+  zoom: svg('M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM15.5 15.5L20 20M10.5 8v5M8 10.5h5'),
+  warn: svg('M12 4l9 16H3zM12 10v4M12 17h.01'),
   deck: svg('M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10'),
   back: svg('M15 5l-7 7 7 7', 2.2),
   compare: svg('M8 4v16M16 4v16M4 8l4-4 4 4M12 16l4 4 4-4'),
@@ -39,7 +42,7 @@ const I = {
 
 // ---------- state (kv store) ----------
 let L = null, D = null, ST = null, loading = null;
-const freshLearn = () => ({ cards: {}, best: {}, duels: { n: 0, won: 0 }, rounds: 0, perfect: 0, prefs: {} });
+const freshLearn = () => ({ cards: {}, best: {}, duels: { n: 0, won: 0 }, rounds: 0, perfect: 0, prefs: {}, packs: {} });
 const freshDaily = () => ({ streak: 0, best: 0, lastDate: '', done: 0, history: {}, today: null });
 export function learnReady() {
   loading ||= Promise.all([
@@ -48,6 +51,7 @@ export function learnReady() {
     L = { ...freshLearn(), ...(l && typeof l === 'object' ? l : {}) };
     L.prefs = { kind: 'animals', scope: 'all', difficulty: 'normal', ...(L.prefs || {}) };
     L.duels = { n: 0, won: 0, ...(L.duels || {}) };
+    L.packs = L.packs && typeof L.packs === 'object' ? L.packs : {};
     D = { ...freshDaily(), ...(d && typeof d === 'object' ? d : {}) };
     ST = s && typeof s === 'object' ? s : {};
   });
@@ -105,13 +109,16 @@ function accuracy(kind) {
 // For the Learning badges (stats.js badges(..., learnStats())).
 export function learnStats() {
   if (!L) return {};
-  const cards = allCards();
+  const cards = allCards(), packs = Object.values(L.packs);
   return {
     rounds: L.rounds, perfect: L.perfect, duelsWon: L.duels.won, bestStreak: D.best, dailyDone: D.done,
     mastered: Object.keys(L.cards).filter(id => isMastered(id)).length,
     callsMastered: cards.filter(c => c.skill === 'call' && c.box >= 4).length,
+    packsDone: packs.filter(x => x.plays > 0).length, packPerfect: packs.filter(x => x.perfect > 0).length,
   };
 }
+// Per pack: best score (of how many), rounds finished, perfect rounds and the species she has got right in it.
+const packState = key => (L.packs[key] ||= { best: null, of: 0, plays: 0, perfect: 0, got: [] });
 
 // ---------- the dex home teaser (integrated later) ----------
 function pipsHTML(picks = [], n = 5, cls = 'lh-pips') {
@@ -223,11 +230,11 @@ const credit = c => (c ? `Recording: ${String(c.artist || 'Unknown').slice(0, 50
 // ---------- photos with fallbacks ----------
 const photoCredit = p => (p ? `Photo: ${String(p.credit || 'Unknown').slice(0, 50)}${p.license ? `, ${p.license}` : ''}` : '');
 // `missing` is HTML (already escaped) shown when no photo will load. Inside a button use inline: true (spans only).
-function photoHTML(photos, { alt = '', cls = 'lq-photo', missing = '', inline = false } = {}) {
+function photoHTML(photos, { alt = '', cls = 'lq-photo', missing = '', inline = false, style = '' } = {}) {
   const [p, ...rest] = photos || [];
   const [box, cap] = inline ? ['span', 'span'] : ['figure', 'figcaption'];
   if (!p) return `<${box} class="${cls} is-missing" data-photo><span class="lq-nophoto">${missing || 'No photo saved on this phone.'}</span></${box}>`;
-  return `<${box} class="${cls}" data-photo><span class="whole"><img class="whole-bg" src="${esc(p.src)}" alt="" aria-hidden="true" decoding="async">
+  return `<${box} class="${cls}" data-photo${style ? ` style="${esc(style)}"` : ''}><span class="whole"><img class="whole-bg" src="${esc(p.src)}" alt="" aria-hidden="true" decoding="async">
     <img class="whole-fg" src="${esc(p.src)}" alt="${esc(alt)}" decoding="async" data-chain="${esc(JSON.stringify(rest.slice(0, 4).map(x => [x.src, photoCredit(x)])))}"></span>
     <span class="lq-nophoto" hidden>${missing || 'This photo needs a connection.'}</span>
     <${cap} class="lq-credit">${esc(photoCredit(p))}</${cap}></${box}>`;
@@ -296,7 +303,7 @@ export async function renderLearn(ctx, sub = '', arg = '') {
     if (game?.testId === id) return game.done ? drawResults(ctx) : drawQuestion(ctx);
     return startRound(ctx, 'quick', { ids: testSet(id), testId: id });
   }
-  if (sub === 'play' && Q.MODES.includes(arg)) {
+  if (sub === 'play' && (Q.MODES.includes(arg) || Q.PACK_BY[arg])) {
     if (game && !game.daily && !game.deck) return game.done ? drawResults(ctx) : drawQuestion(ctx);
     return startRound(ctx, arg);
   }
@@ -321,8 +328,11 @@ const MODE_INFO = {
   whoami: ['Who am I?', 'Field notes with the names blanked out.'],
   duel: ['Look-alike duels', 'Two that get mixed up. Pick the right one.'],
   rapid: ['Rapid fire', 'As many in a row as you can in 60 seconds.'],
+  silhouette: ['Silhouettes', 'Shape and shade only. The colour comes back when you answer.'],
+  zoom: ['Zoom in', 'A close-up crop that pulls back once you answer.'],
   facts: ['Seasons and facts', 'When, where and how big. No photos needed.'],
 };
+const roundName = () => (game.daily ? "Today's challenge" : game.testId ? 'Test me' : game.pack ? Q.PACK_BY[game.pack].name : MODE_INFO[game.mode]?.[0] || '');
 const DIFF = { easy: ['Easy', 'Wrong answers come from other groups.'], normal: ['Normal', 'One look-alike among the answers.'], hard: ['Hard', 'Every wrong answer is one of its closest matches.'] };
 const bestKey = (mode, p) => `${mode}|${p.kind}|${p.scope}|${p.difficulty}`;
 const kindLabel = k => (k === 'animals' ? 'All animals' : KINDS[k].label);
@@ -423,12 +433,21 @@ function renderHub(ctx) {
   const kinds = ['animals', ...kindsPresent];
   const scopes = [['all', 'Everything'], ['seen', "Ones I've seen"], ['month', `Around in ${month}`]];
   const now = new Date();
-  const grow = !hubOnce && !reduced() ? ' data-grow' : '';
+  const first = !hubOnce;
+  const grow = first && !reduced() ? ' data-grow' : '';
   hubOnce = true;
   const hero = heroFace(now.getMonth() + 1);
+  const packsDone = Object.values(L.packs).filter(x => x.plays > 0).length;
+  const mastered = Object.keys(L.cards).filter(id => isMastered(id)).length;
+  const packs = packsHTML(!!p.allPacks), packN = Q.PACKS.filter(x => Q.packSpecies(x.key).length >= 5).length;
   view.innerHTML = `
-    <header class="page-head"><h1 class="lh-title">Learn</h1></header>
+    <header class="page-head lh-head"><h1 class="lh-title">Learn</h1><p class="lh-lede">Quizzes on the birds, wildlife and plants of South East Queensland.</p></header>
     <div class="learn">
+      <ul class="lh-stats" aria-label="How you're going at a glance">
+        <li><b data-count="${streak}">${streak}</b><span>${streak === 1 ? 'day' : 'days'} in a row</span></li>
+        <li><b data-count="${packsDone}">${packsDone}</b><span>of ${packN} packs done</span></li>
+        <li><b data-count="${mastered}">${mastered}</b><span>species mastered</span></li>
+      </ul>
       ${navigator.onLine ? '' : '<p class="lh-offline" role="status">No signal. Questions use the photos and calls saved on this phone, plus field notes.</p>'}
       <a class="lh-daily${doneToday ? ' is-done' : ''}${hero ? ` kind--${hero.kind}` : ''}" href="#/learn/daily">
         ${hero ? `<span class="lh-daily-photo" aria-hidden="true">${imgTag(faceSrc(hero.id, 'large'))}</span>` : ''}
@@ -440,21 +459,28 @@ function renderHub(ctx) {
         <span class="lh-daily-foot">${heroPips(picks, today)}<span class="lh-go">${doneToday ? 'See how you went' : picks.length ? 'Carry on' : 'Start'}</span></span>
       </a>
 
+      <section class="lh-sec" aria-labelledby="lh-packs-h">
+        <div class="lh-sec-h"><h2 id="lh-packs-h">Quiz packs</h2></div>
+        ${packs ? `<ul class="lh-modes lh-packs"${grow}>${packs}</ul>
+        ${packN > PACKS_SHOWN ? `<button type="button" class="btn btn--block lh-more" data-morepacks aria-expanded="${!!p.allPacks}">${p.allPacks ? 'Show fewer packs' : `Show all ${packN} packs`}</button>` : ''}`
+          : '<p class="small muted lh-empty">The packs appear once the species list has loaded.</p>'}
+      </section>
+
+      <section class="lh-sec" aria-labelledby="lh-play-h">
+        <div class="lh-sec-h"><h2 id="lh-play-h">Quick play</h2></div>
+        <div class="lh-kinds" role="group" aria-label="What to practise">${kinds.map(k => `<button type="button" class="lh-kind${k !== 'animals' ? ` kind--${k}` : ''}" data-kind="${k}" aria-pressed="${p.kind === k}"><i aria-hidden="true"></i>${esc(kindLabel(k))}</button>`).join('')}</div>
+        ${segHTML('scope', scopes, p.scope, 'Which species')}
+        ${segHTML('diff', Object.entries(DIFF).map(([k, [l]]) => [k, l]), p.difficulty, 'Difficulty')}
+        <p class="small muted lh-hint" data-hint>${esc(DIFF[p.difficulty][1])}</p>
+        <ul class="lh-modes${p.kind !== 'animals' ? ` kind--${p.kind}` : ''}" data-modes>${modesHTML(p)}</ul>
+      </section>
+
       <section class="lh-sec" aria-labelledby="lh-deck-h">
         <div class="lh-sec-h"><h2 id="lh-deck-h">Review deck</h2><a href="#/learn/deck">${cards.length ? 'Open' : 'Set up'}</a></div>
         ${cards.length ? `<a class="lh-deck${due ? ' is-due' : ''}" href="#/learn/deck" aria-label="${due} ${due === 1 ? 'card' : 'cards'} due. Open the review deck"${grow}>
           ${boxesHTML(boxes)}
           <span class="lh-deck-txt"><strong>${due ? `<b>${due}</b> ${due === 1 ? 'card' : 'cards'} to review` : 'Nothing due right now'}</strong><span class="small muted">Know a card and it moves along a box. Box 4 and 5 count as mastered.</span></span></a>`
           : '<p class="small muted lh-empty">Species you miss in a round land here, so they come back until you know them. You can also add a set yourself.</p>'}
-      </section>
-
-      <section class="lh-sec" aria-labelledby="lh-play-h">
-        <div class="lh-sec-h"><h2 id="lh-play-h">Practise</h2></div>
-        <div class="lh-kinds" role="group" aria-label="What to practise">${kinds.map(k => `<button type="button" class="lh-kind${k !== 'animals' ? ` kind--${k}` : ''}" data-kind="${k}" aria-pressed="${p.kind === k}"><i aria-hidden="true"></i>${esc(kindLabel(k))}</button>`).join('')}</div>
-        ${segHTML('scope', scopes, p.scope, 'Which species')}
-        ${segHTML('diff', Object.entries(DIFF).map(([k, [l]]) => [k, l]), p.difficulty, 'Difficulty')}
-        <p class="small muted lh-hint" data-hint>${esc(DIFF[p.difficulty][1])}</p>
-        <ul class="lh-modes${p.kind !== 'animals' ? ` kind--${p.kind}` : ''}" data-modes>${modesHTML(p)}</ul>
       </section>
 
       <section class="lh-sec" aria-labelledby="lh-prog-h">
@@ -466,9 +492,20 @@ function renderHub(ctx) {
   const card = view.querySelector('.lh-daily');
   if (hero && tintable(faceSrc(hero.id))) ctx.applyTint?.(card, faceSrc(hero.id), null);
   growOnView(view);
-  ctx.stagger?.(view, '.lh-daily, .lh-deck, .lh-modes > li', { key: 'learn-hub' });
+  ctx.stagger?.(view, '.lh-stats > li, .lh-daily, .lh-packs > li:not([hidden]), .lh-modes[data-modes] > li', { key: 'learn-hub', max: 16 });
+  if (first && !reduced()) for (const b of view.querySelectorAll('.lh-stats [data-count]')) { const n = Number(b.dataset.count); if (n > 0) ctx.countUp?.(b, 0, n, { delay: 160 }); }
   view.querySelector('.lh-kind[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'auto' });
   view.onclick = e => {
+    const more = e.target.closest('[data-morepacks]');
+    if (more) {
+      L.prefs.allPacks = !L.prefs.allPacks; saveL();
+      const all = L.prefs.allPacks;
+      view.querySelectorAll('.lh-packs > li').forEach((li, i) => { li.hidden = !all && i >= PACKS_SHOWN; });
+      more.setAttribute('aria-expanded', String(all));
+      more.textContent = all ? 'Show fewer packs' : `Show all ${packN} packs`;
+      if (all) ctx.stagger?.(view, `.lh-packs > li:nth-child(n+${PACKS_SHOWN + 1})`, { key: `learn-packs-${Date.now()}`, max: 16 });
+      return;
+    }
     const k = e.target.closest('[data-kind]'), sc = e.target.closest('[data-scope]'), d = e.target.closest('[data-diff]');
     if (k) L.prefs.kind = k.dataset.kind;
     if (sc) L.prefs.scope = sc.dataset.scope;
@@ -515,6 +552,43 @@ function modesHTML(p) {
   }).join('');
 }
 
+// ---------- quiz packs on the hub ----------
+const PACKS_SHOWN = 6;
+// A cover photo per pack, the same all day, no species on two covers; commoner ones where the pack has them.
+let covers = { key: '', v: null };
+function packCovers() {
+  const key = dayStr();
+  if (covers.key === key) return covers.v;
+  const used = new Set(), v = {};
+  for (const p of Q.PACKS) {
+    const list = Q.packSpecies(p.key).filter(Q.hasPhoto);
+    if (!list.length) continue;
+    const common = list.filter(s => s.rarity <= 3);
+    const pool = Q.shuffle((common.length >= 3 ? common : list).slice(), Q.seeded(Q.hashStr(`pack|${key}|${p.key}`)));
+    const s = pool.find(x => !used.has(x.id)) || pool[0];
+    used.add(s.id); v[p.key] = s.id;
+  }
+  if (Object.keys(v).length >= Q.PACKS.length - 2) covers = { key, v }; // keep trying until the photo index is in
+  return v;
+}
+// The ring shows how much of the pack she has got right at least once; it fills the first time it is seen.
+function packsHTML(all) {
+  const cov = packCovers();
+  let i = 0;
+  return Q.PACKS.map(p => {
+    const list = Q.packSpecies(p.key), n = list.length;
+    if (n < 5) return ''; // calls or look-alikes still loading
+    const st = L.packs[p.key] || {}, got = new Set(st.got || []);
+    const right = list.filter(s => got.has(s.id)).length, frac = right / n;
+    const label = `${p.name}. ${n} species${right ? `, ${right} got right` : ''}${st.best != null ? `. Best ${st.best} of ${st.of}` : ''}.`;
+    return `<li${!all && i++ >= PACKS_SHOWN ? ' hidden' : ''}><a class="lh-mode lh-pack${p.kind ? ` kind--${p.kind}` : ''}" href="#/learn/play/${p.key}" aria-label="${esc(label)}">
+      <span class="lh-mode-bg" aria-hidden="true">${cov[p.key] ? imgTag(faceSrc(cov[p.key])) : ''}</span>
+      <span class="lh-mode-top" aria-hidden="true"><span class="lh-ring"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" pathLength="100"/><circle class="lh-ring-fg${right ? '' : ' is-zero'}" cx="20" cy="20" r="16" pathLength="100" style="stroke-dashoffset:${(100 - frac * 100).toFixed(1)}"/></svg><b>${Math.round(frac * 100)}<span>%</span></b></span>
+        ${st.best != null ? `<span class="lh-best">Best <b>${st.best}</b><span>/${st.of}</span></span>` : ''}</span>
+      <span class="lh-mode-txt" aria-hidden="true"><strong>${esc(p.name)}</strong><span class="lh-mode-desc">${esc(p.blurb)}</span><span class="lh-pack-n">${n} species</span></span></a></li>`;
+  }).join('');
+}
+
 // Mastered (box 4+) and accuracy for each kind she has practised; one line for the rest.
 function progressHTML(grow = '') {
   const rows = kindsPresent.map(k => ({ k, all: ofKind(k).length, m: ofKind(k).filter(s => isMastered(s.id)).length, acc: accuracy(k) }));
@@ -539,14 +613,14 @@ function emptyMessage(mode, p, offline) {
 }
 async function startRound(ctx, mode, { ids = null, testId = null } = {}) {
   const p = L.prefs, month = new Date().getMonth() + 1;
-  const route = location.hash;
+  const route = location.hash, pack = Q.PACK_BY[mode] || null;
   let offline = null, playMode = mode;
   if (!navigator.onLine) {
-    const pool = Q.speciesFor(ids ? 'all' : p.kind === 'animals' ? 'all' : p.kind);
+    const pool = Q.speciesFor(ids || pack ? 'all' : p.kind === 'animals' ? 'all' : p.kind);
     const [photos, calls] = await Promise.all([Q.cachedPhotos(pool), Q.cachedCalls(pool)]);
     if (location.hash !== route) return;
     offline = { photos, calls };
-    if (['photo', 'rapid'].includes(mode) && photos.size < 4) {
+    if (!pack && ['photo', 'rapid', 'silhouette', 'zoom'].includes(mode) && photos.size < 4) {
       ctx.toast('No photos saved on this phone yet, so this round uses field notes.');
       playMode = 'whoami';
     }
@@ -555,10 +629,14 @@ async function startRound(ctx, mode, { ids = null, testId = null } = {}) {
       return toHub();
     }
   }
-  const qs = Q.buildRound({ mode: playMode, kind: p.kind, scope: ids ? 'all' : p.scope, difficulty: testId ? 'hard' : mode === 'rapid' ? 'normal' : p.difficulty,
-    seen: ctx.seenSet(), month, n: mode === 'rapid' ? 60 : ids ? Math.min(ROUND, ids.length) : ROUND, ids, offline });
-  if (qs.length < (ids ? 1 : 3)) { ctx.toast(emptyMessage(mode, p, !!offline)); return toHub(); }
-  game = { route, mode, qs, i: 0, score: 0, prefs: { ...p }, practice: !!ids, testId };
+  const qs = pack ? Q.buildPackRound(mode, { n: ROUND, month, ids, offline })
+    : Q.buildRound({ mode: playMode, kind: p.kind, scope: ids ? 'all' : p.scope, difficulty: testId ? 'hard' : mode === 'rapid' ? 'normal' : p.difficulty,
+      seen: ctx.seenSet(), month, n: mode === 'rapid' ? 60 : ids ? Math.min(ROUND, ids.length) : ROUND, ids, offline });
+  if (qs.length < (ids ? 1 : pack ? 4 : 3)) {
+    ctx.toast(!pack ? emptyMessage(mode, p, !!offline) : offline ? 'This pack needs more photos or calls saved on this phone. Try it again with a signal.' : 'This pack is still loading. Try again in a moment.');
+    return toHub();
+  }
+  game = { route, mode, pack: pack?.key || null, kind: pack ? pack.kind : p.kind, qs, i: 0, score: 0, prefs: pack ? { ...p, difficulty: 'normal' } : { ...p }, practice: !!ids, testId };
   barWas = 0;
   if (mode === 'rapid') Object.assign(game, { endsAt: Date.now() + RAPID_MS, streak: 0, top: 0 });
   drawQuestion(ctx);
@@ -577,13 +655,16 @@ function headHTML() {
   return `<header class="lq-head glass"><button class="iconbtn" data-quit aria-label="${game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'}">${game.daily ? I.back : I.close}</button>
     <span class="lq-bar" role="progressbar" aria-label="Question ${n} of ${total}" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${n}">${barSpan(filled / total)}</span>
     <span class="lq-count" aria-hidden="true">${n}<span>/${total}</span></span></header>
-    <p class="lq-kicker">${game.daily ? "Today's challenge" : game.testId ? 'Test me' : esc(MODE_INFO[game.mode]?.[0] || '')}${game.testId ? `<span>${esc(byId.get(game.testId).name)} and its look-alikes</span>` : game.practice ? '<span>The ones you missed</span>' : ''}</p>`;
+    <p class="lq-kicker">${esc(roundName())}${game.testId ? `<span>${esc(byId.get(game.testId).name)} and its look-alikes</span>` : game.practice ? '<span>The ones you missed</span>' : game.pack ? '<span>Quiz pack</span>' : ''}</p>`;
 }
+// Photo answers: look-alike duels, odd one out (four) and which is bigger (named from the start).
+const SIDES = { 2: ['Photo on the left', 'Photo on the right'], 4: ['Top left photo', 'Top right photo', 'Bottom left photo', 'Bottom right photo'] };
 function optionsHTML(q) {
-  if (q.type === 'duel') {
-    return `<div class="lq-duel">${q.options.map((o, i) => `<button class="lq-side" data-pick="${esc(o.key)}" aria-label="Photo ${i === 0 ? 'on the left' : 'on the right'}">
+  if (q.options[0]?.photos) {
+    const n = q.options.length;
+    return `<div class="lq-duel${n > 2 ? ' lq-duel--four' : ''}">${q.options.map((o, i) => `<button class="lq-side" data-pick="${esc(o.key)}" aria-label="${esc(q.named ? o.label : SIDES[n]?.[i] || `Photo ${i + 1}`)}">
       ${photoHTML(o.photos, { alt: '', cls: 'lq-photo lq-photo--duel', missing: 'Photo not saved on this phone', inline: true })}
-      <span class="lq-side-name" data-name></span><span class="lq-opt-mark" aria-hidden="true"></span></button>`).join('')}</div>`;
+      <span class="lq-side-name" data-name>${q.named ? esc(o.label) : ''}</span><span class="lq-opt-mark" aria-hidden="true"></span></button>`).join('')}</div>`;
   }
   const grid = game.mode === 'rapid' ? ' lq-options--grid' : '';
   return `<div class="lq-options${grid}" role="group" aria-label="Answers">${q.options.map(o => `<button class="lq-opt" data-pick="${esc(o.key)}">
@@ -591,12 +672,23 @@ function optionsHTML(q) {
 }
 function mediaHTML(q) {
   const sp = byId.get(q.focus);
-  if (q.type === 'photo') return photoHTML(q.photos, { alt: `Mystery ${KINDS[sp.kind].one}`, missing: `This photo needs a connection. Here are its field notes instead: ${clueHTML(Q.blankNotes(sp, q.wrong))}` });
+  const missing = `This photo needs a connection. Here are its field notes instead: ${clueHTML(Q.blankNotes(sp, q.wrong || []))}`;
+  if (q.type === 'photo') return photoHTML(q.photos, { alt: `Mystery ${KINDS[sp.kind].one}`, missing });
+  if (q.type === 'silhouette') return `${SIL_FILTER}${photoHTML(q.photos, { alt: `Mystery ${KINDS[sp.kind].one}, shown as a silhouette`, cls: 'lq-photo lq-photo--sil', missing })}`;
+  if (q.type === 'zoom') return photoHTML(q.photos, { alt: `Mystery ${KINDS[sp.kind].one}, close up`, cls: 'lq-photo lq-photo--zoom', missing, style: `--zx:${q.zoom.x}%;--zy:${q.zoom.y}%;--zs:${q.zoom.scale}` });
   if (q.type === 'call') return callPlayerHTML(sp, { call: q.call, extra: `<p class="lq-hint" data-callhint hidden>Field notes: ${clueHTML(Q.blankNotes(sp, q.wrong))}</p>` });
   if (q.type === 'whoami') return `<blockquote class="lq-clue">${clueHTML(q.clue)}</blockquote>`;
   if (q.type === 'fact' && q.photos?.length) return photoHTML(q.photos, { alt: byId.get(q.img)?.name || '', cls: 'lq-photo lq-photo--small' });
   return '';
 }
+
+// The silhouette: a slight blur, then every pixel goes to dark ink or pale ground by brightness, so the shape is
+// all that's left. A drawing filter on the picture, not a read of its pixels, so any photo host works.
+const ink = [0.075, 0.125, 0.114], ground = [0.914, 0.937, 0.925];
+const SIL_FILTER = `<svg class="lq-defs" aria-hidden="true" focusable="false"><filter id="lq-sil" color-interpolation-filters="sRGB">
+  <feGaussianBlur stdDeviation="1.2"/><feColorMatrix type="matrix" values=".2126 .7152 .0722 0 0 .2126 .7152 .0722 0 0 .2126 .7152 .0722 0 0 0 0 0 1 0"/>
+  <feComponentTransfer>${['R', 'G', 'B'].map((c, i) => `<feFunc${c} type="discrete" tableValues="${[...Array(5).fill(ink[i]), ...Array(6).fill(ground[i])].join(' ')}"/>`).join('')}</feComponentTransfer>
+</filter></svg>`;
 
 function drawQuestion(ctx) {
   const { view } = ctx;
@@ -604,10 +696,13 @@ function drawQuestion(ctx) {
   cleanup();
   const q = game.qs[game.i];
   if (!q || (game.mode === 'rapid' && Date.now() >= game.endsAt)) return drawResults(ctx);
-  view.innerHTML = `<div class="lq-screen lq-screen--${game.mode}${game.prefs?.kind && game.prefs.kind !== 'animals' ? ` kind--${game.prefs.kind}` : ''}" data-own-topbar>${headHTML()}
+  const sub = q.type === 'duel' ? 'Tap the photo you think it is.' : q.type === 'odd' ? 'Tap the odd one out.' : q.sub || '';
+  const safety = q.safety || (game.pack && Q.PACK_BY[game.pack]?.safety ? Q.SNAKE_RULE : '');
+  view.innerHTML = `<div class="lq-screen lq-screen--${game.mode}${game.kind && game.kind !== 'animals' ? ` kind--${game.kind}` : ''}" data-own-topbar>${headHTML()}
     <div class="lq lq--${q.type}">
       <h1 class="lq-prompt" tabindex="-1">${esc(q.prompt)}</h1>
-      ${q.type === 'duel' ? '<p class="lq-sub">Tap the photo you think it is.</p>' : ''}
+      ${sub ? `<p class="lq-sub">${esc(sub)}</p>` : ''}
+      ${safety ? `<p class="lq-safety">${I.warn}<span>${esc(safety)}</span></p>` : ''}
       ${mediaHTML(q)}
       ${optionsHTML(q)}
       <div class="lq-fb" data-fb tabindex="-1"></div>
@@ -649,6 +744,10 @@ function answer(ctx, q, key) {
   q.picked = key;
   const right = key === q.answer;
   if (right) game.score++;
+  if (right && game.pack) {
+    const got = packState(game.pack).got;
+    for (const id of new Set([q.focus, ...(q.also || []), ...q.options.filter(o => o.photos).map(o => o.sp)])) if (id != null && !got.includes(id)) got.push(id);
+  }
   record(q, right);
   navigator.vibrate?.(right ? 30 : [40, 60, 40]);
   if (game.daily) {
@@ -688,6 +787,8 @@ function showAnswer(ctx, q, { brief = false, restore = false } = {}) {
     if (st) st.textContent = game.streak;
     if (tp) tp.textContent = game.top;
   }
+  const pic = view.querySelector('.lq-photo--sil, .lq-photo--zoom');
+  if (pic) { if (restore || reduced()) pic.classList.add('no-anim'); pic.classList.add('is-revealed'); }
   if (!restore && game.mode !== 'rapid') fillBar(view, (game.i + 1) / game.qs.length);
   const fb = view.querySelector('[data-fb]');
   if (!fb) return;
@@ -706,13 +807,14 @@ function feedbackHTML(q, right, brief) {
   const pickedSp = pickedOpt?.sp ? byId.get(pickedOpt.sp) : null;
   const ansLabel = q.options.find(o => o.key === q.answer)?.label || '';
   const speciesQ = q.type !== 'fact' || q.ttype === 'Calls';
-  const verdictText = right ? 'Correct.' : q.type === 'duel' ? `Not quite. That one is the ${pickedSp?.name}.`
+  const verdictText = right ? 'Correct.' : q.miss ? q.miss : q.type === 'duel' ? `Not quite. That one is the ${pickedSp?.name}.`
     : speciesQ ? `Not quite. It's the ${ans.name}.` : q.options.find(o => o.key === q.answer)?.sp ? `Not quite. It's the ${ansLabel}.` : `Not quite. It's ${ansLabel}.`;
   const verdict = `<p class="lq-verdict">${right ? I.tick : I.cross}<span>${esc(verdictText)}</span></p>`;
   if (brief) return verdict;
   const tell = q.type === 'duel' ? q.tell : !right && pickedSp ? Q.tellFor(ans.id, pickedSp.id) : null;
   const cw = q.type === 'call' ? Q.callWords(ans) : null;
-  const line = q.type === 'fact' ? q.explain : cw ? cw.sentence : Q.fieldMark(ans);
+  const line = q.explain || (cw ? cw.sentence : Q.fieldMark(ans));
+  const mark = q.type === 'odd' ? Q.fieldMark(ans) : '';
   const showPhoto = q.type === 'call' || q.type === 'whoami';
   const last = game.i + 1 >= game.qs.length;
   const actions = [];
@@ -722,7 +824,8 @@ function feedbackHTML(q, right, brief) {
   return `${verdict}
     ${speciesQ ? `<p class="lq-name"><a href="#/bird/${ans.id}">${esc(ans.name)}</a> <span class="lq-sci">${esc(ans.sci)}</span></p>` : ''}
     ${showPhoto && q.photos?.length ? photoHTML(q.photos, { alt: ans.name, cls: 'lq-photo lq-photo--answer' }) : ''}
-    ${line ? `<p class="lq-line">${esc(line)}</p>` : ''}
+    ${line ? `<p class="lq-line">${esc(line)}</p>` : ''}${mark ? `<p class="lq-line">${esc(mark)}</p>` : ''}
+    ${q.safety ? `<p class="lq-safety">${I.warn}<span>${esc(q.safety)}</span></p>` : ''}
     ${tell ? `<p class="lq-tell"><strong>How to tell them apart.</strong> ${esc(tell)}</p>` : ''}
     ${q.type === 'fact' && q.source?.title ? `<p class="lq-source">Source: ${q.source.url ? `<a href="${esc(q.source.url)}" target="_blank" rel="noopener">${esc(q.source.title)}</a>` : esc(q.source.title)}</p>` : ''}
     ${actions.length ? `<div class="lq-actions">${actions.join('')}</div>` : ''}
@@ -751,6 +854,14 @@ function drawResults(ctx) {
         D.history = Object.fromEntries(keep.map(k => [k, D.history[k]]));
         saveD();
       }
+    } else if (game.pack && !game.practice) {
+      const P = packState(game.pack);
+      P.plays++;
+      if (P.best == null || game.score > P.best || (game.score === P.best && total < P.of)) { if (P.best != null && game.score > P.best) game.newBest = true; P.best = game.score; P.of = total; }
+      if (game.score === total) P.perfect++;
+      L.rounds++;
+      if (game.score === total && total >= ROUND) L.perfect++;
+      saveL();
     } else if (!game.practice) {
       const key = bestKey(game.mode, game.prefs);
       const score = game.mode === 'rapid' ? game.top : game.score;
@@ -766,7 +877,7 @@ function drawResults(ctx) {
   } else if (game.mode === 'rapid') {
     note = `${game.score} right out of ${total} in 60 seconds.${game.newBest ? ' A new best streak.' : ''}`;
   } else {
-    note = `${game.score === total ? 'A perfect round.' : game.score >= total * 0.7 ? 'Sharp eyes and ears.' : missed.some(q => q.type !== 'fact') ? 'Keep at it. The misses are in your review deck now.' : 'Keep at it.'}${game.newBest ? ' A new personal best.' : ''}`;
+    note = `${game.score === total ? (game.pack && !game.practice ? 'A clean sweep: every one right.' : 'A perfect round.') : game.score >= total * 0.7 ? 'Sharp eyes and ears.' : missed.some(q => q.type !== 'fact') ? 'Keep at it. The misses are in your review deck now.' : 'Keep at it.'}${game.newBest ? ' A new personal best.' : ''}`;
   }
   const big = game.mode === 'rapid' ? game.top : game.score;
   const of = game.mode === 'rapid' ? 'in a row' : `of ${total}`;
@@ -775,7 +886,7 @@ function drawResults(ctx) {
   const wrongs = game.mode === 'rapid' ? missed.slice(0, 15) : missed;
   const rights = game.mode === 'rapid' ? [] : asked.filter(q => q.picked === q.answer);
   view.innerHTML = `<div class="lr">
-    <header class="page-head"><h1 class="lh-title" tabindex="-1">${game.daily ? "Today's challenge" : game.testId ? 'Test me' : esc(MODE_INFO[game.mode][0])}</h1></header>
+    <header class="page-head"><h1 class="lh-title" tabindex="-1">${esc(roundName())}</h1></header>
     ${scoreHTML(big, of, total ? game.score / total : 0, note)}
     <div class="lr-actions">
       ${missed.length && !game.daily ? `<button class="btn btn--primary btn--block" data-again-missed>Practise ${missed.length === 1 ? 'the one' : missed.length > ROUND ? `${ROUND} of the ${missed.length}` : `the ${missed.length}`} you missed</button>` : ''}
