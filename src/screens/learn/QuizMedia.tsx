@@ -112,7 +112,7 @@ export function CallPlayer({ call, seed, extra }: { call?: CallClip | null; seed
           <circle className="lq-ring-fg" cx="60" cy="60" r="54" pathLength="100" style={{ strokeDashoffset: 100 - progress * 100 }} />
         </svg>
         <button type="button" className={`lq-play${state === 'loading' ? ' is-loading' : ''}${state === 'playing' ? ' is-playing' : ''}`} aria-label={state === 'playing' ? 'Pause the call' : 'Play the call'} onClick={toggle}>
-          <span>{state === 'playing' ? QI.pause : QI.play}</span>
+          <span><svg viewBox="0 0 24 24" aria-hidden="true">{state === 'playing' ? QI.pause : QI.play}</svg></span>
         </button>
       </span>
       <Wave seed={String(seed)} />
