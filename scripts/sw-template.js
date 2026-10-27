@@ -8,12 +8,45 @@ const CALLS = 'birdydex-calls';
 const PHOTO_LIMIT = 400;
 const PRECACHE = __PRECACHE__;
 
+// Fetch decodes gzip, but keeps the gzip headers. Serving that body from Cache Storage makes the
+// browser try to decode it twice, so strip the transfer headers before storing anything.
+const stash = (cache, request, res) => {
+  const headers = new Headers(res.headers);
+  headers.delete('content-encoding');
+  headers.delete('transfer-encoding');
+  headers.delete('content-length');
+  return cache.put(request, new Response(res.body, { status: res.status, statusText: res.statusText, headers }));
+};
+
+// A response read back from Cache Storage has an empty URL. Module scripts and some media checks need the
+// requested URL, and the stored body is already decoded, so rebuild a clean response with both.
+const serve = (res, request) => {
+  const headers = new Headers(res.headers);
+  headers.delete('content-encoding');
+  headers.delete('transfer-encoding');
+  headers.delete('content-length');
+  headers.set('access-control-allow-origin', '*');
+  const out = new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+  try {
+    const url = typeof request === 'string' ? new URL(request, self.location.href).href : request.url;
+    Object.defineProperty(out, 'url', { value: url, configurable: true });
+    Object.defineProperty(out, 'type', { value: 'basic', configurable: true });
+  } catch (_) {}
+  return out;
+};
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL).then(async (cache) => {
-      // add() one by one so a single missing file cannot fail the whole install
+      // one by one so a single missing file cannot fail the whole install
       await Promise.all(
-        PRECACHE.map((url) => cache.add(new Request(url, { cache: 'reload' })).catch(() => {})),
+        PRECACHE.map(async (url) => {
+          try {
+            const res = await fetch(new Request(url, { cache: 'reload' }));
+            if (!res.ok) return;
+            await stash(cache, url, res);
+          } catch (_) { /* keep the previous release's copy, if any */ }
+        }),
       );
       await self.skipWaiting();
     }),
@@ -49,11 +82,11 @@ async function trim(cacheName, limit) {
 async function modelFile(request) {
   const shell = await caches.open(SHELL);
   const own = await shell.match(request);
-  if (own) return own;
+  if (own) return serve(own, request);
   const saved = await caches.match(request);
-  if (saved) return saved;
+  if (saved) return serve(saved, request);
   const res = await fetch(request);
-  if (res.ok) (await caches.open('birddex-models')).put(request, res.clone()).catch(() => {});
+  if (res.ok) stash(await caches.open('birddex-models'), request, res.clone()).catch(() => {});
   return res;
 }
 
@@ -65,10 +98,10 @@ async function callClip(request) {
   if (!res) {
     res = await fetch(request);
     if (!res.ok) return res;
-    await cache.put(request, res.clone());
+    await stash(cache, request, res.clone());
   }
   const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') || '');
-  if (!range) return res;
+  if (!range) return serve(res, request);
   const buf = await res.arrayBuffer(), size = buf.byteLength;
   let start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
   let end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
@@ -86,9 +119,9 @@ async function callClip(request) {
 
 async function cacheFirst(request, cacheName) {
   const hit = await caches.match(request);
-  if (hit) return hit;
+  if (hit) return serve(hit, request);
   const res = await fetch(request);
-  if (res.ok) (await caches.open(cacheName)).put(request, res.clone()).catch(() => {});
+  if (res.ok) stash(await caches.open(cacheName), request, res.clone()).catch(() => {});
   return res;
 }
 
@@ -106,10 +139,11 @@ self.addEventListener('fetch', (event) => {
         try {
           const fresh = await fetch(request);
           const cache = await caches.open(SHELL);
-          cache.put('/index.html', fresh.clone()).catch(() => {});
+          stash(cache, '/index.html', fresh.clone()).catch(() => {});
           return fresh;
         } catch {
-          return (await caches.match('/index.html')) || (await caches.match(request)) || Response.error();
+          const saved = (await caches.match('/index.html')) || (await caches.match(request));
+          return saved ? serve(saved, request) : Response.error();
         }
       })(),
     );
@@ -133,11 +167,11 @@ self.addEventListener('fetch', (event) => {
         const cached = await caches.match(request);
         const network = fetch(request)
           .then(async (res) => {
-            if (res.ok) (await caches.open(RUNTIME)).put(request, res.clone()).catch(() => {});
+            if (res.ok) stash(await caches.open(RUNTIME), request, res.clone()).catch(() => {});
             return res;
           })
           .catch(() => null);
-        return cached || (await network) || Response.error();
+        return cached ? serve(cached, request) : ((await network) || Response.error());
       })(),
     );
     return;
@@ -152,12 +186,12 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         const cached = await caches.match(request);
-        if (cached) return cached;
+        if (cached) return serve(cached, request);
         try {
           const res = await fetch(request);
           if (res.ok) {
             const cache = await caches.open(PHOTOS);
-            await cache.put(request, res.clone());
+            await stash(cache, request, res.clone());
             void trim(PHOTOS, PHOTO_LIMIT);
           }
           return res;

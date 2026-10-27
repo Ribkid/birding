@@ -60,4 +60,48 @@ The refreshed v1 is the reference for behaviour, markup and copy. Match it.
 
 ## Status
 
-(deepcode: fill in as you go.)
+### Done
+
+- **Assets.** Copied the refreshed `photoid.json` / `photoid.bin`, `lookalikes.json`, `calls.json` and all 205
+  call clips, the int4 BioCLIP manifest and both chunks, and the public-profiles migration. Removed the q8 model
+  chunks and `bioclip-text.json`.
+- **Core.** Replaced `photoid.js`, `media.js`, `listen.js`, `stats.js`, `seqdata.js` and `species.js` with the
+  refreshed v1 modules, re-applying the site-root asset URLs and the `@vite-ignore` runtime imports. Added
+  `quiz.js` (19 packs, 10 question types). Extracted the framework-free Learn state/scoring/deck logic into
+  `core/learn.js`, profile and avatar calls into `core/profile.js`, auth/leaderboard calls into
+  `core/account.js`, and the photo-ID pipeline and scan log into `core/scan.js`. The typed facade now covers the
+  quiz, learning, profile, leaderboard and scan shapes.
+- **Styles.** Replaced `app.css` with the refreshed token block (neutral paper/ink palette, outdoor theme,
+  type/space/radius/motion tokens), added `look.css` and `motion.css`, and added `learn.css`, `me.css`,
+  `scan.css`, `species.css`, `screens.css`, `rest.css`, `calls.css` and `field.css` beside the screens. A small
+  compatibility block at the end of `app.css` keeps the first port's Dex header styling. No green page
+  backgrounds.
+- **Shell.** Tab bar is Dex · Learn · + · Map · Me. Added `#/learn`, `#/learn/play/:pack`, `#/learn/daily`,
+  `#/learn/deck`, `#/scan`, `#/me`, `#/me/edit`, `#/me/signup`, `#/me/signin`, `#/u/:publicId`,
+  with `#/quiz` redirecting to `#/learn`. Settings' back link goes to `#/me`. Ported view transitions, FLIP,
+  count-up, tile-to-hero names, the sheet layer stack (inert background, Escape, focus trap), the frosted top
+  bar and the photo-tint allowlist/contrast loop. Reduced motion is respected throughout.
+- **Screens.** Learn hub with daily challenge, 19-pack grid, quick play controls, review deck and progress;
+  play screen with every question type, feedback, rapid timer, results and the add/edit review deck; Scan on
+  the new photo ID with crop box, whole-photo mode, kinds, progress and comparison cards; Me hub (guest and
+  signed-in), photo/species profile edit, Google/email sign-in, public profile, and leaderboard rows that link
+  to `#/u/:id`. The species page now plays calls from the offline pack and links look-alikes to Compare; Dex,
+  Lists, Map, Badges and Settings inherit the refreshed styles.
+- **Offline.** `build-sw.mjs` now precaches the refreshed data files, photo-ID header/bin, int4 model chunks
+  and BirdNET worker/audio worklet (36 files, ~94 MB), and `sw-template.js` has a range-aware call-clip route,
+  clean cached-response headers, cache version bumps and preserves the call/model caches across releases.
+- **Check.** `npm run build` and `npm test` pass (16 tests). Clicked through Dex, Learn, Add, Map, Me, Scan,
+  Settings and a species page at 390 px in light and dark: no console errors and no horizontal document
+  overflow. Offline launch from the installed worker renders the app with the network disabled.
+
+### Left / caveats
+
+- Dex, Lists, Map, Badges and Settings still use the first port's React markup, restyled with the refreshed
+  CSS; the new hero/rail markup from `js/app.js` was not rebuilt for those pages.
+- The signed-in Me/edit/public-profile states compile and use the real profile/cloud calls, but could not be
+  exercised end-to-end without a test account.
+- A Playwright offline *hard reload* left a blank document even though a normal offline launch (`goto`) worked;
+  the service worker precache and call/model routes are in place, but this reload path should be rechecked on a
+  real phone.
+- Still not ported from the first port: the 3D card/confetti, share image, global search overlay and install
+  prompt.

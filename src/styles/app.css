@@ -825,3 +825,26 @@ body.has-sheet .tabbar .tab-plus { rotate: 45deg; }
 .pad { padding: 16px; }
 .pad-x { padding-left: 16px; padding-right: 16px; }
 #view > .rows, #view > .chips--scroll { padding-left: 16px; padding-right: 16px; }
+
+/* ---------- compatibility for screens still using the first port's markup ---------- */
+.dex-head { padding: calc(14px + env(safe-area-inset-top)) 16px 4px; }
+.dex-head-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wordmark { display: flex; align-items: center; gap: 10px; margin: 0; font: 400 1.7rem/1 var(--display); letter-spacing: 0; }
+.wordmark .logo { width: 52px; height: 52px; flex: none; border-radius: 16px; }
+.wordmark .wordmark-txt { display: grid; gap: 5px; margin: 0; font: inherit; font-family: var(--display); color: var(--ink); }
+.wordmark .wordmark-txt small { font: 500 0.8rem/1.3 var(--font); color: var(--ink-2); letter-spacing: 0; }
+.tally { display: flex; align-items: center; gap: 14px; margin: 18px 0 14px; }
+.tally-band {
+  font-family: var(--stamp); line-height: 1; padding: 8px 16px 6px; border-radius: 10px;
+  background: linear-gradient(180deg, var(--band-hi) 0%, var(--band-lo) 30%, var(--band-mid) 62%, var(--band-lo) 100%);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.8);
+  color: #1D2B29;
+}
+.tally-band b { font-size: 3rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tally-band i { font-style: normal; font-size: 1.4rem; font-weight: 600; opacity: .7; }
+.tally-meta { flex: 1; display: grid; gap: 6px; font-weight: 500; }
+.id-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 12px; }
+.idbtn { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 16px; background: var(--ink); color: var(--paper); text-decoration: none; }
+.idbtn svg { width: 30px; height: 30px; flex: none; color: var(--sun); }
+.idbtn span { display: grid; line-height: 1.2; min-width: 0; }
+.idbtn em { font-style: normal; font-size: .8rem; opacity: .75; }
