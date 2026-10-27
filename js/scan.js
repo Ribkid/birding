@@ -72,14 +72,17 @@ export async function renderScan(ctx) {
   function drawVF(fresh = false) {
     if (!S.url) {
       vf.className = 'scan-vf scan-vf--empty';
-      vf.innerHTML = `<span class="scan-corners" aria-hidden="true"></span>
-        <div class="scan-entry">
-          <span class="scan-entry-icon">${icon.scan}</span>
-          <p>Works best when ${subject() ? `the ${esc(subject())}` : 'it'} fills a good part of the frame.</p>
-          <div class="scan-pick">
-            <label class="scan-pickbtn scan-pickbtn--main">${icon.cam}<span>Take a photo</span><input type="file" accept="image/*" capture="environment" class="scan-file" data-file></label>
-            <label class="scan-pickbtn">${galleryIcon}<span>Choose from gallery</span><input type="file" accept="image/*" class="scan-file" data-file></label>
+      // A camera's controls: the shutter in the middle, the gallery beside it.
+      vf.innerHTML = `<div class="scan-frame">
+          <span class="scan-corners" aria-hidden="true"></span>
+          <div class="scan-entry">
+            <span class="scan-entry-icon">${icon.scan}</span>
+            <p>Works best when ${subject() ? `the ${esc(subject())}` : 'it'} fills a good part of the frame.</p>
           </div>
+        </div>
+        <div class="scan-pick">
+          <label class="scan-pickbtn scan-pickbtn--main"><span class="scan-shutter">${icon.cam}</span><span>Take a photo</span><input type="file" accept="image/*" capture="environment" class="scan-file" data-file></label>
+          <label class="scan-pickbtn scan-pickbtn--side"><span class="scan-pickicon">${galleryIcon}</span><span>Choose from gallery</span><input type="file" accept="image/*" class="scan-file" data-file></label>
         </div>`;
       tools.innerHTML = '';
       go.classList.add('hidden');
@@ -339,7 +342,8 @@ export async function renderScan(ctx) {
       : multi && !r.kind ? 'Choose what kind it is, or try a tighter box or a photo from another angle.'
       : 'Try a tighter box, or a photo from another angle.';
     const lead = r.band === 'likely' ? 1 : r.band === 'possibly' ? 2 : 0;
-    const word = p => (p >= (r.bands?.likely ?? 0.8) ? 'Strong match' : p >= 0.3 ? 'Possible' : p >= 0.08 ? 'Outside chance' : 'Unlikely');
+    const level = p => (p >= (r.bands?.likely ?? 0.8) ? 'strong' : p >= 0.3 ? 'possible' : p >= 0.08 ? 'outside' : 'unlikely');
+    const word = p => ({ strong: 'Strong match', possible: 'Possible', outside: 'Outside chance', unlikely: 'Unlikely' })[level(p)];
     const refs = id => {
       const g = galleryFor(id).slice(0, 2).map(p => ({ src: p.thumb || p.src, credit: p.credit, from: p.from }));
       if (g.length < 2) { const w = sized(id); if (w && !g.some(p => p.src === w)) g.unshift({ src: w, credit: '', from: 'Wikipedia' }); }
@@ -367,7 +371,7 @@ export async function renderScan(ctx) {
           </div>
           ${sp.notes ? `<p class="scan-tip">${esc(firstSentence(sp.notes))}</p>` : ''}
           <div class="scan-card-foot">
-            <div class="scan-conf">
+            <div class="scan-conf scan-conf--${level(x.p)}">
               <p><strong>${word(x.p)}</strong> <span>${pct(x.p)}</span></p>
               <span class="scan-bar" aria-hidden="true"><i style="--p:${Math.max(0.02, Math.min(1, x.p)).toFixed(3)}"></i></span>
             </div>
