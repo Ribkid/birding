@@ -298,6 +298,7 @@ export default function Scan() {
                 {top.map((x: any, i: number) => {
                   const sp = x.sp;
                   const refs = scanRefs(sp.id);
+                  const credits = refs.filter((p2: any) => p2.credit).map((p2: any) => String(p2.credit).slice(0, 40));
                   const level = bandLevel(x.p, result.bands);
                   return (
                     <article key={sp.id} className={`scan-card kind--${sp.kind} ${i < lead ? 'scan-card--lead' : ''}`}>
@@ -306,6 +307,7 @@ export default function Scan() {
                         {[0, 1].map((j) => refs[j] ? <img key={j} src={refs[j].src} alt={`${sp.name}, reference photo`} loading="lazy" decoding="async" /> : <span key={j} className="scan-tile-missing" />)}
                       </div>
                       <div className="scan-card-body">
+                        {credits.length > 0 && <p className="scan-credit">Photos: {words(credits, 'and')}{refs.some((p2: any) => p2.from && p2.credit) ? ` (${refs.find((p2: any) => p2.credit)?.from || ''})` : ''}</p>}
                         <div className="scan-card-head"><h3><Link to={`/bird/${sp.id}`}>{sp.name}</Link></h3><span className="scan-kind">{KINDS[sp.kind]?.one}</span>{!seen.has(sp.id) && <span className="scan-new">New for your dex</span>}</div>
                         {sp.notes && <p className="scan-tip">{firstSentence(sp.notes)}</p>}
                         <div className="scan-card-foot">
