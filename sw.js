@@ -8,7 +8,7 @@ const TILES = 'birddex-tiles';
 const MODELS = 'birddex-models';
 const CALLS = 'birddex-calls';
 const ASSETS = [
-  './', 'index.html', 'css/app.css', 'css/motion.css', 'css/learn.css', 'css/calls.css', 'css/scan.css', 'manifest.webmanifest',
+  './', 'index.html', 'css/app.css', 'css/motion.css', 'css/learn.css', 'css/calls.css', 'css/scan.css', 'css/field.css', 'manifest.webmanifest',
   'js/app.js', 'js/motion.js', 'js/layers.js', 'js/db.js', 'js/media.js', 'js/species.js', 'js/stats.js', 'js/ebird.js', 'js/seqdata.js',
   'js/card3d.js', 'js/quiz.js', 'js/learn.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js', 'js/scan.js', 'js/gallery.js',
   'js/config.js', 'js/cloud.js', 'js/sync.js', 'js/account.js', 'vendor/supabase/supabase.js',

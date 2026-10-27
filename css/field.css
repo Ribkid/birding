@@ -1,0 +1,16 @@
+/* Working with no signal: Settings' "Ready for the field" card and the map's no-signal note (js/app.js). */
+
+/* ---------- map with no signal ---------- */
+/* Sits below the search bar and the filter chips, so neither hides it. */
+.map-note {
+  position: absolute; z-index: 510; left: var(--sp-4); right: var(--sp-4); top: calc(134px + env(safe-area-inset-top));
+  max-width: 440px; margin: 0 auto; padding: var(--sp-4); border-radius: var(--r-2);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-2);
+}
+.map-note p { margin: 0; font-size: var(--fs-2); color: var(--ink-2); }
+.map-note p strong { color: var(--ink); }
+.map-note-h { margin: 0 0 var(--sp-1); font-size: var(--fs-3); font-weight: 700; }
+.map-note--nolib .btn { margin-top: var(--sp-3); }
+.map-note--tiles { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4); }
+.map-note--tiles p { flex: 1; }
+.map-note--tiles .iconbtn { flex: none; }

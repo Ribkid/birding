@@ -1719,15 +1719,35 @@ function renderLog() {
 }
 
 // Map
+// One load at a time; a failed one (no signal, not saved yet) is tidied away so the next try starts clean.
+let leafletP = null;
 function loadLeaflet() {
   if (window.L) return Promise.resolve();
-  return new Promise((res, rej) => {
+  return leafletP ||= new Promise((res, rej) => {
     const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'vendor/leaflet/leaflet.css'; document.head.append(css);
-    const s = document.createElement('script'); s.src = 'vendor/leaflet/leaflet.js'; s.onload = res; s.onerror = rej; document.head.append(s);
+    const s = document.createElement('script'); s.src = 'vendor/leaflet/leaflet.js'; s.onload = res;
+    s.onerror = () => { s.remove(); css.remove(); leafletP = null; rej(new Error('The map could not load')); };
+    document.head.append(s);
   });
 }
+// No signal: a card below the map's controls (the search bar and chips stay usable above it).
+// 'nolib': the map itself isn't on the phone yet. 'tiles': the map works, but areas not opened before stay blank.
+function mapNote(kind) {
+  const wrap = $('.mapwrap', view);
+  if (!wrap || $('.map-note', wrap) || (kind === 'tiles' && state.mapNoteHidden)) return;
+  const n = document.createElement('div');
+  n.className = `map-note map-note--${kind}`;
+  n.innerHTML = kind === 'nolib'
+    ? `<h2 class="map-note-h">The map needs signal the first time</h2>
+      <p>Open it once with signal and it works offline after that, showing the areas you looked at.</p>
+      <button type="button" class="btn btn--small btn--primary" data-map-retry>Try again</button>`
+    : `<p><strong>No signal.</strong> Areas you haven't opened before stay blank. Hotspots and your sightings still show.</p>
+      <button type="button" class="iconbtn" data-map-note-x aria-label="Hide this message">${icon.close}</button>`;
+  wrap.append(n);
+  announce(kind === 'nolib' ? 'The map needs signal the first time.' : "No signal. Areas you haven't opened before stay blank.");
+}
 // Map or satellite base layers, remembered on this device. Returns a control element to put in the page.
-function baseLayers(map, L) {
+function baseLayers(map, L, { onTileError } = {}) {
   const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' });
   const sat = L.layerGroup([
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, maxNativeZoom: 19, crossOrigin: true, attribution: 'Imagery &copy; <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics and the GIS User Community' }),
@@ -1743,6 +1763,7 @@ function baseLayers(map, L) {
     ctl.querySelectorAll('[data-layer]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.layer === mode)));
   };
   set(state.settings.mapLayer === 'sat' ? 'sat' : 'map');
+  if (onTileError) [osm, ...sat.getLayers()].forEach(l => l.on('tileerror', onTileError));
   ctl.addEventListener('click', e => {
     const b = e.target.closest('[data-layer]');
     if (!b) return;
@@ -1783,12 +1804,19 @@ async function renderMap(spId = null, at = null) {
       <div class="map-cross hidden" aria-hidden="true"></div>
     </div>`;
   view.onchange = null;
-  try { await loadLeaflet(); } catch (_) { $('#map').innerHTML = '<p class="pad">The map needs an internet connection the first time.</p>'; return; }
+  try { await loadLeaflet(); } catch (_) {
+    if (!location.hash.startsWith('#/map')) return;
+    mapNote('nolib');
+    view.onclick = e => { if (e.target.closest('[data-map-retry]')) keepFocus(() => renderMap(spId, at), { fallback: '[data-map-retry], [data-mq]' }); };
+    return;
+  }
   if (!location.hash.startsWith('#/map')) return;
   const L = window.L;
   const map = state.map = L.map('map', { zoomControl: false, attributionControl: true }).setView(state.mapView?.c || [-27.47, 153.02], state.mapView?.z || 9);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
-  $('.mapwrap', view).append(baseLayers(map, L));
+  // Offline, a map square not opened before fails to load: say why the map has gaps (again on the next visit).
+  $('.mapwrap', view).append(baseLayers(map, L, { onTileError: () => { if (!navigator.onLine) { state.tilesOffline = true; mapNote('tiles'); } } }));
+  if (!navigator.onLine && state.tilesOffline) mapNote('tiles');
   map.on('moveend', () => { state.mapView = { c: map.getCenter(), z: map.getZoom() }; });
   const css = getComputedStyle(document.documentElement);
   const accent = css.getPropertyValue('--azure').trim(), ink = css.getPropertyValue('--lori').trim();
@@ -1928,6 +1956,7 @@ async function renderMap(spId = null, at = null) {
   view.onclick = async e => {
     const ri = e.target.closest('[data-ri]');
     if (ri) { goTo(results[Number(ri.dataset.ri)]); return; }
+    if (e.target.closest('[data-map-note-x]')) { state.mapNoteHidden = true; $('.map-note', view)?.remove(); mq.focus(); return; }
     if (e.target.closest('[data-mqx]')) { mq.value = ''; mqx.classList.add('hidden'); tempMarker?.remove(); mq.focus(); showRes(localResults('')); return; }
     if (e.target.closest('[data-need]')) { f.need = !f.need; keepFocus(() => renderMap(spId)); return; }
     const ms = e.target.closest('[data-mshow]');
