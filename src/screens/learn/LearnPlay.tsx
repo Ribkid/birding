@@ -295,6 +295,8 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         if (active.mode === 'rapid') setRapidLeft(Math.max(0, (active.endsAt || 0) - Date.now()));
         return;
       }
+      // v1 focuses the new screen's heading after a route change.
+      wantHeadFocus.current = true;
       if (isDaily) {
         const r = newDailyRound();
         if (!alive) return;
@@ -351,12 +353,14 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     finish();
   }, [game, isOver, finish]);
 
+  // A new question (Next, Play again, Practise missed, or a round just started) puts focus on its heading, as v1's
+  // drawn()/focusPageHeading do. Play again shows the loading shell first, so wait until the heading is there.
   useEffect(() => {
-    if (wantHeadFocus.current) {
-      promptRef.current?.focus({ preventScroll: true });
+    if (wantHeadFocus.current && promptRef.current) {
+      promptRef.current.focus({ preventScroll: true });
       wantHeadFocus.current = false;
     }
-  }, [game?.i]);
+  }, [game, game?.i]);
 
   // Every new question and the results start at the top, like v1 drawn(); a resumed round goes back to where she was.
   useEffect(() => { if (!resumed) window.scrollTo(0, 0); }, [game?.i, isOver]);
@@ -531,8 +535,17 @@ function Deck({ onBack }: { onBack: () => void }) {
   const backRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLHeadingElement>(null);
   const resuming = useRef(!!saved);
+  // Each card and the Deck reviewed screen put focus on their heading once drawn (v1 drawCard/drawDeckDone focusHead),
+  // so grading by keyboard does not drop focus to <body> when the answer it was on goes away.
+  const wantHead = useRef(false);
   const sightings = useSightings();
   useMedia();
+  useEffect(() => {
+    if (wantHead.current && headRef.current) {
+      headRef.current.focus({ preventScroll: true });
+      wantHead.current = false;
+    }
+  });
 
   useEffect(() => { void learnReady().then(() => { setReady(true); force(); }); }, []);
   useEffect(() => {
@@ -557,6 +570,7 @@ function Deck({ onBack }: { onBack: () => void }) {
 
   const startReview = () => {
     const g = newDeckRound(due.slice(0, 20));
+    wantHead.current = true;
     setGame(g as any); setMode('card'); setRevealed(false);
   };
   const add = (which: 'month' | 'seen') => {
@@ -589,6 +603,7 @@ function Deck({ onBack }: { onBack: () => void }) {
       game.tally![g]++;
       game.queue!.shift();
       if (box === 1 && c.reps < 2) game.queue!.push({ ...c, reps: c.reps + 1 }); else game.n!++;
+      wantHead.current = true;
       setRevealed(false);
       if (!game.queue!.length) setMode('done');
       force();
