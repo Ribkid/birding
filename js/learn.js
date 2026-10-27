@@ -325,6 +325,9 @@ function wireFaces(root) {
   }
 }
 const faceSrc = (id, size = 'small') => Q.photosFor(id, { size, prefer: 'wiki' })[0]?.src || '';
+// Only pictures served with CORS (Wikimedia, or this app's own files) can lend their colour; reading any other
+// would fail and log an error, so those cards keep their kind colour.
+const tintable = src => /^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(src) || (!!src && new URL(src, location.href).origin === location.origin);
 // One photo per practice card, the same all day for a kind: commoner species, none twice, a look-alike pair for duels.
 let faces = { key: '', v: null };
 function modeFaces(kind) {
@@ -354,6 +357,8 @@ function heroFace(month) {
   const rate = s => Q.relRate(s.id, month) ?? 0;
   let list = SPECIES.filter(s => rate(s) >= 0.5 && rate(s) < 0.8 && Q.hasPhoto(s));
   if (!list.length) list = SPECIES.filter(s => s.rarity <= 2 && Q.hasPhoto(s));
+  const tinted = list.filter(s => tintable(faceSrc(s.id)));
+  if (tinted.length) list = tinted;
   return list.length ? list[(Q.seeded(Q.hashStr(`hero|${dayStr()}`))() * list.length) | 0] : null;
 }
 
@@ -409,7 +414,7 @@ function renderHub(ctx) {
     <header class="page-head"><h1 class="lh-title">Learn</h1></header>
     <div class="learn">
       ${navigator.onLine ? '' : '<p class="lh-offline" role="status">No signal. Questions use the photos and calls saved on this phone, plus field notes.</p>'}
-      <a class="lh-daily${doneToday ? ' is-done' : ''}" href="#/learn/daily">
+      <a class="lh-daily${doneToday ? ' is-done' : ''}${hero ? ` kind--${hero.kind}` : ''}" href="#/learn/daily">
         ${hero ? `<span class="lh-daily-photo" aria-hidden="true">${imgTag(faceSrc(hero.id, 'large'))}</span>` : ''}
         <span class="lh-daily-top">
           <span class="lh-date" aria-hidden="true"><b>${now.getDate()}</b><span>${esc(month)}</span></span>
@@ -443,7 +448,7 @@ function renderHub(ctx) {
     </div>`;
   wireFaces(view);
   const card = view.querySelector('.lh-daily');
-  if (hero) ctx.applyTint?.(card, faceSrc(hero.id), null);
+  if (hero && tintable(faceSrc(hero.id))) ctx.applyTint?.(card, faceSrc(hero.id), null);
   growOnView(view);
   ctx.stagger?.(view, '.lh-daily, .lh-deck, .lh-modes > li', { key: 'learn-hub' });
   view.querySelector('.lh-kind[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'auto' });

@@ -23,12 +23,13 @@
 
 /* ---------- today's challenge: a photo-backed hero card tinted from the photo ---------- */
 .lh-daily {
-  --deep: var(--tint-deep, #0B2A4F);
+  /* tinted from the photo when it can be read, otherwise from the species' kind colour (azure without one) */
+  --deep: var(--tint-deep, color-mix(in srgb, var(--kc, #1A5CCB) 34%, #06120F));
   position: relative; isolation: isolate; overflow: hidden;
   display: grid; grid-template-rows: auto 1fr auto; gap: var(--sp-3);
   min-height: clamp(256px, 70vw, 300px); padding: var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-5);
   border-radius: 28px; color: #fff; text-decoration: none;
-  background: linear-gradient(150deg, var(--tint, #1A5CCB), var(--deep) 75%);
+  background: linear-gradient(150deg, var(--tint, color-mix(in srgb, var(--kc, #1A5CCB) 70%, #06120F)), var(--deep) 75%);
   box-shadow: var(--shadow-card), 0 24px 44px -26px var(--deep);
 }
 .lh-daily-photo { position: absolute; inset: 0; z-index: -2; }
