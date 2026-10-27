@@ -66,10 +66,18 @@ async function photoUrl(id) {
   photoUrls.set(id, url);
   return url;
 }
-async function hydratePhotos(root = document) {
-  for (const img of $$('img[data-photo]', root)) {
-    const url = await photoUrl(Number(img.dataset.photo));
-    if (url) img.src = url;
+// Her own photos load only as they come near the screen, so a long log doesn't decode hundreds of full-size JPEGs.
+const photoWatch = new Set();
+const fillPhoto = async img => { const url = await photoUrl(Number(img.dataset.photo)); if (url && img.isConnected) img.src = url; };
+const photoIO = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
+  for (const e of entries) if (e.isIntersecting) { photoIO.unobserve(e.target); photoWatch.delete(e.target); fillPhoto(e.target); }
+}, { rootMargin: '400px 0px' }) : null;
+function hydratePhotos(root = document) {
+  for (const img of photoWatch) if (!img.isConnected) { photoIO.unobserve(img); photoWatch.delete(img); }
+  for (const img of $$('img[data-photo]:not([src])', root)) {
+    img.loading = 'lazy'; img.decoding = 'async';
+    if (!photoIO) { fillPhoto(img); continue; }
+    if (!photoWatch.has(img)) { photoWatch.add(img); photoIO.observe(img); }
   }
 }
 async function resizeImage(file, max = 1600) {
@@ -84,15 +92,48 @@ async function resizeImage(file, max = 1600) {
 // ---------- small UI pieces ----------
 const band = (id, seen) => `<span class="band band--${kindOf(id)} ${seen ? 'band--on' : ''}" aria-label="Dex number ${dexNo(id)}">${dexNo(id)}</span>`;
 const pips = r => `<span class="pips pips--${r}" title="${RARITY[r].label}">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= r ? 'on' : ''}"></i>`).join('')}</span>`;
+// Photos fade in the first time they arrive. Ones already shown this session come back at full strength, so a
+// redraw (a filter, a sync) doesn't make the whole grid blink.
+const shown = new Set();
+document.addEventListener('load', e => { if (e.target.tagName === 'IMG' && e.target.classList.contains('fade')) shown.add(e.target.getAttribute('src')); }, true);
+const fade = url => shown.has(url) ? 'fade in' : 'fade';
+const ONLOAD = `onload="this.classList.add('in')"`;
+// Images that were already complete when inserted (memory cache) show at once, with no fade.
+function settleImages(root) {
+  for (const img of $$('img.fade:not(.in)', root)) if (img.complete && img.naturalWidth) { img.classList.add('in'); shown.add(img.getAttribute('src')); }
+}
 // whole: show the entire photo (no cropping) over a soft blurred copy, for big views.
+// data-sp/data-size let a later photo index swap in a better picture without redrawing the page.
 function birdImg(sp, size = 'small', cls = '', { whole = false } = {}) {
   const url = sized(sp.id, size);
   if (url && whole) return wholeImg(url, sp.name, cls);
   return url
-    ? `<img class="${cls}" src="${esc(url)}" alt="${esc(sp.name)}" loading="lazy" decoding="async" onerror="this.classList.add('img-missing')">`
-    : `<span class="${cls} img-missing" role="img" aria-label="${esc(sp.name)}"></span>`;
+    ? `<img class="${cls} ${fade(url)}" src="${esc(url)}" alt="${esc(sp.name)}" loading="lazy" decoding="async" data-sp="${sp.id}" data-size="${size}" ${ONLOAD} onerror="this.classList.add('img-missing')">`
+    : `<span class="${cls} img-missing" role="img" aria-label="${esc(sp.name)}" data-sp="${sp.id}" data-size="${size}"></span>`;
 }
-const wholeImg = (url, alt, cls = '') => `<span class="whole ${cls}"><img class="whole-bg" src="${esc(url)}" alt="" aria-hidden="true" decoding="async"><img class="whole-fg" src="${esc(url)}" alt="${esc(alt)}" decoding="async" onerror="this.closest('.whole').classList.add('img-missing')"></span>`;
+const wholeImg = (url, alt, cls = '') => `<span class="whole ${cls}"><img class="whole-bg ${fade(url)}" src="${esc(url)}" alt="" aria-hidden="true" loading="lazy" decoding="async" ${ONLOAD}><img class="whole-fg ${fade(url)}" src="${esc(url)}" alt="${esc(alt)}" loading="lazy" decoding="async" ${ONLOAD} onerror="this.closest('.whole').classList.add('img-missing')"></span>`;
+// The first hero photo on a page (marked data-hero-frame) is the one thing worth fetching first.
+function prioritiseHero(root) {
+  for (const img of $$('[data-hero-frame] img', root)) { img.loading = 'eager'; img.fetchPriority = 'high'; }
+}
+// After the photo index arrives: swap better pictures into place instead of redrawing (a call keeps playing,
+// the gallery keeps its slide).
+function patchSpeciesImages(root = document) {
+  for (const el of $$('[data-sp]', root)) {
+    const sp = byId.get(Number(el.dataset.sp));
+    const url = sp && sized(sp.id, el.dataset.size || 'small');
+    if (!url) continue;
+    if (el.tagName === 'IMG') {
+      if (el.getAttribute('src') === url) continue;
+      // A photo already on screen stays until its replacement is ready, so the tile never blanks.
+      if (el.complete && el.naturalWidth) {
+        const next = new Image(); next.src = url;
+        next.decode().then(() => { if (el.isConnected) { shown.add(url); el.src = url; } }, () => {});
+      } else { el.classList.remove('img-missing'); el.src = url; }
+    }
+    else el.outerHTML = birdImg(sp, el.dataset.size || 'small', [...el.classList].filter(c => c !== 'img-missing').join(' '));
+  }
+}
 const icon = {
   back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
