@@ -112,8 +112,8 @@ export default function App() {
 
           <Route path="/me" element={<Me />} />
           <Route path="/me/edit" element={<EditProfile />} />
-          <Route path="/me/signup" element={<SignIn mode="signup" />} />
-          <Route path="/me/signin" element={<SignIn mode="signin" />} />
+          <Route path="/me/signup" element={<SignIn key="signup" mode="signup" />} />
+          <Route path="/me/signin" element={<SignIn key="signin" mode="signin" />} />
           <Route path="/u/:publicId" element={<PublicProfile />} />
 
           <Route path="/badges" element={<Badges />} />

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { configured } from '../../core/profile.js';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { configured, signedIn } from '../../core/profile.js';
 import { sendSignInEmail, verifySignInCode, startGoogleSignIn, friendly } from '../../core/account.js';
 import './me.css';
 
@@ -14,6 +14,8 @@ export default function SignIn({ mode = 'signin' }: { mode?: 'signup' | 'signin'
   const [code, setCode] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+
+  if (signedIn()) return <Navigate to="/me" replace />;
 
   if (!configured) {
     return (
