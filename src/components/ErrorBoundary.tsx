@@ -1,8 +1,10 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 interface Props {
   children: ReactNode;
+  /** When this changes (a new route), a failed screen gets another try. */
+  resetKey?: string;
 }
 
 interface State {
@@ -19,6 +21,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('Screen failed to render', error, info);
+  }
+
+  componentDidUpdate(prev: Props) {
+    if (this.state.failed && prev.resetKey !== this.props.resetKey) this.setState({ failed: false });
   }
 
   render() {
@@ -40,4 +46,10 @@ export class ErrorBoundary extends Component<Props, State> {
       </div>
     );
   }
+}
+
+/** The boundary around the routed screen: tapping a tab or going Back after a failure draws the new screen. */
+export function ScreenBoundary({ children }: { children: ReactNode }) {
+  const { pathname, search } = useLocation();
+  return <ErrorBoundary resetKey={pathname + search}>{children}</ErrorBoundary>;
 }

@@ -24,7 +24,7 @@ import SignIn from './screens/me/SignIn';
 import PublicProfile from './screens/me/PublicProfile';
 import { Placeholder } from './screens/Placeholder';
 import { TabBar } from './components/TabBar';
-import { ErrorBoundary } from './components/ErrorBoundary';
+import { ScreenBoundary } from './components/ErrorBoundary';
 import { Welcome } from './components/Welcome';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
@@ -81,7 +81,7 @@ export default function App() {
       <SyncBanner />
       <Welcome />
       <main id="view" tabIndex={-1}>
-        <ErrorBoundary>
+        <ScreenBoundary>
         <Routes>
           <Route path="/" element={<Navigate to="/dex" replace />} />
           <Route path="/dex" element={<Dex />} />
@@ -123,7 +123,7 @@ export default function App() {
 
           <Route path="*" element={<Placeholder title="Not found" />} />
         </Routes>
-        </ErrorBoundary>
+        </ScreenBoundary>
       </main>
       <TabBar />
     </>
