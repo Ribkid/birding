@@ -22,6 +22,8 @@ const EXTRA_SHELL = new Set([
   '/data/seq.json', '/data/birdnet-map.json', '/data/lookalikes.json', '/data/calls.json',
   '/data/photoid.json', '/data/photoid.bin',
   '/models/bioclip/manifest.json',
+  // Saved with each release, as in v1, so a signed-in phone still loads it offline after an update.
+  '/vendor/supabase/supabase.js',
 ]);
 // The 88 MB int4 vision model is deliberately NOT precached: src/core/photoid.js downloads it
 // on demand with progress and stores it in its own 'birddex-models' cache. Precaching it here
@@ -44,12 +46,15 @@ for (const file of files) {
   const rel = relative(DIST, file).split(sep).join('/');
   const url = '/' + rel;
   if (rel === 'sw.js') continue;
-  if (RUNTIME_ONLY.some((prefix) => rel.startsWith(prefix))) continue;
+  if (RUNTIME_ONLY.some((prefix) => rel.startsWith(prefix)) && !EXTRA_SHELL.has(url)) continue;
   if ((rel.startsWith('data/') || rel.startsWith('models/')) && !EXTRA_SHELL.has(url)) continue;
   if (!SHELL_EXT.has(extname(rel)) && !EXTRA_SHELL.has(url)) continue;
   shell.push(url);
   bytes += (await stat(file)).size;
 }
+
+// sw-template.js saves this one under the address src/core/listen.js asks for (with its query).
+if (!shell.includes('/js/birdnet-worker.js')) console.warn('build-sw: /js/birdnet-worker.js is missing, so Listen will not start offline');
 
 const template = await readFile(new URL('./sw-template.js', import.meta.url), 'utf8');
 const sw = template

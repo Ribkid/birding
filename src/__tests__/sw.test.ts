@@ -269,3 +269,64 @@ describe('service worker updates from an earlier release', () => {
     expect(await get('/vendor/ort/ort.wasm.min.mjs')).toMatchObject({ status: 200, text: 'ort' });
   });
 });
+
+// The worker address exactly as src/core/listen.js builds it for this origin.
+function listenWorkerUrl() {
+  const src = readFileSync(join(root, 'src', 'core', 'listen.js'), 'utf8');
+  const tpl = /const url = `([^`]*birdnet-worker\.js[^`]*)`/.exec(src)?.[1];
+  if (!tpl) throw new Error('listen.js no longer builds the worker address as the service worker expects');
+  return new Function('BASE', `return \`${tpl}\`;`)(ORIGIN + '/') as string;
+}
+
+describe('Listen offline', () => {
+  const precache = ['/index.html', '/assets/index-a.js', '/js/birdnet-worker.js'];
+  const files = { '/js/birdnet-worker.js': 'worker-new' };
+
+  it('saves the worker under the address listen.js asks for, query and all', async () => {
+    const url = listenWorkerUrl();
+    expect(url).toContain('?tf=');
+    const { caches, state, get, update } = setup(precache, { files });
+    await update();
+    const shell = [...caches.map.keys()].find((n) => n.startsWith('birdydex-shell-'))!;
+    expect(caches.urls(shell)).toContain(url);
+    state.online = false;
+    // The worker reads its settings from its own address, which is the address of the answer it gets.
+    expect(await get(url, { destination: 'worker', mode: 'same-origin' })).toMatchObject({ status: 200, text: 'worker-new', url });
+  });
+
+  it('starts offline after an update from main, with main\'s BirdNET files', async () => {
+    const url = listenWorkerUrl();
+    const { state, get, update } = setup(precache, {
+      files,
+      before: (c) => {
+        c.seed('birdydex-runtime-v3', url, 'worker-main');
+        c.seed('birdydex-runtime-v3', '/vendor/tfjs/tf.min.js', 'tf-main');
+        c.seed('birdydex-runtime-v3', '/models/birdnet/model.json', '{"m":1}', 'application/json');
+      },
+    });
+    await update();
+    state.online = false;
+    expect(await get(url, { destination: 'worker', mode: 'same-origin' })).toMatchObject({ status: 200, text: 'worker-new', url });
+    expect(await get('/vendor/tfjs/tf.min.js', { destination: 'script' })).toMatchObject({ status: 200, text: 'tf-main' });
+    expect(await get('/models/birdnet/model.json')).toMatchObject({ status: 200, text: '{"m":1}' });
+  });
+
+  it('answers the Supabase client from this release, not an older runtime copy', async () => {
+    const { state, get, update } = setup(['/index.html', '/assets/index-a.js', '/vendor/supabase/supabase.js'], {
+      files: { '/vendor/supabase/supabase.js': 'supabase-new' },
+      before: (c) => c.seed('birdydex-runtime-v3', '/vendor/supabase/supabase.js', 'supabase-main'),
+    });
+    await update();
+    expect(await get('/vendor/supabase/supabase.js')).toMatchObject({ status: 200, text: 'supabase-new' });
+    state.online = false;
+    expect(await get('/vendor/supabase/supabase.js')).toMatchObject({ status: 200, text: 'supabase-new' });
+  });
+
+  it('counts the worker in the shell status', async () => {
+    const { sw, update } = setup(precache, { files });
+    await update();
+    let status: unknown = null;
+    await dispatch(sw.message, { data: { type: 'shell-status' }, ports: [{ postMessage: (s: unknown) => { status = s; } }] });
+    expect(status).toMatchObject({ total: 3, saved: 3 });
+  });
+});

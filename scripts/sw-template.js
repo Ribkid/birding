@@ -18,9 +18,19 @@ const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
 const MODELS = 'birddex-models';
 const PHOTO_LIMIT = 400;
-const NAV_WAIT = 4000;
 const TILE_LIMIT = 3000;
+const NAV_WAIT = 4000; // a page load waits this long for the network before using the saved copy
+const SCRIPT_WAIT = 2500; // a /js/ script waits this long
 const PRECACHE = __PRECACHE__;
+
+// Listen's worker reads its settings from its own query string, and a worker's address is the address of
+// the response it is given. A copy saved without the query would start the worker without its settings
+// (it then looks for /js/js/tfjs-4.14.0.min.js), so the shell keeps the worker under the exact address
+// src/core/listen.js builds, fetched with that query. src/__tests__/sw.test.ts checks the two agree.
+const ROOT = new URL('/', self.location.href).href;
+const LISTEN_WORKER = `/js/birdnet-worker.js?tf=${encodeURIComponent(ROOT + 'vendor/tfjs/tf.min.js')}&root=${encodeURIComponent(ROOT + 'models')}&lang=en_uk`;
+const SHELL_FILES = PRECACHE.map((path) => (path === '/js/birdnet-worker.js' ? LISTEN_WORKER : path));
+const href = (path) => new URL(path, ROOT).href;
 
 // Cached responses carry the server's Vary header, but requests for module scripts, styles and
 // fonts send different Accept* headers than the install-time fetch did. Without ignoreVary the
@@ -28,6 +38,7 @@ const PRECACHE = __PRECACHE__;
 const MATCH = { ignoreVary: true };
 
 const isHtml = (res) => (res.headers.get('content-type') || '').includes('text/html');
+const keysOf = async (cache) => new Set((await cache.keys()).map((req) => req.url));
 
 // Keep the worker alive until `promise` settles. waitUntil throws once the event is over and nothing
 // else is pending; the work itself still runs.
@@ -54,23 +65,26 @@ function keep(event, cacheName, key, limit = 0) {
   };
 }
 
+// Save one shell file. A file that cannot be fetched now keeps the copy any cache already holds under the
+// same address, as v1 does, so an update on a patchy connection never loses a working file.
+async function saveShellFile(cache, path) {
+  try {
+    await cache.add(new Request(path, { cache: 'reload' }));
+  } catch {
+    const old = await caches.match(path, MATCH);
+    if (old) await cache.put(path, old).catch(() => {});
+  }
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL);
-      // Keep the previous release's copy of a file that fails now; content-hashed
-      // assets have no older copy, so a missing index or asset fails the install and
-      // leaves the working worker in charge until the next update.
-      await Promise.all(PRECACHE.map(async (url) => {
-        try {
-          await cache.add(new Request(url, { cache: 'reload' }));
-        } catch {
-          const old = await caches.match(url, MATCH);
-          if (old) await cache.put(url, old).catch(() => {});
-        }
-      }));
-      const have = new Set((await cache.keys()).map((req) => new URL(req.url).pathname));
-      if (PRECACHE.some((url) => (url === '/index.html' || url.startsWith('/assets/')) && !have.has(url))) {
+      await Promise.all(SHELL_FILES.map((path) => saveShellFile(cache, path)));
+      // The page and its content-hashed assets have no older copy to fall back on. Without them this
+      // release cannot start, so the install fails and the working release stays in charge.
+      const have = await keysOf(cache);
+      if (SHELL_FILES.some((path) => (path === '/index.html' || path.startsWith('/assets/')) && !have.has(href(path)))) {
         throw new Error('shell incomplete');
       }
       await self.skipWaiting();
@@ -135,10 +149,12 @@ async function trim(cacheName, limit) {
   for (const key of keys.slice(0, keys.length - limit)) await cache.delete(key);
 }
 
-// Cache first: any saved copy, else the network, keeping a good answer in `cacheName`.
+// Cache first, as v1 does: this release's shell copy, else any saved copy, else the network, keeping a
+// good answer in `cacheName`. The shell comes first so a file this release ships (the Supabase client)
+// wins over an older copy an earlier release kept in the runtime cache.
 async function cacheFirst(event, cacheName, limit = 0) {
   const { request } = event;
-  const hit = await caches.match(request, MATCH);
+  const hit = (await (await caches.open(SHELL)).match(request, MATCH)) || (await caches.match(request, MATCH));
   if (hit) return hit;
   return fetch(request).then(keep(event, cacheName, request.url, limit));
 }
@@ -159,19 +175,22 @@ async function cacheFirstCross(event, cacheName, limit = 0) {
   return keep(event, cacheName, request.url, limit)(res);
 }
 
-// Worker scripts and /js/ files: try the network briefly, then this release's shell.
-async function networkFirstScript(event, ms = 2500) {
+// /js/ scripts and workers: the network for up to SCRIPT_WAIT, so a new release's worker reaches the
+// phone, stored in this release's shell under the full address. Then a saved copy under that same
+// address: this release's shell first, then any cache (such as an earlier release's runtime copy). A copy
+// saved without the query is the last resort, for a script that does not read one.
+async function networkFirstScript(event) {
   const { request } = event;
   const net = fetch(request).then(keep(event, SHELL, request.url));
   waitFor(event, net.catch(() => {}));
-  const timer = new Promise((resolve) => setTimeout(() => resolve(null), ms));
+  const timer = new Promise((resolve) => setTimeout(() => resolve(null), SCRIPT_WAIT));
   const first = await Promise.race([net.catch(() => null), timer]);
   if (first) return first;
-  const own = await (await caches.open(SHELL)).match(request, { ignoreVary: true, ignoreSearch: true });
-  if (own) return own;
-  const any = await caches.match(request, MATCH);
-  if (any) return any;
-  return (await net.catch(() => null)) || Response.error();
+  const shell = await caches.open(SHELL);
+  const saved = (await shell.match(request, MATCH))
+    || (await caches.match(request, MATCH))
+    || (await shell.match(request, { ignoreVary: true, ignoreSearch: true }));
+  return saved || net;
 }
 
 // Call clips: audio elements ask for byte ranges, and Safari will not play a plain 200 answer to a
@@ -324,25 +343,19 @@ self.addEventListener('fetch', (event) => {
 });
 
 async function shellStatus() {
-  const have = new Set((await (await caches.open(SHELL)).keys()).map((req) => new URL(req.url).pathname));
+  const have = await keysOf(await caches.open(SHELL));
   return {
     version: VERSION,
-    total: PRECACHE.length,
-    saved: PRECACHE.filter((url) => have.has(url)).length,
+    total: SHELL_FILES.length,
+    saved: SHELL_FILES.filter((path) => have.has(href(path))).length,
   };
 }
 
 async function shellFill() {
   const cache = await caches.open(SHELL);
-  const have = new Set((await cache.keys()).map((req) => new URL(req.url).pathname));
-  for (const url of PRECACHE) {
-    if (have.has(url)) continue;
-    try {
-      await cache.add(new Request(url, { cache: 'reload' }));
-    } catch {
-      const old = await caches.match(url, MATCH);
-      if (old) await cache.put(url, old).catch(() => {});
-    }
+  const have = await keysOf(cache);
+  for (const path of SHELL_FILES) {
+    if (!have.has(href(path))) await saveShellFile(cache, path);
   }
   return shellStatus();
 }
