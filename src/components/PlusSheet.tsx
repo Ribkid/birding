@@ -102,7 +102,7 @@ export function PlusSheet({ open, onClose }: { open: boolean; onClose: () => voi
   })();
 
   return (
-    <Sheet open={open} onClose={onClose} label="Add a sighting" cls="sheet-wrap--plus">
+    <Sheet open={open} onClose={onClose} label="Add a sighting" cls="sheet-wrap--plus" step={mode}>
       {mode === 'menu' ? (
         <>
           <h2 className="sheet-title">Add a sighting</h2>

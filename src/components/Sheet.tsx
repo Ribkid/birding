@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { closeLayer, onLayerKey, openLayer, type Layer } from '../lib/layers';
+import { closeLayer, focusFirst, onLayerKey, openLayer, type Layer } from '../lib/layers';
 
 interface SheetProps {
   open: boolean;
@@ -12,10 +12,12 @@ interface SheetProps {
   /** false keeps the page usable behind the sheet (e.g. the patch sheet over the map). */
   modal?: boolean;
   lock?: boolean;
+  /** Change it when the sheet swaps its content for another step, so the new step's first control takes focus. */
+  step?: string | number;
 }
 
 /** A bottom sheet on the shared layer stack: scrim, focus trap, Escape and inert page behind it. */
-export function Sheet({ open, onClose, children, label, wide = false, cls = '', modal = true, lock = true }: SheetProps) {
+export function Sheet({ open, onClose, children, label, wide = false, cls = '', modal = true, lock = true, step }: SheetProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
@@ -42,6 +44,16 @@ export function Sheet({ open, onClose, children, label, wide = false, cls = '', 
       closeLayer(layer);
     };
   }, [open, label, modal, lock]);
+
+  // Take the person into the sheet, as v1's openSheet did: its first control gets focus after 50 ms.
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => {
+      const wrap = wrapRef.current, card = cardRef.current;
+      if (wrap && card && wrap.isConnected && !wrap.hasAttribute('data-closing')) focusFirst(card);
+    }, 50);
+    return () => clearTimeout(t);
+  }, [open, step]);
 
   if (!open) return null;
   return createPortal(
