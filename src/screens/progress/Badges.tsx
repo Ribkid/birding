@@ -5,6 +5,7 @@ import { learnReady, learnStats } from '../../core/learn.js';
 import { configured } from '../../core/cloud.js';
 import { useOutings, useSightings } from '../../lib/hooks';
 import { Icon } from '../../components/Icon';
+import { HubIcon } from '../lists/hubParts';
 import './progress.css';
 
 interface Badge {
@@ -103,7 +104,7 @@ export default function Badges() {
           </div>
         </div>
         <div className="trophy-links">
-          <Link className="btn" to="/learn"><Icon name="grid" /> Learn</Link>
+          <Link className="btn" to="/learn"><HubIcon name="learn" /> Learn</Link>
           <Link className="btn" to="/stats"><Icon name="chart" /> Stats</Link>
           {configured && <Link className="btn" to="/leaderboard">Leaderboard</Link>}
         </div>

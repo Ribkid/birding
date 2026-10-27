@@ -957,6 +957,24 @@ function MapView() {
     setPatchOpen(true);
   };
 
+  // v1 js/app.js:2389: Lists' "New patch" opens the map in patch mode, near her when the phone says where.
+  const { state: routeState } = useLocation();
+  useEffect(() => {
+    if ((routeState as { mapMode?: string } | null)?.mapMode !== 'patch') return;
+    navigate(pathname, { replace: true, state: null });
+    let alive = true;
+    const start = () => { if (alive) openPatch(); };
+    if (!navigator.geolocation) { start(); return () => { alive = false; }; }
+    navigator.geolocation.getCurrentPosition(
+      (p) => { if (alive) mapRef.current?.setView([p.coords.latitude, p.coords.longitude], 14); start(); },
+      start,
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
+    );
+    return () => { alive = false; };
+    // Once, on arrival from Lists.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const savePatch = async () => {
     const name = patchName.trim();
     if (!name) {
