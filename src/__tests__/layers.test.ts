@@ -50,3 +50,19 @@ describe('the layer stack', () => {
     expect(document.activeElement?.id).toBe('opener');
   });
 });
+
+describe('Escape', () => {
+  it('closes only the top layer, once, however many layers are open', () => {
+    const closed: string[] = [];
+    const a = card('<div class="a"><button>A</button></div>');
+    const b = card('<div class="b"><button>B</button></div>');
+    const la = openLayer(a, { close: () => { closed.push('a'); closeLayer(la); } });
+    const lb = openLayer(b, { close: () => { closed.push('b'); closeLayer(lb); } });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(closed).toEqual(['b']);
+    expect(layers()).toEqual([la]);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(closed).toEqual(['b', 'a']);
+    expect(layers()).toHaveLength(0);
+  });
+});

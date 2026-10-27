@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { closeLayer, focusFirst, onLayerKey, openLayer, type Layer } from '../lib/layers';
+import { closeLayer, focusFirst, openLayer, type Layer } from '../lib/layers';
 
 interface SheetProps {
   open: boolean;
@@ -36,11 +36,8 @@ export function Sheet({ open, onClose, children, label, wide = false, cls = '', 
       close: () => closeRef.current(),
     });
     const raf = requestAnimationFrame(() => wrap.classList.add('open'));
-    const key = (e: KeyboardEvent) => { onLayerKey(e); };
-    document.addEventListener('keydown', key);
     return () => {
       cancelAnimationFrame(raf);
-      document.removeEventListener('keydown', key);
       closeLayer(layer);
     };
   }, [open, label, modal, lock]);

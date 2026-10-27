@@ -103,6 +103,7 @@ export function openLayer(el: HTMLElement, { dialog = el, close, label, labelled
   if (labelledBy || h) { dialog.setAttribute('aria-labelledby', labelledBy || (h as HTMLElement).id); dialog.removeAttribute('aria-label'); }
   else if (label) dialog.setAttribute('aria-label', label);
   if (!dialog.hasAttribute('tabindex')) dialog.tabIndex = -1;
+  wireKeys();
   stack.push(layer);
   sync();
   return layer;
@@ -134,6 +135,15 @@ function restoreFocus(layer: Layer) {
 export function closeAllLayers(reason = 'nav') {
   for (const l of stack.slice().reverse()) l.close(reason);
   if (stack.length) { stack.length = 0; sync(); }
+}
+
+// One document listener for every layer, as v1's boot wired it: Escape must close only the top layer once, however
+// many layers (each with its own component) are open.
+let wired = false;
+function wireKeys() {
+  if (wired || typeof document === 'undefined') return;
+  wired = true;
+  document.addEventListener('keydown', (e) => { onLayerKey(e); });
 }
 
 export function onLayerKey(e: KeyboardEvent): boolean {
