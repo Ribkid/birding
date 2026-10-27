@@ -15,6 +15,12 @@
   --accent-soft: color-mix(in srgb, var(--kc) 13%, var(--surface));
 }
 :root[data-theme="outdoor"] .bird, :root[data-theme="outdoor"] .compare { --card-shadow: 0 0 0 1.5px var(--line-strong); }
+/* Filled controls with white text: a photo tint (always at 36% lightness) can be light for its hue (yellow-greens),
+   so in the light theme the fill is taken a step deeper to keep white text at 4.5:1. */
+.bird { --accent-strong: var(--accent); }
+#view.tinted .bird { --accent-strong: color-mix(in srgb, var(--accent) 76%, #000); }
+:root[data-theme="dark"] #view.tinted .bird, :root[data-theme="outdoor"] #view.tinted .bird { --accent-strong: var(--accent); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-theme="outdoor"]) #view.tinted .bird { --accent-strong: var(--accent); } }
 
 /* ---------- hero ---------- */
 .bird .bird-hero {
@@ -115,7 +121,7 @@
 }
 @keyframes sp-hero-drift { to { transform: translateY(34%) scale(1.08); } }
 @keyframes sp-scrim-deepen { to { opacity: .55; } }
-@keyframes sp-cap-lift { to { transform: translateY(18%); opacity: .2; } }
+@keyframes sp-cap-lift { 65% { opacity: 1; } to { transform: translateY(18%); opacity: 0; } }
 
 /* ---------- the sheet ---------- */
 .bird .bird-body {
@@ -129,8 +135,8 @@
 .bird .bird-actions .btn--primary { border-radius: var(--r-card); min-height: 54px; font-size: 1.0625rem; }
 .bird .btn--share { width: 54px; min-height: 54px; padding: 0; flex: none; border-radius: var(--r-card); }
 .bird .btn--share svg { width: 22px; height: 22px; }
-.bird .btn--primary { background: var(--accent); color: var(--on-accent); box-shadow: 0 12px 24px -12px var(--accent); }
-.bird .playbtn { background: var(--accent); color: var(--on-accent); }
+.bird .btn--primary { background: var(--accent-strong); color: var(--on-accent); box-shadow: 0 12px 24px -12px var(--accent-strong); }
+.bird .playbtn { background: var(--accent-strong); color: var(--on-accent); }
 .bird .seen-line { margin: var(--sp-3) 2px 0; }
 
 .bird .h2 { font-size: var(--fs-4); margin: var(--sp-6) 0 var(--sp-3); }
@@ -190,7 +196,7 @@
 .bird .where .btn svg { color: var(--accent); }
 
 /* Calls */
-.bird .call .playbtn { box-shadow: 0 8px 18px -10px var(--accent); }
+.bird .call .playbtn { box-shadow: 0 8px 18px -10px var(--accent-strong); }
 .bird .call .call-progress span { background: var(--accent); }
 
 /* About */
