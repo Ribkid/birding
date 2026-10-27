@@ -403,7 +403,7 @@ function openLocationPicker(init = {}) {
     ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Choose a place');
     ov.innerHTML = `
       <div class="locpick-top">
-        <div class="search-bar search-bar--map">${icon.search}<input type="search" placeholder="Search a park, suburb, address or hotspot" aria-label="Search for a place" autocomplete="off" data-lq>
+        <div class="search-bar search-bar--map">${icon.search}<input type="search" placeholder="Search a park, suburb or address" aria-label="Search for a place" autocomplete="off" data-lq>
           <button type="button" class="iconbtn" data-lclose aria-label="Cancel">${icon.close}</button></div>
         <ul class="rows locpick-res hidden" data-lres></ul>
       </div>
@@ -2195,7 +2195,7 @@ async function renderMap(spId = null, at = null) {
     <div class="mapwrap">
       <div id="map" aria-label="Map of your sightings and SEQ birding hotspots"></div>
       <div class="map-top">
-        <div class="search-bar search-bar--map">${icon.search}<input type="search" placeholder="Search species, hotspots, suburbs, parks" aria-label="Search the map" autocomplete="off" data-mq>
+        <div class="search-bar search-bar--map">${icon.search}<input type="search" placeholder="Search species and places" aria-label="Search the map" autocomplete="off" data-mq>
           <button type="button" class="iconbtn hidden" data-mqx aria-label="Clear search">${icon.close}</button></div>
         <ul class="rows map-res hidden" data-mres></ul>
       </div>
