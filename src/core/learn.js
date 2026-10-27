@@ -37,6 +37,10 @@ export function learnReady() {
   return loading;
 }
 if (typeof indexedDB !== 'undefined') learnReady();
+let active = null;
+export const getActive = () => active;
+export const setActive = (game) => { active = game; };
+const currentRoute = () => (typeof location !== 'undefined' ? location.hash : '');
 export const getLearn = () => L;
 export const getDaily = () => D;
 export const getQuizStats = () => ST;
@@ -176,7 +180,7 @@ export async function newPracticeRound(mode, { ids = null, testId = null, seen =
   if (qs.length < (ids ? 1 : pack ? 4 : 3)) {
     return { game: null, error: !pack ? emptyMessage(mode, p, !!offline) : offline ? 'This pack needs more photos or calls saved on this phone. Try it again with a signal.' : 'This pack is still loading. Try again in a moment.' };
   }
-  const game = { mode, pack: pack?.key || null, kind: pack ? pack.kind : p.kind, qs, i: 0, score: 0, prefs: pack ? { ...p, difficulty: 'normal' } : { ...p }, practice: !!ids, testId };
+  const game = { mode, pack: pack?.key || null, kind: pack ? pack.kind : p.kind, qs, i: 0, score: 0, prefs: pack ? { ...p, difficulty: 'normal' } : { ...p }, practice: !!ids, testId, route: currentRoute() };
   if (mode === 'rapid') Object.assign(game, { endsAt: Date.now() + RAPID_MS, streak: 0, top: 0 });
   return { game, error: '' };
 }
@@ -188,7 +192,7 @@ export function newDailyRound() {
   if (D.today?.date !== today) { D.today = { date: today, picks: [] }; saveDaily(); }
   const picks = D.today.picks;
   picks.forEach((p, i) => { if (qs[i]) qs[i].picked = p.key; });
-  const game = { daily: true, date: today, mode: 'daily', qs, i: Math.min(picks.length, qs.length), score: picks.filter(p => p.right).length };
+  const game = { daily: true, date: today, mode: 'daily', qs, i: Math.min(picks.length, qs.length), score: picks.filter(p => p.right).length, route: currentRoute() };
   if (D.history[today] != null) game.done = true;
   return { game, error: '' };
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { KINDS, byId, type QuizQuestion, type RoundState } from '../../lib/data';
 import { useMedia, useSightings } from '../../lib/hooks';
 import { CountUp } from '../../components/Motion';
@@ -11,7 +11,7 @@ import { cachedIndex } from '../../core/media.js';
 import {
   learnReady, newPracticeRound, newDailyRound, newDeckRound, answer as recordAnswer, finishRound,
   roundNote, testSet, allCards, dueCards, boxes, nextDue, addCards, gradeCard, dayStr, monthName,
-  packBy, ROUND, RAPID_MS, kindLabel, emptyMessage, startOfDay, getLearn,
+  packBy, ROUND, RAPID_MS, kindLabel, emptyMessage, startOfDay, getLearn, getActive, setActive,
 } from '../../core/learn.js';
 import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, type CallClip } from './QuizMedia';
 import './learn.css';
@@ -218,6 +218,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const params = useParams();
   const pack = fixedPack || params.pack || 'quick';
   const navigate = useNavigate();
+  const location = useLocation();
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [game, setGame] = useState<RoundState | null>(null);
   const [error, setError] = useState('');
@@ -245,11 +246,18 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       if (!alive) return;
       setReady(true);
       if (isDeck) return;
+      const active = getActive();
+      if (active && active.route === location.hash && !active.done) {
+        setGame(active);
+        if (active.mode === 'rapid') setRapidLeft(Math.max(0, (active.endsAt || 0) - Date.now()));
+        return;
+      }
       if (isDaily) {
         const r = newDailyRound();
         if (!alive) return;
         if (r.error) { setError(r.error); return; }
         setGame(r.game);
+        setActive(r.game);
         return;
       }
       const seenNow = new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId));
@@ -258,6 +266,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       if (!alive) return;
       if (r.error) { setError(r.error); return; }
       setGame(r.game);
+      setActive(r.game);
       if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
     })();
     return () => { alive = false; };
@@ -306,6 +315,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const restart = async () => {
     wantHeadFocus.current = true;
     stopCalls();
+    setActive(null);
     setGame(null);
     setError('');
     setQuickCall(null);
@@ -318,6 +328,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       return;
     }
     setGame(r.game);
+    setActive(r.game);
     if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
   };
   const startWithIds = async (ids: number[]) => {
@@ -335,6 +346,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       return;
     }
     setGame(r.game);
+    setActive(r.game);
     setError('');
     if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
   };
@@ -382,7 +394,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   if (!ready || !game) return <div className="learn learn--loading" aria-busy="true" />;
 
   if (isOver) {
-    return <Results game={game} total={total} onAgain={() => { void restart(); }} onAgainMissed={(ids) => { void startWithIds(ids); }} onHub={() => navigate('/learn')} />;
+    return <Results game={game} total={total} onAgain={() => { void restart(); }} onAgainMissed={(ids) => { void startWithIds(ids); }} onHub={() => { setActive(null); navigate('/learn'); }} />;
   }
 
   const q = current!;
@@ -395,7 +407,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   return (
     <div className={`lq-screen lq-screen--${game.mode}${game.kind && game.kind !== 'animals' ? ` kind--${game.kind}` : ''}`} data-own-topbar>
       <header className="lq-head glass">
-        <Link className="iconbtn" to="/learn" aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { if (!game.daily) setGame(null); }}>
+        <Link className="iconbtn" to="/learn" aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { setActive(null); if (!game.daily) setGame(null); }}>
           <svg viewBox="0 0 24 24">{game.daily ? QI.back : QI.close}</svg>
         </Link>
         {game.mode === 'rapid' ? (

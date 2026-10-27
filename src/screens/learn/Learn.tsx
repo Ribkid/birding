@@ -6,7 +6,7 @@ import { useStagger, CountUp } from '../../components/Motion';
 import { useTint } from '../../components/Motion';
 import * as Q from '../../core/quiz.js';
 import {
-  learnReady, getLearn, getDaily, learnStats, masteryOf, dueCards, boxes, currentStreak,
+  learnReady, getLearn, getDaily, learnStats, masteryOf, dueCards, boxes, currentStreak, setActive,
   dayStr, monthName, accuracyForKinds, packProgress, setPrefs, saveLearn, kindLabel,
   packs as PACKS, isMastered,
 } from '../../core/learn.js';
@@ -54,6 +54,7 @@ export default function Learn() {
   useSightings();
 
   useEffect(() => {
+    setActive(null);
     let alive = true;
     void learnReady().then(() => { if (alive) { setReady(true); force(); } }).catch(() => { if (alive) setReady(true); });
     return () => { alive = false; };
