@@ -1,7 +1,7 @@
 // Sarah's BirdyDex service worker.
 // App files: network first (so updates arrive straight away), cache when offline.
 // Bird photos, map tiles, the ID models and our call clips: cache first, so they work in the bush.
-const VERSION = 'v9-look';
+const VERSION = 'v9-look-s';
 const SHELL = `birddex-shell-${VERSION}`;
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
