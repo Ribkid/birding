@@ -11,6 +11,7 @@
 // such as CSS still work, which is a very confusing way to go offline.
 const VERSION = __VERSION__;
 const SHELL = 'birdydex-shell-' + VERSION;
+const OLDER = 'birdydex-older-' + VERSION;
 const RUNTIME = 'birdydex-runtime-v3';
 const PHOTOS = 'birdydex-photos-v3';
 const CALLS = 'birddex-calls';
@@ -81,12 +82,18 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL);
-      await Promise.all(SHELL_FILES.map((path) => saveShellFile(cache, path)));
-      // The page and its content-hashed assets have no older copy to fall back on. Without them this
-      // release cannot start, so the install fails and the working release stays in charge.
-      const have = await keysOf(cache);
-      if (SHELL_FILES.some((path) => (path === '/index.html' || path.startsWith('/assets/')) && !have.has(href(path)))) {
-        throw new Error('shell incomplete');
+      try {
+        await Promise.all(SHELL_FILES.map((path) => saveShellFile(cache, path)));
+        // The page and its content-hashed assets have no older copy to fall back on. Without them this
+        // release cannot start, so the install fails and the working release stays in charge.
+        const have = await keysOf(cache);
+        if (SHELL_FILES.some((path) => (path === '/index.html' || path.startsWith('/assets/')) && !have.has(href(path)))) {
+          throw new Error('shell incomplete');
+        }
+      } catch (err) {
+        // A failed install leaves no half-filled shell behind.
+        await caches.delete(SHELL);
+        throw err;
       }
       await self.skipWaiting();
     })(),
@@ -96,22 +103,23 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      const keep = new Set([SHELL, RUNTIME, PHOTOS, CALLS, MODELS]);
-      const shell = await caches.open(SHELL);
-      // A page still running the previous release may lazy-load an old content-hashed
-      // chunk. Keep the old shell's assets in the new shell before deleting it.
+      // A page still running the previous release may lazy-load one of its content-hashed chunks, so that
+      // release's own /assets/ files are copied into this release's OLDER cache. Shells hold only their
+      // own release's files, and the OLDER caches are dropped below, so old chunks are kept for one
+      // release and never pile up.
+      const older = await caches.open(OLDER);
       for (const name of await caches.keys()) {
         if (name === SHELL || !name.startsWith('birdydex-shell-')) continue;
         const old = await caches.open(name);
         for (const req of await old.keys()) {
-          if (!new URL(req.url).pathname.startsWith('/assets/')) continue;
-          if (await shell.match(req, MATCH)) continue;
-          const res = await old.match(req);
-          if (res) await shell.put(req, res).catch(() => {});
+          if (!new URL(req.url).pathname.startsWith('/assets/') || OWN.has(req.url)) continue;
+          const res = await old.match(req, MATCH);
+          if (res) await older.put(req, res).catch(() => {});
         }
       }
+      const keep = new Set([SHELL, OLDER, RUNTIME, PHOTOS]);
       for (const name of await caches.keys()) {
-        if (!keep.has(name) && name.startsWith('birdydex-')) await caches.delete(name);
+        if (name.startsWith('birdydex-') && !keep.has(name)) await caches.delete(name);
       }
       // Earlier releases kept the photo model's .bin parts and the ONNX runtime in the runtime cache.
       // photoid.js keeps the joined model and the .wasm in birddex-models, so the parts are deleted. The
@@ -307,9 +315,11 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Built assets are content-hashed, so the cached copy is always right.
+  // Built assets are content-hashed, so any saved copy is right. One fetched now is kept in the shell
+  // when this release lists it, else in OLDER (an older release's chunk, asked for by a page still
+  // running that release), so the shell never holds another release's files.
   if (url.pathname.startsWith('/assets/')) {
-    event.respondWith(cacheFirst(event, SHELL).catch(() => Response.error()));
+    event.respondWith(cacheFirst(event, OWN.has(request.url) ? SHELL : OLDER).catch(() => Response.error()));
     return;
   }
 

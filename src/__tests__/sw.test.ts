@@ -381,3 +381,70 @@ describe('navigations', () => {
     expect((await get('/does-not-exist', nav)).text).toContain('<div id="root">');
   });
 });
+
+describe('releases', () => {
+  // One phone, one network, several releases of the service worker in a row.
+  function phone(files: Files) {
+    const all: Files = { '/index.html': { body: '<div id="root"></div>', type: 'text/html' }, ...files };
+    const { net, state } = makeNet(Object.fromEntries(Object.entries(all).map(([u, f]) => [abs(u), f])));
+    const caches = new FakeCaches(net);
+    // Install and activate a release; resolves to 'installed' or the install's error.
+    const release = async (version: string, precache: string[]) => {
+      const sw = loadWorker({ precache: ['/index.html', ...precache], version, caches, net });
+      let wait: Promise<unknown> = Promise.resolve();
+      sw.install({ waitUntil: (p: Promise<unknown>) => { wait = p; } });
+      try {
+        await wait;
+      } catch (err) {
+        return String(err);
+      }
+      await dispatch(sw.activate, {});
+      return { result: 'installed', get: (url: string) => dispatch(sw.fetch, { request: toReq(url) }) };
+    };
+    const assets = (name: string) => caches.urls(name).filter((u) => u.includes('/assets/')).map((u) => u.split('/').pop()).sort();
+    return { caches, state, release, assets };
+  }
+  const files: Files = {
+    '/assets/index-a.js': 'a', '/assets/index-b.js': 'b', '/assets/index-c.js': 'c', '/assets/index-d.js': 'd',
+    '/assets/photoid-1.js': 'p1', '/assets/photoid-2.js': 'p2', '/assets/photoid-3.js': 'p3',
+  };
+
+  it('keeps an older release\'s own chunks for one release only', async () => {
+    const { caches, state, release, assets } = phone(files);
+    await release('A', ['/assets/index-a.js', '/assets/photoid-1.js']);
+    const b = await release('B', ['/assets/index-b.js', '/assets/photoid-2.js']);
+    expect(assets('birdydex-shell-B')).toEqual(['index-b.js', 'photoid-2.js']);
+    expect(assets('birdydex-older-B')).toEqual(['index-a.js', 'photoid-1.js']);
+    // A page still running release A loads its chunk offline.
+    state.online = false;
+    expect(await (b as { get: (u: string) => Promise<unknown> }).get('/assets/photoid-1.js')).toMatchObject({ status: 200, text: 'p1' });
+    state.online = true;
+    await release('C', ['/assets/index-c.js', '/assets/photoid-3.js']);
+    await release('D', ['/assets/index-d.js', '/assets/photoid-3.js']);
+    expect([...caches.map.keys()].filter((n) => /^birdydex-(shell|older)-/.test(n)).sort()).toEqual(['birdydex-older-D', 'birdydex-shell-D']);
+    expect(assets('birdydex-shell-D')).toEqual(['index-d.js', 'photoid-3.js']);
+    expect(assets('birdydex-older-D')).toEqual(['index-c.js']);
+  });
+
+  it('drops what an earlier build carried into its shell after one release', async () => {
+    const { caches, release, assets } = phone(files);
+    // A shell from before this fix, holding its own files and chunks carried from two releases back.
+    caches.seed('birdydex-shell-old', '/index.html', '<div id="root"></div>', 'text/html');
+    for (const f of ['index-a.js', 'photoid-1.js', 'photoid-2.js']) caches.seed('birdydex-shell-old', '/assets/' + f, f);
+    await release('C', ['/assets/index-c.js', '/assets/photoid-3.js']);
+    expect(assets('birdydex-older-C')).toEqual(['index-a.js', 'photoid-1.js', 'photoid-2.js']);
+    await release('D', ['/assets/index-d.js', '/assets/photoid-3.js']);
+    expect(assets('birdydex-older-D')).toEqual(['index-c.js']);
+  });
+
+  it('leaves no half-filled shell when an install fails, and the working release carries on', async () => {
+    const { caches, state, release, assets } = phone({ ...files, '/assets/photoid-9.js': { body: 'flaky', type: 'text/plain', status: 503 } });
+    await release('A', ['/assets/index-a.js', '/assets/photoid-1.js']);
+    expect(await release('B', ['/assets/index-b.js', '/assets/photoid-9.js'])).toContain('shell incomplete');
+    expect([...caches.map.keys()].filter((n) => /^birdydex-(shell|older)-/.test(n)).sort()).toEqual(['birdydex-older-A', 'birdydex-shell-A']);
+    expect(assets('birdydex-shell-A')).toEqual(['index-a.js', 'photoid-1.js']);
+    state.online = false;
+    const a = loadWorker({ precache: ['/index.html', '/assets/index-a.js'], version: 'A', caches, net: async () => { throw new TypeError('offline'); } });
+    expect((await dispatch(a.fetch, { request: toReq('/', { mode: 'navigate' }) })).text).toContain('<div id="root">');
+  });
+});
