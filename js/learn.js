@@ -1,8 +1,9 @@
 // Learn: today's challenge, practice rounds, look-alike duels, rapid fire and a spaced-repetition review deck.
 // Progress lives in the key-value store ('learn', 'dailyQuiz', 'quizStats'), never alongside the sightings.
-import { KINDS, HABITATS, byId, kindsPresent, ofKind } from './species.js';
+import { KINDS, HABITATS, SPECIES, byId, kindsPresent, ofKind } from './species.js';
 import { db } from './db.js';
 import { MONTHS } from './stats.js';
+import { lookAfterDraw } from './look.js';
 import * as Q from './quiz.js';
 
 const ROUND = 10, RAPID_MS = 60000, DAY = 864e5;
@@ -134,7 +135,7 @@ export function learnTeaser(_ctx) {
 }
 
 // ---------- audio ----------
-let audio = null, audioBtn = null, ticker = null;
+let audio = null, audioBtn = null, ticker = null, ringRaf = 0;
 // Cached clips come back from ctx.audioUrl as blob: URLs; let each one go when its player is done with it.
 const dropUrl = u => { if (typeof u === 'string' && u.startsWith('blob:')) URL.revokeObjectURL(u); };
 function setPlay(btn, state) {
@@ -144,8 +145,25 @@ function setPlay(btn, state) {
   const ic = btn.querySelector('[data-ic]');
   if (ic) ic.innerHTML = state === true ? I.pause : I.play;
 }
+// The ring round the big play button shows how far through the recording she is (paused: it holds still).
+const ringOf = btn => btn?.closest('.lq-player')?.querySelector('[data-ring]') || null;
+function trackRing(btn, a) {
+  cancelAnimationFrame(ringRaf);
+  const ring = ringOf(btn);
+  if (!ring) return;
+  const step = () => {
+    if (audio !== a || a.paused) { ringRaf = 0; return; }
+    const d = a.duration;
+    if (d && Number.isFinite(d)) ring.style.strokeDashoffset = String(100 - Math.min(1, a.currentTime / d) * 100);
+    ringRaf = requestAnimationFrame(step);
+  };
+  ringRaf = requestAnimationFrame(step);
+}
 function stopAudio() {
+  cancelAnimationFrame(ringRaf); ringRaf = 0;
   if (audio) { audio.onended = audio.onerror = null; audio.pause(); dropUrl(audio.src); }
+  const ring = ringOf(audioBtn);
+  if (ring) ring.style.strokeDashoffset = '100';
   setPlay(audioBtn, false);
   audio = null; audioBtn = null;
 }
@@ -153,7 +171,8 @@ function cleanup() { stopAudio(); clearInterval(ticker); ticker = null; }
 async function playCall(ctx, call, btn, status, onFail) {
   if (!call) return;
   if (audio && audioBtn === btn) {
-    if (audio.paused) { audio.play().then(() => setPlay(btn, true)).catch(() => {}); } else { audio.pause(); setPlay(btn, false); }
+    const a = audio;
+    if (a.paused) { a.play().then(() => { setPlay(btn, true); trackRing(btn, a); }).catch(() => {}); } else { a.pause(); setPlay(btn, false); }
     return;
   }
   stopAudio();
@@ -175,10 +194,30 @@ async function playCall(ctx, call, btn, status, onFail) {
   if (call.local || !/^https:\/\/images\.ala\.org\.au\//.test(src)) { try { url = await ctx.audioUrl(src); } catch (_) {} }
   if (audioBtn !== btn) { dropUrl(url); return; }
   const a = audio = new Audio(url);
-  a.onended = () => { setPlay(btn, false); if (status) status.textContent = 'Tap to hear it again'; dropUrl(url); audio = null; audioBtn = null; };
+  a.onended = () => {
+    cancelAnimationFrame(ringRaf); ringRaf = 0;
+    const ring = ringOf(btn);
+    if (ring) ring.style.strokeDashoffset = '0';
+    setPlay(btn, false); if (status) status.textContent = 'Tap to hear it again'; dropUrl(url); audio = null; audioBtn = null;
+  };
   a.onerror = fail;
-  a.play().then(() => { if (audio === a) { setPlay(btn, true); if (status) status.textContent = 'Playing'; } }).catch(fail);
+  a.play().then(() => { if (audio === a) { setPlay(btn, true); trackRing(btn, a); if (status) status.textContent = 'Playing'; } }).catch(fail);
 }
+// The big call player: a play button inside a progress ring, over a waveform that moves while it plays. It takes the
+// colour of the kind being practised, never the answer's own kind (that would give a bird or frog away).
+// The bars are a drawing, not the sound itself (most recordings come from servers that don't allow reading them).
+function waveHTML(seed) {
+  const rng = Q.seeded(Q.hashStr(String(seed)));
+  return `<span class="lq-wave" aria-hidden="true">${Array.from({ length: 32 }, (_, i) => {
+    const env = Math.sin(Math.PI * (i + 0.5) / 32) ** 0.6;
+    return `<i style="--h:${(0.16 + 0.84 * env * (0.3 + 0.7 * rng())).toFixed(2)};--j:${i % 7}"></i>`;
+  }).join('')}</span>`;
+}
+const callPlayerHTML = (sp, { play = 'answer', call = null, extra = '' } = {}) => `<div class="lq-call">
+  <span class="lq-player"><svg class="lq-ring" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" pathLength="100"/><circle class="lq-ring-fg" data-ring cx="60" cy="60" r="54" pathLength="100"/></svg>
+  <button class="lq-play" ${play ? `data-play="${play}"` : 'data-play'} aria-label="Play the call"><span data-ic>${I.play}</span></button></span>
+  ${waveHTML(call?.src || sp.id)}
+  <p class="lq-status" data-status aria-live="polite">Tap to listen</p>${call ? `<p class="lq-credit">${esc(credit(call))}</p>` : ''}${extra}</div>`;
 const credit = c => (c ? `Recording: ${String(c.artist || 'Unknown').slice(0, 50)}${c.license ? `, ${c.license}` : ''}` : '');
 
 // ---------- photos with fallbacks ----------
@@ -226,6 +265,21 @@ const clueHTML = clue => esc(clue).replace(/\u0001/g, '<span class="lq-blank"><s
 // the new screen's heading so she keeps her place and hears the next question.
 const focusWithin = view => view.contains(document.activeElement) && document.activeElement !== view;
 const focusHead = (view, had) => { if (had) view.querySelector('h1')?.focus({ preventScroll: true }); };
+// Screens drawn here (not by the router) start at the top, as a new route does (after a long answer she would
+// otherwise land halfway down the next question), and tell the frosted top bar which title is on screen.
+const drawn = (ctx, had) => { window.scrollTo(0, 0); focusHead(ctx.view, had); lookAfterDraw(ctx.view); };
+
+// The progress bar fills from where the last screen left it, so it visibly grows between questions and cards.
+let barWas = 0;
+const barSpan = frac => `<span data-fill style="transform:scaleX(${barWas.toFixed(3)})" data-to="${frac.toFixed(3)}"></span>`;
+function fillBar(view, frac = null) {
+  const s = view.querySelector('[data-fill]');
+  if (!s) return;
+  const to = frac ?? Number(s.dataset.to);
+  barWas = to;
+  if (!reduced()) void s.offsetWidth; // start from the old width so the change animates
+  s.style.transform = `scaleX(${to.toFixed(3)})`;
+}
 
 // ---------- routing ----------
 let game = null;
@@ -273,6 +327,89 @@ const DIFF = { easy: ['Easy', 'Wrong answers come from other groups.'], normal: 
 const bestKey = (mode, p) => `${mode}|${p.kind}|${p.scope}|${p.difficulty}`;
 const kindLabel = k => (k === 'animals' ? 'All animals' : KINDS[k].label);
 
+// ---------- photos for the hub and results ----------
+// Photos already on screen once this session go straight in, so cards redrawn by a choice don't flicker.
+const shownSrc = new Set();
+const imgTag = (src, alt = '') => (src ? `<img class="fade${shownSrc.has(src) ? ' in' : ''}" src="${esc(src)}" alt="${esc(alt)}" decoding="async" data-face>` : '');
+function wireFaces(root) {
+  for (const img of root.querySelectorAll('img[data-face]')) {
+    const done = () => { img.classList.add('in'); shownSrc.add(img.getAttribute('src')); };
+    if (img.complete && img.naturalWidth) { done(); continue; }
+    img.addEventListener('load', done, { once: true });
+    // Offline or moved: the card's own colour shows instead of a broken picture.
+    img.addEventListener('error', () => img.classList.add('is-gone'), { once: true });
+  }
+}
+const faceSrc = (id, size = 'small') => Q.photosFor(id, { size, prefer: 'wiki' })[0]?.src || '';
+// Only pictures served with CORS (Wikimedia, or this app's own files) can lend their colour; reading any other
+// would fail and log an error, so those cards keep their kind colour.
+const tintable = src => /^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(src) || (!!src && new URL(src, location.href).origin === location.origin);
+// One photo per practice card, the same all day for a kind: commoner species, none twice, a look-alike pair for duels.
+let faces = { key: '', v: null };
+function modeFaces(kind) {
+  const key = `${dayStr()}|${kind}`;
+  if (faces.key === key) return faces.v;
+  const all = Q.speciesFor(kind).filter(Q.hasPhoto);
+  if (!all.length) return {}; // the photo index hasn't arrived yet: try again next time
+  const rng = Q.seeded(Q.hashStr(`faces|${key}`));
+  const common = all.filter(s => s.rarity <= 2);
+  const pool = Q.shuffle((common.length >= 12 ? common : all).slice(), rng);
+  const inKind = s => s && Q.hasPhoto(s) && (kind === 'animals' ? s.kind !== 'plant' : s.kind === kind);
+  const pair = Q.shuffle(Q.lookalikePairs().filter(x => inKind(byId.get(x.a)) && inKind(byId.get(x.b))), rng)[0];
+  const used = new Set(pair ? [pair.a, pair.b] : []), v = {};
+  if (pair) v.duel = [pair.a, pair.b];
+  for (const m of Q.MODES) {
+    if (v[m]) continue;
+    const ok = m === 'call' ? s => Q.CALL_KINDS.includes(s.kind) && Q.hasCall(s.id) : () => true;
+    const s = pool.find(x => !used.has(x.id) && ok(x)) || pool.find(x => !used.has(x.id));
+    if (s) { used.add(s.id); v[m] = [s.id]; }
+  }
+  faces = { key, v };
+  return v;
+}
+// The challenge card takes its colour from a species about this month that isn't in today's set (that set is
+// drawn from the commonest, 80% of peak and up), so the picture never gives an answer away.
+function heroFace(month) {
+  const rate = s => Q.relRate(s.id, month) ?? 0;
+  let list = SPECIES.filter(s => rate(s) >= 0.5 && rate(s) < 0.8 && Q.hasPhoto(s));
+  if (!list.length) list = SPECIES.filter(s => s.rarity <= 2 && Q.hasPhoto(s));
+  const tinted = list.filter(s => tintable(faceSrc(s.id)));
+  if (tinted.length) list = tinted;
+  return list.length ? list[(Q.seeded(Q.hashStr(`hero|${dayStr()}`))() * list.length) | 0] : null;
+}
+
+// Bars, meters and pips fill the first time they are seen; after that they are drawn full.
+let hubOnce = false, pipsSeen = { date: '', n: 0 };
+function growOnView(root) {
+  const els = [...root.querySelectorAll('[data-grow]')];
+  if (!els.length) return;
+  if (typeof IntersectionObserver !== 'function') { els.forEach(el => el.classList.add('is-in')); return; }
+  const io = new IntersectionObserver(ens => {
+    for (const en of ens) if (en.isIntersecting) { en.target.classList.add('is-in'); io.unobserve(en.target); }
+  }, { threshold: 0.4 });
+  els.forEach(el => io.observe(el));
+}
+function heroPips(picks, today) {
+  const from = pipsSeen.date === today ? pipsSeen.n : 0;
+  pipsSeen = { date: today, n: picks.length };
+  const anim = !reduced();
+  return `<span class="lh-pips" aria-hidden="true">${Array.from({ length: 5 }, (_, i) => {
+    const p = picks[i];
+    const cls = p ? `${p.right ? 'is-right' : 'is-wrong'}${anim && i >= from ? ' is-new' : ''}` : '';
+    return `<i class="${cls}" style="--j:${Math.max(0, i - from)}">${p ? (p.right ? I.tick : I.cross) : ''}</i>`;
+  }).join('')}</span>`;
+}
+// A segmented choice; the thumb glides to the pressed button (--idx), which keeps aria-pressed.
+function segHTML(attr, items, cur, label) {
+  const idx = Math.max(0, items.findIndex(([k]) => k === cur));
+  return `<div class="lh-seg" role="group" aria-label="${esc(label)}" style="--n:${items.length};--idx:${idx}"><span class="lh-seg-thumb" aria-hidden="true"></span>${
+    items.map(([k, l]) => `<button type="button" data-${attr}="${k}" aria-pressed="${k === cur}">${esc(l)}</button>`).join('')}</div>`;
+}
+const boxesHTML = (boxes, cls = '') => {
+  const maxBox = Math.max(1, ...boxes);
+  return `<span class="lh-boxes ${cls}" aria-hidden="true">${boxes.map((n, i) => `<span class="lh-box"><b>${n}</b><span class="lh-box-bar"><i style="--h:${(n / maxBox).toFixed(3)};--j:${i}"></i></span><em>${i + 1}</em></span>`).join('')}</span>`;
+};
+
 function renderHub(ctx) {
   const { view } = ctx;
   game = null;
@@ -282,75 +419,115 @@ function renderHub(ctx) {
   const streak = currentStreak();
   const cards = allCards(), due = dueCards().length;
   const boxes = [1, 2, 3, 4, 5].map(b => cards.filter(c => c.box === b).length);
-  const maxBox = Math.max(1, ...boxes);
   const dailyLine = doneToday ? `Done: ${D.history[today]} of 5. A new set comes tomorrow.` : picks.length ? `${picks.length} of 5 answered. Pick up where you left off.` : `Five species around in ${month}. About two minutes.`;
   const kinds = ['animals', ...kindsPresent];
   const scopes = [['all', 'Everything'], ['seen', "Ones I've seen"], ['month', `Around in ${month}`]];
-  const callOk = Q.CALL_KINDS.includes(p.kind) || p.kind === 'animals';
-  const best = m => L.best[bestKey(m, p)];
   const now = new Date();
+  const grow = !hubOnce && !reduced() ? ' data-grow' : '';
+  hubOnce = true;
+  const hero = heroFace(now.getMonth() + 1);
   view.innerHTML = `
     <header class="page-head"><h1 class="lh-title">Learn</h1></header>
     <div class="learn">
       ${navigator.onLine ? '' : '<p class="lh-offline" role="status">No signal. Questions use the photos and calls saved on this phone, plus field notes.</p>'}
-      <a class="lh-daily ${doneToday ? 'is-done' : ''}" href="#/learn/daily">
-        <span class="lh-date" aria-hidden="true"><b>${now.getDate()}</b><span>${esc(month.slice(0, 3))}</span></span>
-        <span class="lh-daily-main"><strong>Today's challenge</strong><span>${esc(dailyLine)}</span>${pipsHTML(picks)}</span>
-        ${streak ? `<span class="lh-streak"><b>${streak}</b><span>${streak === 1 ? 'day' : 'days'} in a row</span></span>`
-          : `<span class="lh-go">${picks.length ? 'Carry on' : 'Start'}</span>`}
+      <a class="lh-daily${doneToday ? ' is-done' : ''}${hero ? ` kind--${hero.kind}` : ''}" href="#/learn/daily">
+        ${hero ? `<span class="lh-daily-photo" aria-hidden="true">${imgTag(faceSrc(hero.id, 'large'))}</span>` : ''}
+        <span class="lh-daily-top">
+          <span class="lh-date" aria-hidden="true"><b>${now.getDate()}</b><span>${esc(month)}</span></span>
+          ${streak ? `<span class="lh-streak"><b>${streak}</b><span>${streak === 1 ? 'day' : 'days'} in a row</span></span>` : ''}
+        </span>
+        <span class="lh-daily-main"><strong>Today's challenge</strong><span>${esc(dailyLine)}</span></span>
+        <span class="lh-daily-foot">${heroPips(picks, today)}<span class="lh-go">${doneToday ? 'See how you went' : picks.length ? 'Carry on' : 'Start'}</span></span>
       </a>
 
       <section class="lh-sec" aria-labelledby="lh-deck-h">
         <div class="lh-sec-h"><h2 id="lh-deck-h">Review deck</h2><a href="#/learn/deck">${cards.length ? 'Open' : 'Set up'}</a></div>
-        ${cards.length ? `<a class="lh-deck" href="#/learn/deck" aria-label="${due} ${due === 1 ? 'card' : 'cards'} due. Open the review deck">
-          <span class="lh-boxes" aria-hidden="true">${boxes.map((n, i) => `<span class="lh-box"><b>${n}</b><i style="--h:${Math.round(n / maxBox * 100)}%"></i><em>${i + 1}</em></span>`).join('')}</span>
-          <span class="lh-deck-txt"><strong>${due ? `${due} ${due === 1 ? 'card' : 'cards'} to review` : 'Nothing due right now'}</strong><span class="small muted">Know a card and it moves along a box. Box 4 and 5 count as mastered.</span></span></a>`
+        ${cards.length ? `<a class="lh-deck${due ? ' is-due' : ''}" href="#/learn/deck" aria-label="${due} ${due === 1 ? 'card' : 'cards'} due. Open the review deck"${grow}>
+          ${boxesHTML(boxes)}
+          <span class="lh-deck-txt"><strong>${due ? `<b>${due}</b> ${due === 1 ? 'card' : 'cards'} to review` : 'Nothing due right now'}</strong><span class="small muted">Know a card and it moves along a box. Box 4 and 5 count as mastered.</span></span></a>`
           : '<p class="small muted lh-empty">Species you miss in a round land here, so they come back until you know them. You can also add a set yourself.</p>'}
       </section>
 
       <section class="lh-sec" aria-labelledby="lh-play-h">
         <div class="lh-sec-h"><h2 id="lh-play-h">Practise</h2></div>
-        <div class="chips chips--scroll lh-chips" role="group" aria-label="What to practise">${kinds.map(k => `<button class="chip ${k !== 'animals' ? `chip--kind kind--${k}` : ''} ${p.kind === k ? 'chip--on' : ''}" data-kind="${k}" aria-pressed="${p.kind === k}">${esc(kindLabel(k))}</button>`).join('')}</div>
-        <div class="lh-seg" role="group" aria-label="Which species">${scopes.map(([k, l]) => `<button data-scope="${k}" aria-pressed="${p.scope === k}">${esc(l)}</button>`).join('')}</div>
-        <div class="lh-seg" role="group" aria-label="Difficulty">${Object.entries(DIFF).map(([k, [l]]) => `<button data-diff="${k}" aria-pressed="${p.difficulty === k}">${l}</button>`).join('')}</div>
-        <p class="small muted lh-hint">${esc(DIFF[p.difficulty][1])}</p>
-        <ul class="lh-modes">${Q.MODES.map(m => {
-          const [title, desc] = MODE_INFO[m];
-          const b = best(m), off = m === 'call' && !callOk;
-          return `<li class="${m === 'quick' ? 'lh-mode--wide' : ''}"><a class="lh-mode lh-mode--${m} ${off ? 'is-off' : ''}" href="#/learn/play/${m}" ${off ? 'aria-disabled="true" data-off' : ''}>
-            <span class="lh-mode-ic">${I[m]}</span><strong>${title}</strong><span class="lh-mode-desc">${off ? 'Calls are for birds and frogs. Choose All animals, Birds or Frogs.' : desc}</span>
-            ${b != null ? `<span class="lh-best">${m === 'rapid' ? 'Best streak' : 'Best'} <b>${b}</b>${m === 'rapid' ? '' : `<span>/${ROUND}</span>`}</span>` : ''}</a></li>`;
-        }).join('')}</ul>
+        <div class="lh-kinds" role="group" aria-label="What to practise">${kinds.map(k => `<button type="button" class="lh-kind${k !== 'animals' ? ` kind--${k}` : ''}" data-kind="${k}" aria-pressed="${p.kind === k}"><i aria-hidden="true"></i>${esc(kindLabel(k))}</button>`).join('')}</div>
+        ${segHTML('scope', scopes, p.scope, 'Which species')}
+        ${segHTML('diff', Object.entries(DIFF).map(([k, [l]]) => [k, l]), p.difficulty, 'Difficulty')}
+        <p class="small muted lh-hint" data-hint>${esc(DIFF[p.difficulty][1])}</p>
+        <ul class="lh-modes${p.kind !== 'animals' ? ` kind--${p.kind}` : ''}" data-modes>${modesHTML(p)}</ul>
       </section>
 
       <section class="lh-sec" aria-labelledby="lh-prog-h">
         <div class="lh-sec-h"><h2 id="lh-prog-h">How you're going</h2></div>
-        ${progressHTML()}
+        ${progressHTML(grow)}
       </section>
     </div>`;
+  wireFaces(view);
+  const card = view.querySelector('.lh-daily');
+  if (hero && tintable(faceSrc(hero.id))) ctx.applyTint?.(card, faceSrc(hero.id), null);
+  growOnView(view);
+  ctx.stagger?.(view, '.lh-daily, .lh-deck, .lh-modes > li', { key: 'learn-hub' });
+  view.querySelector('.lh-kind[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'auto' });
   view.onclick = e => {
     const k = e.target.closest('[data-kind]'), sc = e.target.closest('[data-scope]'), d = e.target.closest('[data-diff]');
     if (k) L.prefs.kind = k.dataset.kind;
     if (sc) L.prefs.scope = sc.dataset.scope;
     if (d) L.prefs.difficulty = d.dataset.diff;
-    if (k || sc || d) { saveL(); renderHub(ctx); return; }
+    if (k || sc || d) { saveL(); syncHub(ctx, k || sc || d); return; }
     if (e.target.closest('[data-off]')) { e.preventDefault(); ctx.toast('Calls are for birds and frogs. Choose All animals, Birds or Frogs.'); }
   };
   view.onchange = null;
 }
 
+// A choice changes the controls and cards in place: focus stays on the button she pressed and the thumb can glide.
+function syncHub(ctx, btn) {
+  const { view } = ctx, p = L.prefs;
+  const press = (attr, val) => { for (const b of view.querySelectorAll(`[data-${attr}]`)) b.setAttribute('aria-pressed', String(b.getAttribute(`data-${attr}`) === val)); };
+  press('kind', p.kind); press('scope', p.scope); press('diff', p.difficulty);
+  for (const seg of view.querySelectorAll('.lh-seg')) seg.style.setProperty('--idx', Math.max(0, [...seg.querySelectorAll('button')].findIndex(b => b.getAttribute('aria-pressed') === 'true')));
+  const hint = view.querySelector('[data-hint]');
+  if (hint) hint.textContent = DIFF[p.difficulty][1];
+  const modes = view.querySelector('[data-modes]');
+  if (modes) {
+    modes.className = `lh-modes${p.kind !== 'animals' ? ` kind--${p.kind}` : ''}`;
+    modes.innerHTML = modesHTML(p);
+    wireFaces(modes);
+  }
+  if (btn?.matches('.lh-kind')) {
+    btn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduced() ? 'auto' : 'smooth' });
+    if (!reduced()) { btn.classList.remove('is-pop'); void btn.offsetWidth; btn.classList.add('is-pop'); }
+  }
+}
+
+function modesHTML(p) {
+  const callOk = Q.CALL_KINDS.includes(p.kind) || p.kind === 'animals';
+  const f = modeFaces(p.kind);
+  return Q.MODES.map(m => {
+    const [title, desc] = MODE_INFO[m];
+    const b = L.best[bestKey(m, p)], off = m === 'call' && !callOk;
+    const ids = f[m] || [];
+    const pics = ids.map(id => imgTag(faceSrc(id, m === 'quick' ? 'large' : 'small'))).join('');
+    return `<li class="${m === 'quick' ? 'lh-mode--wide' : ''}"><a class="lh-mode lh-mode--${m}${off ? ' is-off' : ''}" href="#/learn/play/${m}"${off ? ' aria-disabled="true" data-off' : ''}>
+      <span class="lh-mode-bg${ids.length > 1 ? ' is-split' : ''}" aria-hidden="true">${pics}</span>
+      <span class="lh-mode-top"><span class="lh-mode-ic" aria-hidden="true">${I[m]}</span>
+      ${b != null ? `<span class="lh-best">${m === 'rapid' ? 'Best streak' : 'Best'} <b>${b}</b>${m === 'rapid' ? '' : `<span>/${ROUND}</span>`}</span>` : ''}</span>
+      <span class="lh-mode-txt"><strong>${title}</strong><span class="lh-mode-desc">${off ? 'Calls are for birds and frogs. Choose All animals, Birds or Frogs.' : desc}</span></span></a></li>`;
+  }).join('');
+}
+
 // Mastered (box 4+) and accuracy for each kind she has practised; one line for the rest.
-function progressHTML() {
+function progressHTML(grow = '') {
   const rows = kindsPresent.map(k => ({ k, all: ofKind(k).length, m: ofKind(k).filter(s => isMastered(s.id)).length, acc: accuracy(k) }));
   const active = rows.filter(r => r.acc || r.m), idle = rows.filter(r => !r.acc && !r.m);
   if (!active.length) return '<p class="small muted lh-empty">Answer a few questions and your accuracy, and how many species you have mastered, show here for each kind.</p>';
   const names = idle.map(r => KINDS[r.k].label.toLowerCase());
-  return `<ul class="lh-prog">${active.map(({ k, all, m, acc }) => `<li class="kind--${k}"><span class="lh-dot" aria-hidden="true"></span>
-      <span class="lh-prog-main"><strong>${KINDS[k].label}</strong><span class="meter meter--thin" aria-hidden="true" style="--p:${Math.round(m / all * 100)}%"><span></span></span>
+  return `<ul class="lh-prog"${grow}>${active.map(({ k, all, m, acc }, i) => `<li class="kind--${k}"><span class="lh-dot" aria-hidden="true"></span>
+      <span class="lh-prog-main"><strong>${KINDS[k].label}</strong><span class="lh-meter" aria-hidden="true"><span style="--p:${(m / all).toFixed(3)};--j:${i}"></span></span>
       <span class="small muted">${m} of ${all} mastered</span></span>
       <span class="lh-acc">${acc ? `<b>${acc.pct}%</b><span>right of ${acc.n}</span>` : '<span>No answers yet</span>'}</span></li>`).join('')}</ul>
     ${names.length ? `<p class="small muted lh-empty">Nothing yet for ${esc(names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names[0])}.</p>` : ''}`;
 }
+
 
 // ---------- practice rounds ----------
 function emptyMessage(mode, p, offline) {
@@ -382,6 +559,7 @@ async function startRound(ctx, mode, { ids = null, testId = null } = {}) {
     seen: ctx.seenSet(), month, n: mode === 'rapid' ? 60 : ids ? Math.min(ROUND, ids.length) : ROUND, ids, offline });
   if (qs.length < (ids ? 1 : 3)) { ctx.toast(emptyMessage(mode, p, !!offline)); return toHub(); }
   game = { route, mode, qs, i: 0, score: 0, prefs: { ...p }, practice: !!ids, testId };
+  barWas = 0;
   if (mode === 'rapid') Object.assign(game, { endsAt: Date.now() + RAPID_MS, streak: 0, top: 0 });
   drawQuestion(ctx);
 }
@@ -390,14 +568,14 @@ function headHTML() {
   const total = game.qs.length;
   if (game.mode === 'rapid') {
     const left = Math.max(0, game.endsAt - Date.now());
-    return `<header class="lq-head"><button class="iconbtn" data-quit aria-label="Stop and go back to Learn">${I.close}</button>
+    return `<header class="lq-head glass"><button class="iconbtn" data-quit aria-label="Stop and go back to Learn">${I.close}</button>
       <span class="lq-bar lq-bar--time" aria-hidden="true"><span data-timebar style="transform:scaleX(${(left / RAPID_MS).toFixed(3)})"></span></span>
       <span class="lq-count" data-secs aria-label="Seconds left">${Math.ceil(left / 1000)}<span>s</span></span></header>
       <p class="lq-hud" role="status"><span>In a row <b data-streak>${game.streak}</b></span><span>Best this round <b data-top>${game.top}</b></span></p>`;
   }
-  const n = game.i + 1;
-  return `<header class="lq-head"><button class="iconbtn" data-quit aria-label="${game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'}">${game.daily ? I.back : I.close}</button>
-    <span class="lq-bar" role="progressbar" aria-label="Question ${n} of ${total}" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${n}"><span style="transform:scaleX(${((n - 1) / total).toFixed(3)})"></span></span>
+  const n = game.i + 1, filled = game.qs[game.i]?.picked != null ? n : n - 1;
+  return `<header class="lq-head glass"><button class="iconbtn" data-quit aria-label="${game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'}">${game.daily ? I.back : I.close}</button>
+    <span class="lq-bar" role="progressbar" aria-label="Question ${n} of ${total}" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${n}">${barSpan(filled / total)}</span>
     <span class="lq-count" aria-hidden="true">${n}<span>/${total}</span></span></header>
     <p class="lq-kicker">${game.daily ? "Today's challenge" : game.testId ? 'Test me' : esc(MODE_INFO[game.mode]?.[0] || '')}${game.testId ? `<span>${esc(byId.get(game.testId).name)} and its look-alikes</span>` : game.practice ? '<span>The ones you missed</span>' : ''}</p>`;
 }
@@ -414,9 +592,7 @@ function optionsHTML(q) {
 function mediaHTML(q) {
   const sp = byId.get(q.focus);
   if (q.type === 'photo') return photoHTML(q.photos, { alt: `Mystery ${KINDS[sp.kind].one}`, missing: `This photo needs a connection. Here are its field notes instead: ${clueHTML(Q.blankNotes(sp, q.wrong))}` });
-  if (q.type === 'call') return `<div class="lq-call"><button class="lq-play" data-play="answer" aria-label="Play the call"><span data-ic>${I.play}</span></button>
-    <p class="lq-status" data-status aria-live="polite">Tap to listen</p><p class="lq-credit">${esc(credit(q.call))}</p>
-    <p class="lq-hint" data-callhint hidden>Field notes: ${clueHTML(Q.blankNotes(sp, q.wrong))}</p></div>`;
+  if (q.type === 'call') return callPlayerHTML(sp, { call: q.call, extra: `<p class="lq-hint" data-callhint hidden>Field notes: ${clueHTML(Q.blankNotes(sp, q.wrong))}</p>` });
   if (q.type === 'whoami') return `<blockquote class="lq-clue">${clueHTML(q.clue)}</blockquote>`;
   if (q.type === 'fact' && q.photos?.length) return photoHTML(q.photos, { alt: byId.get(q.img)?.name || '', cls: 'lq-photo lq-photo--small' });
   return '';
@@ -428,7 +604,7 @@ function drawQuestion(ctx) {
   cleanup();
   const q = game.qs[game.i];
   if (!q || (game.mode === 'rapid' && Date.now() >= game.endsAt)) return drawResults(ctx);
-  view.innerHTML = `<div class="lq-screen lq-screen--${game.mode}">${headHTML()}
+  view.innerHTML = `<div class="lq-screen lq-screen--${game.mode}${game.prefs?.kind && game.prefs.kind !== 'animals' ? ` kind--${game.prefs.kind}` : ''}" data-own-topbar>${headHTML()}
     <div class="lq lq--${q.type}">
       <h1 class="lq-prompt" tabindex="-1">${esc(q.prompt)}</h1>
       ${q.type === 'duel' ? '<p class="lq-sub">Tap the photo you think it is.</p>' : ''}
@@ -437,7 +613,8 @@ function drawQuestion(ctx) {
       <div class="lq-fb" data-fb tabindex="-1"></div>
     </div></div>`;
   wireImages(view);
-  focusHead(view, had);
+  drawn(ctx, had);
+  fillBar(view);
   preload(game.qs[game.i + 1]);
   if (q.picked != null) showAnswer(ctx, q, { restore: true });
   if (game.mode === 'rapid') {
@@ -511,6 +688,7 @@ function showAnswer(ctx, q, { brief = false, restore = false } = {}) {
     if (st) st.textContent = game.streak;
     if (tp) tp.textContent = game.top;
   }
+  if (!restore && game.mode !== 'rapid') fillBar(view, (game.i + 1) / game.qs.length);
   const fb = view.querySelector('[data-fb]');
   if (!fb) return;
   fb.innerHTML = feedbackHTML(q, right, brief);
@@ -592,10 +770,13 @@ function drawResults(ctx) {
   }
   const big = game.mode === 'rapid' ? game.top : game.score;
   const of = game.mode === 'rapid' ? 'in a row' : `of ${total}`;
+  const first = !game.shown;
+  game.shown = true;
+  const wrongs = game.mode === 'rapid' ? missed.slice(0, 15) : missed;
+  const rights = game.mode === 'rapid' ? [] : asked.filter(q => q.picked === q.answer);
   view.innerHTML = `<div class="lr">
     <header class="page-head"><h1 class="lh-title" tabindex="-1">${game.daily ? "Today's challenge" : game.testId ? 'Test me' : esc(MODE_INFO[game.mode][0])}</h1></header>
-    <div class="lr-score ${reduced() ? 'no-anim' : ''}" role="status"><b>${big}</b><span>${esc(of)}</span></div>
-    <p class="lr-note">${esc(note)}</p>
+    ${scoreHTML(big, of, total ? game.score / total : 0, note)}
     <div class="lr-actions">
       ${missed.length && !game.daily ? `<button class="btn btn--primary btn--block" data-again-missed>Practise ${missed.length === 1 ? 'the one' : missed.length > ROUND ? `${ROUND} of the ${missed.length}` : `the ${missed.length}`} you missed</button>` : ''}
       ${game.daily ? '<a class="btn btn--primary btn--block" href="#/learn">Back to Learn</a>' : `<button class="btn ${missed.length ? '' : 'btn--primary'} btn--block" data-again>Play again</button>`}
@@ -603,16 +784,26 @@ function drawResults(ctx) {
       ${game.testId ? `<a class="btn btn--quiet btn--block" href="#/bird/${game.testId}">Back to the ${esc(byId.get(game.testId).name)}</a>` : ''}
       ${game.daily ? '' : '<button class="btn btn--quiet btn--block" data-hub>Back to Learn</button>'}
     </div>
-    ${game.mode === 'rapid' && missed.length ? '<h2 class="lr-h">The ones you missed</h2>' : ''}
-    <ul class="lr-list">${(game.mode === 'rapid' ? missed.slice(0, 15) : asked).map(q => {
-      const ok = q.picked === q.answer, sp = byId.get(q.focus);
-      const picked = q.options.find(o => o.key === q.picked);
+    ${wrongs.length ? `<h2 class="lr-h">The ones you missed</h2>
+    <ul class="lr-cards">${wrongs.map(q => {
+      const sp = byId.get(q.focus), picked = q.options.find(o => o.key === q.picked)?.label || 'nothing';
+      const fact = q.type === 'fact' && q.ttype !== 'Calls';
+      const sub = fact ? `${q.prompt} It's ${q.options.find(o => o.key === q.answer)?.label || ''}. You picked ${picked}.` : `You picked ${picked}`;
+      return `<li class="lr-card kind--${sp.kind}"><a href="#/bird/${sp.id}"><span class="lr-card-img">${imgTag(faceSrc(sp.id))}</span>
+        <span class="lr-mark">${I.cross}<span class="sr">Wrong:</span></span><span class="lr-card-txt"><strong>${esc(sp.name)}</strong><span>${esc(sub)}</span></span></a></li>`;
+    }).join('')}</ul>` : ''}
+    ${rights.length ? `<h2 class="lr-h">${wrongs.length ? 'The ones you got' : 'Every one right'}</h2>
+    <ul class="lr-list">${rights.map(q => {
+      const sp = byId.get(q.focus);
       const title = q.type === 'fact' && q.ttype !== 'Calls' ? q.prompt : sp.name;
-      return `<li class="${ok ? 'is-right' : 'is-wrong'}"><span class="lr-mark">${ok ? I.tick : I.cross}<span class="sr">${ok ? 'Right' : 'Wrong'}</span></span>
-        <a class="lr-main" href="#/bird/${sp.id}"><strong>${esc(title)}</strong><span class="small muted">${ok ? (q.type === 'fact' ? esc(q.options.find(o => o.key === q.answer)?.label) : 'Got it') : `You picked ${esc(picked?.label || 'nothing')}`}</span></a></li>`;
-    }).join('')}</ul>
+      return `<li class="is-right"><span class="lr-mark">${I.tick}<span class="sr">Right</span></span>
+        <a class="lr-main" href="#/bird/${sp.id}"><strong>${esc(title)}</strong><span class="small muted">${q.type === 'fact' ? esc(q.options.find(o => o.key === q.answer)?.label) : 'Got it'}</span></a></li>`;
+    }).join('')}</ul>` : ''}
   </div>`;
-  focusHead(view, had);
+  wireFaces(view);
+  drawn(ctx, had);
+  playScore(ctx, big, first);
+  if (first) ctx.stagger?.(view, '.lr-card', { key: `learn-results-${Date.now()}`, max: 8 });
   view.onclick = e => {
     if (e.target.closest('[data-again]')) { const t = game.testId; game = null; startRound(ctx, t ? 'quick' : ROUTE_MODE(), t ? { ids: testSet(t), testId: t } : {}); }
     if (e.target.closest('[data-again-missed]')) {
@@ -624,6 +815,23 @@ function drawResults(ctx) {
     if (e.target.closest('[data-hub]')) { game = null; toHub(); }
   };
   view.onchange = null;
+}
+// The score sits inside a ring that fills to the share she got right; the number counts up the first time.
+function scoreHTML(big, of, frac, note) {
+  return `<section class="lr-hero" aria-label="Your score"><div class="lr-ring">
+      <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" pathLength="100"/><circle class="lr-ring-fg${frac > 0 ? '' : ' is-zero'}" data-scorering cx="60" cy="60" r="52" pathLength="100" style="stroke-dashoffset:${(100 - frac * 100).toFixed(1)}"/></svg>
+      <p class="lr-score" role="status"><b data-score aria-hidden="true">${big}</b><span aria-hidden="true">${esc(of)}</span><span class="sr">${big} ${esc(of)}</span></p></div>
+    <p class="lr-note">${esc(note)}</p></section>`;
+}
+function playScore(ctx, big, first) {
+  const ring = ctx.view.querySelector('[data-scorering]');
+  if (!first || reduced() || !ring) return;
+  const to = ring.style.strokeDashoffset;
+  ring.style.strokeDashoffset = '100';
+  void ring.getBoundingClientRect();
+  ring.classList.add('is-filling');
+  ring.style.strokeDashoffset = to;
+  ctx.countUp?.(ctx.view.querySelector('[data-score]'), 0, big, { delay: 120 });
 }
 const ROUTE_MODE = () => (location.hash.match(/^#\/learn\/play\/(\w+)/) || [])[1] || 'quick';
 
@@ -637,6 +845,7 @@ function renderDaily(ctx) {
     const picks = D.today.picks;
     picks.forEach((p, i) => { if (qs[i]) qs[i].picked = p.key; });
     game = { route: location.hash, daily: true, date: today, mode: 'daily', qs, i: Math.min(picks.length, qs.length), score: picks.filter(p => p.right).length };
+    barWas = 0;
     if (D.history[today] != null) game.done = true;
   }
   if (game.i >= game.qs.length) return drawResults(ctx);
@@ -650,30 +859,32 @@ function renderDeck(ctx) {
   game = { route: location.hash, deck: true };
   const p = L.prefs, cards = allCards(), due = dueCards();
   const boxes = [1, 2, 3, 4, 5].map(b => cards.filter(c => c.box === b).length);
-  const maxBox = Math.max(1, ...boxes);
   const next = cards.filter(c => c.due > Date.now()).sort((a, b) => a.due - b.due)[0];
   const nextTxt = next ? (startOfDay(next.due) <= startOfDay() ? 'More come due later today.' : `Next ones are due ${new Date(next.due).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' })}.`) : '';
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/learn" aria-label="Back to Learn">${I.back}</a><h1 class="lh-title">Review deck</h1></header>
     <div class="learn">
-      <div class="ld-summary">
-        <span class="lh-boxes lh-boxes--big" aria-hidden="true">${boxes.map((n, i) => `<span class="lh-box"><b>${n}</b><i style="--h:${Math.round(n / maxBox * 100)}%"></i><em>${i + 1}</em></span>`).join('')}</span>
+      <div class="ld-summary"${reduced() ? '' : ' data-grow'}>
+        ${boxesHTML(boxes, 'lh-boxes--big')}
         <p class="small muted">${cards.length ? `${cards.length} cards. ${boxes[3] + boxes[4]} in box 4 or 5, which count as mastered.` : 'No cards yet.'} Knew it moves a card along a box: it comes back after 1, 3, 7, then 21 days. Missed sends it back to box 1.</p>
       </div>
       ${due.length ? `<button class="btn btn--primary btn--block" data-review>Review ${due.length > 20 ? 20 : due.length} ${due.length === 1 ? 'card' : 'cards'}</button>`
         : `<p class="ld-none" role="status">${cards.length ? `Nothing to review right now. ${esc(nextTxt)}` : 'Add a set to start. Species you miss in any round are added for you.'}</p>`}
       <section class="lh-sec"><div class="lh-sec-h"><h2>Add cards</h2></div>
         <div class="ld-add">
-          <button class="btn btn--block" data-add="month">${I.facts}<span>Add 10 ${esc(p.kind === 'animals' ? 'animals' : KINDS[p.kind].label.toLowerCase())} around in ${esc(monthName())}</span></button>
-          <button class="btn btn--block" data-add="seen">${I.deck}<span>Add the ones I've seen</span></button>
+          <button class="btn btn--block" data-add="month"><span class="ld-add-ic">${I.facts}</span><span>Add 10 ${esc(p.kind === 'animals' ? 'animals' : KINDS[p.kind].label.toLowerCase())} around in ${esc(monthName())}</span></button>
+          <button class="btn btn--block" data-add="seen"><span class="ld-add-ic">${I.deck}</span><span>Add the ones I've seen</span></button>
         </div>
         <p class="small muted">Birds and frogs with recordings get a call card as well as a photo card.</p>
       </section>
     </div>`;
+  growOnView(view);
+  lookAfterDraw(view);
   view.onclick = e => {
     if (e.target.closest('[data-review]')) {
       game.queue = dueCards().slice(0, 20).map(c => ({ id: c.id, skill: c.skill, reps: 0 }));
       game.total = game.queue.length; game.n = 0; game.tally = { knew: 0, unsure: 0, missed: 0 };
+      barWas = 0;
       drawCard(ctx);
     }
     const add = e.target.closest('[data-add]');
@@ -702,13 +913,13 @@ function drawCard(ctx) {
   game.revealed = false;
   const photos = Q.photosFor(sp.id);
   const front = c.skill === 'call'
-    ? `<div class="lq-call"><button class="lq-play" data-play aria-label="Play the call"><span data-ic>${I.play}</span></button><p class="lq-status" data-status aria-live="polite">Tap to listen</p></div>`
+    ? callPlayerHTML(sp, { play: null })
     : photoHTML(photos, { alt: `Mystery ${KINDS[sp.kind].one}`, missing: `This photo needs a connection. Its field notes: ${clueHTML(Q.blankNotes(sp))}` });
   const mates = Q.lookalikesOf(sp.id).map(id => byId.get(id)).filter(Boolean);
   const peaks = Q.peaksOf(sp.id), cw = Q.callWords(sp);
-  view.innerHTML = `<div class="lq-screen">
-    <header class="lq-head"><a class="iconbtn" href="#/learn/deck" data-quit aria-label="Stop reviewing">${I.close}</a>
-      <span class="lq-bar" role="progressbar" aria-label="Card ${game.n + 1} of ${game.total}" aria-valuemin="1" aria-valuemax="${game.total}" aria-valuenow="${game.n + 1}"><span style="transform:scaleX(${(game.n / Math.max(1, game.total)).toFixed(3)})"></span></span>
+  view.innerHTML = `<div class="lq-screen lq-screen--deck" data-own-topbar>
+    <header class="lq-head glass"><a class="iconbtn" href="#/learn/deck" data-quit aria-label="Stop reviewing">${I.close}</a>
+      <span class="lq-bar" role="progressbar" aria-label="Card ${game.n + 1} of ${game.total}" aria-valuemin="1" aria-valuemax="${game.total}" aria-valuenow="${game.n + 1}">${barSpan(game.n / Math.max(1, game.total))}</span>
       <span class="lq-count" aria-hidden="true">${game.queue.length}<span> left</span></span></header>
     <p class="lq-kicker">Review deck<span>Box ${L.cards[sp.id]?.[c.skill]?.box || 1}, ${c.skill === 'call' ? 'by call' : 'by sight'}</span></p>
     <div class="lq ld-card">
@@ -730,7 +941,8 @@ function drawCard(ctx) {
       </div>
     </div></div>`;
   wireImages(view);
-  focusHead(view, had);
+  drawn(ctx, had);
+  fillBar(view);
   const nextC = game.queue[1] && byId.get(game.queue[1].id);
   if (nextC && game.queue[1].skill === 'look') preload({ photos: Q.photosFor(nextC.id) });
   view.onclick = e => {
@@ -773,12 +985,14 @@ function drawDeckDone(ctx) {
   const had = focusWithin(view);
   cleanup();
   const t = game.tally || { knew: 0, unsure: 0, missed: 0 };
+  const seen = t.knew + t.unsure + t.missed, first = !game.shown;
+  game.shown = true;
   view.innerHTML = `<div class="lr">
     <header class="page-head"><h1 class="lh-title" tabindex="-1">Deck reviewed</h1></header>
-    <div class="lr-score" role="status"><b>${t.knew}</b><span>knew it</span></div>
-    <p class="lr-note">${t.unsure ? `${t.unsure} unsure. ` : ''}${t.missed ? `${t.missed} missed, and they'll come back soon. ` : ''}Cards you knew come back in a few days.</p>
+    ${scoreHTML(t.knew, 'knew it', seen ? t.knew / seen : 0, `${t.unsure ? `${t.unsure} unsure. ` : ''}${t.missed ? `${t.missed} missed, and they'll come back soon. ` : ''}Cards you knew come back in a few days.`)}
     <div class="lr-actions"><a class="btn btn--primary btn--block" href="#/learn">Back to Learn</a><button class="btn btn--block" data-deck>Deck overview</button></div>
   </div>`;
-  focusHead(view, had);
+  drawn(ctx, had);
+  playScore(ctx, t.knew, first);
   view.onclick = e => { if (e.target.closest('[data-deck]')) { game = null; renderDeck(ctx); } };
 }
