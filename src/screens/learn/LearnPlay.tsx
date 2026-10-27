@@ -9,7 +9,7 @@ import {
   roundNote, testSet, allCards, dueCards, boxes, nextDue, addCards, gradeCard, dayStr, monthName,
   packBy, ROUND, RAPID_MS, kindLabel, emptyMessage, startOfDay, getLearn,
 } from '../../core/learn.js';
-import { PhotoBox, CallPlayer, SilhouetteFilter, QI, type CallClip } from './QuizMedia';
+import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, type CallClip } from './QuizMedia';
 import './learn.css';
 
 const SIDES: Record<number, string[]> = {
@@ -49,7 +49,7 @@ function Media({ q }: { q: QuizQuestion }) {
   return null;
 }
 
-function Options({ q, picked, onPick, rapid }: { q: QuizQuestion; picked: string | null; onPick: (key: string) => void; rapid: boolean }) {
+function Options({ q, picked, onPick, rapid, round }: { q: QuizQuestion; picked: string | null; onPick: (key: string) => void; rapid: boolean; round: number }) {
   const disabled = picked != null;
   if (q.options[0]?.photos) {
     const n = q.options.length;
@@ -59,7 +59,7 @@ function Options({ q, picked, onPick, rapid }: { q: QuizQuestion; picked: string
           const cls = disabled ? (o.key === q.answer ? ' is-right' : o.key === picked ? ' is-wrong' : ' is-dim') : '';
           return (
             <button key={o.key} type="button" className={`lq-side${cls}`} data-pick={o.key} disabled={disabled} aria-label={q.named ? o.label : SIDES[n]?.[i] || `Photo ${i + 1}`} onClick={() => onPick(o.key)}>
-              <PhotoBox photos={o.photos} alt="" cls="lq-photo lq-photo--duel" missing="Photo not saved on this phone" />
+              <PhotoBox key={`${round}-${o.key}`} photos={o.photos} alt="" cls="lq-photo lq-photo--duel" missing="Photo not saved on this phone" />
               <span className="lq-side-name" data-name>{q.named ? o.label : ''}</span>
               <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24">{QI.cross}</svg> : null}</span>
             </button>
@@ -269,6 +269,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
 
   // These must be declared before any early return: the results screen calls them.
   const restart = async () => {
+    stopCalls();
     setGame(null);
     setError('');
     setQuickCall(null);
@@ -281,6 +282,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
   };
   const startWithIds = async (ids: number[]) => {
+    stopCalls();
     setQuickCall(null);
     const mode = game?.mode === 'rapid' ? 'photo' : pack;
     const r = await newPracticeRound(mode, { ids, seen: seenSet } as any);
@@ -294,6 +296,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   };
   const next = () => {
     if (!game) return;
+    stopCalls();
     setQuickCall(null);
     game.i += 1;
     setRevealed(false);
@@ -365,8 +368,8 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         <h1 className="lq-prompt" tabIndex={-1}>{promptFor(q)}</h1>
         {sub && <p className="lq-sub">{sub}</p>}
         {safety && <p className="lq-safety"><svg viewBox="0 0 24 24">{QI.warn}</svg><span>{safety}</span></p>}
-        <Media q={q} />
-        <Options q={q} picked={picked} onPick={pick} rapid={game.mode === 'rapid'} />
+        <Media key={game.i} q={q} />
+        <Options q={q} picked={picked} onPick={pick} rapid={game.mode === 'rapid'} round={game.i} />
         {picked != null && game.mode !== 'rapid' && <Feedback q={q} right={right} game={game} onNext={next} onPlay={play} />}
         {picked != null && game.mode === 'rapid' && <p className={`lq-verdict lq-fb ${right ? 'is-right' : 'is-wrong'} lq-fb--brief`}><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{right ? 'Correct.' : `Not quite. It's the ${speciesName(q.focus)}.`}</span></p>}
       </div>
@@ -441,7 +444,7 @@ function Deck({ onBack }: { onBack: () => void }) {
         <p className="lq-kicker">Review deck<span>Box {c.box || 1}, {c.skill === 'call' ? 'by call' : 'by sight'}</span></p>
         <div className="lq ld-card">
           <h1 className="lq-prompt" tabIndex={-1}>{c.skill === 'call' ? 'Whose call is this?' : `Which ${KINDS[sp.kind]?.one || 'species'} is this?`}</h1>
-          {c.skill === 'call' ? <CallPlayer call={(Q.callsOf(sp.id) as CallClip[])[0]} seed={sp.id} /> : <PhotoBox photos={photos} alt={`Mystery ${KINDS[sp.kind]?.one}`} missing={`This photo needs a connection. Its field notes: ${Q.blankNotes(sp)}`} />}
+          {c.skill === 'call' ? <CallPlayer key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} call={(Q.callsOf(sp.id) as CallClip[])[0]} seed={sp.id} /> : <PhotoBox key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} photos={photos} alt={`Mystery ${KINDS[sp.kind]?.one}`} missing={`This photo needs a connection. Its field notes: ${Q.blankNotes(sp)}`} />}
           {!revealed && <button type="button" className="btn btn--primary btn--block" onClick={() => setRevealed(true)}>Show the answer</button>}
           {revealed && (
             <div className="ld-back" tabIndex={-1}>

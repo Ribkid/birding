@@ -71,21 +71,36 @@ function Wave({ seed }: { seed: string }) {
 
 export interface CallClip { src: string; local?: string; artist?: string; license?: string; seconds?: number }
 
+/** Every player currently holding audio, so a question change can silence the old clip. */
+const live = new Set<HTMLAudioElement>();
+export function stopCalls() {
+  for (const a of live) { a.pause(); }
+  live.clear();
+}
+
 /** The big call player: progress ring, play/pause and a moving waveform. */
 export function CallPlayer({ call, seed, extra }: { call?: CallClip | null; seed: string | number; extra?: ReactNode }) {
   const audio = useRef<HTMLAudioElement | null>(null);
   const [state, setState] = useState<'idle' | 'loading' | 'playing'>('idle');
   const [progress, setProgress] = useState(0);
-  useEffect(() => () => { audio.current?.pause(); audio.current = null; }, []);
+  useEffect(() => () => {
+    audio.current?.pause();
+    if (audio.current) live.delete(audio.current);
+    audio.current = null;
+    setState('idle');
+    setProgress(0);
+  }, [call?.src, call?.local]);
   const toggle = async () => {
     if (!call?.src && !call?.local) return;
+    if (state === 'loading') return;
     if (audio.current && state === 'playing') { audio.current.pause(); setState('idle'); return; }
     if (audio.current && state === 'idle') { await audio.current.play().catch(() => {}); setState('playing'); return; }
     setState('loading');
     const a = new Audio(call.local || call.src);
     audio.current = a;
-    a.onended = () => { setState('idle'); setProgress(0); };
-    a.onerror = () => { setState('idle'); };
+    live.add(a);
+    a.onended = () => { setState('idle'); setProgress(0); live.delete(a); };
+    a.onerror = () => { setState('idle'); live.delete(a); };
     a.ontimeupdate = () => { if (a.duration) setProgress(a.currentTime / a.duration); };
     try { await a.play(); setState('playing'); } catch { setState('idle'); }
   };
