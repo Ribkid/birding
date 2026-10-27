@@ -1,5 +1,6 @@
 // On-device photo identification with BioCLIP (imageomics/bioclip, ViT-B/16), run by onnxruntime-web.
-// The image encoder (~87 MB, uint8-quantised ONNX) is fetched in chunks once and kept in Cache Storage,
+// The image encoder (~93 MB, 4-bit weight-only ONNX with float activations, so the same photo always gives the
+// same answer) is fetched in chunks once and kept in Cache Storage,
 // so later loads work offline. Species scores come from data/photoid.json + data/photoid.bin: text
 // embeddings and image prototypes per species, plus the scoring weights, views and confidence bands.
 // Nothing here hard-codes species counts or kinds; it all follows that file.
@@ -35,7 +36,7 @@ const MAX_SIDE = 1600;      // whole-photo views: short side reduced to this fir
 const MAX_PIXELS = 24e6;    // bigger originals are scaled down on decode so phones don't run out of memory
 const WIDE = 1.3;
 
-export const PHOTO_MODEL_MB = 98; // model 87 MB + runtime 11 MB
+export const PHOTO_MODEL_MB = 104; // model 93 MB + runtime 11 MB
 
 let ort = null;
 let session = null;
@@ -174,6 +175,8 @@ export function loadPhotoModel(onProgress) {
     ort = ortMod.default || ortMod;
     ort.env.wasm.wasmPaths = ORT_DIR;
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1;
+    // Run the model in ONNX Runtime's own worker so the page keeps scrolling and animating during a scan.
+    ort.env.wasm.proxy = true;
 
     const wasmBytes = 11.2e6;
     const total = manifest.totalBytes + wasmBytes;
@@ -200,6 +203,8 @@ export function loadPhotoModel(onProgress) {
       if (o !== manifest.totalBytes) throw new Error('The photo model download was incomplete. Try again on a steadier connection.');
       modelBuf = all.buffer;
       try { await cache?.put(key, new Response(modelBuf.slice(0), { headers: { 'Content-Type': 'application/octet-stream' } })); } catch (_) {}
+      // Keep one copy: drop the cached file of any earlier model version (the old one was 87 MB).
+      try { for (const r of await cache?.keys() || []) if (r.url.startsWith(MODEL_DIR) && r.url.endsWith('.onnx') && r.url !== key) await cache.delete(r); } catch (_) {}
     }
     report(0.99, 'Starting the model');
     session = await ort.InferenceSession.create(new Uint8Array(modelBuf), { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });

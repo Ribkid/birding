@@ -1,16 +1,16 @@
 {
- "model": "imageomics/bioclip ViT-B/16 image encoder, ONNX opset 17, dynamic uint8 quantised",
- "version": "bioclip-vitb16-q8-1",
- "sha1": "25a3b0e6f1485fb921536afec2403bde5bd96d4a",
- "totalBytes": 87383504,
+ "model": "imageomics/bioclip ViT-B/16 image encoder, ONNX opset 17, 4-bit weight-only (MatMulNBits, block 16, asymmetric), fp32 activations",
+ "version": "bioclip-vitb16-int4b16-1",
+ "sha1": "b783ae152f01e3441780628e8256c90800c0e698",
+ "totalBytes": 93129076,
  "chunks": [
   {
-   "file": "vision-q8.part1.bin",
-   "bytes": 43691752
+   "file": "vision-int4.part1.bin",
+   "bytes": 46564538
   },
   {
-   "file": "vision-q8.part2.bin",
-   "bytes": 43691752
+   "file": "vision-int4.part2.bin",
+   "bytes": 46564538
   }
  ],
  "input": {
@@ -32,5 +32,6 @@
   0.26862954,
   0.26130258,
   0.27577711
- ]
+ ],
+ "note": "Weight-only quantisation keeps activations in float, so the same photo always gives the same answer and tiny pixel changes no longer move the result (the earlier dynamic uint8 model re-quantised every activation per image)."
 }
