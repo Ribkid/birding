@@ -37,4 +37,10 @@ describe('Badges', () => {
     const link = screen.getByRole('link', { name: 'Leaderboard' });
     expect(link.querySelector('svg path')?.getAttribute('d')).toMatch(/^M8 4h8v5a4 4 0 0 1-8 0z/);
   });
+
+  it('puts v1 learn icon on the Learn link', () => {
+    render(<MemoryRouter><Badges /></MemoryRouter>);
+    const link = screen.getByRole('link', { name: 'Learn' });
+    expect(link.querySelector('svg path')?.getAttribute('d')).toMatch(/^M7 7\.5h11a1\.5 1\.5 0 0 1 1\.5 1\.5v10/);
+  });
 });

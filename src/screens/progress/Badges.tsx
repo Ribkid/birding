@@ -48,6 +48,13 @@ const Trophy = () => (
   </svg>
 );
 
+// v1 icon.learn (js/app.js:170): the card stack on the Learn link.
+const LearnIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const Ring = ({ p }: { p: number }) => (
   <svg className={`ring${p > 0 ? '' : ' ring--zero'}`} viewBox="0 0 36 36" aria-hidden="true">
     <circle className="ring-track" cx="18" cy="18" r="15.5" />
@@ -111,7 +118,7 @@ export default function Badges() {
           </div>
         </div>
         <div className="trophy-links">
-          <Link className="btn" to="/learn"><Icon name="grid" /> Learn</Link>
+          <Link className="btn" to="/learn"><LearnIcon /> Learn</Link>
           <Link className="btn" to="/stats"><Icon name="chart" /> Stats</Link>
           {configured && <Link className="btn" to="/leaderboard"><Trophy /> Leaderboard</Link>}
         </div>
