@@ -14,13 +14,16 @@ const SHELL_EXT = new Set(['.html', '.js', '.css', '.woff2', '.svg', '.png', '.w
 /** Directories that are cached on demand rather than at install time. */
 const RUNTIME_ONLY = ['vendor/', 'photos/'];
 
-/** Data and model files the app needs on a cold start offline. Call clips stay on the calls route. */
+/** Data the app needs on a cold start offline. Call clips stay on the calls route. */
 const EXTRA_SHELL = new Set([
   '/data/species-new.json', '/data/tiers.json', '/data/info.json', '/data/gallery.json',
   '/data/seq.json', '/data/birdnet-map.json', '/data/lookalikes.json', '/data/calls.json',
   '/data/photoid.json', '/data/photoid.bin',
-  '/models/bioclip/manifest.json', '/models/bioclip/vision-int4.part1.bin', '/models/bioclip/vision-int4.part2.bin',
+  '/models/bioclip/manifest.json',
 ]);
+// The 88 MB int4 vision model is deliberately NOT precached: src/core/photoid.js downloads it
+// on demand with progress and stores it in its own 'birddex-models' cache. Precaching it here
+// too would download it before first use and keep a second copy (about 177 MB on the phone).
 
 async function walk(dir, out = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
