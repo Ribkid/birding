@@ -298,6 +298,9 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     }
   }, [game?.i]);
 
+  // Every new question and the results start at the top, like v1 drawn().
+  useEffect(() => { window.scrollTo(0, 0); }, [game?.i, isOver]);
+
   // These must be declared before any early return: the results screen calls them.
   const restart = async () => {
     wantHeadFocus.current = true;
@@ -432,6 +435,7 @@ function Deck({ onBack }: { onBack: () => void }) {
   useMedia();
 
   useEffect(() => { void learnReady().then(() => { setReady(true); force(); }); }, []);
+  useEffect(() => { window.scrollTo(0, 0); }, [game?.n, game?.queue?.length, mode, revealed]);
   useEffect(() => { if (revealed) backRef.current?.focus({ preventScroll: true }); }, [revealed]);
   const due = ready ? dueCards() : [];
   const cards = ready ? allCards() : [];
