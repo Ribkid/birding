@@ -1,5 +1,33 @@
 /* Working with no signal: Settings' "Ready for the field" card and the map's no-signal note (js/app.js). */
 
+/* ---------- Ready for the field ---------- */
+.ready-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0 var(--sp-4); border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-1); }
+.ready-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); min-height: 64px; padding: var(--sp-3) 0; }
+.ready-row + .ready-row { border-top: 1px solid var(--line); }
+.ready-main { display: grid; gap: 2px; min-width: 0; }
+.ready-main strong { font-weight: 700; }
+.ready-main [data-field-text] { outline-offset: 3px; }
+.ready-main .meter { margin: var(--sp-1) 0 0; }
+.ready-act:empty { display: none; }
+.ready-act .btn { min-height: var(--tap); white-space: nowrap; }
+
+/* The mark says the same as the text: a tick when it works offline, an open ring when it doesn't yet. */
+.ready-mark { position: relative; width: 24px; height: 24px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--line-strong); }
+.ready-row--ok .ready-mark { background: var(--seen); box-shadow: none; }
+.ready-row--ok .ready-mark::after {
+  content: ''; position: absolute; left: 7px; top: 6px; width: 10px; height: 6px;
+  border: solid var(--on-seen); border-width: 0 0 2.5px 2.5px; transform: rotate(-45deg);
+}
+.ready-row--busy .ready-mark { box-shadow: inset 0 0 0 2px var(--surface-2); }
+.ready-row--busy .ready-mark::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--sun-ink);
+  animation: ready-spin 900ms linear infinite;
+}
+@keyframes ready-spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) {
+  .ready-row--busy .ready-mark::after { animation: none; border-color: var(--sun-ink) transparent; }
+}
+
 /* ---------- map with no signal ---------- */
 /* Sits below the search bar and the filter chips, so neither hides it. */
 .map-note {
@@ -14,3 +42,9 @@
 .map-note--tiles { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4); }
 .map-note--tiles p { flex: 1; }
 .map-note--tiles .iconbtn { flex: none; }
+
+/* Narrow phones: the button goes under its text instead of squeezing it. */
+@media (max-width: 359px) {
+  .ready-row { grid-template-columns: 24px minmax(0, 1fr); }
+  .ready-act { grid-column: 2; }
+}
