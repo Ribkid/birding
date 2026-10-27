@@ -1875,7 +1875,7 @@ function renderList(period, patchId = null) {
     <header class="page-head page-head--back"><a class="iconbtn" href="#/lists" aria-label="Back to lists">${icon.back}</a>
       <div><h1>${patch ? esc(patch.name) : label}</h1>${patch ? `<p class="muted small">${label}, within ${patch.radiusKm} km</p>` : ''}</div></header>
     <div class="lbar">
-      <nav class="lseg" aria-label="Which list">${['life', 'year', 'month'].map(p => `<a class="lseg-btn" href="${base}/${p}" ${period === p ? 'aria-current="page"' : ''}>${p === 'life' ? 'Life' : p === 'year' ? now.getFullYear() : MONTHS[now.getMonth()]}</a>`).join('')}</nav>
+      <nav class="lseg" aria-label="Which list">${['life', 'year', 'month'].map(p => `<a class="lseg-btn" href="${base}/${p}" ${period === p ? 'aria-current="page"' : ''}>${p === 'life' ? 'Life' : p === 'year' ? now.getFullYear() : `<span class="lseg-long">${MONTHS[now.getMonth()]}</span><span class="lseg-short">${MONTHS[now.getMonth()].slice(0, 3)}</span>`}</a>`).join('')}</nav>
       <button class="chip lsort" data-sort aria-label="Sort: ${byDex ? 'dex order' : 'newest first'}. Tap to change">${byDex ? 'Dex order' : 'Newest first'}</button>
     </div>
     ${kindChips(lk)}
