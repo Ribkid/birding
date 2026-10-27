@@ -26,6 +26,7 @@ import { Placeholder } from './screens/Placeholder';
 import { TabBar } from './components/TabBar';
 import { ScreenBoundary } from './components/ErrorBoundary';
 import { Welcome } from './components/Welcome';
+import { OutingBar } from './components/OutingBar';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
 import { closeAllLayers } from './lib/layers';
@@ -132,6 +133,7 @@ export default function App() {
         </Routes>
         </ScreenBoundary>
       </main>
+      <OutingBar />
       <TabBar />
     </>
   );
