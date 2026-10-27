@@ -115,6 +115,7 @@
 .lq-hud { display: flex; justify-content: space-between; margin: 0; padding: 0 var(--sp-4); font-size: var(--fs-2); font-weight: 600; color: var(--ink-2); }
 .lq-hud b { font: 800 var(--fs-5)/1 var(--stamp); color: var(--ink); margin-left: var(--sp-1); vertical-align: -2px; }
 .lq { display: grid; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4) 0; }
+.lq-sub { margin: calc(var(--sp-2) * -1) 0 0; font-size: var(--fs-2); color: var(--ink-2); }
 .lq-prompt { margin: 0; font-size: var(--fs-4); font-weight: 700; line-height: 1.25; }
 
 .lq-photo { position: relative; margin: 0; border-radius: var(--r-2); overflow: hidden; background: var(--surface-2); }

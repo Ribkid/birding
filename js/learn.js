@@ -405,6 +405,7 @@ function drawQuestion(ctx) {
   view.innerHTML = `<div class="lq-screen lq-screen--${game.mode}">${headHTML()}
     <div class="lq lq--${q.type}">
       <h1 class="lq-prompt">${esc(q.prompt)}</h1>
+      ${q.type === 'duel' ? '<p class="lq-sub">Tap the photo you think it is.</p>' : ''}
       ${mediaHTML(q)}
       ${optionsHTML(q)}
       <div class="lq-fb" data-fb tabindex="-1"></div>
