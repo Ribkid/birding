@@ -516,7 +516,7 @@ export function buildDaily(dateStr, month) {
   const take = (list, fn) => {
     for (const sp of shuffle(list.filter(s => !used.has(s.id)), rng)) {
       const q = fn(sp);
-      if (q) { used.add(q.focus); if (q.type === 'duel') q.options.forEach(x => used.add(x.sp)); return q; }
+      if (q && !used.has(q.focus)) { used.add(q.focus); if (q.type === 'duel') q.options.forEach(x => used.add(x.sp)); return q; }
     }
     return null;
   };
@@ -529,7 +529,9 @@ export function buildDaily(dateStr, month) {
     if (t === 'whoami') q = take(around, sp => whoQ(sp, o));
     if (t === 'duel') {
       const ids = new Set(around.map(s => s.id));
-      const p = shuffle(lookalikePairs().filter(x => (ids.has(x.a) || ids.has(x.b)) && gallery(byId.get(x.a)) && gallery(byId.get(x.b))), rng)[0];
+      // find, not [0]: same draw as before, but skip a pair whose species another question already asks about
+      const p = shuffle(lookalikePairs().filter(x => (ids.has(x.a) || ids.has(x.b)) && gallery(byId.get(x.a)) && gallery(byId.get(x.b))), rng)
+        .find(x => !used.has(x.a) && !used.has(x.b));
       q = p ? duelQ(p, o) : null;
       if (q) { used.add(p.a); used.add(p.b); }
     }
