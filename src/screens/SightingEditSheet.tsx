@@ -1,7 +1,9 @@
-// Edit one of her sightings from the species page, as v1's openSightingSheet({ sightingId }) does. The same form and
-// save/delete path as the Log page's editor (src/screens/lists/Log.tsx), built from the shared sighting pieces.
+// Log a sighting of this species, or edit one of hers, from the species page without leaving it, as v1's
+// openSightingSheet({ speciesId }) and openSightingSheet({ sightingId }) do. The form and the save/delete path are the
+// shared sighting pieces (src/screens/lists/shared.tsx) that the Log and Add pages use.
 import { useEffect, useState, type FormEvent } from 'react';
 import { focusables, topLayer } from '../lib/layers';
+import { byId } from '../lib/data';
 import {
   ConfirmDialog,
   Modal,
@@ -9,18 +11,26 @@ import {
   buildSighting,
   deleteSighting,
   draftFromSighting,
+  emptyDraft,
   getPosition,
   saveSighting,
   type SightingDraft,
   type SightingRow,
 } from './lists/shared';
+import { toast } from './birdToast';
 
-export function SightingEditSheet({ sighting, onClose }: { sighting: SightingRow; onClose: () => void }) {
-  const [draft, setDraft] = useState<SightingDraft>(() => draftFromSighting(sighting));
+export function SightingEditSheet({ sighting, speciesId, onClose }: { sighting?: SightingRow | null; speciesId?: number; onClose: () => void }) {
+  const existing = sighting || null;
+  const [draft, setDraft] = useState<SightingDraft>(() => {
+    if (existing) return draftFromSighting(existing);
+    const d = emptyDraft();
+    if (speciesId) d.speciesId = speciesId;
+    return d;
+  });
   const [error, setError] = useState('');
   const [status, setStatus] = useState(
-    sighting.lat != null && sighting.lng != null
-      ? `${sighting.lat.toFixed(4)}, ${sighting.lng.toFixed(4)}`
+    existing?.lat != null && existing.lng != null
+      ? `${existing.lat.toFixed(4)}, ${existing.lng.toFixed(4)}`
       : 'No location yet',
   );
   const [locating, setLocating] = useState(false);
@@ -54,7 +64,7 @@ export function SightingEditSheet({ sighting, onClose }: { sighting: SightingRow
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
-    const { rec, error: problem } = buildSighting(draft, { ...sighting });
+    const { rec, error: problem } = buildSighting(draft, existing ? { ...existing } : {});
     if (!rec) {
       setError(problem ?? 'That sighting is not complete.');
       return;
@@ -63,14 +73,16 @@ export function SightingEditSheet({ sighting, onClose }: { sighting: SightingRow
     try {
       await saveSighting(rec);
       onClose();
+      // v1's words. v1 shows its new-for-the-dex celebration instead of the toast for a first sighting; this app has
+      // no celebration, so the toast says it was saved either way.
+      toast(existing ? 'Changes saved' : `${byId.get(rec.speciesId as number)?.name ?? 'Sighting'} saved`);
     } catch {
-      setError('The change could not be saved. Try again.');
-    } finally {
+      setError(existing ? 'The change could not be saved. Try again.' : 'The sighting could not be saved. Try again.');
       setSaving(false);
     }
   };
 
-  if (confirmDelete) {
+  if (existing && confirmDelete) {
     return (
       <ConfirmDialog
         title="Delete this sighting?"
@@ -79,22 +91,22 @@ export function SightingEditSheet({ sighting, onClose }: { sighting: SightingRow
         danger
         onCancel={() => setConfirmDelete(false)}
         onConfirm={async () => {
-          await deleteSighting(sighting);
+          await deleteSighting(existing);
           onClose();
+          toast('Sighting deleted');
         }}
       />
     );
   }
 
   return (
-    <Modal title="Edit sighting" onClose={onClose}>
+    <Modal title={existing ? 'Edit sighting' : 'Log a sighting'} onClose={onClose}>
       <form className="form" onSubmit={save} noValidate>
         <SightingFields draft={draft} onChange={setDraft} status={status} onLocate={locate} locating={locating} error={error} />
         <div className="row-end">
-          <button type="button" className="btn btn--danger btn--quiet" onClick={() => setConfirmDelete(true)}>Delete</button>
-          <span className="spacer" />
+          {existing && <><button type="button" className="btn btn--danger btn--quiet" onClick={() => setConfirmDelete(true)}>Delete</button><span className="spacer" /></>}
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn--primary" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          <button type="submit" className="btn btn--primary" disabled={saving}>{saving ? 'Saving…' : existing ? 'Save changes' : 'Save sighting'}</button>
         </div>
       </form>
     </Modal>

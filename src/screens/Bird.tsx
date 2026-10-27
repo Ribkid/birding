@@ -1,9 +1,10 @@
 // The species page, ported from v1's renderBird (birding-refresh js/app.js) with spotSection, confuseSection,
 // whereSection and infoSection. The hero photo runs under the status bar with the name set on a scrim tinted from
-// the photo (src/lib/look.ts); the content is a sheet that slides up over its foot; a slim Log bar rises once the
-// main Log button has scrolled away. species.css styles it all under .bird.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+// the photo (src/lib/look.ts), with the Photos / 3D model / Card switch and the back and search buttons floating
+// over it; the content is a sheet that slides up over its foot; a slim Log bar rises once the main Log button has
+// scrolled away. species.css styles it all under .bird.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, type Species } from '../lib/data';
 import { useMedia, useSightings } from '../lib/hooks';
 import { useSeqReady } from '../lib/seq';
@@ -15,10 +16,14 @@ import { callWords, loadLookalikes, lookalikesOf, parseSize, peaksOf, sentences,
 import { monthRates, recordCount, spotsFor } from '../core/seqdata.js';
 import { MONTHS } from '../core/stats.js';
 import { learnReady, masteryOf } from '../core/learn.js';
+import { topLayer } from '../lib/layers';
 import { Icon } from '../components/Icon';
 import { Band, Pips } from '../components/SpeciesImage';
 import { CallsSection, PauseIcon, PlayIcon, hasCalls, useCallPlayer } from './BirdCalls';
+import { CardOverlay, askMotion, shareCard, type CardInfo } from './BirdCard';
+import { BirdSearch } from './BirdSearch';
 import { SightingEditSheet } from './SightingEditSheet';
+import { toast } from './birdToast';
 import type { SightingRow } from './lists/shared';
 import './species.css';
 
@@ -79,6 +84,7 @@ function Credit({ ph }: { ph: Photo }) {
 }
 const sourceLabel = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 
+const ShareIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4M5 13v6h14v-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 const LearnIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 const TickIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 
@@ -118,10 +124,21 @@ function WholeImg({ src, alt, className = '', eager = false }: { src?: string; a
   );
 }
 
-// Her own photo from a sighting, read from the photos store.
+// Her own photo from a sighting, read from the photos store. As in v1 (hydratePhotos), it loads only as it comes
+// within 400px of the screen, so a long strip doesn't decode every full-size photo at once.
 function MinePhoto({ photoId }: { photoId: number }) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined');
   const [url, setUrl] = useState('');
   useEffect(() => {
+    const el = imgRef.current;
+    if (near || !el) return;
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { setNear(true); io.disconnect(); } }, { rootMargin: '400px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near]);
+  useEffect(() => {
+    if (!near) return;
     let alive = true, made = '';
     void Promise.resolve(db.get('photos', photoId)).then((rec: { blob?: Blob } | undefined) => {
       if (!alive || !rec?.blob) return;
@@ -129,9 +146,14 @@ function MinePhoto({ photoId }: { photoId: number }) {
       setUrl(made);
     }).catch(() => {});
     return () => { alive = false; if (made) URL.revokeObjectURL(made); };
-  }, [photoId]);
-  return url ? <img src={url} alt="" decoding="async" /> : <img alt="" />;
+  }, [near, photoId]);
+  return <img ref={imgRef} src={url || undefined} alt="" loading="lazy" decoding="async" />;
 }
+
+// v1 focuses the new screen's heading after a route change (focusPageHeading), but not on the first page of a visit.
+// A route change is either a router navigation (it has its own key) or a plain hash change (a link with href="#/...").
+let hashMoved = false;
+if (typeof window !== 'undefined') window.addEventListener('hashchange', () => { hashMoved = true; });
 
 export default function Bird() {
   const { id } = useParams();
@@ -144,20 +166,27 @@ export default function Bird() {
 function SpeciesPage({ sp }: { sp: Species }) {
   useMedia();
   useSeqReady();
+  const location = useLocation();
   const [, setTick] = useState(0);
   const sightings = useSightings() as SightingRow[];
   const [det, setDet] = useState<Details | null>(null);
-  const [toast, setToast] = useState('');
   const [editing, setEditing] = useState<SightingRow | null>(null);
+  const [logging, setLogging] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [carding, setCarding] = useState(false);
+  const [hero, setHero] = useState<'photo' | 'model'>('photo');
+  const [modelMsg, setModelMsg] = useState<{ cls: string; text: string } | null>(null);
   const [slide, setSlide] = useState(0);
   const [awake, setAwake] = useState<ReadonlySet<string>>(() => new Set());
   const [barOn, setBarOn] = useState(false);
   const [grown, setGrown] = useState(false);
   const galRef = useRef<HTMLDivElement>(null);
-  const logRef = useRef<HTMLAnchorElement>(null);
+  const logRef = useRef<HTMLButtonElement>(null);
   const growRef = useRef<HTMLDivElement>(null);
-  const showToast = useCallback((msg: string) => setToast(msg), []);
-  const player = useCallPlayer(sp, showToast);
+  const nameRef = useRef<HTMLHeadingElement>(null);
+  const modelRef = useRef<HTMLDivElement>(null);
+  const model = useRef<{ alive: boolean; mounting: boolean; dispose: (() => void) | null }>({ alive: true, mounting: false, dispose: null });
+  const player = useCallPlayer(sp, toast);
 
   const hist = useMemo(
     () => sightings.filter((s) => s.speciesId === sp.id)
@@ -167,6 +196,60 @@ function SpeciesPage({ sp }: { sp: Species }) {
   const first = hist[hist.length - 1];
   const seen = hist.length > 0;
   const isBird = sp.kind === 'bird';
+  const seenIds = useMemo(() => new Set(sightings.map((s) => s.speciesId)), [sightings]);
+  const cardInfo: CardInfo = { seen, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
+
+  // After a route change, the name takes focus so a screen reader announces where she is. Left alone if she is
+  // already typing in the page, or a layer has opened meanwhile.
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      if (location.key === 'default' && !hashMoved) return;
+      if (topLayer()) return;
+      const a = document.activeElement as HTMLElement | null;
+      if (a && a.isConnected && document.getElementById('view')?.contains(a) && a.matches('input, textarea, select')) return;
+      const h = nameRef.current;
+      if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); }
+    });
+    return () => cancelAnimationFrame(raf);
+    // Once, when the page is drawn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Deleting a sighting takes its row (or photo) away after the sheet has given focus back to it. As v1's redraw does,
+  // focus then goes to the name rather than being dropped on the page.
+  const histCount = useRef(hist.length);
+  useEffect(() => {
+    const fewer = hist.length < histCount.current;
+    histCount.current = hist.length;
+    if (!fewer || topLayer()) return;
+    const a = document.activeElement;
+    if (a && a !== document.body && a.isConnected) return;
+    const h = nameRef.current;
+    if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); }
+  }, [hist.length]);
+
+  // 3D model: three.js arrives on demand. If she has left before it lands, nothing is mounted. Switching back to the
+  // photos keeps the model (its frame loop rests while it is hidden).
+  useEffect(() => {
+    const m = model.current;
+    m.alive = true;
+    return () => { m.alive = false; m.dispose?.(); m.dispose = null; };
+  }, []);
+  useEffect(() => {
+    const m = model.current, box = modelRef.current;
+    if (hero !== 'model' || !box || m.dispose || m.mounting) return;
+    m.mounting = true;
+    setModelMsg({ cls: 'model-loading', text: 'Building the model…' });
+    void (async () => {
+      let mod: { mountBird: (el: HTMLElement, s: Species) => () => void } | null = null;
+      try { mod = await import('./birdModel3d.js'); } catch { /* offline the first time */ }
+      m.mounting = false;
+      if (!m.alive || !box.isConnected) return;
+      if (!mod) { setModelMsg({ cls: 'model-loading', text: '3D needs signal the first time.' }); return; }
+      try { setModelMsg({ cls: 'model-hint', text: 'Drag to turn' }); m.dispose = mod.mountBird(box, sp); }
+      catch { setModelMsg({ cls: 'model-loading', text: '3D needs a newer browser.' }); }
+    })();
+  }, [hero, sp]);
 
   // Learn progress, the curated look-alikes, the gallery/write-ups and the call pack load at start-up; fill them in
   // if they arrive after the page.
@@ -178,13 +261,6 @@ function SpeciesPage({ sp }: { sp: Species }) {
     void Promise.resolve(details(sp)).then((d: Details | null) => { if (alive) setDet(d); }).catch(() => {});
     return () => { alive = false; };
   }, [sp]);
-
-  // One toast at a time, about 4.5 s, tap to dismiss.
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(''), 4500);
-    return () => clearTimeout(t);
-  }, [toast]);
 
   // Once the Log button has scrolled away, a slim bar with the name and a Log button rises above the tab bar.
   useEffect(() => {
@@ -207,7 +283,14 @@ function SpeciesPage({ sp }: { sp: Species }) {
     return () => io.disconnect();
   }, [hasMonths, grown]);
 
-  const photos = heroPhotos(sp, det);
+  // The Wikipedia photo can arrive after the gallery photos are on screen. Until she has touched the gallery, it
+  // stays on the first photo rather than following the old first one along (scroll snap would keep that in view).
+  // Once she has, the list is kept as it is, as v1 keeps the gallery's slide (nothing is redrawn mid-use).
+  const touched = useRef(false);
+  const kept = useRef<Photo[] | null>(null);
+  const live = heroPhotos(sp, det);
+  const photos = touched.current && kept.current?.length ? kept.current.map((k) => live.find((l) => l.src === k.src) || k) : live;
+  kept.current = photos;
   const n = photos.length;
   // The tint comes from the first photo. If it arrives after the page (the photo index loads late), take it again.
   const heroSrc = photos[0]?.src || '';
@@ -226,9 +309,6 @@ function SpeciesPage({ sp }: { sp: Species }) {
     const add = idx.map((i) => photos[i]?.src).filter((src) => src && !prev.has(src));
     return add.length ? new Set([...prev, ...add]) : prev;
   });
-  // The Wikipedia photo can arrive after the gallery photos are on screen. Until she has touched the gallery, it
-  // stays on the first photo rather than following the old first one along (scroll snap would keep that in view).
-  const touched = useRef(false);
   const touch = () => { touched.current = true; wake(1); };
   const listKey = photos.map((p) => p.src).join('|');
   useLayoutEffect(() => {
@@ -260,7 +340,6 @@ function SpeciesPage({ sp }: { sp: Species }) {
   const kindWord = KINDS[sp.kind].label.toLowerCase();
   const prev = [...SPECIES].reverse().find((s) => s.kind === sp.kind && s.id < sp.id);
   const next = SPECIES.find((s) => s.kind === sp.kind && s.id > sp.id);
-  const logTo = `/add?species=${sp.id}`;
 
   // How to spot it: the field notes as short marks, the call words, size, when, group, habitats and a quick test.
   const cw = callWords(sp) as { words: string; sentence: string } | null;
@@ -287,8 +366,8 @@ function SpeciesPage({ sp }: { sp: Species }) {
 
   return (
     <article className={`bird kind--${sp.kind}`}>
-      <div className="bird-hero" data-hero-box="">
-        <div className="hero-photo">
+      <div className={`bird-hero${hero === 'model' ? ' bird-hero--model' : ''}`} data-hero-box="">
+        <div className={`hero-photo${hero === 'photo' ? '' : ' hidden'}`}>
           <div
             className="gallery"
             data-gallery=""
@@ -312,18 +391,27 @@ function SpeciesPage({ sp }: { sp: Species }) {
             )}
           </div>
         </div>
+        <div className={`hero-model${hero === 'model' ? '' : ' hidden'}`} data-model="" ref={modelRef} role="group" aria-label={`3D model of a ${sp.name}. Drag to turn it.`}>
+          {modelMsg && <p className={modelMsg.cls}>{modelMsg.text}</p>}
+        </div>
         <div className="hero-scrim" aria-hidden="true" />
         <div className="hero-cap">
           <div className="hero-meta">
             <Band sp={sp} seen={seen} />
             {sp.kind !== 'bird' && <span className={`kindtag kind--${sp.kind}`}>{KINDS[sp.kind].one}</span>}
-            {n > 1 && <span className="hero-count" data-count="" aria-hidden="true"><b data-count-i="">{slide + 1}</b>/{n}</span>}
+            {n > 1 && <span className={`hero-count${hero === 'photo' ? '' : ' hidden'}`} data-count="" aria-hidden="true"><b data-count-i="">{slide + 1}</b>/{n}</span>}
           </div>
-          <h1 className="bird-name">{sp.name}</h1>
+          <h1 className="bird-name" ref={nameRef}>{sp.name}</h1>
           <p className="sci">{sp.sci}</p>
-          <p className="hero-credit" data-credit="">{photos[slide]?.credit ? <Credit ph={photos[slide]} /> : null}</p>
+          <p className={`hero-credit${hero === 'photo' ? '' : ' hidden'}`} data-credit="">{photos[slide]?.credit ? <Credit ph={photos[slide]} /> : null}</p>
         </div>
         <Link className="iconbtn iconbtn--float" to="/dex" aria-label="Back to the dex"><Icon name="back" /></Link>
+        <button type="button" className="iconbtn iconbtn--float iconbtn--right" data-search="" aria-label="Search everything" onClick={() => setSearching(true)}><Icon name="search" /></button>
+        <div className="hero-tabs" role="tablist" aria-label="View">
+          <button type="button" role="tab" aria-selected={hero === 'photo'} data-hero="photo" onClick={() => setHero('photo')}>{n > 1 ? 'Photos' : 'Photo'}</button>
+          {isBird && <button type="button" role="tab" aria-selected={hero === 'model'} data-hero="model" onClick={() => setHero('model')}>3D model</button>}
+          <button type="button" role="tab" aria-selected="false" data-hero="card" onClick={() => { askMotion(); setCarding(true); }}>Card</button>
+        </div>
       </div>
 
       <div className="bird-body">
@@ -334,7 +422,8 @@ function SpeciesPage({ sp }: { sp: Species }) {
             : mastery > 0 ? <span className="mastery"><i style={{ '--p': Math.round(mastery * 100) } as CSSProperties} aria-hidden="true" />Learning</span> : null}</span>
         </div>
         <div className="bird-actions">
-          <Link className="btn btn--primary btn--grow" ref={logRef} to={logTo}>{seen ? 'Log another sighting' : 'Log a sighting'}</Link>
+          <button type="button" className="btn btn--primary btn--grow" ref={logRef} data-log="" onClick={() => setLogging(true)}>{seen ? 'Log another sighting' : 'Log a sighting'}</button>
+          {seen && <button type="button" className="btn btn--share" data-sharecard="" aria-label="Share card" onClick={() => void shareCard(sp, cardInfo)}><ShareIcon /></button>}
         </div>
         {seen && <p className="seen-line">Seen {plural(hist.length, 'time')}. First on {fmtDate(first.date)}{first.place ? ` at ${first.place}` : ''}.</p>}
 
@@ -352,7 +441,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
           <dl className="facts">
             {size && <div><dt>{size[0]}</dt><dd>{size[1]}</dd></div>}
             <div><dt>{when[0]}</dt><dd>{when[1]}</dd></div>
-            <div><dt>Group</dt><dd><Link to="/dex" state={{ dexFilter: { kind: sp.kind === 'plant' ? 'plant' : 'animals', group: sp.group } }}>{GROUPS[sp.group]}</Link></dd></div>
+            <div><dt>Group</dt><dd><Link to="/dex" state={{ dexFilter: { kind: sp.kind === 'plant' ? 'plant' : 'animals', q: '', show: 'all', group: sp.group, habitat: '', rarity: '', season: false, sort: 'dex' } }}>{GROUPS[sp.group]}</Link></dd></div>
           </dl>
           <ul className="spot-hab" aria-label="Where to look">
             {sp.habitats.map((h) => <li key={h}>{HABITATS[h]}</li>)}
@@ -433,7 +522,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
             <ul className="mine-strip">
               {snaps.map((h) => (
                 <li key={h.id}>
-                  <button type="button" className="mine-ph" aria-label={`Your photo from ${fmtDate(h.date)}`} onClick={() => setEditing(h)}>
+                  <button type="button" className="mine-ph" data-edit={h.id} aria-label={`Your photo from ${fmtDate(h.date)}`} onClick={() => setEditing(h)}>
                     <MinePhoto photoId={h.photoId as number} />
                   </button>
                 </li>
@@ -444,9 +533,9 @@ function SpeciesPage({ sp }: { sp: Species }) {
             <ul className="hist">
               {hist.map((h) => (
                 <li key={h.id}>
-                  <button type="button" className="hist-row" onClick={() => setEditing(h)}>
+                  <button type="button" className="hist-row" data-edit={h.id} onClick={() => setEditing(h)}>
                     <span className="hist-main"><strong>{fmtDate(h.date)}</strong>{h.time ? <> <span className="muted">{h.time}</span></> : null}<br /><span className="muted">{h.place || 'No place name'}</span></span>
-                    <span className="hist-n">{h.count ? `×${h.count}` : 'X'}{h.heard ? <><br /><span className="muted small">heard</span></> : null}</span>
+                    {' '}<span className="hist-n">{h.count ? `×${h.count}` : 'X'}{h.heard ? <><br /><span className="muted small">heard</span></> : null}</span>
                   </button>
                 </li>
               ))}
@@ -469,12 +558,14 @@ function SpeciesPage({ sp }: { sp: Species }) {
       </div>
 
       <div className={`logbar${barOn ? ' logbar--on' : ''}`} data-logbar="" inert={!barOn}>
-        <Band sp={sp} seen={seen} /><strong>{sp.name}</strong>
-        <Link className="btn btn--primary btn--small" to={logTo} aria-label={`Log a sighting of the ${sp.name}`}>Log it</Link>
+        <Band sp={sp} seen={seen} /><strong>{sp.name}</strong>{' '}
+        <button type="button" className="btn btn--primary btn--small" data-log="" aria-label={`Log a sighting of the ${sp.name}`} onClick={() => setLogging(true)}>Log it</button>
       </div>
 
-      {toast && <div className="toast" role="status" onClick={() => setToast('')}>{toast}</div>}
+      {logging && <SightingEditSheet speciesId={sp.id} onClose={() => setLogging(false)} />}
       {editing && <SightingEditSheet sighting={editing} onClose={() => setEditing(null)} />}
+      {carding && <CardOverlay sp={sp} info={cardInfo} onClose={() => setCarding(false)} />}
+      {searching && <BirdSearch sightings={sightings} seen={seenIds} onClose={() => setSearching(false)} />}
     </article>
   );
 }
