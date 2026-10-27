@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { KINDS, byId, kindsPresent } from '../../lib/data';
 import { avatarUrl } from '../../core/profile.js';
 import {
@@ -72,9 +72,17 @@ function LeaderAvatar({ speciesId, path, name }: { speciesId?: number | null; pa
 }
 
 export default function Leaderboard() {
+  const location = useLocation();
+  const groupsRef = useRef<HTMLElement>(null);
   const [authReady, setAuthReady] = useState(!configured);
   const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
   const [online, setOnline] = useState(() => navigator.onLine);
+
+  useEffect(() => {
+    if (!new URLSearchParams(location.search).has('groups')) return;
+    const timer = window.setTimeout(() => groupsRef.current?.scrollIntoView({ block: 'start' }), 120);
+    return () => window.clearTimeout(timer);
+  }, [location.search]);
 
   const [period, setPeriod] = useState<Period>('life');
   const [kind, setKind] = useState('');
@@ -375,7 +383,7 @@ export default function Leaderboard() {
         {header}
         <div className="empty">
           <p>Sign in to see how your dex compares with other birders and with your family.</p>
-          <Link className="btn btn--primary" to="/settings">
+          <Link className="btn btn--primary" to="/me/signin">
             Sign in
           </Link>
         </div>
@@ -486,7 +494,7 @@ export default function Leaderboard() {
         )}
       </section>
 
-      <section className="block">
+      <section className="block" id="groups" ref={groupsRef}>
         <h2 className="h2">Groups</h2>
         <p className="muted small">
           Make a group for family or friends. Share its code; anyone with it can join and see the
