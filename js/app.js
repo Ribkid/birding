@@ -1898,7 +1898,7 @@ function renderLists() {
     </section>
 
     <section class="block lh-sec">
-      <div class="block-h"><h2 class="h2">Outings</h2><a href="#/log">All sightings</a></div>
+      <div class="block-h"><h2 class="h2">Outings</h2></div>
       ${outings.length ? `<ul class="lh-outings">${outings.slice(0, 12).map(o => {
         const st = strip(o);
         return `<li><a class="ocard" href="#/outing/${o.id}">
