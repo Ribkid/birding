@@ -1,18 +1,18 @@
 // Sarah's BirdyDex service worker.
 // App files: network first (so updates arrive straight away), cache when offline.
 // Bird photos, map tiles and the ID models: cache first, so they work in the bush.
-const VERSION = 'v6-2';
+const VERSION = 'v7-l';
 const SHELL = `birddex-shell-${VERSION}`;
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
 const MODELS = 'birddex-models';
 const ASSETS = [
-  './', 'index.html', 'css/app.css', 'manifest.webmanifest',
+  './', 'index.html', 'css/app.css', 'css/learn.css', 'manifest.webmanifest',
   'js/app.js', 'js/db.js', 'js/media.js', 'js/species.js', 'js/stats.js', 'js/ebird.js', 'js/seqdata.js',
-  'js/card3d.js', 'js/quiz.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js', 'js/gallery.js',
+  'js/card3d.js', 'js/quiz.js', 'js/learn.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js', 'js/gallery.js',
   'js/config.js', 'js/cloud.js', 'js/sync.js', 'js/account.js', 'vendor/supabase/supabase.js',
   'data/bioclip-text.json', 'data/species-new.json', 'data/tiers.json', 'data/info.json', 'data/gallery.json',
-  'data/seq.json', 'data/birdnet-map.json',
+  'data/seq.json', 'data/birdnet-map.json', 'data/lookalikes.json',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/three/three.module.min.js',
   'fonts/schibsted-grotesk-latin-400-normal.woff2', 'fonts/schibsted-grotesk-latin-400-italic.woff2',
   'fonts/schibsted-grotesk-latin-500-normal.woff2', 'fonts/schibsted-grotesk-latin-700-normal.woff2',

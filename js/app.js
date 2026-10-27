@@ -6,7 +6,7 @@ import { speciesList, periodFilter, totals, yearTotals, targets, badges, inPatch
 import { toEbirdCsv } from './ebird.js';
 import { loadSeq, seq, monthRates, likelihood, recordCount, spotsFor, pointsFor, hotspots, nearbyTargets } from './seqdata.js';
 import { openCard, confetti, shareCard } from './card3d.js';
-import { renderQuiz } from './quiz.js';
+import { renderLearn, learnStats, learnReady } from './learn.js';
 import { renderStats } from './statsview.js';
 import { describeArea } from './mapinfo.js';
 import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
@@ -109,6 +109,7 @@ const icon = {
   close: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   quiz: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 9a3 3 0 1 1 4 2.8c-.8.3-1.2 1-1.2 1.8V15M12 18.5v.01" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   chart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M21 20H3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  learn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 function toast(msg) {
@@ -681,7 +682,8 @@ const routes = [
   [/^#\/map\/at\/(-?[\d.]+),(-?[\d.]+)$/, m => renderMap(null, [Number(m[1]), Number(m[2])])],
   [/^#\/compare\/(\d+)\/(\d+)$/, m => renderCompare(Number(m[1]), Number(m[2]))],
   [/^#\/stats$/, () => renderStats(ctx)],
-  [/^#\/quiz$/, () => renderQuiz(ctx)],
+  [/^#\/learn(?:\/(daily|deck|play)(?:\/(\w+))?)?$/, m => renderLearn(ctx, m[1], m[2])],
+  [/^#\/quiz$/, () => location.replace('#/learn')],
   [/^#\/listen$/, () => renderListen()],
   [/^#\/scan$/, () => renderScan()],
 ];
@@ -695,7 +697,7 @@ function render() {
     if (m) { fn(m); break; }
   }
   const tab = hash.split('/')[1] || 'dex';
-  const tabFor = { bird: 'dex', dex: 'dex', compare: 'dex', listen: 'dex', scan: 'dex', lists: 'lists', list: 'lists', patch: 'lists', targets: 'lists', outing: 'lists', log: 'lists', stats: 'lists', map: 'map', badges: 'badges', settings: 'badges', quiz: 'badges' }[tab] || 'dex';
+  const tabFor = { bird: 'dex', dex: 'dex', compare: 'dex', listen: 'dex', scan: 'dex', lists: 'lists', list: 'lists', patch: 'lists', targets: 'lists', outing: 'lists', log: 'lists', stats: 'lists', map: 'map', badges: 'badges', settings: 'badges', quiz: 'badges', learn: 'badges' }[tab] || 'dex';
   $$('.tabbar a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === tabFor ? 'page' : 'false'));
   renderOutingBar();
   if (hash !== lastRoute) { if (!hash.startsWith('#/dex') || !lastRoute.startsWith('#/bird')) window.scrollTo(0, 0); lastRoute = hash; }
@@ -1179,7 +1181,7 @@ function renderLists() {
   const years = yearTotals(state.sightings).filter(y => y.year !== String(now.getFullYear()));
   view.innerHTML = `
     <header class="page-head"><h1>Lists</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button></div></header>
-    <div class="quicklinks pad-x"><a class="btn" href="#/stats">${icon.chart} Stats</a><a class="btn" href="#/quiz">${icon.quiz} Guess the bird</a></div>
+    <div class="quicklinks pad-x"><a class="btn" href="#/stats">${icon.chart} Stats</a><a class="btn" href="#/learn">${icon.learn} Learn</a></div>
     <div class="totals">
       <a href="#/list/life"><b>${t.life}</b><span>Life list</span></a>
       <a href="#/list/year"><b>${t.year}</b><span>${now.getFullYear()} list</span></a>
@@ -1627,16 +1629,21 @@ async function renderMap(spId = null, at = null) {
 }
 
 // Badges
+let badgesWaited = false;
 function renderBadges() {
-  const list = badges(state.sightings, state.outings);
+  const learning = learnStats();
+  // Learning progress loads from the kv store at start-up; draw again once it's in.
+  if (!Object.keys(learning).length && !badgesWaited) { badgesWaited = true; learnReady().then(() => { if (location.hash === '#/badges') renderBadges(); }).catch(() => {}); }
+  const list = badges(state.sightings, state.outings, learning);
   const earned = list.filter(b => b.done).length;
-  const sections = [['milestone', 'Milestones'], ['rarity', 'Rarities'], ['habit', 'Habits'], ['habitat', 'Habitats'], ['group', 'Complete a group']];
+  const sections = [['milestone', 'Milestones'], ['kind', 'Animals & plants'], ['rarity', 'Rarities'], ['habit', 'Habits'], ['learning', 'Learning'], ['habitat', 'Habitats'], ['group', 'Complete a group']]
+    .filter(([k]) => list.some(b => b.kind === k));
   view.innerHTML = `
     <header class="page-head"><h1>Badges</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button><a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a></div></header>
-    <div class="quicklinks pad-x"><a class="btn" href="#/quiz">${icon.quiz} Guess the bird</a><a class="btn" href="#/stats">${icon.chart} Stats</a>${leaderboardLink()}</div>
+    <div class="quicklinks pad-x"><a class="btn" href="#/learn">${icon.learn} Learn</a><a class="btn" href="#/stats">${icon.chart} Stats</a>${leaderboardLink()}</div>
     <p class="list-count"><b>${earned}</b> of ${list.length} earned</p>
     ${sections.map(([k, title]) => `<section class="block"><h2 class="h2">${title}</h2><ul class="badges">${list.filter(b => b.kind === k).map(b => `
-      <li class="badge ${b.done ? 'badge--done' : ''} badge--${k}">
+      <li class="badge ${b.done ? 'badge--done' : ''} badge--${k}${k === 'kind' ? ` kind--${b.id.split('-')[1]}` : ''}">
         <span class="medal" aria-hidden="true"><span>${b.done ? '✓' : b.need}</span></span>
         <span class="badge-txt"><strong>${esc(b.name)}</strong><span class="small muted">${esc(b.desc)}</span>
         ${b.done ? '' : `<span class="meter meter--thin" style="--p:${Math.round(b.have / b.need * 100)}%"><span></span></span><span class="small muted">${b.have} of ${b.need}</span>`}</span>
@@ -1994,7 +2001,7 @@ const ctx = {
 async function refreshFromSync({ force = false } = {}) {
   await loadData();
   applyTheme();
-  const busy = $('.sheet-wrap') || document.activeElement?.matches('input, textarea') || /^#\/(listen|scan|quiz)/.test(location.hash);
+  const busy = $('.sheet-wrap') || document.activeElement?.matches('input, textarea') || /^#\/(listen|scan|quiz|learn)/.test(location.hash);
   if (force ? !$('.sheet-wrap') : !busy) render();
 }
 
