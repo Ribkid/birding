@@ -1,7 +1,7 @@
 /* The photo-first, glassy look for Lists and its pages, Settings, the map and place picker, the welcome card, the
    celebration and the account/leaderboard bits (js/app.js, js/account.js). Loaded after css/look.css. */
 
-/* ---------- shared: inset photo lists, section headers, press ---------- */
+/* ---------- shared: inset photo lists and section headers ---------- */
 .rows--card { background: var(--surface); border-radius: var(--r-card); box-shadow: var(--shadow-card); padding: 0 14px; }
 .rows--card > li > .row { border-bottom: 1px solid var(--line); min-height: 64px; }
 .rows--card > li:last-child > .row { border-bottom: 0; }
@@ -11,8 +11,6 @@
 .lsec { margin: 18px 0 0; padding: 0 16px; }
 .lsec-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 6px 8px; font-size: var(--fs-2); font-weight: 700; color: var(--ink-2); letter-spacing: 0; }
 .lsec-n { font: 800 1.125rem/1 var(--stamp); font-variant-numeric: tabular-nums; }
-.press { transition: scale var(--dur-2) var(--ease-spring); }
-.press:active { scale: .96; transition-duration: var(--dur-1); transition-timing-function: var(--ease-out); }
 
 /* How likely a target is this month: a short bar with the same thing said in words. */
 .chance { display: grid; gap: 4px; margin-top: 2px; }
@@ -166,18 +164,19 @@ body.is-scrolled .tally-search { top: calc(var(--topbar-h) + env(safe-area-inset
 .tally-ctl .tally-inc { background: var(--azure); color: var(--on-azure); box-shadow: 0 8px 16px -8px color-mix(in srgb, var(--azure) 80%, transparent); }
 :root[data-theme="outdoor"] .tally-ctl button:not(.tally-inc) { box-shadow: inset 0 0 0 2px var(--line-strong); background: var(--surface); }
 .tally-n { display: inline-block; min-width: 2.2ch; font-size: 1.75rem; }
-.tally-foot {
+.tally-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 18px 16px 0; }
+.tally-foot--live {
   position: sticky; bottom: calc(var(--chrome-bottom) + 8px); z-index: 6; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin: 18px 12px 0; padding: 8px; border-radius: 22px;
   background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
 }
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .tally-foot { background: var(--glass-strong); } }
-@media (prefers-reduced-transparency: reduce) { .tally-foot { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .tally-foot--live { background: var(--glass-strong); } }
+@media (prefers-reduced-transparency: reduce) { .tally-foot--live { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 .tally-foot .btn { min-height: var(--tap); }
-.tally-foot .btn:not(.btn--primary):not(.btn--quiet) { background: var(--surface); box-shadow: none; }
+.tally-foot--live .btn:not(.btn--primary):not(.btn--quiet) { background: var(--surface); box-shadow: none; }
 @media (prefers-reduced-motion: reduce) {
-  .tally-ctl button, .lh-stat, .lh-link, .tcard, .pcard, .ocard, .press { transition: none; }
-  .tally-ctl button:active, .lh-stat:active, .lh-link:active, .tcard:active, .pcard:active, .ocard:active, .press:active { scale: none; }
+  .tally-ctl button, .lh-stat, .lh-link, .tcard, .pcard, .ocard { transition: none; }
+  .tally-ctl button:active, .lh-stat:active, .lh-link:active, .tcard:active, .pcard:active, .ocard:active { scale: none; }
 }
 
 /* ---------- Settings: grouped inset lists on cards ---------- */
@@ -467,3 +466,8 @@ body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
 .map-fab { width: 48px; height: 48px; }
 .mapwrap .leaflet-touch .leaflet-bar a, .locpick .leaflet-touch .leaflet-bar a { width: 48px; height: 48px; line-height: 48px; }
 .set-select { min-height: var(--tap); }
+body.has-outing .tally-foot--live { bottom: calc(var(--chrome-bottom) + 70px); }
+/* A finished outing: the two edits side by side, delete on its own line below. */
+.tally-foot:not(.tally-foot--live) .spacer { display: none; }
+.tally-foot:not(.tally-foot--live) .btn:not(.btn--quiet) { flex: 1 1 8rem; }
+.tally-foot:not(.tally-foot--live) [data-cancel] { order: 2; flex-basis: 100%; }

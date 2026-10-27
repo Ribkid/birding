@@ -1979,7 +1979,7 @@ function renderOuting(id) {
       ${q ? `<ul class="tally-list rows--card tally-list--found">${results.map(tallyRow).join('') || '<li class="muted pad">Nothing by that name in the dex.</li>'}</ul>` : ''}` : ''}
     ${ordered.length ? `<ul class="tally-list rows--card">${ordered.map(tallyRow).join('')}</ul>` : editing ? '<p class="empty-inline tally-empty">Search above to add the first species. Tap + again each time you count another.</p>' : ''}
     ${o.notes ? `<p class="pad-x">${esc(o.notes)}</p>` : ''}
-    <div class="tally-foot">
+    <div class="tally-foot ${live ? 'tally-foot--live' : ''}">
       ${live ? `<button class="btn btn--danger btn--quiet" data-cancel>Discard</button><span class="spacer"></span><button class="btn btn--primary" data-finish>Finish outing</button>`
              : `<button class="btn btn--danger btn--quiet" data-cancel>Delete outing</button><span class="spacer"></span><button class="btn" data-editbirds>${editing ? 'Done editing species' : 'Edit species'}</button><button class="btn" data-finish>Edit details</button>`}
     </div>`;
