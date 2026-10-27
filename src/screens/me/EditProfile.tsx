@@ -6,7 +6,7 @@ import { SpeciesImage } from '../../components/SpeciesImage';
 import { Sheet } from '../../components/Sheet';
 import { onStatus, syncStatus } from '../../core/account.js';
 import {
-  signedIn, configured, getProfile, getMyCloud, initProfile, saveMyProfile, setCloud,
+  signedIn, configured, getProfile, getMyCloud, myName, initProfile, saveMyProfile, setCloud,
   uploadAvatarPhoto, removeAvatarPhoto, avatarUrl, problem, resizeImage, squareJpeg,
 } from '../../core/profile.js';
 import './me.css';
@@ -230,14 +230,14 @@ export default function EditProfile() {
             </span>
           </span>
           <div className="me-edit-picks">
-            <button type="button" className="btn btn--small" disabled={busy} onClick={() => fileRef.current?.click()}><svg viewBox="0 0 24 24">{I.cam}</svg> {m?.avatarPath ? 'New photo' : 'Upload a photo'}</button>
+            <button type="button" className="btn btn--small" disabled={busy} onClick={() => { if (!navigator.onLine) { setMsg('Uploading a photo needs signal. Your species picture works offline.'); return; } fileRef.current?.click(); }}><svg viewBox="0 0 24 24">{I.cam}</svg> {m?.avatarPath ? 'New photo' : 'Upload a photo'}</button>
             <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; void upload(f); }} />
             <button type="button" className="btn btn--small" onClick={() => setPicking(true)}><svg viewBox="0 0 24 24">{I.leaf}</svg> Choose a species</button>
             {m?.avatarPath && <button type="button" className="btn btn--small btn--quiet btn--danger" disabled={busy} onClick={() => void remove()}>Remove photo</button>}
           </div>
         </div>
         <p className="small me-edit-msg" role="status" aria-live="polite">{msg}</p>
-        <label className="field"><span>Display name</span><input maxLength={40} autoComplete="nickname" value={name} placeholder={prof.displayName || 'You'} onChange={(e) => setName(e.target.value)} onBlur={() => void saveName()} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void saveName(); } }} /></label>
+        <label className="field"><span>Display name</span><input maxLength={40} autoComplete="nickname" value={name} placeholder={myName()} onChange={(e) => setName(e.target.value)} onBlur={() => void saveName()} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void saveName(); } }} /></label>
         <label className="check check--card me-check">
           <input type="checkbox" checked={showLb} onChange={async (e) => { setShowLb(e.target.checked); await saveMyProfile({ showOnLeaderboard: e.target.checked }); setMsg(e.target.checked ? 'You show on the leaderboard.' : 'You are hidden from the Everyone board.'); }} />
           <span><strong>Show me on the leaderboard</strong><span className="small muted">Only your name, picture and counts are shown, never your sightings, places, notes or photos. Groups you join always show you to their members.</span></span>
