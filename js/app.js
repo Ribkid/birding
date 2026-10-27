@@ -6,7 +6,7 @@ import { speciesList, periodFilter, totals, yearTotals, targets, badges, inPatch
 import { toEbirdCsv } from './ebird.js';
 import { loadSeq, seq, monthRates, likelihood, recordCount, spotsFor, pointsFor, hotspots, nearbyTargets } from './seqdata.js';
 import { openCard, confetti, shareCard } from './card3d.js';
-import { renderLearn } from './learn.js';
+import { renderLearn, learnStats, learnReady } from './learn.js';
 import { renderStats } from './statsview.js';
 import { describeArea } from './mapinfo.js';
 import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
@@ -1624,16 +1624,21 @@ async function renderMap(spId = null, at = null) {
 }
 
 // Badges
+let badgesWaited = false;
 function renderBadges() {
-  const list = badges(state.sightings, state.outings);
+  const learning = learnStats();
+  // Learning progress loads from the kv store at start-up; draw again once it's in.
+  if (!Object.keys(learning).length && !badgesWaited) { badgesWaited = true; learnReady().then(() => { if (location.hash === '#/badges') renderBadges(); }).catch(() => {}); }
+  const list = badges(state.sightings, state.outings, learning);
   const earned = list.filter(b => b.done).length;
-  const sections = [['milestone', 'Milestones'], ['rarity', 'Rarities'], ['habit', 'Habits'], ['habitat', 'Habitats'], ['group', 'Complete a group']];
+  const sections = [['milestone', 'Milestones'], ['kind', 'Animals & plants'], ['rarity', 'Rarities'], ['habit', 'Habits'], ['learning', 'Learning'], ['habitat', 'Habitats'], ['group', 'Complete a group']]
+    .filter(([k]) => list.some(b => b.kind === k));
   view.innerHTML = `
     <header class="page-head"><h1>Badges</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button><a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a></div></header>
     <div class="quicklinks pad-x"><a class="btn" href="#/learn">${icon.learn} Learn</a><a class="btn" href="#/stats">${icon.chart} Stats</a>${leaderboardLink()}</div>
     <p class="list-count"><b>${earned}</b> of ${list.length} earned</p>
     ${sections.map(([k, title]) => `<section class="block"><h2 class="h2">${title}</h2><ul class="badges">${list.filter(b => b.kind === k).map(b => `
-      <li class="badge ${b.done ? 'badge--done' : ''} badge--${k}">
+      <li class="badge ${b.done ? 'badge--done' : ''} badge--${k}${k === 'kind' ? ` kind--${b.id.split('-')[1]}` : ''}">
         <span class="medal" aria-hidden="true"><span>${b.done ? '✓' : b.need}</span></span>
         <span class="badge-txt"><strong>${esc(b.name)}</strong><span class="small muted">${esc(b.desc)}</span>
         ${b.done ? '' : `<span class="meter meter--thin" style="--p:${Math.round(b.have / b.need * 100)}%"><span></span></span><span class="small muted">${b.have} of ${b.need}</span>`}</span>

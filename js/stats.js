@@ -71,7 +71,7 @@ export function targets({ seen, month, habitat, score, rel, kinds = ['bird'] }) 
 // ---------- Badges ----------
 const placeKey = s => s.lat != null ? `${s.lat.toFixed(2)},${s.lng.toFixed(2)}` : (s.place || '').trim().toLowerCase();
 
-export function badges(sightings, outings) {
+export function badges(sightings, outings, learning = {}) {
   const life = speciesList(sightings);
   const seen = new Set(life.keys());
   const seenAll = [...seen].map(id => byId.get(id)).filter(Boolean);
@@ -141,6 +141,16 @@ export function badges(sightings, outings) {
       add(`kind-${k}-${need0}`, name, need === 1 ? `Log your first ${KINDS[k].one}` : `See ${need} ${KINDS[k].label.toLowerCase()}`, ofKindSeen(k), need, 'kind');
     }
   }
+
+  // Learning (from learnStats() in js/learn.js). Callers that don't pass it simply see these as not earned yet.
+  const lv = k => Number(learning?.[k]) || 0;
+  add('learn-round', 'First round', 'Finish a practice round in Learn', lv('rounds'), 1, 'learning');
+  add('learn-daily', 'Daily habit', "Finish today's challenge", lv('dailyDone'), 1, 'learning');
+  add('learn-streak7', 'Seven-day streak', "Do today's challenge 7 days in a row", lv('bestStreak'), 7, 'learning');
+  add('learn-perfect', 'Perfect round', 'Get all 10 right in a round on Normal or Hard', lv('perfect'), 1, 'learning');
+  add('learn-duels20', 'Look-alike pro', 'Win 20 look-alike duels', lv('duelsWon'), 20, 'learning');
+  add('learn-calls10', 'Ear for it', 'Master 10 calls in the review deck', lv('callsMastered'), 10, 'learning');
+  add('learn-master25', 'Walking field guide', 'Master 25 species in the review deck', lv('mastered'), 25, 'learning');
 
   // Habitats
   for (const [code, label] of Object.entries(HABITATS)) {
