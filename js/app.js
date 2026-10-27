@@ -2372,11 +2372,11 @@ async function showWelcome() {
     <h1>Hi Sarah</h1>
     <p>This is your BirdyDex: ${BIRDS.length} South East Queensland birds to find${ANIMALS.length > BIRDS.length ? `, plus ${ANIMALS.length - BIRDS.length} other native animals` : ''}${ofKind('plant').length ? ` and ${ofKind('plant').length} native plants` : ''}, starting with this Eastern Yellow Robin.</p>
     <ul class="welcome-list">
-      <li><strong>Log</strong> a bird with the + button, or press and hold any bird in the dex.</li>
-      <li><strong>Listen</strong> and <strong>Scan</strong> name birds from a call or a photo.</li>
-      <li><strong>Hotspots, targets and badges</strong> show where to go next.</li>
+      <li><strong>Log</strong> anything you find with the + button, or press and hold a tile in the dex.</li>
+      <li><strong>Scan</strong> names any species in your dex from a photo, and <strong>Listen</strong> names birds by their calls.</li>
+      <li><strong>Learn</strong> has a daily challenge and look-alike games, and <strong>badges</strong> and <strong>targets</strong> show where to go next.</li>
     </ul>
-    <div class="row-center">${state.installPrompt ? '<button class="btn" data-winstall>Install app</button>' : ''}<button class="btn btn--primary" data-wgo>Start birding</button></div>
+    <div class="row-center">${state.installPrompt ? '<button class="btn" data-winstall>Install app</button>' : ''}<button class="btn btn--primary" data-wgo>Start exploring</button></div>
   </div>`;
   document.body.append(ov);
   let dispose = null, layer;
