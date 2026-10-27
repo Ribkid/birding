@@ -1,17 +1,16 @@
 // Stats page: life list growth, months, calendar heatmap, places, and the dex by kind and group.
 // The first visit in a session counts the totals up and fills each chart as it comes into view.
 // Ported from v1's js/statsview.js (renderStats); the styles are v1's, in screens.css.
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../../core/db.js';
 import { loadExtras } from '../../core/gallery.js';
-import { cachedIndex } from '../../core/media.js';
+import { cachedIndex, sized } from '../../core/media.js';
 import { MONTHS } from '../../core/stats.js';
-import { GROUPS, KINDS, SPECIES, byId, kindsPresent } from '../../lib/data';
-import { normaliseSighting, type Sighting } from '../../lib/hooks';
+import { GROUPS, KINDS, SPECIES, byId, kindsPresent, type Species } from '../../lib/data';
+import { normaliseSighting, useMedia, type Sighting } from '../../lib/hooks';
 import { countUp, motionOK } from '../../lib/motion';
 import { Icon } from '../../components/Icon';
-import { SpeciesImage } from '../../components/SpeciesImage';
 
 /** A sighting as stored in IndexedDB, with the fields this page reads beyond the shared facade type. */
 type StatSighting = Omit<Sighting, 'count'> & { count?: number | string | null; place?: string };
@@ -60,6 +59,75 @@ function useLoadedSightings(): StatSighting[] | null {
     };
   }, []);
   return rows;
+}
+
+// Photos already shown this session come back at full strength, so a redraw doesn't make them blink (v1 `shown`).
+const shown = new Set<string>();
+
+/**
+ * v1's birdImg(sp, 'small', '', { alt: '' }) for a Most logged row: the name is written beside the photo, so the
+ * photo is not read out. It fades in the first time it arrives (the row shimmers meanwhile), and when the photo
+ * index brings a better picture later, the photo already on screen stays until the new one has decoded
+ * (v1 settleImages and patchSpeciesImages). A photo that fails shows the striped no-photo block, as a species
+ * without a photo does; v1 left that row shimmering as if it were still loading.
+ */
+function Thumb({ sp }: { sp: Species }) {
+  useMedia();
+  const url = sized(sp.id, 'small') as string | null;
+  const [src, setSrc] = useState(url);
+  const [shownIn, setShownIn] = useState(() => !!url && shown.has(url));
+  const [missing, setMissing] = useState(false);
+  const ref = useRef<HTMLImageElement>(null);
+
+  useEffect(() => {
+    if (!url || url === src) return;
+    const el = ref.current;
+    if (!el || !el.complete || !el.naturalWidth) {
+      setSrc(url);
+      setShownIn(shown.has(url));
+      setMissing(false);
+      return;
+    }
+    let alive = true;
+    const next = new Image();
+    next.src = url;
+    next.decode().then(
+      () => {
+        if (!alive) return;
+        shown.add(url);
+        setSrc(url);
+      },
+      () => {},
+    );
+    return () => {
+      alive = false;
+    };
+  }, [url, src]);
+
+  // A photo that is already complete when drawn (memory cache) shows at once, with no fade.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || shownIn || !el.complete || !el.naturalWidth) return;
+    shown.add(el.getAttribute('src') || '');
+    setShownIn(true);
+  }, [src, shownIn]);
+
+  if (!src || missing) return <span className="img-missing" aria-hidden="true" />;
+  return (
+    <img
+      ref={ref}
+      className={`fade${shownIn ? ' in' : ''}`}
+      src={src}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      onLoad={() => {
+        shown.add(src);
+        setShownIn(true);
+      }}
+      onError={() => setMissing(true)}
+    />
+  );
 }
 
 /** A total that counts up from zero on the first visit and simply shows its value after that. */
@@ -331,9 +399,8 @@ function StatsBody({ sightings, play }: { sightings: StatSighting[]; play: boole
               return (
                 <li key={id}>
                   <Link className="row" to={`/bird/${id}`} data-tile={id}>
-                    {/* The name is written beside the photo, so the photo is not read out twice (v1: alt=""). */}
-                    <span className="row-thumb" aria-hidden="true">
-                      <SpeciesImage sp={sp} />
+                    <span className="row-thumb">
+                      <Thumb sp={sp} />
                     </span>
                     <span className="row-main">
                       <strong>{sp.name}</strong>
