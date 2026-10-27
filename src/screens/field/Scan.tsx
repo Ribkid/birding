@@ -33,7 +33,8 @@ function boxPct(photo: Chosen, b: Box) {
   return { left: `${(b.cx * photo.W - side / 2) / photo.W * 100}%`, top: `${(b.cy * photo.H - side / 2) / photo.H * 100}%`, width: `${side / photo.W * 100}%`, height: `${side / photo.H * 100}%` };
 }
 function clampBox(photo: Chosen, b: Box): Box {
-  const s = Math.min(1, Math.max(0.08, b.s));
+  const min = Math.min(1, Math.max(0.08, 24 / shortOf(photo)));
+  const s = Math.min(1, Math.max(min, b.s));
   const hw = s * shortOf(photo) / (2 * photo.W), hh = s * shortOf(photo) / (2 * photo.H);
   return { s, cx: Math.min(Math.max(b.cx, hw), 1 - hw), cy: Math.min(Math.max(b.cy, hh), 1 - hh) };
 }
