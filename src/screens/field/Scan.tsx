@@ -9,11 +9,11 @@ import {
   scanRefs, logScan, markChosen,
 } from '../../core/scan.js';
 import { setPending } from './scanHandoff';
+import { KEEP_MS, S, resetScan, type ScanBox, type ScanPhoto } from './scanSession';
 import './scan.css';
 
-const KEEP_MS = 30 * 60 * 1000;
-interface Chosen { file: File; blob: Blob; url: string; W: number; H: number }
-interface Box { cx: number; cy: number; s: number }
+type Chosen = ScanPhoto;
+type Box = ScanBox;
 
 const shortOf = (p: Chosen) => Math.min(p.W, p.H);
 function boxPct(photo: Chosen, b: Box) {
@@ -30,28 +30,28 @@ export default function Scan() {
   const navigate = useNavigate();
   const seen = useSeen();
   const [info, setInfo] = useState<any>(null);
-  const [photo, setPhoto] = useState<Chosen | null>(null);
-  const [box, setBox] = useState<Box>({ cx: 0.5, cy: 0.5, s: 0.75 });
-  const [whole, setWhole] = useState(false);
-  const [kind, setKind] = useState('');
+  const [photo, setPhoto] = useState<Chosen | null>(S.photo);
+  const [box, setBox] = useState<Box>(S.box);
+  const [whole, setWhole] = useState(S.whole);
+  const [kind, setKind] = useState(S.kind);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [progress, setProgress] = useState<{ phase: 'model' | 'view'; frac: number; index?: number; count?: number } | null>(null);
-  const [result, setResult] = useState<(ScanResult & { whole: boolean; kind: string }) | null>(null);
-  const [logAt, setLogAt] = useState<number | null>(null);
-  const [yours, setYours] = useState('');
+  const [result, setResult] = useState<(ScanResult & { whole: boolean; kind: string }) | null>(S.result as (ScanResult & { whole: boolean; kind: string }) | null);
+  const [logAt, setLogAt] = useState<number | null>(S.logAt);
+  const [yours, setYours] = useState(S.yours);
   const [error, setError] = useState('');
   const [needsReload, setNeedsReload] = useState(false);
-  const [at, setAt] = useState(0);
+  const [at, setAt] = useState(S.at);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ mode: 'move' | 'resize'; id: number; start: { x: number; y: number; cx: number; cy: number; s: number } } | null>(null);
   const picks = useRef(0);
   const currentFile = useRef<File | null>(null);
   const identifyRun = useRef(0);
-  const photoRef = useRef<Chosen | null>(null);
-
-  useEffect(() => { photoRef.current = photo; }, [photo]);
-  useEffect(() => () => { if (photoRef.current?.url) URL.revokeObjectURL(photoRef.current.url); }, []);
+  useEffect(() => {
+    S.at = at; S.photo = photo; S.box = box; S.whole = whole; S.kind = kind;
+    S.result = result; S.logAt = logAt; S.yours = yours;
+  }, [at, photo, box, whole, kind, result, logAt, yours]);
 
   const covered: string[] = info?.kinds?.filter((k: string) => KINDS[k]) || [];
   const multi = covered.length > 1;
@@ -61,7 +61,10 @@ export default function Scan() {
     : 'Find out what you photographed, right on your phone.';
 
   useEffect(() => {
-    if (at && Date.now() - at > KEEP_MS) { setPhoto(null); setResult(null); setAt(0); }
+    if (S.at && Date.now() - S.at > KEEP_MS) {
+      resetScan();
+      setPhoto(null); setBox(S.box); setWhole(false); setResult(null); setLogAt(null); setYours(''); setAt(0);
+    }
     void photoIdInfo().then((i: any) => setInfo(i));
   }, []);
 
