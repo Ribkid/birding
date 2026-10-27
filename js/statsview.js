@@ -1,6 +1,10 @@
-// Stats page: life list growth, months, calendar heatmap, places.
-import { byId, SPECIES } from './species.js';
+// Stats page: life list growth, months, calendar heatmap, places, and the dex by kind and group.
+// The first visit in a session counts the totals up and fills each chart as it comes into view.
+import { byId, SPECIES, KINDS, kindsPresent } from './species.js';
 import { MONTHS } from './stats.js';
+
+let played = false, io = null;
+const ring = p => `<svg class="ring" viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-track" cx="18" cy="18" r="15"/><circle class="ring-fill" cx="18" cy="18" r="15" pathLength="100" style="--off:${(100 - Math.min(1, p) * 100).toFixed(1)}${p ? '' : ';visibility:hidden'}"/></svg>`;
 
 export function renderStats(ctx) {
   const { view, esc, icon, state, fmtDate, plural } = ctx;
@@ -27,23 +31,35 @@ export function renderStats(ctx) {
   const freq = new Map(); S.forEach(s => freq.set(s.speciesId, (freq.get(s.speciesId) || 0) + 1));
   const topBirds = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-  view.innerHTML = `
+  const play = !played && 'IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fmt = n => n.toLocaleString('en-AU');
+  view.innerHTML = `<div class="stats-page${play ? ' stats-play' : ''}">
     <header class="page-head page-head--back"><a class="iconbtn" href="#/lists" aria-label="Back to lists">${icon.back}</a><h1>Stats</h1></header>
     <div class="statgrid">
-      <div><b>${seen.size}</b><span>species</span></div>
-      <div><b>${S.length}</b><span>sightings</span></div>
-      <div><b>${individuals.toLocaleString('en-AU')}</b><span>birds counted</span></div>
-      <div><b>${perDay.size}</b><span>days out</span></div>
+      <div><b data-n="${seen.size}">${fmt(seen.size)}</b><span>species</span></div>
+      <div><b data-n="${S.length}">${fmt(S.length)}</b><span>sightings</span></div>
+      <div><b data-n="${individuals}">${fmt(individuals)}</b><span>individuals counted</span></div>
+      <div><b data-n="${perDay.size}">${fmt(perDay.size)}</b><span>days out</span></div>
     </div>
     ${S.length ? '' : '<p class="empty-inline pad-x">Charts appear here once there are a few sightings.</p>'}
     <section class="block"><h2 class="h2">Life list growth</h2>${growthChart(growth)}</section>
     <section class="block"><h2 class="h2">Species each month in ${year}</h2>${monthBars(perMonth.map(s => s.size), now.getMonth())}</section>
-    <section class="block"><h2 class="h2">Birding days</h2><p class="small muted">The last 26 weeks. Darker squares mean more species that day.</p>${heatmap(perDay, now)}
+    <section class="block"><h2 class="h2">Days out</h2><p class="small muted">The last 26 weeks. Darker squares mean more species that day.</p>${heatmap(perDay, now)}
       ${bestDay ? `<p class="small">Best day: <strong>${bestDay[1].size} species</strong> on ${fmtDate(bestDay[0])}.</p>` : ''}</section>
     ${topPlaces.length ? `<section class="block"><h2 class="h2">Top places</h2><ul class="spots">${topPlaces.map(([p, set]) => `<li><span>${esc(p)}</span><span class="num">${set.size}</span></li>`).join('')}</ul></section>` : ''}
-    ${topBirds.length ? `<section class="block"><h2 class="h2">Most logged</h2><ul class="spots">${topBirds.map(([id, n]) => `<li><a href="#/bird/${id}">${esc(byId.get(id)?.name)}</a><span class="num">${n}</span></li>`).join('')}</ul></section>` : ''}
-    <section class="block"><h2 class="h2">Dex progress by group</h2>${groupBars(ctx, seen)}</section>`;
+    ${topBirds.length ? `<section class="block"><h2 class="h2">Most logged</h2><ul class="rows">${topBirds.filter(([id]) => byId.get(id)).map(([id, n]) => `<li><a class="row" href="#/bird/${id}" data-tile="${id}"><span class="row-thumb">${ctx.birdImg(byId.get(id), 'small', '', { alt: '' })}</span><span class="row-main"><strong>${esc(byId.get(id).name)}</strong></span><span class="num">${n}<span class="sr-only"> ${n === 1 ? 'sighting' : 'sightings'}</span></span></a></li>`).join('')}</ul></section>` : ''}
+    <section class="block"><h2 class="h2">Dex progress by group</h2>${groupBars(ctx, seen)}</section></div>`;
   view.onclick = null; view.onchange = null;
+  if (!play) return;
+  played = true;
+  view.querySelectorAll('.statgrid b').forEach((b, i) => ctx.countUp(b, 0, Number(b.dataset.n), { delay: 120 + i * 80, format: fmt }));
+  io?.disconnect();
+  io = new IntersectionObserver(ens => ens.forEach(en => {
+    if (!en.isIntersecting) return;
+    en.target.classList.add('is-in');
+    io.unobserve(en.target);
+  }), { rootMargin: '0px 0px -10% 0px' });
+  view.querySelectorAll('.stats-page .block').forEach(el => io.observe(el));
 }
 
 function growthChart(growth) {
@@ -60,7 +76,7 @@ function growthChart(growth) {
     <text x="${P - 6}" y="${y(max) + 4}" text-anchor="end" class="lbl">${max}</text>
     <text x="${P - 6}" y="${H - 16}" text-anchor="end" class="lbl">0</text>
     <path d="${d} L${x(growth[growth.length - 1][0])},${H - 20} L${x(growth[0][0])},${H - 20} Z" class="area"/>
-    <path d="${d}" class="line"/>
+    <path d="${d}" class="line" pathLength="1"/>
     <text x="${P}" y="${H - 4}" class="lbl">${short(growth[0][0])}</text>
     <text x="${W - 8}" y="${H - 4}" text-anchor="end" class="lbl">${short(growth[growth.length - 1][0])}</text>
   </svg>`;
@@ -69,7 +85,7 @@ const short = d => { const [y, m] = d.split('-'); return `${MONTHS[Number(m) - 1
 
 function monthBars(vals, cur) {
   const max = Math.max(1, ...vals);
-  return `<div class="season season--tall" role="img" aria-label="Species per month">${vals.map((v, i) => `<i class="${i === cur ? 'now' : ''}" style="height:${Math.max(2, v / max * 100)}%" title="${MONTHS[i]}: ${v}"><em>${v || ''}</em></i>`).join('')}</div>
+  return `<div class="season season--tall" role="img" aria-label="Species per month">${vals.map((v, i) => `<i class="${i === cur ? 'now' : ''}" style="height:${Math.max(2, v / max * 100)}%;--i:${i}" title="${MONTHS[i]}: ${v}"><em>${v || ''}</em></i>`).join('')}</div>
     <div class="season-labels" aria-hidden="true">${[...'JFMAMJJASOND'].map(c => `<span>${c}</span>`).join('')}</div>`;
 }
 
@@ -84,11 +100,19 @@ function heatmap(perDay, now) {
     const n = perDay.get(k)?.size || 0;
     days.push(`<i style="--v:${n ? 0.25 + 0.75 * n / max : 0}" title="${k}: ${n} species"></i>`);
   }
-  return `<div class="heat" role="img" aria-label="Calendar of birding days">${days.join('')}</div>`;
+  return `<div class="heat" role="img" aria-label="Calendar of days out">${days.join('')}</div>`;
 }
 
+// Groups sit under their kind, each kind with its own tally, so 18 bird groups and 26 others don't run together.
 function groupBars(ctx, seen) {
-  const groups = {};
-  for (const s of SPECIES) { (groups[s.group] ||= { n: 0, got: 0 }); groups[s.group].n++; if (seen.has(s.id)) groups[s.group].got++; }
-  return `<ul class="gbars">${Object.entries(groups).map(([g, v]) => `<li><span>${ctx.GROUPS[g]}</span><span class="meter meter--thin" style="--p:${Math.round(v.got / v.n * 100)}%"><span></span></span><span class="num">${v.got}/${v.n}</span></li>`).join('')}</ul>`;
+  const kinds = kindsPresent.length > 1;
+  return kindsPresent.map(k => {
+    const all = SPECIES.filter(s => s.kind === k);
+    const got = all.filter(s => seen.has(s.id)).length;
+    const groups = {};
+    for (const s of all) { (groups[s.group] ||= { n: 0, got: 0 }); groups[s.group].n++; if (seen.has(s.id)) groups[s.group].got++; }
+    return `<div class="gkind kind--${k}">
+      ${kinds ? `<h3 class="gkind-h">${ring(got / all.length)}<span>${KINDS[k].label}</span><span class="num"><span aria-hidden="true">${got}/${all.length}</span><span class="sr-only">${got} of ${all.length} seen</span></span></h3>` : ''}
+      <ul class="gbars">${Object.entries(groups).map(([g, v], i) => `<li><span>${ctx.esc(ctx.GROUPS[g])}</span><span class="meter meter--thin" style="--p:${Math.round(v.got / v.n * 100)}%;--s:${(v.got / v.n).toFixed(3)};--i:${i}"><span></span></span><span class="num">${v.got}/${v.n}</span></li>`).join('')}</ul></div>`;
+  }).join('');
 }

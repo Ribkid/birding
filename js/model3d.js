@@ -253,6 +253,8 @@ export function mountBird(container, sp) {
   return () => {
     cancelAnimationFrame(raf);
     scene.traverse(o => { o.geometry?.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); });
+    // Give the WebGL context back now rather than at garbage collection, or browsing many species runs out of them.
+    renderer.forceContextLoss();
     renderer.dispose();
     el.remove();
   };

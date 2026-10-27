@@ -236,6 +236,12 @@ export async function renderLearn(ctx, sub = '', arg = '') {
   if (game && game.route !== hash) game = null;
   if (sub === 'daily') return renderDaily(ctx);
   if (sub === 'deck') return renderDeck(ctx);
+  if (sub === 'test') {
+    const id = Number(arg);
+    if (!byId.has(id)) return toHub();
+    if (game?.testId === id) return game.done ? drawResults(ctx) : drawQuestion(ctx);
+    return startRound(ctx, 'quick', { ids: testSet(id), testId: id });
+  }
   if (sub === 'play' && Q.MODES.includes(arg)) {
     if (game && !game.daily && !game.deck) return game.done ? drawResults(ctx) : drawQuestion(ctx);
     return startRound(ctx, arg);
@@ -243,6 +249,15 @@ export async function renderLearn(ctx, sub = '', arg = '') {
   return renderHub(ctx);
 }
 const toHub = () => location.replace('#/learn');
+
+// 'Test me on this' (species pages, #/learn/test/<id>): a short round on one species and the ones it gets mixed up
+// with, curated look-alikes first, every wrong answer a close match.
+export function testSet(id) {
+  const sp = byId.get(id);
+  if (!sp) return [];
+  const near = Q.pickDistractors(sp, { difficulty: 'hard', n: 4, rng: () => 0.5, pool: ofKind(sp.kind) }).map(s => s.id);
+  return [...new Set([id, ...Q.lookalikesOf(id), ...near])].slice(0, 5);
+}
 
 // ---------- hub ----------
 const MODE_INFO = {
@@ -345,7 +360,7 @@ function emptyMessage(mode, p, offline) {
   if (mode === 'call') return 'No calls for these. Calls are for birds and frogs.';
   return 'Not enough species match that choice. Try a wider one.';
 }
-async function startRound(ctx, mode, { ids = null } = {}) {
+async function startRound(ctx, mode, { ids = null, testId = null } = {}) {
   const p = L.prefs, month = new Date().getMonth() + 1;
   const route = location.hash;
   let offline = null, playMode = mode;
@@ -363,10 +378,10 @@ async function startRound(ctx, mode, { ids = null } = {}) {
       return toHub();
     }
   }
-  const qs = Q.buildRound({ mode: playMode, kind: p.kind, scope: ids ? 'all' : p.scope, difficulty: mode === 'rapid' ? 'normal' : p.difficulty,
+  const qs = Q.buildRound({ mode: playMode, kind: p.kind, scope: ids ? 'all' : p.scope, difficulty: testId ? 'hard' : mode === 'rapid' ? 'normal' : p.difficulty,
     seen: ctx.seenSet(), month, n: mode === 'rapid' ? 60 : ids ? Math.min(ROUND, ids.length) : ROUND, ids, offline });
   if (qs.length < (ids ? 1 : 3)) { ctx.toast(emptyMessage(mode, p, !!offline)); return toHub(); }
-  game = { route, mode, qs, i: 0, score: 0, prefs: { ...p }, practice: !!ids };
+  game = { route, mode, qs, i: 0, score: 0, prefs: { ...p }, practice: !!ids, testId };
   if (mode === 'rapid') Object.assign(game, { endsAt: Date.now() + RAPID_MS, streak: 0, top: 0 });
   drawQuestion(ctx);
 }
@@ -384,7 +399,7 @@ function headHTML() {
   return `<header class="lq-head"><button class="iconbtn" data-quit aria-label="${game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'}">${game.daily ? I.back : I.close}</button>
     <span class="lq-bar" role="progressbar" aria-label="Question ${n} of ${total}" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${n}"><span style="transform:scaleX(${((n - 1) / total).toFixed(3)})"></span></span>
     <span class="lq-count" aria-hidden="true">${n}<span>/${total}</span></span></header>
-    <p class="lq-kicker">${game.daily ? "Today's challenge" : esc(MODE_INFO[game.mode]?.[0] || '')}${game.practice ? '<span>The ones you missed</span>' : ''}</p>`;
+    <p class="lq-kicker">${game.daily ? "Today's challenge" : game.testId ? 'Test me' : esc(MODE_INFO[game.mode]?.[0] || '')}${game.testId ? `<span>${esc(byId.get(game.testId).name)} and its look-alikes</span>` : game.practice ? '<span>The ones you missed</span>' : ''}</p>`;
 }
 function optionsHTML(q) {
   if (q.type === 'duel') {
@@ -578,13 +593,14 @@ function drawResults(ctx) {
   const big = game.mode === 'rapid' ? game.top : game.score;
   const of = game.mode === 'rapid' ? 'in a row' : `of ${total}`;
   view.innerHTML = `<div class="lr">
-    <header class="page-head"><h1 class="lh-title" tabindex="-1">${game.daily ? "Today's challenge" : esc(MODE_INFO[game.mode][0])}</h1></header>
+    <header class="page-head"><h1 class="lh-title" tabindex="-1">${game.daily ? "Today's challenge" : game.testId ? 'Test me' : esc(MODE_INFO[game.mode][0])}</h1></header>
     <div class="lr-score ${reduced() ? 'no-anim' : ''}" role="status"><b>${big}</b><span>${esc(of)}</span></div>
     <p class="lr-note">${esc(note)}</p>
     <div class="lr-actions">
       ${missed.length && !game.daily ? `<button class="btn btn--primary btn--block" data-again-missed>Practise ${missed.length === 1 ? 'the one' : missed.length > ROUND ? `${ROUND} of the ${missed.length}` : `the ${missed.length}`} you missed</button>` : ''}
       ${game.daily ? '<a class="btn btn--primary btn--block" href="#/learn">Back to Learn</a>' : `<button class="btn ${missed.length ? '' : 'btn--primary'} btn--block" data-again>Play again</button>`}
       ${game.daily && missed.some(x => x.type !== 'fact') ? '<a class="btn btn--block" href="#/learn/deck">Review the ones you missed</a>' : ''}
+      ${game.testId ? `<a class="btn btn--quiet btn--block" href="#/bird/${game.testId}">Back to the ${esc(byId.get(game.testId).name)}</a>` : ''}
       ${game.daily ? '' : '<button class="btn btn--quiet btn--block" data-hub>Back to Learn</button>'}
     </div>
     ${game.mode === 'rapid' && missed.length ? '<h2 class="lr-h">The ones you missed</h2>' : ''}
@@ -598,7 +614,7 @@ function drawResults(ctx) {
   </div>`;
   focusHead(view, had);
   view.onclick = e => {
-    if (e.target.closest('[data-again]')) { game = null; startRound(ctx, ROUTE_MODE()); }
+    if (e.target.closest('[data-again]')) { const t = game.testId; game = null; startRound(ctx, t ? 'quick' : ROUTE_MODE(), t ? { ids: testSet(t), testId: t } : {}); }
     if (e.target.closest('[data-again-missed]')) {
       const ids = [...new Set(missed.map(q => q.focus))].slice(0, ROUND);
       const mode = game.mode === 'rapid' ? 'photo' : game.mode;
