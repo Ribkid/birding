@@ -40,8 +40,9 @@ export function lookAfterDraw(view) {
   // Colour from the species photo on screen; cleared on every other screen so it never leaks.
   for (const k of ['--tint', '--tint-deep', '--tint-soft', '--tint-soft-dark', '--tint-ink-dark']) view.style.removeProperty(k);
   view.classList.remove('tinted');
-  const heroImg = $('.bird-hero img.whole-fg, .bird-hero .slide img, [data-hero] img', view);
-  if (heroImg?.src) applyTint(view, heroImg.currentSrc || heroImg.src);
+  const heroImgs = [...view.querySelectorAll('.bird-hero img.whole-fg, .bird-hero .slide img, [data-hero-frame] img')];
+  const heroImg = heroImgs.find(i => readable(i.currentSrc || i.src || ''));
+  if (heroImg) applyTint(view, heroImg.currentSrc || heroImg.src);
   // Screens with their own top controls (the dex's sticky search, the map's search bar) keep them instead.
   const own = $('.dex-tools, .mapwrap, [data-own-topbar]', view);
   const target = own ? null : hero || h1;
@@ -56,8 +57,11 @@ export function lookAfterDraw(view) {
 
 // ---------- colour from a photo ----------
 const tints = new Map();
+// Only hosts that send CORS headers can be read back from a canvas; asking any other host logs an error.
+const READABLE = /^(https:\/\/(upload|thumb)\.wikimedia\.org\/|https:\/\/inaturalist-open-data\.s3\.amazonaws\.com\/|blob:|data:)/;
+const readable = url => READABLE.test(url) || url.startsWith(location.origin);
 export function tintFrom(url) {
-  if (!url) return Promise.resolve(null);
+  if (!url || !readable(url)) return Promise.resolve(null);
   if (tints.has(url)) return tints.get(url);
   const p = new Promise(resolve => {
     const img = new Image();
