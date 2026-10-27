@@ -1,42 +1,46 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <title>Sarah's BirdyDex</title>
-  <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#4A8AE6"/><stop offset="1" stop-color="#1650B4"/>
-    </linearGradient>
-    <linearGradient id="breast" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFD84A"/><stop offset="1" stop-color="#F2B90C"/>
-    </linearGradient>
-    <clipPath id="badge"><rect width="512" height="512" rx="116"/></clipPath>
-    <clipPath id="body"><path d="M196 312c0-78 64-136 140-130 64 5 106 52 104 112-2 74-66 128-142 126-58-2-102-44-102-108z"/></clipPath>
-  </defs>
-  <g clip-path="url(#badge)">
-    <rect width="512" height="512" fill="url(#sky)"/>
-    <circle cx="410" cy="96" r="150" fill="#ffffff" opacity=".08"/>
-    <!-- trunk -->
-    <path d="M58 -10h104l-8 540H50z" fill="#5B3D2A"/>
-    <path d="M86 20c-6 60 6 120-4 180M120 60c8 70-6 130 4 210M92 280c-8 60 8 120-2 230M130 330c6 50-4 110 2 180" stroke="#3E2A1C" stroke-width="9" fill="none" stroke-linecap="round"/>
-    <!-- tail -->
-    <path d="M214 352l-62 92 22 12 70-82z" fill="#5F646B"/>
-    <!-- body: grey back, yellow breast -->
-    <g clip-path="url(#body)">
-      <rect x="180" y="170" width="280" height="260" fill="#8A8F96"/>
-      <path d="M270 222c66-10 138 4 186 40v190H250c-30-60-24-150 20-230z" fill="url(#breast)"/>
-      <path d="M216 360c10 20 26 34 46 42l-10 30h-60z" fill="#C9C42E"/>
-    </g>
-    <!-- wing -->
-    <path d="M206 300c18-52 70-84 120-74-18 50-60 92-112 112-10-10-12-24-8-38z" fill="#6A6F76"/>
-    <path d="M226 318c22-28 52-48 82-58" stroke="#565B62" stroke-width="7" fill="none" stroke-linecap="round"/>
-    <!-- head -->
-    <circle cx="374" cy="196" r="64" fill="#8A8F96"/>
-    <path d="M412 226c10 6 20 6 28 2-6 10-16 16-28 14z" fill="#B9BDC1"/>
-    <path d="M434 192l40 10-40 12z" fill="#1A1A1A"/>
-    <circle cx="396" cy="186" r="11" fill="#141414"/>
-    <circle cx="400" cy="182" r="3.5" fill="#fff"/>
-    <!-- feet gripping the trunk -->
-    <path d="M262 382l-104 14M272 394l-112 34" stroke="#2B2B2B" stroke-width="9" stroke-linecap="round"/>
-    <!-- leg band -->
-    <rect x="200" y="380" width="30" height="18" rx="4" transform="rotate(-8 215 389)" fill="#DCE0E3" stroke="#2B2B2B" stroke-width="3"/>
-  </g>
-  <rect x="6" y="6" width="500" height="500" rx="110" fill="none" stroke="#ffffff" stroke-opacity=".25" stroke-width="6"/>
+<title>BirdyDex</title>
+<defs>
+  <linearGradient id="band" x1="0" y1="97.1" x2="0" y2="414.2" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#90b577"/>
+    <stop offset="0.347" stop-color="#7ca97b"/>
+    <stop offset="0.714" stop-color="#57957b"/>
+    <stop offset="1" stop-color="#468b79"/>
+  </linearGradient>
+</defs>
+<!-- field: sky and hills (edges tucked under the rings) -->
+<path fill="#c6e3d3" d="M133.3 49.9L433.8 49.9L433.8 371.5L283.6 469.5L133.3 371.5Z"/>
+<path fill="#dfecd8" d="M133.3 49.9L433.8 49.9L433.8 176.1L397.3 176.1L345.5 220.1L267.9 220.1L133.3 161.8Z"/>
+<path fill="#707e6d" d="M133.3 268.7L201.4 327L163.3 391L133.3 371.5Z"/>
+<path fill="#b3996e" d="M232.4 364.5L227.1 432.7L176.4 399.6Z"/>
+<path fill="#ad8663" d="M233.3 353.1L257.7 342L380 406.6L283.6 469.5L227.1 432.7Z"/>
+<path fill="#cbac79" d="M247.6 346.6L257.7 342L380 406.6L335.8 435.5A376.3 376.3 0 0 1 247.6 346.6Z"/>
+<path fill="#c29f6a" d="M308.3 368.7L433.8 298.9L433.8 371.5L380 406.6Z"/>
+<path fill="#cdad78" d="M308.3 368.7L433.8 298.9L433.8 317.3L316.5 373.1Z"/>
+<path fill="#224d40" d="M124.1 267.5L198.1 330.8L204.6 323.2L130.7 259.9ZM255.4 346.4L384.5 414.6L389.2 405.9L260.1 337.7ZM227.1 364.1L221.2 440L231.8 440.9L237.7 364.9Z"/>
+<!-- shield: white, dark and gradient rings -->
+<path fill="#ffffff" fill-rule="evenodd" d="M138.3 78.4A23.5 23.5 0 0 1 161.8 54.9L405.4 54.9A23.5 23.5 0 0 1 428.9 78.4L428.9 346.9A40.3 40.3 0 0 1 410.6 380.7L301.7 451.8A33.2 33.2 0 0 1 265.4 451.8L156.6 380.7A40.3 40.3 0 0 1 138.3 346.9ZM148.7 78.4A13.1 13.1 0 0 1 161.8 65.3L405.4 65.3A13.1 13.1 0 0 1 418.4 78.4L418.4 346.9A29.9 29.9 0 0 1 404.9 372L296 443A22.8 22.8 0 0 1 271.1 443L162.3 372A29.9 29.9 0 0 1 148.7 346.9Z"/>
+<path fill="#224d40" fill-rule="evenodd" d="M126.3 78.4A35.5 35.5 0 0 1 161.8 42.8L405.4 42.8A35.5 35.5 0 0 1 440.9 78.4L440.9 346.9A52.4 52.4 0 0 1 417.2 390.8L308.3 461.8A45.2 45.2 0 0 1 258.9 461.8L150 390.8A52.4 52.4 0 0 1 126.3 346.9ZM139.3 78.4A22.5 22.5 0 0 1 161.8 55.9L405.4 55.9A22.5 22.5 0 0 1 427.8 78.4L427.8 346.9A39.3 39.3 0 0 1 410 379.8L301.2 450.9A32.2 32.2 0 0 1 266 450.9L157.1 379.8A39.3 39.3 0 0 1 139.3 346.9Z"/>
+<path fill="url(#band)" fill-rule="evenodd" d="M114.2 78.4A47.6 47.6 0 0 1 161.8 30.7L405.4 30.7A47.6 47.6 0 0 1 453 78.4L453 346.9A64.5 64.5 0 0 1 423.8 400.9L314.9 472A57.3 57.3 0 0 1 252.2 472L143.4 400.9A64.5 64.5 0 0 1 114.2 346.9ZM127.3 78.4A34.5 34.5 0 0 1 161.8 43.9L405.4 43.9A34.5 34.5 0 0 1 439.9 78.4L439.9 346.9A51.3 51.3 0 0 1 416.6 389.9L307.7 461A44.2 44.2 0 0 1 259.4 461L150.6 389.9A51.3 51.3 0 0 1 127.3 346.9Z"/>
+<!-- bird: dark silhouette, then facets inset by the outline widths -->
+<path fill="#224d40" d="M367.9 277.1A58.9 58.9 0 0 1 335.9 312.2L238.3 356.4L237.5 367.3L131.7 433.7L224.1 278.3L45.3 106.5L172.8 130.9L161.8 63.5L175.5 63.5L272.4 148L302.5 192.4L330.7 158.1A50.3 50.3 0 0 1 380.1 140.8A40.8 40.8 0 0 1 402.6 154.2L466.7 178.3L394 197.9Z"/>
+<path fill="#429281" d="M174.3 78.5L173.7 75.1L256.2 146.9L201 136.3Z"/>
+<path fill="#3a8174" d="M183.2 132.9L173.7 75.1L173.9 75.2L202.2 136.6Z"/>
+<path fill="#3f9280" d="M221.9 261.6L151 193.5L193.7 180L242.6 205.2Z"/>
+<path fill="#83ac77" d="M151.8 194.3L77.1 122.5L82 123.5L195 180.6Z"/>
+<path fill="#81ab65" d="M192.3 180.4L259 157.5L260.1 157.7L242.2 206.2Z"/>
+<path fill="#acce90" d="M78.3 122.8L260.1 157.7L259.9 158.3L193.6 181.1Z"/>
+<path fill="#42866f" d="M230.7 266.7L251.2 211.1L334.4 263.5L338.6 269.2Z"/>
+<path fill="#81a964" d="M250.8 212.1L266.4 169.7L336 265.7Z"/>
+<path fill="#accf96" d="M266 170.9L269.3 162L342.1 269.3L337.3 269.2Z"/>
+<path fill="#83c7ae" d="M328.7 230.9L308.7 201.5L338.8 164.8A39.8 39.8 0 0 1 377.9 151.1A30.3 30.3 0 0 1 394.7 161.2L385.1 190.3Z"/>
+<path fill="#d2ac7a" d="M354.9 269.6L328.1 230.1L385.6 188.6L358.8 269.7Z"/>
+<path fill="#d0aa77" d="M403.6 165.5L433.5 176.7L429.7 177.8L399.6 177.6Z"/>
+<path fill="#b39367" d="M433.5 176.7L396.6 186.7L399.9 176.6Z"/>
+<path fill="#409381" d="M239.2 344.8L243.4 290.9L296 290.9L243.7 342.8Z"/>
+<path fill="#367d71" d="M243.3 292L244.5 276.5L309 278L294.9 292Z"/>
+<path fill="#be966a" d="M355.9 279.1A48.9 48.9 0 0 1 331.6 302.9L241 344L307.6 278Z"/>
+<path fill="#8f9964" d="M233 287.5L227.3 361.8L193.1 383.2Z"/>
+<path fill="#c6b37f" d="M162.9 402.1L233.3 283.8L232.7 290.8L194.6 382.3Z"/>
+<path fill="#224d40" d="M362.2 169.5A7.7 7.7 0 0 1 377.6 169.5A7.7 7.7 0 0 1 362.2 169.5Z"/>
 </svg>
