@@ -61,11 +61,13 @@ function Options({ q, picked, onPick, rapid, round }: { q: QuizQuestion; picked:
       <div className={`lq-duel${n > 2 ? ' lq-duel--four' : ''}`}>
         {q.options.map((o, i) => {
           const cls = disabled ? (o.key === q.answer ? ' is-right' : o.key === picked ? ' is-wrong' : ' is-dim') : '';
+          const suffix = disabled ? (o.key === q.answer ? ' (right answer)' : o.key === picked ? ' (your answer)' : '') : '';
           return (
-            <button key={o.key} type="button" className={`lq-side${cls}`} data-pick={o.key} disabled={disabled} aria-label={q.named ? o.label : SIDES[n]?.[i] || `Photo ${i + 1}`} onClick={() => onPick(o.key)}>
+            <button key={o.key} type="button" className={`lq-side${cls}`} data-pick={o.key} aria-disabled={disabled || undefined} aria-label={`${q.named ? o.label : SIDES[n]?.[i] || `Photo ${i + 1}`}${suffix}`} onClick={() => onPick(o.key)}>
               <PhotoBox key={`${round}-${o.key}`} photos={o.photos} alt="" cls="lq-photo lq-photo--duel" missing="Photo not saved on this phone" />
               <span className="lq-side-name" data-name>{q.named ? o.label : ''}</span>
               <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24">{QI.cross}</svg> : null}</span>
+              <span className="sr-only">{suffix}</span>
             </button>
           );
         })}
@@ -76,10 +78,12 @@ function Options({ q, picked, onPick, rapid, round }: { q: QuizQuestion; picked:
     <div className={`lq-options${rapid ? ' lq-options--grid' : ''}`} role="group" aria-label="Answers">
       {q.options.map((o) => {
         const cls = disabled ? (o.key === q.answer ? ' is-right' : o.key === picked ? ' is-wrong' : ' is-dim') : '';
+        const suffix = disabled ? (o.key === q.answer ? ' (right answer)' : o.key === picked ? ' (your answer)' : '') : '';
         return (
-          <button key={o.key} type="button" className={`lq-opt${cls}`} data-pick={o.key} disabled={disabled} onClick={() => onPick(o.key)}>
+          <button key={o.key} type="button" className={`lq-opt${cls}`} data-pick={o.key} aria-disabled={disabled || undefined} onClick={() => onPick(o.key)}>
             <span className={`lq-opt-label${q.italic ? ' is-sci' : ''}`}>{o.label}</span>
             <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24">{QI.cross}</svg> : null}</span>
+            <span className="sr-only">{suffix}</span>
           </button>
         );
       })}
@@ -107,8 +111,16 @@ function Feedback({ q, right, game, onNext, onPlay }: {
   const line = q.explain || (cw ? cw.sentence : Q.fieldMark(ans));
   const mark = q.type === 'odd' ? Q.fieldMark(ans) : '';
   const last = game.i + 1 >= game.qs.length;
+  const fbRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = fbRef.current;
+    if (!el) return;
+    el.focus({ preventScroll: true });
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' }));
+  }, []);
   return (
-    <div className={`lq-fb ${right ? 'is-right' : 'is-wrong'}`} data-fb tabIndex={-1}>
+    <div ref={fbRef} className={`lq-fb ${right ? 'is-right' : 'is-wrong'}`} data-fb tabIndex={-1}>
       <p className="lq-verdict"><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{verdictText}</span></p>
       {speciesQ && <p className="lq-name"><Link to={`/bird/${ans.id}`}>{ans.name}</Link> <span className="lq-sci">{ans.sci}</span></p>}
       {(q.type === 'call' || q.type === 'whoami') && q.photos?.length ? <PhotoBox photos={q.photos} alt={ans.name} cls="lq-photo lq-photo--answer" /> : null}
@@ -137,9 +149,11 @@ function Results({ game, total, onAgain, onAgainMissed, onHub }: {
   const note = roundNote(game, total);
   const wrongs = game.mode === 'rapid' ? missed.slice(0, 15) : missed;
   const roundName = game.daily ? "Today's challenge" : game.testId ? 'Test me' : game.pack ? packBy[game.pack]?.name : MODE_INFO[game.mode] || '';
+  const headRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { headRef.current?.focus({ preventScroll: true }); }, []);
   return (
     <div className="lr">
-      <header className="page-head"><h1 className="lh-title" tabIndex={-1}>{roundName}</h1></header>
+      <header className="page-head"><h1 ref={headRef} className="lh-title" tabIndex={-1}>{roundName}</h1></header>
       <section className="lr-hero" aria-label="Your score">
         <div className="lr-ring">
           <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" pathLength="100" /><circle className={`lr-ring-fg${frac > 0 ? '' : ' is-zero'}`} cx="60" cy="60" r="52" pathLength="100" style={{ strokeDashoffset: 100 - frac * 100 }} /></svg>
@@ -214,6 +228,8 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const [quickCall, setQuickCall] = useState<CallClip | null>(null);
   useMedia();
   const startRef = useRef(0);
+  const promptRef = useRef<HTMLHeadingElement>(null);
+  const wantHeadFocus = useRef(false);
 
   const isDeck = pack === 'deck';
   const isDaily = pack === 'daily';
@@ -275,8 +291,16 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     finish();
   }, [game, isOver, finish]);
 
+  useEffect(() => {
+    if (wantHeadFocus.current) {
+      promptRef.current?.focus({ preventScroll: true });
+      wantHeadFocus.current = false;
+    }
+  }, [game?.i]);
+
   // These must be declared before any early return: the results screen calls them.
   const restart = async () => {
+    wantHeadFocus.current = true;
     stopCalls();
     setGame(null);
     setError('');
@@ -293,6 +317,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
   };
   const startWithIds = async (ids: number[]) => {
+    wantHeadFocus.current = true;
     stopCalls();
     setQuickCall(null);
     await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
@@ -311,6 +336,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   };
   const next = () => {
     if (!game) return;
+    wantHeadFocus.current = true;
     stopCalls();
     setQuickCall(null);
     game.i += 1;
@@ -325,7 +351,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (game.mode === 'rapid') {
       const g = game;
       window.setTimeout(() => {
-        if (g.qs[g.i] === q) { g.i += 1; setRevealed(false); force(); }
+        if (g.qs[g.i] === q) { wantHeadFocus.current = true; g.i += 1; setRevealed(false); force(); }
       }, ok ? 450 : 1100);
     }
     force();
@@ -380,7 +406,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       {game.mode === 'rapid' && <p className="lq-hud" role="status"><span>In a row <b>{game.streak || 0}</b></span><span>Best this round <b>{game.top || 0}</b></span></p>}
       <p className="lq-kicker">{roundName}{game.testId ? <span>{speciesName(game.testId)} and its look-alikes</span> : game.practice ? <span>The ones you missed</span> : game.pack ? <span>Quiz pack</span> : null}</p>
       <div className={`lq lq--${q.type}`}>
-        <h1 className="lq-prompt" tabIndex={-1}>{promptFor(q)}</h1>
+        <h1 ref={promptRef} className="lq-prompt" tabIndex={-1}>{promptFor(q)}</h1>
         {sub && <p className="lq-sub">{sub}</p>}
         {safety && <p className="lq-safety"><svg viewBox="0 0 24 24">{QI.warn}</svg><span>{safety}</span></p>}
         <Media key={game.i} q={q} />
@@ -401,10 +427,12 @@ function Deck({ onBack }: { onBack: () => void }) {
   const [game, setGame] = useState<RoundState | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [toast, setToast] = useState('');
+  const backRef = useRef<HTMLDivElement>(null);
   const sightings = useSightings();
   useMedia();
 
   useEffect(() => { void learnReady().then(() => { setReady(true); force(); }); }, []);
+  useEffect(() => { if (revealed) backRef.current?.focus({ preventScroll: true }); }, [revealed]);
   const due = ready ? dueCards() : [];
   const cards = ready ? allCards() : [];
   const boxN = ready ? boxes() : [0, 0, 0, 0, 0];
@@ -462,7 +490,7 @@ function Deck({ onBack }: { onBack: () => void }) {
           {c.skill === 'call' ? <CallPlayer key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} call={(Q.callsOf(sp.id) as CallClip[])[0]} seed={sp.id} /> : <PhotoBox key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} photos={photos} alt={`Mystery ${KINDS[sp.kind]?.one}`} missing={`This photo needs a connection. Its field notes: ${Q.blankNotes(sp)}`} />}
           {!revealed && <button type="button" className="btn btn--primary btn--block" onClick={() => setRevealed(true)}>Show the answer</button>}
           {revealed && (
-            <div className="ld-back" tabIndex={-1}>
+            <div ref={backRef} className="ld-back" tabIndex={-1}>
               <p className="ld-name"><Link to={`/bird/${sp.id}`}>{sp.name}</Link></p>
               <p className="lq-sci">{sp.sci}{sp.kind !== 'bird' ? <> <span className={`kindtag kind--${sp.kind}`}>{KINDS[sp.kind]?.one}</span></> : null}</p>
               <ul className="ld-marks">{Q.fieldMarks(sp, 3).map((s: string, i: number) => <li key={i}>{s}</li>)}{cw && c.skill === 'call' ? <li>Listen for "{cw.words}".</li> : null}</ul>
