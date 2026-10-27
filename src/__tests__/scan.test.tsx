@@ -96,6 +96,19 @@ describe('Scan', () => {
     expect({ left: box.style.left, top: box.style.top, width: box.style.width, height: box.style.height }).toEqual(at);
   });
 
+  it('neither logs nor shows a run that finishes after leaving Scan (new 6)', async () => {
+    let finish!: (value: typeof LIKELY) => void;
+    vi.mocked(scan.identifyScan).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const { unmount } = mount();
+    fireEvent.click(identifyButton());
+    await waitFor(() => expect(scan.identifyScan).toHaveBeenCalled());
+    unmount();
+    finish(LIKELY);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(scan.logScan).not.toHaveBeenCalled();
+    expect(S.result).toBeNull();
+  });
+
   it('puts the Change photo icon beside its label, as v1 does (new 5)', () => {
     mount();
     const chip = document.querySelector('.scan-change') as HTMLElement;

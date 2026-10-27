@@ -76,6 +76,12 @@ export default function Scan() {
   // This one → Cancel) brings its file back with it, so Identify works without picking the photo again.
   const currentFile = useRef<File | null>(S.photo?.file ?? null);
   const identifyRun = useRef(0);
+  // False once the person has left Scan: a run that finishes after that is neither shown nor logged (v1 checks the hash).
+  const onScan = useRef(true);
+  useEffect(() => {
+    onScan.current = true;
+    return () => { onScan.current = false; };
+  }, []);
   useEffect(() => {
     S.at = at; S.photo = photo; S.box = box; S.whole = whole; S.kind = kind;
     S.result = result; S.logAt = logAt; S.yours = yours;
@@ -183,6 +189,8 @@ export default function Scan() {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     requestAnimationFrame(() => workRef.current?.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' }));
     const MB = photoModelMb();
+    // Stop quietly when another photo or run took over, or the person left Scan.
+    const stale = () => !onScan.current || currentFile.current !== file || run !== identifyRun.current;
     try {
       const cached = await modelCached();
       if (!cached) {
@@ -190,7 +198,7 @@ export default function Scan() {
         setStatus(`Getting photo ID ready: a one-time download of about ${MB} MB. Wi-Fi is best.`);
         let said = 0;
         await ensureModel((f: number) => {
-          if (currentFile.current !== file || run !== identifyRun.current) return;
+          if (stale()) return;
           setProgress({ phase: 'model', frac: f });
           const quarter = Math.floor(f * 4) / 4;
           if (quarter > said && f < 1) {
@@ -201,19 +209,19 @@ export default function Scan() {
       } else {
         await ensureModel();
       }
-      if (currentFile.current !== file || run !== identifyRun.current) return;
+      if (stale()) return;
       setProgress(null);
       const month = new Date(file.lastModified || Date.now()).getMonth() + 1;
       const { res } = await identifyScan(file, {
         crop: cropFractions(), kinds: kind ? [kind] : null, month,
         onProgress: (x: any) => {
-          if (currentFile.current !== file || run !== identifyRun.current) return;
+          if (stale()) return;
           if (x.phase === 'view') { setProgress({ phase: 'view', frac: 0, index: x.index, count: x.count }); setStatus(`Looking closely, ${x.index} of ${x.count}`); }
         },
       } as any);
-      if (currentFile.current !== file || run !== identifyRun.current) return;
+      if (stale()) return;
       const logged = await logScan(res);
-      if (currentFile.current !== file || run !== identifyRun.current) return;
+      if (stale()) return;
       setResult({ ...res, whole, kind });
       setLogAt(logged);
       setYours(makeYours(photo, box, whole));
@@ -221,13 +229,13 @@ export default function Scan() {
       setRise(true);
       setStatus('');
     } catch (err: any) {
-      if (currentFile.current !== file || run !== identifyRun.current) return;
+      if (stale()) return;
       const raw = String(err?.message || err);
       const importFailed = /dynamically imported module|Importing a module script failed|module script failed/i.test(raw);
       // Only a new release makes a reload help. A module that is just not saved yet (offline) needs the network,
       // which is v1's message for a failed fetch.
       const updated = importFailed && await releaseChanged();
-      if (currentFile.current !== file || run !== identifyRun.current) return;
+      if (stale()) return;
       if (updated) {
         setError('BirdyDex was updated. Reload to use Scan.');
         setNeedsReload(true);
