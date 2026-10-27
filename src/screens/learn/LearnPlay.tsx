@@ -260,9 +260,16 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         setActive(r.game);
         return;
       }
+      const testId = pack === 'test' ? Number(params.id) : null;
+      if (pack === 'test' && (!testId || !byId.has(testId))) {
+        navigate('/learn', { replace: true });
+        return;
+      }
       const seenNow = new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId));
       if (!alive) return;
-      const r = await newPracticeRound(pack, { seen: seenNow } as any);
+      const r = testId
+        ? await newPracticeRound('quick', { ids: testSet(testId), testId, seen: seenNow } as any)
+        : await newPracticeRound(pack, { seen: seenNow } as any);
       if (!alive) return;
       if (r.error) { setError(r.error); return; }
       setGame(r.game);
@@ -320,9 +327,16 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     setError('');
     setQuickCall(null);
     await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
-    const r = isDaily ? newDailyRound() : await newPracticeRound(pack, {
-      seen: new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId)),
-    } as any);
+    const testId = pack === 'test' ? Number(params.id) : null;
+    const r = isDaily ? newDailyRound() : testId
+      ? await newPracticeRound('quick', {
+        ids: testSet(testId),
+        testId,
+        seen: new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId)),
+      } as any)
+      : await newPracticeRound(pack, {
+        seen: new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId)),
+      } as any);
     if (r.error) {
       setError(r.error);
       return;
@@ -336,7 +350,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     stopCalls();
     setQuickCall(null);
     await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
-    const mode = game?.mode === 'rapid' ? 'photo' : pack;
+    const mode = game?.mode === 'rapid' ? 'photo' : pack === 'test' ? 'quick' : pack;
     const r = await newPracticeRound(mode, {
       ids,
       seen: new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId)),

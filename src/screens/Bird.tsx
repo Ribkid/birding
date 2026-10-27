@@ -5,6 +5,7 @@ import { useSightings } from '../lib/hooks';
 import { galleryFor, infoFor } from '../core/gallery.js';
 import { localCallsNow, loadCallPack, calls as fetchCalls, audioUrl } from '../core/media.js';
 import { lookalikesOf, tellFor } from '../core/quiz.js';
+import { learnReady, masteryOf } from '../core/learn.js';
 import { Icon } from '../components/Icon';
 import { Pips, SpeciesImage } from '../components/SpeciesImage';
 import './species.css';
@@ -18,6 +19,7 @@ export default function Bird() {
   const [clips, setClips] = useState<Clip[]>([]);
   const [playing, setPlaying] = useState(-1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [, forceLearn] = useState(0);
 
   const mine = useMemo(
     () =>
@@ -26,6 +28,12 @@ export default function Bird() {
         .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)),
     [sightings, sp?.id],
   );
+
+  useEffect(() => {
+    let alive = true;
+    learnReady().then(() => { if (alive) forceLearn((n) => n + 1); }).catch(() => {});
+    return () => { alive = false; };
+  }, [sp?.id]);
 
   useEffect(() => {
     if (!sp || !['bird', 'frog'].includes(sp.kind)) return;
@@ -71,6 +79,7 @@ export default function Bird() {
 
   const info = infoFor(sp.id) as { text?: string; status?: string; sources?: { title: string; url: string }[] } | null;
   const gallery = galleryFor(sp.id) as { src: string; credit?: string; license?: string; page?: string }[];
+  const mastery = masteryOf(sp.id);
   const similar = SPECIES.filter((s) => s.id !== sp.id && s.group === sp.group).slice(0, 4);
   const lookalikes = lookalikesOf(sp.id).map((n: number) => byId.get(n)).filter(Boolean) as typeof SPECIES;
 
@@ -126,6 +135,13 @@ export default function Bird() {
             </div>
           )}
         </dl>
+
+        <div className="bird-sum">
+          <span className="rarity-line"><Pips rarity={sp.rarity} /> {RARITY[sp.rarity]?.label}</span>
+          <span data-mastery>{mastery >= 1 ? <span className="mastery mastery--done"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>Learnt</span> : mastery > 0 ? <span className="mastery"><i style={{ '--p': Math.round(mastery * 100) } as React.CSSProperties} aria-hidden="true" />Learning</span> : null}</span>
+        </div>
+
+        <Link className="btn spot-test" to={`/learn/test/${sp.id}`}><Icon name="grid" /><span>Test me on this</span></Link>
 
         {info?.status && <p className="small muted">Conservation: {info.status}</p>}
 
