@@ -119,7 +119,7 @@
 
 /* ---------- the sheet ---------- */
 .bird .bird-body {
-  position: relative; z-index: 1; margin-top: -24px; padding: var(--sp-5) var(--sp-4) calc(var(--sp-7) + 24px);
+  position: relative; z-index: 1; margin-top: -24px; padding: var(--sp-5) var(--sp-4) calc(var(--sp-5) + 72px); /* room for the Log bar at the end */
   background: var(--paper); border-radius: 28px 28px 0 0;
 }
 .bird .bird-sum { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-4); }
@@ -149,6 +149,7 @@
 .bird .spot-marks li::before { background: var(--accent); }
 .bird .spot-call { background: var(--surface); box-shadow: none; border-radius: var(--r-2); }
 .bird .spot .facts div { border-top-color: color-mix(in srgb, var(--accent) 24%, transparent); }
+.bird .spot .facts div:last-child:nth-child(odd) { grid-column: 1 / -1; } /* the group name gets the full width */
 .bird .spot-hab li { background: var(--surface); }
 .bird .spot-hab .spot-hab--night { background: var(--ink); color: var(--paper); }
 .bird .spot-test { box-shadow: none; background: var(--surface); }
@@ -229,7 +230,7 @@
 .bird .pn:not(.kind--bird) .pn-ph { box-shadow: 0 0 0 2px var(--kc); }
 .bird .pn-txt { display: grid; min-width: 0; line-height: 1.2; }
 .bird .pn-no { font: 800 var(--fs-2)/1.1 var(--stamp); letter-spacing: .05em; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.bird .pn-txt strong { font-size: var(--fs-2); font-weight: 700; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.bird .pn-txt strong { font-size: var(--fs-2); font-weight: 700; overflow-wrap: anywhere; }
 
 /* ---------- sticky Log bar: glass, above the floating tab bar (and above the outing bar when one shows) ---------- */
 .bird .logbar {
