@@ -17,6 +17,7 @@ const CALLS = 'birddex-calls';
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
 const PHOTO_LIMIT = 400;
+const NAV_WAIT = 4000;
 const TILE_LIMIT = 3000;
 const PRECACHE = __PRECACHE__;
 
@@ -181,32 +182,39 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       (async () => {
-        try {
-          const fresh = await fetch(request);
+        const navFetch = fetch(request);
+        // A slow answer still refreshes the shell, but never holds the launch open.
+        event.waitUntil(navFetch.then(async (fresh) => {
           if (fresh.ok && (fresh.headers.get('content-type') || '').includes('text/html')) {
             const isApp = url.pathname === '/' || url.pathname === '/index.html';
             if (!isApp) {
               // Privacy, terms and error pages belong under their own URL, never as the app shell.
-              event.waitUntil(caches.open(SHELL).then((cache) => cache.put(request, fresh.clone())).catch(() => {}));
+              const cache = await caches.open(SHELL);
+              await cache.put(request, fresh.clone()).catch(() => {});
             } else {
               // A captive portal can answer with HTML; only store a real BirdyDex shell.
               const body = await fresh.clone().text();
               if (body.includes('<div id="root">')) {
-                event.waitUntil(caches.open(SHELL).then((cache) => cache.put('/index.html', fresh.clone())).catch(() => {}));
+                const cache = await caches.open(SHELL);
+                await cache.put('/index.html', fresh.clone()).catch(() => {});
               }
             }
           }
-          return fresh;
-        } catch {
-          return (
-            (await caches.match(request, MATCH)) ||
-            (await caches.match('/index.html', MATCH)) ||
-            new Response('<h1>Offline</h1><p>BirdyDex has not been opened online yet.</p>', {
-              status: 503,
-              headers: { 'Content-Type': 'text/html; charset=utf-8' },
-            })
-          );
-        }
+        }).catch(() => {}));
+
+        const timer = new Promise((resolve) => setTimeout(() => resolve(null), NAV_WAIT));
+        const first = await Promise.race([navFetch.catch(() => null), timer]);
+        if (first) return first;
+
+        const cached = (await caches.match(request, MATCH)) || (await caches.match('/index.html', MATCH));
+        if (cached) return cached;
+
+        const late = await navFetch.catch(() => null);
+        if (late) return late;
+        return new Response('<h1>Offline</h1><p>BirdyDex has not been opened online yet.</p>', {
+          status: 503,
+          headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        });
       })(),
     );
     return;
