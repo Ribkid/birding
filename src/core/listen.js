@@ -17,7 +17,11 @@ export function loadListenModel(onProgress) {
   readyP = new Promise((resolve, reject) => {
     const url = `${BASE}js/birdnet-worker.js?tf=${encodeURIComponent(BASE + 'vendor/tfjs/tf.min.js')}&root=${encodeURIComponent(BASE + 'models')}&lang=en_uk`;
     worker = new Worker(url);
-    worker.onerror = e => reject(new Error(e.message || 'The sound model failed to load'));
+    // A failed load must not stick: drop the dead worker so the next Start tries again (e.g. back in signal).
+    worker.onerror = e => {
+      readyP = null; worker?.terminate(); worker = null;
+      reject(new Error(navigator.onLine === false ? 'Listen needs signal the first time. After that it works offline.' : (e.message || 'The sound model failed to load')));
+    };
     worker.onmessage = ({ data }) => {
       if (data.message === 'load_model') onProgress?.(data.progress, 'Downloading the sound model');
       else if (data.message === 'warmup') onProgress?.(75, 'Warming up');

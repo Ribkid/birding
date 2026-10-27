@@ -458,6 +458,17 @@ export const KINDS = {
 };
 export const ANIMAL_KINDS = ['bird', 'mammal', 'reptile', 'frog', 'butterfly'];
 
+// '1–2 m with tail' -> 150 cm, 'Wingspan to 16 cm' -> 16 cm (wingspan), 'Tree to 45 m' -> 4500 cm. Range midpoints.
+export function parseSize(text) {
+  const t = String(text ?? '');
+  const m = t.match(/(\d+(?:\.\d+)?)(?:\s*[–-]\s*(\d+(?:\.\d+)?))?\s*(mm|cm|m)\b/i);
+  if (!m) return null;
+  const lo = Number(m[1]), hi = m[2] ? Number(m[2]) : lo;
+  const cm = ((lo + hi) / 2) * { mm: 0.1, cm: 1, m: 100 }[m[3].toLowerCase()];
+  const measure = /wingspan/i.test(t) ? 'wingspan' : /shell/i.test(t) ? 'shell' : /\bbody\b/i.test(t) ? 'body' : 'length';
+  return { cm: Math.round(cm * 10) / 10, measure };
+}
+
 const BIRDS_ = RAW.map((b, i) => ({
   id: i + 1,
   kind: 'bird',
@@ -466,6 +477,7 @@ const BIRDS_ = RAW.map((b, i) => ({
   group: b.g,
   habitats: b.h.split(''),
   size: b.size,
+  sizeCm: b.size,
   sizeText: `${b.size} cm`,
   rarity: b.r,
   season: b.s || null,
@@ -503,6 +515,7 @@ const OTHERS = extra.list
       group: g,
       habitats: String(x.h || '').split('').filter(c => HABITATS[c]),
       size: firstNumber(x.size),
+      sizeCm: parseSize(x.size)?.cm ?? null, // size is the bare first number; sizeCm knows m and mm
       sizeText: x.size ? String(x.size) : '',
       rarity: Number(extra.tiers?.[x.id]) || x.rarity || 3,
       season: x.season || null,

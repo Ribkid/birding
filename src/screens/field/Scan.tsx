@@ -262,10 +262,10 @@ export default function Scan() {
         setModelPhase('ready');
       }
       setStatus('Looking closely…');
-      const res = (await identifyPhoto(current.blob, {
-        crop: currentCrop.size < 1 ? boxRect(current, currentCrop) : undefined,
-        topK: 5,
-      })) as Candidate[];
+      const out = await identifyPhoto(current.blob, {
+        crop: currentCrop.size < 1 ? boxRect(current, currentCrop) : null,
+      });
+      const res = (out.results ?? []).map((r: { id: number; p: number }) => ({ id: r.id, score: r.p })) as Candidate[];
       if (!mountedRef.current || run !== runIdRef.current) return;
       setResults(res);
       const top = res[0]?.score ?? 0;

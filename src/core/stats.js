@@ -71,7 +71,7 @@ export function targets({ seen, month, habitat, score, rel, kinds = ['bird'] }) 
 // ---------- Badges ----------
 const placeKey = s => s.lat != null ? `${s.lat.toFixed(2)},${s.lng.toFixed(2)}` : (s.place || '').trim().toLowerCase();
 
-export function badges(sightings, outings) {
+export function badges(sightings, outings, learning = {}) {
   const life = speciesList(sightings);
   const seen = new Set(life.keys());
   const seenAll = [...seen].map(id => byId.get(id)).filter(Boolean);
@@ -109,18 +109,18 @@ export function badges(sightings, outings) {
 
   // Rarity
   add('scarce', 'Lucky find', 'See a scarce species', count(s => s.rarity >= 4), 1, 'rarity');
-  add('rare', 'Rare bird', 'See a rare species', count(s => s.rarity === 5), 1, 'rarity');
+  add('rare', 'Rare find', 'See a rare species', count(s => s.rarity === 5), 1, 'rarity');
   add('hunter', 'Rarity hunter', 'See 10 scarce or rare species', count(s => s.rarity >= 4), 10, 'rarity');
 
   // Habits
   add('photo', 'Snapshot', 'Add a photo to a sighting', photoSpecies.size, 1, 'habit');
   add('photo25', 'Portfolio', 'Photograph 25 different species', photoSpecies.size, 25, 'habit');
-  add('days7', 'Regular', 'Go birding on 7 different days', days.size, 7, 'habit');
-  add('days30', 'Devoted', 'Go birding on 30 different days', days.size, 30, 'habit');
-  add('places5', 'Wanderer', 'Log birds at 5 different places', places.size, 5, 'habit');
-  add('places20', 'Explorer', 'Log birds at 20 different places', places.size, 20, 'habit');
+  add('days7', 'Regular', 'Get out on 7 different days', days.size, 7, 'habit');
+  add('days30', 'Devoted', 'Get out on 30 different days', days.size, 30, 'habit');
+  add('places5', 'Wanderer', 'Log sightings at 5 different places', places.size, 5, 'habit');
+  add('places20', 'Explorer', 'Log sightings at 20 different places', places.size, 20, 'habit');
   add('outings10', 'Checklist habit', 'Finish 10 outings', completeOutings, 10, 'habit');
-  add('early', 'Dawn chorus', 'Log a bird before 6 am', early ? 1 : 0, 1, 'habit');
+  add('early', 'Dawn chorus', 'Log anything before 6 am', early ? 1 : 0, 1, 'habit');
   add('night', 'Night shift', 'See an animal that is active at night', count(s => s.nocturnal), 1, 'habit');
   add('night5', 'Night owl', 'See 5 night-active species', count(s => s.nocturnal), 5, 'habit');
   add('migrants', 'Summer arrivals', 'See 10 spring–summer visiting birds', count(s => s.kind === 'bird' && s.season === 's'), 10, 'habit');
@@ -142,6 +142,18 @@ export function badges(sightings, outings) {
     }
   }
 
+  // Learning (from learnStats() in js/learn.js). Callers that don't pass it simply see these as not earned yet.
+  const lv = k => Number(learning?.[k]) || 0;
+  add('learn-round', 'First round', 'Finish a practice round in Learn', lv('rounds'), 1, 'learning');
+  add('learn-daily', 'Daily habit', "Finish today's challenge", lv('dailyDone'), 1, 'learning');
+  add('learn-streak7', 'Seven-day streak', "Do today's challenge 7 days in a row", lv('bestStreak'), 7, 'learning');
+  add('learn-perfect', 'Perfect round', 'Get all 10 right in a round on Normal or Hard', lv('perfect'), 1, 'learning');
+  add('learn-packs5', 'Pack rat', 'Finish 5 different quiz packs', lv('packsDone'), 5, 'learning');
+  add('learn-sweep', 'Clean sweep', 'Get every question right in a quiz pack', lv('packPerfect'), 1, 'learning');
+  add('learn-duels20', 'Look-alike pro', 'Win 20 look-alike duels', lv('duelsWon'), 20, 'learning');
+  add('learn-calls10', 'Ear for it', 'Master 10 calls in the review deck', lv('callsMastered'), 10, 'learning');
+  add('learn-master25', 'Walking field guide', 'Master 25 species in the review deck', lv('mastered'), 25, 'learning');
+
   // Habitats
   for (const [code, label] of Object.entries(HABITATS)) {
     add(`hab-${code}`, label, `See 10 species of ${label.toLowerCase()}`, seenAll.filter(s => s.habitats.includes(code)).length, 10, 'habitat');
@@ -151,7 +163,7 @@ export function badges(sightings, outings) {
   for (const [g, label] of Object.entries(GROUPS)) {
     const total = SPECIES.filter(s => s.group === g).length;
     if (!total) continue;
-    add(`grp-${g}`, label, `See all ${total} ${label.toLowerCase()}`, seenAll.filter(s => s.group === g).length, total, 'group');
+    add(`grp-${g}`, label, total === 1 ? `See the ${label.toLowerCase()}` : `See all ${total} ${label.toLowerCase()}`, seenAll.filter(s => s.group === g).length, total, 'group');
   }
   return list;
 }
