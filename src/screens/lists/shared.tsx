@@ -11,6 +11,7 @@ import { MONTHS, targets } from '../../core/stats.js';
 import { byId, dexCode, SPECIES, type Species } from '../../lib/data';
 import { useOutings, useSeen, useSightings, type Outing, type Sighting } from '../../lib/hooks';
 import { Icon } from '../../components/Icon';
+import { nudgeAfterSave } from '../me/nudge';
 import { Band, SpeciesImage } from '../../components/SpeciesImage';
 import './lists.css';
 
@@ -184,13 +185,17 @@ export async function saveSighting(rec: SightingInput): Promise<number> {
   } catch {
     /* storage persistence is best effort */
   }
+  let id: number;
   if (rec.id != null) {
     await db.put('sightings', rec);
-    return rec.id;
+    id = rec.id;
+  } else {
+    rec.createdAt = rec.createdAt ?? Date.now();
+    id = Number(await db.add('sightings', rec));
+    rec.id = id;
   }
-  rec.createdAt = rec.createdAt ?? Date.now();
-  const id = Number(await db.add('sightings', rec));
-  rec.id = id;
+  const total = ((await db.all('sightings')) as unknown[]).length;
+  void nudgeAfterSave(total);
   return id;
 }
 
