@@ -8,6 +8,7 @@ import { loadSeq, seq, monthRates, likelihood, recordCount, spotsFor, pointsFor,
 import { openCard, confetti, shareCard } from './card3d.js';
 import { renderLearn, learnStats, learnReady } from './learn.js';
 import { renderStats } from './statsview.js';
+import { renderScan } from './scan.js';
 import { describeArea } from './mapinfo.js';
 import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
 
@@ -73,11 +74,12 @@ async function hydratePhotos(root = document) {
   }
 }
 async function resizeImage(file, max = 1600) {
-  const bmp = await createImageBitmap(file);
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }).catch(() => createImageBitmap(file));
   const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
-  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  const cx = c.getContext('2d'); cx.imageSmoothingQuality = 'high';
+  cx.drawImage(bmp, 0, 0, c.width, c.height);
   return new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
 }
 
@@ -525,7 +527,7 @@ function openPlusSheet() {
     <div class="plus-options">
       <div class="plus-id">
         <a class="plus-opt plus-opt--id" href="#/listen" data-close>${icon.mic}<strong>Listen</strong><span>Name birds by their calls</span></a>
-        <a class="plus-opt plus-opt--id" href="#/scan" data-close>${icon.scan}<strong>Scan a photo</strong><span>Name a bird from a picture</span></a>
+        <a class="plus-opt plus-opt--id" href="#/scan" data-close>${icon.scan}<strong>Scan a photo</strong><span>Name what you photographed</span></a>
       </div>
       <button class="plus-opt" data-one><strong>Log one bird</strong><span>A single sighting with photo, place and notes.</span></button>
       ${o ? `<button class="plus-opt" data-resume><strong>Back to your outing</strong><span>${esc(o.place || 'Current outing')}, started ${o.time}</span></button>`
@@ -685,7 +687,7 @@ const routes = [
   [/^#\/learn(?:\/(daily|deck|play)(?:\/(\w+))?)?$/, m => renderLearn(ctx, m[1], m[2])],
   [/^#\/quiz$/, () => location.replace('#/learn')],
   [/^#\/listen$/, () => renderListen()],
-  [/^#\/scan$/, () => renderScan()],
+  [/^#\/scan$/, () => renderScan(ctx)],
 ];
 let lastRoute = '';
 function render() {
@@ -808,7 +810,7 @@ function renderDex() {
       </div>
       <div class="id-buttons">
         <a class="idbtn" href="#/listen">${icon.mic}<span><strong>Listen</strong><em>ID by call</em></span></a>
-        <a class="idbtn" href="#/scan">${icon.scan}<span><strong>Scan</strong><em>ID from a photo</em></span></a>
+        <a class="idbtn" href="#/scan">${icon.scan}<span><strong>Scan a photo</strong><em>Name what you see</em></span></a>
       </div>
       ${birdOfDay(seen)}
       ${kindTabs}
@@ -2034,94 +2036,6 @@ function wireFrogBoard(pack, beforePlay) {
   };
 }
 
-// ---------- Scan (photo ID) ----------
-function renderScan() {
-  view.innerHTML = `
-    <header class="page-head page-head--back"><a class="iconbtn" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
-      <div><h1>Scan a bird</h1><p class="muted small">Take a photo or pick one, and BioCLIP suggests which dex bird it is.</p></div></header>
-    <div class="scan pad-x">
-      <label class="scan-drop" data-drop>
-        <input type="file" accept="image/*" data-file hidden>
-        <span class="scan-preview" data-pick>${icon.scan}<strong>Take or choose a photo</strong><em>Works best when the bird fills a good part of the frame</em></span>
-      </label>
-      <div class="crop hidden" data-cropwrap>
-        <div class="crop-stage" data-stage><img alt="Your photo" data-img><span class="crop-box" data-box></span></div>
-        <p class="small muted">Tap the bird so the box sits on it. A tight box gives much better answers for distant birds.</p>
-        <label class="field"><span>Box size</span><input type="range" min="15" max="100" value="100" data-size></label>
-        <div class="row-start"><button class="btn btn--primary" data-identify>Identify this bird</button><button class="btn" data-another>Use another photo</button></div>
-      </div>
-      <p class="small muted" data-sstatus></p>
-      <div class="meter meter--thin hidden" data-sprog style="--p:0%"><span></span></div>
-      <ul class="rows" data-results></ul>
-      <p class="small muted">Photo ID uses BioCLIP (Imageomics Institute, MIT licence) running on your phone. The first scan downloads the model (about 98 MB, best on Wi-Fi), then it works offline. In testing it named the right bird first about 6 times in 10, and 8 in 10 when it was very sure, so compare with the photos before you log.</p>
-    </div>`;
-  let blob = null, img = null;
-  const crop = { cx: 0.5, cy: 0.5, size: 1 };
-  const status = $('[data-sstatus]', view), prog = $('[data-sprog]', view), out = $('[data-results]', view);
-  const boxRect = () => {
-    const ar = img.naturalWidth / img.naturalHeight;
-    // square box measured against the short side
-    const w = ar >= 1 ? crop.size / ar : crop.size, h = ar >= 1 ? crop.size : crop.size * ar;
-    const x = Math.min(Math.max(crop.cx - w / 2, 0), 1 - w), y = Math.min(Math.max(crop.cy - h / 2, 0), 1 - h);
-    return { x, y, w, h };
-  };
-  const drawBox = () => {
-    const r = boxRect(), box = $('[data-box]', view);
-    Object.assign(box.style, { left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.w * 100}%`, height: `${r.h * 100}%` });
-  };
-  view.onchange = async e => {
-    if (e.target.matches('[data-file]')) {
-      const f = e.target.files?.[0]; if (!f) return;
-      blob = await resizeImage(f, 1600);
-      img = $('[data-img]', view);
-      img.src = URL.createObjectURL(blob);
-      await img.decode().catch(() => {});
-      Object.assign(crop, { cx: 0.5, cy: 0.5, size: 1 }); $('[data-size]', view).value = 100;
-      $('[data-drop]', view).classList.add('hidden');
-      $('[data-cropwrap]', view).classList.remove('hidden');
-      out.innerHTML = ''; status.textContent = '';
-      drawBox();
-    }
-  };
-  view.oninput = e => { if (e.target.matches('[data-size]')) { crop.size = e.target.value / 100; drawBox(); } };
-  view.onclick = async e => {
-    const stage = e.target.closest('[data-stage]');
-    if (stage && img) {
-      const r = img.getBoundingClientRect();
-      crop.cx = (e.clientX - r.left) / r.width; crop.cy = (e.clientY - r.top) / r.height;
-      if (crop.size === 1) { crop.size = 0.5; $('[data-size]', view).value = 50; }
-      drawBox();
-    }
-    if (e.target.closest('[data-another]')) { $('[data-file]', view).click(); }
-    const l = e.target.closest('[data-logscan]');
-    if (l) openSightingSheet({ speciesId: Number(l.dataset.logscan), autoGps: true, photoBlob: blob, notes: 'Identified from a photo with BioCLIP.' });
-    if (!e.target.closest('[data-identify]') || !blob) return;
-    out.innerHTML = '';
-    try {
-      const mod = await import('./photoid.js');
-      if (!(await mod.isPhotoModelCached())) {
-        prog.classList.remove('hidden');
-        status.textContent = `Downloading the photo model (about ${mod.PHOTO_MODEL_MB} MB)…`;
-      }
-      await mod.loadPhotoModel(p => { const pct = Math.round(p * 100); prog.style.setProperty('--p', `${pct}%`); status.textContent = `Downloading the photo model… ${pct}%`; });
-      prog.classList.add('hidden');
-      status.textContent = 'Looking closely…';
-      const res = await mod.identifyPhoto(blob, { crop: crop.size < 1 ? boxRect() : undefined, topK: 5 });
-      const top = res[0];
-      status.textContent = top.score >= 0.9 ? 'Strong match. Best guess first.' : top.score >= 0.4 ? 'Not certain. Compare the photos below.' : 'Not sure. It may not be one of the dex birds. Try a tighter box or a sharper photo.';
-      const seen = seenSet();
-      out.innerHTML = res.map(r => { const sp = byId.get(r.id); return `<li class="hit">
-        <a class="row-thumb" href="#/bird/${sp.id}">${birdImg(sp)}</a>
-        <span class="row-main"><strong>${esc(sp.name)}</strong><span class="small muted">${Math.round(r.score * 100)}% sure${seen.has(sp.id) ? '' : '. New for your dex!'}</span>
-        <span class="meter meter--thin" style="--p:${Math.round(r.score * 100)}%"><span></span></span></span>
-        <button class="btn btn--small" data-logscan="${sp.id}">Log it</button></li>`; }).join('');
-    } catch (err) {
-      prog.classList.add('hidden');
-      status.textContent = `Photo ID couldn't run here: ${err.message || err}`;
-    }
-  };
-}
-
 // ---------- theme, install, updates, welcome ----------
 function applyTheme() {
   const t = state.settings.theme || 'auto';
@@ -2173,6 +2087,7 @@ const ctx = {
   state, view, $, $$, esc, icon, birdImg, band, pips, toast, fmtDate, plural, GROUPS,
   seenSet, sightingsOf, openSightingSheet, getCalls, hasCalls, audioUrl,
   openSheet, closeSheet, confirmSheet, refresh: refreshFromSync,
+  resizeImage, openSearch,
 };
 
 // Data changed under us (cloud sync, sign in or out): reload, and redraw unless that would interrupt something.

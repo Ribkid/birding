@@ -62,4 +62,4 @@ Audience: Sarah, a keen amateur naturalist in Brisbane. Australian natives are t
 - URLs must load directly in an `<img>` from another site (hotlink-safe) and stay stable.
 
 ### Code (owner: integration helper)
-Everything under `js/`, `css/`, `index.html`, `sw.js`, `manifest.webmanifest`, `icons/`, `fonts/`, `scripts/`, `data/seq.json`, `data/bioclip-text.json`, `data/birdnet-map.json`.
+Everything under `js/`, `css/`, `index.html`, `sw.js`, `manifest.webmanifest`, `icons/`, `fonts/`, `scripts/`, `data/seq.json`, `data/photoid.json`, `data/photoid.bin`, `data/birdnet-map.json`.

@@ -1,19 +1,20 @@
 // Sarah's BirdyDex service worker.
 // App files: network first (so updates arrive straight away), cache when offline.
 // Bird photos, map tiles, the ID models and our call clips: cache first, so they work in the bush.
-const VERSION = 'v8-a';
+const VERSION = 'v8-b';
 const SHELL = `birddex-shell-${VERSION}`;
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
 const MODELS = 'birddex-models';
 const CALLS = 'birddex-calls';
 const ASSETS = [
-  './', 'index.html', 'css/app.css', 'css/learn.css', 'css/calls.css', 'manifest.webmanifest',
+  './', 'index.html', 'css/app.css', 'css/learn.css', 'css/calls.css', 'css/scan.css', 'manifest.webmanifest',
   'js/app.js', 'js/db.js', 'js/media.js', 'js/species.js', 'js/stats.js', 'js/ebird.js', 'js/seqdata.js',
-  'js/card3d.js', 'js/quiz.js', 'js/learn.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js', 'js/gallery.js',
+  'js/card3d.js', 'js/quiz.js', 'js/learn.js', 'js/mapinfo.js', 'js/statsview.js', 'js/palettes.js', 'js/model3d.js', 'js/listen.js', 'js/photoid.js', 'js/scan.js', 'js/gallery.js',
   'js/config.js', 'js/cloud.js', 'js/sync.js', 'js/account.js', 'vendor/supabase/supabase.js',
-  'data/bioclip-text.json', 'data/species-new.json', 'data/tiers.json', 'data/info.json', 'data/gallery.json',
+  'data/species-new.json', 'data/tiers.json', 'data/info.json', 'data/gallery.json',
   'data/seq.json', 'data/birdnet-map.json', 'data/lookalikes.json', 'data/calls.json',
+  'data/photoid.json', 'data/photoid.bin', 'models/bioclip/manifest.json',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css', 'vendor/three/three.module.min.js',
   'fonts/schibsted-grotesk-latin-400-normal.woff2', 'fonts/schibsted-grotesk-latin-400-italic.woff2',
   'fonts/schibsted-grotesk-latin-500-normal.woff2', 'fonts/schibsted-grotesk-latin-700-normal.woff2',
@@ -105,8 +106,13 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.origin === location.origin) {
-    // The photo model caches itself (js/photoid.js); don't keep a second copy here.
-    if (url.pathname.includes('/models/bioclip/')) return;
+    // The photo model's chunks are joined and cached by js/photoid.js; don't keep a second 87 MB copy here.
+    // Its small manifest goes network first, so photo ID still starts offline.
+    if (url.pathname.includes('/models/bioclip/')) {
+      if (url.pathname.endsWith('.bin')) return;
+      e.respondWith(networkFirst(req));
+      return;
+    }
     if (url.pathname.includes('/models/') || url.pathname.includes('/vendor/')) {
       e.respondWith(cacheFirst(req, MODELS));
       return;
