@@ -12,7 +12,7 @@ const VERSION = __VERSION__;
 const SHELL = 'birdydex-shell-' + VERSION;
 const RUNTIME = 'birdydex-runtime-v3';
 const PHOTOS = 'birdydex-photos-v3';
-const CALLS = 'birdydex-calls-v1';
+const CALLS = 'birddex-calls';
 const PHOTO_LIMIT = 400;
 const PRECACHE = __PRECACHE__;
 
@@ -72,11 +72,13 @@ async function cacheFirst(request, cacheName) {
 // range request, so the whole file is kept and the range is cut from it.
 async function callClip(request) {
   const cache = await caches.open(CALLS);
-  let res = await cache.match(request);
+  let res = await cache.match(request.url, MATCH);
   if (!res) {
-    res = await fetch(request);
-    if (!res.ok) return res;
-    await cache.put(request, res.clone()).catch(() => {});
+    // Fetch the whole file: forwarding the audio element's Range header returns a 206,
+    // and Cache Storage refuses to store partial responses.
+    res = await fetch(request.url);
+    if (!res.ok || res.status === 206) return res;
+    await cache.put(request.url, res.clone()).catch(() => {});
   }
   const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') || '');
   if (!range) return res;
