@@ -6,7 +6,7 @@ import { useStagger, CountUp } from '../../components/Motion';
 import { useTint } from '../../components/Motion';
 import * as Q from '../../core/quiz.js';
 import {
-  learnReady, getLearn, getDaily, learnStats, masteryOf, dueCards, boxes, currentStreak, setActive,
+  learnReady, getLearn, getDaily, learnStats, masteryOf, dueCards, allCards, boxes, currentStreak, setActive,
   dayStr, monthName, accuracyForKinds, packProgress, setPrefs, saveLearn, kindLabel,
   packs as PACKS, isMastered, bestKey, ROUND,
 } from '../../core/learn.js';
@@ -64,7 +64,8 @@ export default function Learn() {
   const D = getDaily();
   const today = dayStr();
   const streak = ready ? currentStreak() : 0;
-  const cards = ready ? dueCards() : [];
+  const cards = ready ? allCards() : [];
+  const due = ready ? dueCards().length : 0;
   const boxN = ready ? boxes() : [0, 0, 0, 0, 0];
   const date = new Date();
   const picks = D?.today?.date === today ? D.today.picks : [];
@@ -225,14 +226,14 @@ export default function Learn() {
         <section className="lh-sec" aria-labelledby="lh-deck-h">
           <div className="lh-sec-h"><h2 id="lh-deck-h">Review deck</h2><Link to="/learn/deck">{cards.length ? 'Open' : 'Set up'}</Link></div>
           {cards.length ? (
-            <Link className={`lh-deck${cards.length ? ' is-due' : ''}`} to="/learn/deck">
+            <Link className={`lh-deck${due ? ' is-due' : ''}`} to="/learn/deck" aria-label={`${due} ${due === 1 ? 'card' : 'cards'} due. Open the review deck`}>
               <span className="lh-boxes" aria-hidden="true">
                 {boxN.map((n, i) => {
                   const max = Math.max(1, ...boxN);
                   return <span className="lh-box" key={i}><b>{n}</b><span className="lh-box-bar"><i style={{ '--h': (n / max).toFixed(3), '--j': i } as React.CSSProperties} /></span><em>{i + 1}</em></span>;
                 })}
               </span>
-              <span className="lh-deck-txt"><strong>{cards.length ? `${cards.length} ${cards.length === 1 ? 'card' : 'cards'} to review` : 'Nothing due right now'}</strong><span className="small muted">Know a card and it moves along a box. Box 4 and 5 count as mastered.</span></span>
+              <span className="lh-deck-txt"><strong>{due ? `${due} ${due === 1 ? 'card' : 'cards'} to review` : 'Nothing due right now'}</strong><span className="small muted">Know a card and it moves along a box. Box 4 and 5 count as mastered.</span></span>
             </Link>
           ) : <p className="small muted lh-empty">Species you miss in a round land here, so they come back until you know them. You can also add a set yourself.</p>}
         </section>
