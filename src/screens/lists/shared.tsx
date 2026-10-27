@@ -508,6 +508,57 @@ export function buildSighting(
   return { rec };
 }
 
+/** An object URL for a photo blob, revoked when the blob changes or the form closes. */
+export function useObjectUrl(blob: Blob | null): string {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    if (!blob) {
+      setUrl('');
+      return;
+    }
+    const next = URL.createObjectURL(blob);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [blob]);
+  return url;
+}
+
+interface PhotoFieldProps {
+  /** The photo's preview URL, or '' when the sighting has none. */
+  url: string;
+  onPick: (file: File) => void;
+  onRemove: () => void;
+}
+
+/** v1's photo field: a 72 px thumbnail, Add photo or Replace photo, and Remove. */
+export function PhotoField({ url, onPick, onRemove }: PhotoFieldProps) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="photo-field">
+      <div className="photo-preview">{url ? <img src={url} alt="Your photo" /> : null}</div>
+      <button type="button" className="btn" onClick={() => input.current?.click()}>
+        <Icon name="cam" /> <span>{url ? 'Replace photo' : 'Add photo'}</span>
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (file) onPick(file);
+        }}
+      />
+      {url ? (
+        <button type="button" className="btn btn--quiet" onClick={onRemove}>
+          Remove
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 interface SightingFieldsProps {
   draft: SightingDraft;
   onChange: (next: SightingDraft) => void;
@@ -515,6 +566,8 @@ interface SightingFieldsProps {
   onLocate?: () => void;
   locating?: boolean;
   error?: string;
+  /** The photo field, shown after Where as in v1's sheet. */
+  photo?: ReactNode;
 }
 
 /** The shared fields for adding or editing a sighting. */
@@ -525,6 +578,7 @@ export function SightingFields({
   onLocate,
   locating = false,
   error,
+  photo,
 }: SightingFieldsProps) {
   const update = (patch: Partial<SightingDraft>) => onChange({ ...draft, ...patch });
   const step = (delta: number) => {
@@ -643,6 +697,8 @@ export function SightingFields({
           </label>
         </div>
       </fieldset>
+
+      {photo}
 
       <label className="field">
         <span>Note (optional)</span>

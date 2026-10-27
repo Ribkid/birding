@@ -192,8 +192,10 @@ export async function squareJpeg(img, sx, sy, side) {
   throw new Error('That photo is too large. Try another one.');
 }
 
+// v1 app.js resizeImage: at most maxEdge px on the long side, upright, JPEG 0.82. Null when the file isn't a photo.
 export async function resizeImage(file, maxEdge = 1600) {
-  const bmp = await createImageBitmap(file).catch(() => null);
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
+    .catch(() => createImageBitmap(file)).catch(() => null);
   if (!bmp) return null;
   try {
     const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
@@ -202,7 +204,7 @@ export async function resizeImage(file, maxEdge = 1600) {
     const cx = c.getContext('2d');
     cx.imageSmoothingQuality = 'high';
     cx.drawImage(bmp, 0, 0, w, h);
-    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.85));
+    const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.82));
     return blob;
   } finally { bmp.close?.(); }
 }
