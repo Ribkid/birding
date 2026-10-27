@@ -26,6 +26,33 @@ const PRECACHE = __PRECACHE__;
 // lookup misses and the (offline) network fallback fails.
 const MATCH = { ignoreVary: true };
 
+const isHtml = (res) => (res.headers.get('content-type') || '').includes('text/html');
+
+// Keep the worker alive until `promise` settles. waitUntil throws once the event is over and nothing
+// else is pending; the work itself still runs.
+function waitFor(event, promise) {
+  try {
+    event.waitUntil(promise);
+  } catch {}
+}
+
+// Returns a step for fetch(...).then() that stores a good answer under `key` and hands the answer on.
+// The copy is cloned at once: once the answer has gone back to respondWith its body is being read,
+// and clone() throws. An HTML answer is the host's fallback page for a missing file, so it is not
+// kept. Caches with a limit are trimmed now and then, as v1 does.
+function keep(event, cacheName, key, limit = 0) {
+  return (res) => {
+    if (res.ok && !isHtml(res)) {
+      const copy = res.clone();
+      waitFor(event, caches.open(cacheName)
+        .then((cache) => cache.put(key, copy))
+        .then(() => (limit && Math.random() < 0.02 ? trim(cacheName, limit) : undefined))
+        .catch(() => {}));
+    }
+    return res;
+  };
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
@@ -94,59 +121,43 @@ async function trim(cacheName, limit) {
   for (const key of keys.slice(0, keys.length - limit)) await cache.delete(key);
 }
 
-async function cacheFirst(request, cacheName, event) {
+// Cache first: any saved copy, else the network, keeping a good answer in `cacheName`.
+async function cacheFirst(event, cacheName, limit = 0) {
+  const { request } = event;
   const hit = await caches.match(request, MATCH);
   if (hit) return hit;
-  const res = await fetch(request);
-  if (res.ok) {
-    const put = caches.open(cacheName).then((cache) => cache.put(request, res.clone())).catch(() => {});
-    if (event) event.waitUntil(put);
-    else await put;
-  }
-  return res;
+  return fetch(request).then(keep(event, cacheName, request.url, limit));
 }
 
-// Cross-origin photos and map tiles. Ask for a CORS response so Cache Storage can keep it;
-// fall back to the original request when the host will not allow that.
-async function cacheFirstCross(request, cacheName, event, limit) {
-  const hit = await caches.match(request, MATCH);
+// Cross-origin photos and map tiles, as v1 does. Ask for a CORS response so Cache Storage can keep
+// it, saved under the plain URL so src/core/quiz.js and Settings find it. When the host refuses
+// CORS, answer with the original request and keep nothing.
+async function cacheFirstCross(event, cacheName, limit = 0) {
+  const { request } = event;
+  const hit = await caches.match(request.url, MATCH);
   if (hit) return hit;
   let res;
   try {
     res = await fetch(new Request(request.url, { mode: 'cors', credentials: 'omit' }));
   } catch {
-    res = await fetch(request);
+    return fetch(request);
   }
-  if (res.ok) {
-    const work = caches.open(cacheName)
-      .then((cache) => cache.put(request, res.clone()))
-      .then(() => (limit ? trim(cacheName, limit) : undefined))
-      .catch(() => {});
-    if (event) event.waitUntil(work);
-    else await work;
-  }
-  return res;
+  return keep(event, cacheName, request.url, limit)(res);
 }
 
 // Worker scripts and /js/ files: try the network briefly, then this release's shell.
-async function networkFirstScript(request, ms = 2500) {
-  const net = fetch(request)
-    .then((res) => {
-      if (res.ok) {
-        const put = caches.open(SHELL).then((cache) => cache.put(request, res.clone())).catch(() => {});
-        void put;
-      }
-      return res;
-    })
-    .catch(() => null);
+async function networkFirstScript(event, ms = 2500) {
+  const { request } = event;
+  const net = fetch(request).then(keep(event, SHELL, request.url));
+  waitFor(event, net.catch(() => {}));
   const timer = new Promise((resolve) => setTimeout(() => resolve(null), ms));
-  const first = await Promise.race([net, timer]);
+  const first = await Promise.race([net.catch(() => null), timer]);
   if (first) return first;
   const own = await (await caches.open(SHELL)).match(request, { ignoreVary: true, ignoreSearch: true });
   if (own) return own;
   const any = await caches.match(request, MATCH);
   if (any) return any;
-  return (await net) || Response.error();
+  return (await net.catch(() => null)) || Response.error();
 }
 
 // Call clips: audio elements ask for byte ranges, and Safari will not play a plain 200 answer to a
@@ -190,11 +201,11 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   // v1 caches Wikipedia photos and map tiles so the field guide, quizzes and map work offline.
   if ((url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org') && request.destination !== 'audio') {
-    event.respondWith(cacheFirstCross(request, IMAGES, event).catch(() => Response.error()));
+    event.respondWith(cacheFirstCross(event, IMAGES).catch(() => Response.error()));
     return;
   }
   if (/(^|\.)tile\.openstreetmap\.org$/.test(url.hostname) || url.hostname === 'server.arcgisonline.com') {
-    event.respondWith(cacheFirstCross(request, TILES, event, TILE_LIMIT).catch(() => Response.error()));
+    event.respondWith(cacheFirstCross(event, TILES, TILE_LIMIT).catch(() => Response.error()));
     return;
   }
   if (url.origin !== self.location.origin) return; // other third-party requests are the app's business
@@ -203,25 +214,26 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       (async () => {
-        const navFetch = fetch(request);
-        // A slow answer still refreshes the shell, but never holds the launch open.
-        event.waitUntil(navFetch.then(async (fresh) => {
-          if (fresh.ok && (fresh.headers.get('content-type') || '').includes('text/html')) {
+        // The copy is cloned the moment the answer arrives, before the page reads it.
+        const navFetch = fetch(request).then((fresh) => {
+          if (fresh.ok && isHtml(fresh)) {
             const isApp = url.pathname === '/' || url.pathname === '/index.html';
-            if (!isApp) {
-              // Privacy, terms and error pages belong under their own URL, never as the app shell.
+            const copy = fresh.clone();
+            waitFor(event, (async () => {
               const cache = await caches.open(SHELL);
-              await cache.put(request, fresh.clone()).catch(() => {});
-            } else {
-              // A captive portal can answer with HTML; only store a real BirdyDex shell.
-              const body = await fresh.clone().text();
-              if (body.includes('<div id="root">')) {
-                const cache = await caches.open(SHELL);
-                await cache.put('/index.html', fresh.clone()).catch(() => {});
+              if (!isApp) {
+                // Privacy, terms and error pages belong under their own URL, never as the app shell.
+                await cache.put(request, copy);
+              } else if ((await copy.clone().text()).includes('<div id="root">')) {
+                // A captive portal can answer with HTML; only store a real BirdyDex shell.
+                await cache.put('/index.html', copy);
               }
-            }
+            })().catch(() => {}));
           }
-        }).catch(() => {}));
+          return fresh;
+        });
+        // A slow answer still refreshes the shell, but never holds the launch open.
+        waitFor(event, navFetch.catch(() => {}));
 
         const timer = new Promise((resolve) => setTimeout(() => resolve(null), NAV_WAIT));
         const first = await Promise.race([navFetch.catch(() => null), timer]);
@@ -254,52 +266,34 @@ self.addEventListener('fetch', (event) => {
         const own = await (await caches.open(SHELL)).match(request, MATCH);
         if (own) return own;
         const cached = await caches.match(request, MATCH);
-        const network = fetch(request)
-          .then(async (res) => {
-            if (res.ok) {
-              const cache = await caches.open(RUNTIME);
-              await cache.put(request, res.clone()).catch(() => {});
-            }
-            return res;
-          })
-          .catch(() => null);
-        return cached || (await network) || Response.error();
-      })(),
+        const net = fetch(request).then(keep(event, RUNTIME, request.url));
+        if (!cached) return net;
+        waitFor(event, net.catch(() => {}));
+        return cached;
+      })().catch(() => Response.error()),
     );
     return;
   }
 
   // Built assets are content-hashed, so the cached copy is always right.
   if (url.pathname.startsWith('/assets/')) {
-    event.respondWith(cacheFirst(request, SHELL).catch(() => Response.error()));
+    event.respondWith(cacheFirst(event, SHELL).catch(() => Response.error()));
     return;
   }
 
   if (isPhoto(url)) {
-    event.respondWith(
-      (async () => {
-        const cached = await caches.match(request, MATCH);
-        if (cached) return cached;
-        const res = await fetch(request);
-        if (res.ok) {
-          const cache = await caches.open(PHOTOS);
-          await cache.put(request, res.clone()).catch(() => {});
-          void trim(PHOTOS, PHOTO_LIMIT);
-        }
-        return res;
-      })().catch(() => Response.error()),
-    );
+    event.respondWith(cacheFirst(event, PHOTOS, PHOTO_LIMIT).catch(() => Response.error()));
     return;
   }
 
   // The BirdNET worker carries a ?tf=&root=&lang= query; a newer worker must reach existing users.
   if (request.destination === 'worker' || url.pathname.startsWith('/js/')) {
-    event.respondWith(networkFirstScript(request).catch(() => Response.error()));
+    event.respondWith(networkFirstScript(event).catch(() => Response.error()));
     return;
   }
   // The Supabase client is a per-release vendor file, like v1's shell.
   if (url.pathname.startsWith('/vendor/supabase/')) {
-    event.respondWith(cacheFirst(request, SHELL, event).catch(() => Response.error()));
+    event.respondWith(cacheFirst(event, SHELL).catch(() => Response.error()));
     return;
   }
 
@@ -307,12 +301,12 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/models/bioclip/') && url.pathname.endsWith('.bin')) return;
   // Models and vendor bundles (the ORT wasm, BirdNET files): one entry in birddex-models.
   if (url.pathname.startsWith('/models/') || url.pathname.startsWith('/vendor/')) {
-    event.respondWith(cacheFirst(request, 'birddex-models', event).catch(() => Response.error()));
+    event.respondWith(cacheFirst(event, 'birddex-models').catch(() => Response.error()));
     return;
   }
 
   // Everything else same-origin (fonts): cache first, then network.
-  event.respondWith(cacheFirst(request, RUNTIME, event).catch(() => Response.error()));
+  event.respondWith(cacheFirst(event, RUNTIME).catch(() => Response.error()));
 });
 
 async function shellStatus() {
