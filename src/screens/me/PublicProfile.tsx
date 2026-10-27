@@ -5,6 +5,8 @@ import { useSeen, useMedia } from '../../lib/hooks';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { CountUp } from '../../components/Motion';
 import { configured, signedIn, getMyCloud, myName, initProfile, loadPublicProfile, avatarUrl, memberSince, dayPick, getPublicProfileCache, problem } from '../../core/profile.js';
+import { onAuth } from '../../core/cloud.js';
+import { authSettled } from '../../core/account.js';
 import { applyTint } from '../../lib/look';
 import './me.css';
 
@@ -17,18 +19,27 @@ export default function PublicProfile() {
   const [row, setRow] = useState<PublicProfileRow | null>(getPublicProfileCache(publicId) as PublicProfileRow | null);
   const [state, setState] = useState<'loading' | 'ready' | 'error' | 'offline' | 'signedout'>(row ? 'ready' : 'loading');
   const [err, setErr] = useState('');
+  const [authDone, setAuthDone] = useState(false);
+  const [authTick, setAuthTick] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    const off = onAuth(() => { if (alive) setAuthTick((n) => n + 1); });
+    authSettled.then(() => { if (alive) { setAuthDone(true); setAuthTick((n) => n + 1); } });
+    return () => { alive = false; off(); };
+  }, []);
 
   useEffect(() => {
     void initProfile();
     if (!configured) { setState('error'); setErr('Profiles need accounts, which are not set up in this copy of the app.'); return; }
-    if (!signedIn()) { setState('signedout'); return; }
+    if (!signedIn()) { setState(authDone ? 'signedout' : 'loading'); return; }
     if (!navigator.onLine) { setState(row ? 'ready' : 'offline'); return; }
     let alive = true;
     void loadPublicProfile(publicId)
       .then((r: PublicProfileRow) => { if (alive) { setRow(r); setState('ready'); } })
       .catch((x: any) => { if (alive) { setErr(/not found/i.test(x?.message || '') ? "This profile isn't available. It may be private, or the link may be wrong." : problem(x)); setState(row ? 'ready' : 'error'); } });
     return () => { alive = false; };
-  }, [publicId]);
+  }, [publicId, authDone, authTick]);
 
   const mine = getMyCloud();
   const isMe = mine?.publicId === publicId;

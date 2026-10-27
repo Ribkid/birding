@@ -15,6 +15,8 @@ export { user, syncStatus, onStatus, onRemoteChange, pendingCount, syncNow, sche
 
 let started = false;
 let prof = null;
+let settleAuth;
+export const authSettled = new Promise((resolve) => { settleAuth = resolve; });
 export const getAccountProfile = () => prof;
 
 // Called once at start: restore a saved session, start sync and subscribe to status changes.
@@ -30,11 +32,12 @@ export async function initAccount({ onChange, onStatusChange, onAuthChange } = {
       onChange?.({ force: true });
     });
     prof = await localProfile();
-    const u = await startAuth();
+    const u = await startAuth().catch(() => null);
     restoring = false;
     if (u) { startSync(); syncNow(); onChange?.({ force: true }); }
   }
   started = true;
+  settleAuth();
   return prof;
 }
 export const accountStarted = () => started;
