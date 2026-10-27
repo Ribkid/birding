@@ -538,12 +538,21 @@ function Deck({ onBack }: { onBack: () => void }) {
   // Each card and the Deck reviewed screen put focus on their heading once drawn (v1 drawCard/drawDeckDone focusHead),
   // so grading by keyboard does not drop focus to <body> when the answer it was on goes away.
   const wantHead = useRef(false);
+  // Show the answer: focus the answer and bring it into view smoothly, where she is (v1 drawCard data-reveal).
+  const wantBack = useRef(false);
   const sightings = useSightings();
   useMedia();
   useEffect(() => {
     if (wantHead.current && headRef.current) {
       headRef.current.focus({ preventScroll: true });
       wantHead.current = false;
+    }
+    const back = backRef.current;
+    if (wantBack.current && back) {
+      wantBack.current = false;
+      back.focus({ preventScroll: true });
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      requestAnimationFrame(() => back.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' }));
     }
   });
 
@@ -553,14 +562,15 @@ function Deck({ onBack }: { onBack: () => void }) {
     else if (getActive()?.deck) setActive(null);
   }, [mode, game, revealed]);
   useRememberScroll(game);
-  useEffect(() => { if (!resuming.current) window.scrollTo(0, 0); }, [game?.n, game?.queue?.length, mode, revealed]);
+  // Each card and the done screen start at the top (v1 drawn()); showing the answer does not. A card missed and put
+  // back is a new queue entry, so it counts as a new card even when it is the only one left.
+  useEffect(() => { if (!resuming.current) window.scrollTo(0, 0); }, [game?.queue?.[0], mode]);
   useEffect(() => {
     if (!ready || !resuming.current) return;
     resuming.current = false;
     if (game) window.scrollTo(0, scrollOf.get(game) || 0);
     headRef.current?.focus({ preventScroll: true });
   }, [ready]);
-  useEffect(() => { if (revealed) backRef.current?.focus({ preventScroll: true }); }, [revealed]);
   const deckKind = (getLearn()?.prefs?.kind as string) || 'animals';
   const due = ready ? dueCards() : [];
   const cards = ready ? allCards() : [];
@@ -618,8 +628,8 @@ function Deck({ onBack }: { onBack: () => void }) {
         <p className="lq-kicker">Review deck<span>Box {(getLearn()?.cards?.[c.id]?.[c.skill]?.box) || 1}, {c.skill === 'call' ? 'by call' : 'by sight'}</span></p>
         <div className="lq ld-card">
           <h1 ref={headRef} className="lq-prompt" tabIndex={-1}>{c.skill === 'call' ? 'Whose call is this?' : `Which ${KINDS[sp.kind]?.one || 'species'} is this?`}</h1>
-          {c.skill === 'call' ? <CallPlayer key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} call={(Q.callsOf(sp.id) as CallClip[])[0]} seed={sp.id} /> : <PhotoBox key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} photos={photos} alt={`Mystery ${KINDS[sp.kind]?.one}`} missing={<>This photo needs a connection. Its field notes: {cleanClue(Q.blankNotes(sp))}</>} />}
-          {!revealed && <button type="button" className="btn btn--primary btn--block" onClick={() => setRevealed(true)}>Show the answer</button>}
+          {c.skill === 'call' ? <CallPlayer key={`${c.id}|${c.skill}|${c.reps}|${game.n}|${game.queue!.length}`} call={(Q.callsOf(sp.id) as CallClip[])[0]} seed={sp.id} /> : <PhotoBox key={`${c.id}|${c.skill}|${c.reps}|${game.n}|${game.queue!.length}`} photos={photos} alt={`Mystery ${KINDS[sp.kind]?.one}`} missing={<>This photo needs a connection. Its field notes: {cleanClue(Q.blankNotes(sp))}</>} />}
+          {!revealed && <button type="button" className="btn btn--primary btn--block" onClick={() => { wantBack.current = true; setRevealed(true); }}>Show the answer</button>}
           {revealed && (
             <div ref={backRef} className="ld-back" tabIndex={-1}>
               <p className="ld-name"><Link to={`/bird/${sp.id}`}>{sp.name}</Link></p>
