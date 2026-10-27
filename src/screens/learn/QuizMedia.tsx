@@ -23,6 +23,7 @@ export function PhotoBox({ photos, alt = '', cls = 'lq-photo', missing = '', sty
 }) {
   const list = photos || [];
   const [i, setI] = useState(0);
+  useEffect(() => { setI(0); }, [photos?.[0]?.src]);
   const p = list[i];
   if (!p) return <figure className={`${cls} is-missing`}><span className="lq-nophoto">{missing || 'No photo saved on this phone.'}</span></figure>;
   return (
