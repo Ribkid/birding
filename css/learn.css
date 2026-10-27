@@ -283,11 +283,6 @@
 .lt-due b { font: 800 var(--fs-4)/1 var(--stamp); }
 :root[data-theme="outdoor"] .lt { box-shadow: 0 0 0 1.5px var(--line-strong); }
 
-/* ---------- badges: kinds and learning ---------- */
-.badge--done.badge--kind .medal { background: var(--kc); color: var(--on-kind); }
-.badge--kind:not(.badge--done) .medal { border-color: color-mix(in srgb, var(--kc) 60%, var(--line)); }
-.badge--done.badge--learning .medal { background: var(--ink); color: var(--paper); }
-
 /* ---------- reduced motion: no pops, shakes or springs; answers and panels just appear ---------- */
 @media (prefers-reduced-motion: reduce) {
   .lh-daily, .lh-mode, .lq-opt, .lq-side, .lq-play { transition: none; }

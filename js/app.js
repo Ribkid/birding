@@ -1,4 +1,4 @@
-import { SPECIES, GROUPS, HABITATS, RARITY, byId, KINDS, ANIMAL_KINDS, ANIMALS, BIRDS, ofKind, dexCode, kindsPresent } from './species.js';
+import { SPECIES, GROUPS, HABITATS, RARITY, byId, KINDS, ANIMAL_KINDS, ANIMALS, BIRDS, ofKind, dexCode, kindsPresent, parseSize } from './species.js';
 import { loadExtras, galleryFor, infoFor } from './gallery.js';
 import { db } from './db.js';
 import { loadIndex, photoFor, sized, details, calls, audioUrl, downloadAll, onMediaReady, loadCallPack, localCalls, hasLocalCall, callPackStatus, saveCallPack } from './media.js';
@@ -117,7 +117,11 @@ function birdImg(sp, size = 'small', cls = '', { whole = false, alt = sp.name } 
     ? `<img class="${cls} ${fade(url)}" src="${esc(url)}" alt="${esc(alt)}" loading="lazy" decoding="async" data-sp="${sp.id}" data-size="${size}" ${ONLOAD} onerror="this.classList.add('img-missing')">`
     : `<span class="${cls} img-missing" ${alt ? `role="img" aria-label="${esc(alt)}"` : 'aria-hidden="true"'} data-sp="${sp.id}" data-size="${size}"></span>`;
 }
-const wholeImg = (url, alt, cls = '') => `<span class="whole ${cls}"><img class="whole-bg ${fade(url)}" src="${esc(url)}" alt="" aria-hidden="true" loading="lazy" decoding="async" ${ONLOAD}><img class="whole-fg ${fade(url)}" src="${esc(url)}" alt="${esc(alt)}" loading="lazy" decoding="async" ${ONLOAD} onerror="this.closest('.whole').classList.add('img-missing')"></span>`;
+// lazy: the picture waits in data-src until the page asks for it (gallery slides she hasn't swiped to yet).
+const wholeImg = (url, alt, cls = '', { lazy = false } = {}) => {
+  const src = lazy ? `data-src="${esc(url)}"` : `src="${esc(url)}"`, f = lazy ? 'fade' : fade(url);
+  return `<span class="whole ${cls}"><img class="whole-bg ${f}" ${src} alt="" aria-hidden="true" loading="lazy" decoding="async" ${ONLOAD}><img class="whole-fg ${f}" ${src} alt="${esc(alt)}" loading="lazy" decoding="async" ${ONLOAD} onerror="this.closest('.whole').classList.add('img-missing')"></span>`;
+};
 // The first hero photo on a page (marked data-hero-frame) is the one thing worth fetching first.
 function prioritiseHero(root) {
   for (const img of $$('[data-hero-frame] img', root)) { img.loading = 'eager'; img.fetchPriority = 'high'; }
@@ -367,7 +371,7 @@ function localPlaceMatches(q, limit = 8) {
   return [
     ...state.patches.filter(p => hit(p.name)).map(p => ({ name: p.name, lat: p.lat, lng: p.lng, kind: 'Your patch' })),
     ...myPlaces().filter(p => hit(p.name)),
-    ...hotspots().filter(h => hit(h.name)).map(h => ({ name: h.name, lat: h.lat, lng: h.lng, kind: `Hotspot, ${h.rich} species` })),
+    ...hotspots().filter(h => hit(h.name)).map(h => ({ name: h.name, lat: h.lat, lng: h.lng, kind: `Hotspot, ${h.rich} birds` })),
   ].slice(0, limit);
 }
 let lastGeocode = 0;
@@ -548,7 +552,7 @@ function speciesPicker(selectedId) {
     <input type="hidden" name="speciesId" value="${sp ? sp.id : ''}">
     <div class="picker-chosen ${sp ? '' : 'hidden'}">${sp ? pickerChosen(sp) : ''}</div>
     <div class="picker-search ${sp ? 'hidden' : ''}">
-      <label class="field"><span>Bird</span><input type="search" placeholder="Type a name, e.g. kookaburra" autocomplete="off" data-picker-q></label>
+      <label class="field"><span>What did you see?</span><input type="search" placeholder="Type a name, e.g. kookaburra" autocomplete="off" data-picker-q></label>
       <ul class="picker-results" data-picker-results></ul>
     </div></div>`;
 }
@@ -570,7 +574,7 @@ function wirePicker(root, onPick) {
   const seen = seenSet();
   q?.addEventListener('input', () => {
     res.innerHTML = matchSpecies(q.value).map(s => `<li><button type="button" data-pick="${s.id}">${band(s.id, seen.has(s.id))}<span>${esc(s.name)}</span></button></li>`).join('')
-      || (q.value.trim() ? '<li class="muted pad">No bird by that name in the dex.</li>' : '');
+      || (q.value.trim() ? '<li class="muted pad">Nothing by that name in the dex.</li>' : '');
   });
   p.addEventListener('click', e => {
     const pick = e.target.closest('[data-pick]');
@@ -588,6 +592,17 @@ function wirePicker(root, onPick) {
       q.value = ''; res.innerHTML = ''; q.focus();
     }
   });
+}
+
+// The notes prompt and 'Heard only' follow the kind she picked (plants can't be heard).
+const NOTES_HINT = { bird: 'Behaviour, plumage, who you were with…', mammal: 'Behaviour, tracks, who you were with…', reptile: 'Basking, size, behaviour…',
+  frog: 'Calling, weather, where it was…', butterfly: 'Feeding on, markings, behaviour…', plant: 'Flowering, fruit, where it grows…' };
+const notesHint = kind => NOTES_HINT[kind] || 'What it was doing, who you were with…';
+function fitSheetToKind(sheet, kind) {
+  const heard = $('[data-heard]', sheet);
+  if (heard) { heard.classList.toggle('hidden', kind === 'plant'); if (kind === 'plant') $('input', heard).checked = false; }
+  const notes = $('textarea[name=notes]', sheet);
+  if (notes) notes.placeholder = notesHint(kind);
 }
 
 async function openSightingSheet({ speciesId = null, sightingId = null, autoGps = false, photoBlob = null, notes = '' } = {}) {
@@ -608,7 +623,7 @@ async function openSightingSheet({ speciesId = null, sightingId = null, autoGps 
           <div class="stepper"><button type="button" data-step="-1" aria-label="One fewer">−</button>
           <input name="count" inputmode="numeric" pattern="[0-9]*" value="${rec.count ?? ''}" placeholder="?" aria-label="Count">
           <button type="button" data-step="1" aria-label="One more">+</button></div></label>
-        <label class="check"><input type="checkbox" name="heard" ${rec.heard ? 'checked' : ''}><span>Heard only</span></label>
+        <label class="check ${rec.speciesId && kindOf(rec.speciesId) === 'plant' ? 'hidden' : ''}" data-heard><input type="checkbox" name="heard" ${rec.heard ? 'checked' : ''}><span>Heard only</span></label>
       </div>
       <div class="grid2">
         <label class="field"><span>Date</span><input type="date" name="date" value="${rec.date}" max="${todayStr()}"></label>
@@ -627,14 +642,14 @@ async function openSightingSheet({ speciesId = null, sightingId = null, autoGps 
         <label class="btn">${icon.cam} <span data-photo-label>${existingPhoto ? 'Replace photo' : 'Add photo'}</span><input type="file" accept="image/*" data-photo-input hidden></label>
         <button type="button" class="btn btn--quiet ${existingPhoto ? '' : 'hidden'}" data-photo-remove>Remove</button>
       </div>
-      <label class="field"><span>Notes</span><textarea name="notes" rows="2" placeholder="Behaviour, plumage, who you were with…">${esc(rec.notes)}</textarea></label>
+      <label class="field"><span>Notes</span><textarea name="notes" rows="2" placeholder="${notesHint(rec.speciesId && kindOf(rec.speciesId))}">${esc(rec.notes)}</textarea></label>
       <p class="form-error" data-error role="alert"></p>
       <div class="row-end">
         ${existing ? '<button type="button" class="btn btn--danger btn--quiet" data-delete>Delete</button><span class="spacer"></span>' : ''}
         <button type="button" class="btn" data-close>Cancel</button>
         <button type="submit" class="btn btn--primary">${existing ? 'Save changes' : 'Save sighting'}</button>
       </div>
-    </form>`, { onOpen: s => wirePicker(s) });
+    </form>`, { onOpen: s => wirePicker(s, sp => fitSheetToKind(s, sp.kind)) });
   const form = $('[data-form]', sheet);
   const status = $('[data-gps-status]', sheet);
   const toOuting = $('[name=toOuting]', form);
@@ -695,11 +710,11 @@ async function openSightingSheet({ speciesId = null, sightingId = null, autoGps 
   form.addEventListener('submit', async e => {
     e.preventDefault();
     const id = Number(form.speciesId.value);
-    if (!id) { $('[data-error]', form).textContent = 'Choose which bird you saw.'; return; }
+    if (!id) { $('[data-error]', form).textContent = 'Choose what you saw.'; return; }
     if (!form.date.value) { $('[data-error]', form).textContent = 'Add the date of the sighting.'; return; }
     rec.speciesId = id;
     rec.count = form.count.value ? Math.max(1, parseInt(form.count.value, 10) || 1) : null;
-    rec.heard = form.heard.checked;
+    rec.heard = kindOf(id) !== 'plant' && form.heard.checked;
     rec.date = form.date.value; rec.time = form.time.value;
     rec.place = form.place.value.trim();
     rec.notes = form.notes.value.trim();
@@ -722,15 +737,16 @@ async function openSightingSheet({ speciesId = null, sightingId = null, autoGps 
 // ---------- outings (checklists) ----------
 function openPlusSheet() {
   const o = activeOuting();
-  const s = openSheet(`<h2 class="sheet-title">Add birds</h2>
+  const ones = (photoKinds || []).map(k => KINDS[k].one);
+  const s = openSheet(`<h2 class="sheet-title">Add a sighting</h2>
     <div class="plus-options">
+      <button class="plus-opt plus-opt--main" data-one>${icon.pencil}<strong>Log one sighting</strong><span>A single sighting with photo, place and notes.</span></button>
+      ${o ? `<button class="plus-opt" data-resume>${icon.outing}<strong>Back to your outing</strong><span>${esc(o.place || 'Current outing')}, started ${o.time}</span></button>`
+          : `<button class="plus-opt" data-outing>${icon.clipboard}<strong>Start or add an outing</strong><span>Tally everything at one place, like an eBird checklist. Works for earlier outings too.</span></button>`}
       <div class="plus-id">
         <a class="plus-opt plus-opt--id" href="#/listen" data-close>${icon.mic}<strong>Listen</strong><span>Name birds by their calls</span></a>
-        <a class="plus-opt plus-opt--id" href="#/scan" data-close>${icon.scan}<strong>Scan a photo</strong><span>Name what you photographed</span></a>
+        <a class="plus-opt plus-opt--id" href="#/scan" data-close>${icon.scan}<strong>Scan a photo</strong><span>${ones.length ? `Name ${article(ones[0])} ${esc(listWords(ones, 'or'))} from a photo` : 'Name what you photographed'}</span></a>
       </div>
-      <button class="plus-opt" data-one><strong>Log one bird</strong><span>A single sighting with photo, place and notes.</span></button>
-      ${o ? `<button class="plus-opt" data-resume><strong>Back to your outing</strong><span>${esc(o.place || 'Current outing')}, started ${o.time}</span></button>`
-          : `<button class="plus-opt" data-outing><strong>Start or add an outing</strong><span>Tally every bird at one place, like an eBird checklist. Works for earlier outings too.</span></button>`}
     </div>`);
   s.addEventListener('click', e => {
     if (e.target.closest('[data-one]')) openSightingSheet();
@@ -799,7 +815,7 @@ function openStartOuting() {
     state.activeOutingId = o.id;
     await db.kvSet('activeOuting', o.id);
     closeSheet();
-    if (past) toast('Outing added. Tally the birds you saw, then tap Finish.');
+    if (past) toast('Outing added. Tally what you saw, then tap Finish.');
     location.hash = `#/outing/${o.id}`;
   });
 }
@@ -883,7 +899,7 @@ const routes = [
   [/^#\/map\/at\/(-?[\d.]+),(-?[\d.]+)$/, m => renderMap(null, [Number(m[1]), Number(m[2])])],
   [/^#\/compare\/(\d+)\/(\d+)$/, m => renderCompare(Number(m[1]), Number(m[2]))],
   [/^#\/stats$/, () => renderStats(ctx)],
-  [/^#\/learn(?:\/(daily|deck|play)(?:\/(\w+))?)?$/, m => renderLearn(ctx, m[1], m[2])],
+  [/^#\/learn(?:\/(daily|deck|play|test)(?:\/(\w+))?)?$/, m => renderLearn(ctx, m[1], m[2])],
   [/^#\/quiz$/, () => location.replace('#/learn')],
   [/^#\/listen$/, () => renderListen()],
   [/^#\/scan$/, () => renderScan(ctx)],
@@ -1315,10 +1331,36 @@ const hasCalls = id => hasLocalCall(id) || (navigator.onLine && !!seq()?.species
 const callCredit = c => `By ${c.page ? `<a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(String(c.artist || 'Unknown').slice(0, 50))}</a>` : esc(String(c.artist || 'Unknown').slice(0, 50))}${c.license ? `, ${esc(c.license)}` : ''}.${c.local ? ` Trimmed from the ${c.from === 'iNaturalist Australia' ? 'iNaturalist' : 'original'} recording.` : ''}`;
 
 // Species detail
-function similarBirds(sp) {
-  return SPECIES.filter(s => s.id !== sp.id && s.group === sp.group)
-    .map(s => ({ s, d: s.size && sp.size ? Math.abs(Math.log(s.size / sp.size)) : 1 }))
-    .sort((a, b) => a.d - b.d).slice(0, 4).map(x => x.s);
+// Look-alikes when there's no curated pair: the same kind, nearest in real size, from its own group unless that group
+// has fewer than two others (the Koala is alone in its group), then from the whole kind.
+function similarSpecies(sp, n = 4) {
+  const kin = SPECIES.filter(s => s.id !== sp.id && s.kind === sp.kind);
+  const group = kin.filter(s => s.group === sp.group);
+  const gap = s => (s.sizeCm && sp.sizeCm ? Math.abs(Math.log(s.sizeCm / sp.sizeCm)) : 1);
+  return (group.length >= 2 ? group : kin).map(s => ({ s, d: gap(s) })).sort((a, b) => a.d - b.d).slice(0, n).map(x => x.s);
+}
+// The size with the label that fits it: Length, Wingspan (butterflies, flying-foxes), Height (plants), Shell or Body.
+const MEASURE = { length: 'Length', wingspan: 'Wingspan', height: 'Height', shell: 'Shell', body: 'Body' };
+function sizeFact(sp) {
+  const t = String(sp.sizeText || '').trim();
+  if (!t) return null;
+  const p = parseSize(t);
+  if (!p) return [sp.kind === 'plant' ? 'Grows as' : 'Size', cap(t)];
+  return [MEASURE[sp.kind === 'plant' ? 'height' : p.measure], cap(t.replace(/^wingspan\s+/i, '').replace(/\s+(shell|body)$/i, '').replace(/^to\b/i, 'up to'))];
+}
+const article = w => (/^[aeiou]/i.test(w) ? 'an' : 'a');
+// Non-bird tiers rank each kind against itself, so the line says so.
+const rarityText = sp => (sp.kind === 'bird' ? `${RARITY[sp.rarity].label} in SEQ` : `${RARITY[sp.rarity].label} for ${article(KINDS[sp.kind].one)} ${KINDS[sp.kind].one} in SEQ`);
+function seasonText(sp) {
+  if (sp.kind === 'plant') return sp.season === 's' ? 'Mostly spring to summer' : sp.season === 'w' ? 'Mostly autumn to winter' : 'Year round';
+  return sp.season === 's' ? (sp.kind === 'bird' ? 'Mostly September to April' : 'Most active September to April') : sp.season === 'w' ? 'Mostly April to September' : 'All year';
+}
+// From the Learn review deck: Learnt once every card for it is in box 4 or 5, Learning while any card is on its way.
+function masteryMark(id) {
+  const m = masteryOf(id);
+  if (!m) return '';
+  return m >= 1 ? `<span class="mastery mastery--done">${icon.tick}Learnt</span>`
+    : `<span class="mastery"><i style="--p:${Math.round(m * 100)}" aria-hidden="true"></i>Learning</span>`;
 }
 
 // Photos for the species page: the Wikipedia picture first, then the gallery (data/gallery.json).
@@ -1329,17 +1371,28 @@ function heroPhotos(sp) {
   for (const g of galleryFor(sp.id)) if (!out.some(o => o.src === g.src)) out.push({ ...g });
   return out.slice(0, 7);
 }
-const creditHTML = ph => `Photo: ${ph.page ? `<a href="${esc(ph.page)}" target="_blank" rel="noopener">${esc(String(ph.credit || 'Unknown').slice(0, 60))}</a>` : esc(String(ph.credit || 'Unknown').slice(0, 60))}${ph.license ? `, ${esc(ph.license)}` : ''}${ph.from ? ` <span class="credit-from">(${esc(ph.from)})</span>` : ''}`;
+// One small line under the photo: the author (linked to the source) and the licence.
+const author = a => String(a || '').replace(/\s*\(?\bhttps?:\/\/[^\s)]*\)?/g, '').trim().slice(0, 60) || 'Unknown';
+const creditHTML = ph => `Photo: ${ph.page ? `<a href="${esc(ph.page)}" target="_blank" rel="noopener">${esc(author(ph.credit))}</a>` : esc(author(ph.credit))}${ph.license ? `, ${esc(ph.license)}` : ''}`;
+// Only the first photo loads with the page. The next loads when she starts to swipe, and each one after that as
+// she reaches the one before it.
 function wireGallery(photos) {
   const g = $('[data-gallery]', view);
   if (!g || photos.length < 2) return;
-  const dots = $$('.dots i', view), cr = $('[data-credit]', view);
+  const slides = $$('.slide', g), counter = $('[data-count-i]', view), cr = $('[data-credit]', view);
+  const load = i => {
+    if (!slides[i]) return;
+    for (const img of $$('img[data-src]', slides[i])) { img.loading = 'eager'; img.src = img.dataset.src; img.removeAttribute('data-src'); }
+  };
+  const wake = () => load(1);
+  for (const ev of ['pointerdown', 'touchstart', 'focus']) g.addEventListener(ev, wake, { once: true, passive: true });
   let last = 0;
   g.addEventListener('scroll', () => {
     const i = Math.round(g.scrollLeft / Math.max(1, g.clientWidth));
+    load(i); load(i + 1);
     if (i === last) return;
     last = i;
-    dots.forEach((d, k) => d.classList.toggle('on', k === i));
+    if (counter) counter.textContent = i + 1;
     if (cr) { cr.dataset.idx = i; cr.innerHTML = photos[i]?.credit ? creditHTML(photos[i]) : ''; }
   }, { passive: true });
   g.addEventListener('keydown', e => {
@@ -1354,31 +1407,65 @@ function infoSection(info) {
     ${info.sources.length ? `<p class="small sources"><span class="muted">Sources:</span> ${info.sources.map(src => `<a href="${esc(src.url)}" target="_blank" rel="noopener">${esc(src.title || sourceLabel(src.url))}</a>`).join('; ')}</p>` : ''}`;
 }
 
+// How to spot it: the field notes as short marks, the call words, size, when, group, habitats and a quick test.
+function spotSection(sp) {
+  const cw = callWords(sp);
+  const marks = sentences(sp.notes).filter(s => !/^introduced[.;]?$/i.test(s) && s !== cw?.sentence).slice(0, 4);
+  const size = sizeFact(sp), peaks = peaksOf(sp.id);
+  const when = sp.kind === 'plant' && sp.season ? ['Flowers', seasonText(sp)]
+    : ['When', !peaks ? seasonText(sp) : /every month|most of the year/.test(peaks) ? 'Reported all year' : `Peaks in ${peaks}`];
+  const playable = cw && hasCalls(sp.id);
+  const callLine = cw && esc(cw.sentence).replace(`&quot;${esc(cw.words)}&quot;`, `<q>${esc(cw.words)}</q>`);
+  return `<section class="spot" aria-labelledby="spot-h">
+    <h2 class="h2" id="spot-h">How to spot it</h2>
+    ${marks.length ? `<ul class="spot-marks">${marks.map(s => `<li>${esc(s)}</li>`).join('')}</ul>` : ''}
+    ${cw ? `<div class="spot-call">${playable ? `<button class="playbtn spot-play" data-callplay aria-label="Play its call">${icon.play}</button>` : `<span class="spot-call-ic" aria-hidden="true">${icon.mic}</span>`}<p>${callLine}</p></div>` : ''}
+    <dl class="facts">
+      ${size ? `<div><dt>${size[0]}</dt><dd>${esc(size[1])}</dd></div>` : ''}
+      <div><dt>${when[0]}</dt><dd>${esc(when[1])}</dd></div>
+      <div><dt>Group</dt><dd><a href="#/dex" data-filter-group="${esc(sp.group)}">${esc(GROUPS[sp.group])}</a></dd></div>
+    </dl>
+    <ul class="spot-hab" aria-label="Where to look">${sp.habitats.map(h => `<li>${esc(HABITATS[h])}</li>`).join('')}${sp.nocturnal ? '<li class="spot-hab--night">Active at night</li>' : ''}</ul>
+    <a class="btn spot-test" href="#/learn/test/${sp.id}">${icon.learn}<span>Test me on this</span></a>
+  </section>`;
+}
+
+// Easy to confuse with: the curated look-alikes first (with how to tell them apart), then the nearest in size.
+function confuseSection(sp) {
+  const curated = lookalikesOf(sp.id).map(id => byId.get(id)).filter(Boolean);
+  const list = [...curated.map(s => ({ s, tell: tellFor(sp.id, s.id) })),
+    ...similarSpecies(sp, 4).filter(s => !curated.includes(s)).map(s => ({ s }))].slice(0, Math.max(4, curated.length));
+  if (!list.length) return '';
+  return `<section class="confuse" aria-labelledby="confuse-h"><h2 class="h2" id="confuse-h">Easy to confuse with</h2>
+    <p class="small muted">Easy to mix up. Tap Compare to see them side by side.</p>
+    <ul class="confuse-list">${list.map(({ s, tell }) => `<li class="confuse-row">
+      <a class="confuse-sp row--sp kind--${s.kind}" href="#/bird/${s.id}"><span class="row-thumb">${birdImg(s, 'small', '', { alt: '' })}</span>
+        <span class="row-main"><strong>${esc(s.name)}</strong><span class="small ${tell ? 'confuse-tell' : 'muted'}">${esc(tell || s.sizeText)}</span></span></a>
+      <a class="btn btn--small" href="#/compare/${sp.id}/${s.id}" aria-label="Compare with the ${esc(s.name)}">Compare</a></li>`).join('')}</ul></section>`;
+}
+
 function renderBird(id) {
   const sp = byId.get(id);
   if (!sp) { location.hash = '#/dex'; return; }
+  const hash = location.hash;
   const hist = sightingsOf(id);
   const first = hist[hist.length - 1];
   const seen = hist.length > 0;
   const prev = [...SPECIES].reverse().find(s => s.kind === sp.kind && s.id < id), next = SPECIES.find(s => s.kind === sp.kind && s.id > id);
   const isBird = sp.kind === 'bird';
-  const seasonText = sp.kind === 'plant'
-    ? (sp.season === 's' ? 'Flowers mostly spring to summer' : sp.season === 'w' ? 'Flowers mostly autumn to winter' : 'Year round')
-    : sp.season === 's' ? (isBird ? 'Mostly September to April' : 'Most active September to April') : sp.season === 'w' ? 'Mostly April to September' : 'All year';
   const photos = heroPhotos(sp);
   const info = infoFor(sp.id);
   const cardInfo = { seen, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
-  const sim = similarBirds(sp);
+  const curated = lookalikesOf(id).length > 0;
   view.innerHTML = `
-    <article class="bird">
+    <article class="bird kind--${sp.kind}">
       <div class="bird-hero" data-hero-box>
         <div class="hero-photo">
           <div class="gallery" data-gallery tabindex="0" aria-label="Photos of the ${esc(sp.name)}${photos.length > 1 ? '. Swipe for more.' : ''}">
-            ${photos.length ? photos.map((ph, i) => `<figure class="slide"${i ? '' : ' data-hero-frame'}>${wholeImg(ph.src, `${sp.name}${photos.length > 1 ? `, photo ${i + 1} of ${photos.length}` : ''}`, 'bird-photo')}</figure>`).join('')
+            ${photos.length ? photos.map((ph, i) => `<figure class="slide"${i ? '' : ' data-hero-frame'}>${wholeImg(ph.src, `${sp.name}${photos.length > 1 ? `, photo ${i + 1} of ${photos.length}` : ''}`, 'bird-photo', { lazy: i > 0 })}</figure>`).join('')
               : `<figure class="slide" data-hero-frame><span class="bird-photo img-missing" role="img" aria-label="${esc(sp.name)}"></span></figure>`}
           </div>
-          ${photos.length > 1 ? `<div class="dots" aria-hidden="true">${photos.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}
-          <p class="credit" data-credit>${photos[0]?.credit ? creditHTML(photos[0]) : ''}</p>
+          ${photos.length > 1 ? `<span class="hero-count" aria-hidden="true"><b data-count-i>1</b>/${photos.length}</span>` : ''}
         </div>
         <div class="hero-model hidden" data-model aria-label="3D model of a ${esc(sp.name)}. Drag to turn it."></div>
         <a class="iconbtn iconbtn--float" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
@@ -1389,30 +1476,21 @@ function renderBird(id) {
           <button role="tab" aria-selected="false" data-hero="card">Card</button>
         </div>
       </div>
+      <p class="hero-credit" data-credit>${photos[0]?.credit ? creditHTML(photos[0]) : ''}</p>
       <div class="bird-body">
-        <div class="bird-id">${band(sp.id, seen)} ${kindTag(sp)} ${pips(sp.rarity)} <span class="muted small">${RARITY[sp.rarity].label} in SEQ${recordCount(sp.id) ? `: ${recordCount(sp.id).toLocaleString('en-AU')} records since 2016` : ''}</span></div>
+        <div class="bird-id">${band(sp.id, seen)}${kindTag(sp)}<span class="rarity-line">${pips(sp.rarity)}<span>${rarityText(sp)}</span></span></div>
         <h1 class="bird-name">${esc(sp.name)}</h1>
-        <p class="sci">${esc(sp.sci)}</p>
+        <p class="sci-row"><span class="sci">${esc(sp.sci)}</span><span data-mastery>${masteryMark(id)}</span></p>
         <div class="bird-actions">
           <button class="btn btn--primary btn--grow" data-log>${seen ? 'Log another sighting' : 'Log a sighting'}</button>
           ${seen ? `<button class="btn" data-sharecard aria-label="Share card">${icon.share}</button>` : ''}
         </div>
         ${seen ? `<p class="seen-line">Seen ${plural(hist.length, 'time')}. First on ${fmtDate(first.date)}${first.place ? ` at ${esc(first.place)}` : ''}.</p>` : ''}
 
-        ${isBird || sp.kind === 'frog' ? '<section class="call" data-calls aria-live="polite"><p class="muted small">Looking for recordings…</p></section>' : ''}
-
-        <p class="notes">${esc(sp.notes)}</p>
-        <dl class="facts">
-          <div><dt>${sp.kind === 'plant' ? 'Height' : sp.kind === 'butterfly' ? 'Wingspan' : 'Size'}</dt><dd>${esc(sp.sizeText || '–')}</dd></div>
-          <div><dt>When</dt><dd>${seasonText}</dd></div>
-          <div><dt>Group</dt><dd><a href="#/dex" data-filter-group="${esc(sp.group)}">${esc(GROUPS[sp.group])}</a></dd></div>
-          <div><dt>Look in</dt><dd>${sp.habitats.map(h => HABITATS[h]).join(', ')}${sp.nocturnal ? '. Active at night.' : ''}</dd></div>
-        </dl>
-
-        ${sim.length ? `<section><h2 class="h2">Similar ${isBird ? 'birds' : 'species'}</h2><p class="small muted">Easy to mix up. Tap Compare to see them side by side.</p>
-          <ul class="rows">${sim.map(s => `<li class="sim-row"><a class="row row--sp" href="#/bird/${s.id}"><span class="row-thumb">${birdImg(s)}</span><span class="row-main"><strong>${esc(s.name)}</strong><span class="muted small">${esc(s.sizeText)}</span></span></a><a class="btn btn--small" href="#/compare/${sp.id}/${s.id}">Compare</a></li>`).join('')}</ul></section>` : ''}
-
+        ${spotSection(sp)}
+        <div data-confuse${curated ? ' data-curated' : ''}>${confuseSection(sp)}</div>
         ${whereSection(sp)}
+        ${isBird || sp.kind === 'frog' ? '<section class="call" data-calls aria-live="polite"><p class="muted small">Looking for recordings…</p></section>' : ''}
 
         <section class="wiki" data-wiki>${info ? infoSection(info) : ''}</section>
 
@@ -1422,7 +1500,7 @@ function renderBird(id) {
             ${h.photoId ? `<img class="hist-photo" data-photo="${h.photoId}" alt="">` : ''}
             <span class="hist-main"><strong>${fmtDate(h.date)}</strong>${h.time ? ` <span class="muted">${h.time}</span>` : ''}<br><span class="muted">${esc(h.place || 'No place name')}</span></span>
             <span class="hist-n">${h.count ? `×${h.count}` : 'X'}${h.heard ? '<br><span class="muted small">heard</span>' : ''}</span></button></li>`).join('')}</ul>`
-          : '<p class="muted">Not seen yet. When you find one, log it here and its card fills in with colour.</p>'}
+          : `<p class="muted">Not seen yet. When you find ${sp.kind === 'plant' ? 'it' : 'one'}, log it here and its card fills in with colour.</p>`}
         </section>
 
         <nav class="more-links">
@@ -1434,25 +1512,43 @@ function renderBird(id) {
           ${next ? `<a href="#/bird/${next.id}" class="next"><span>${dexNo(next.id)} ${esc(next.name)}</span>${icon.back}</a>` : ''}
         </nav>
       </div>
+      <div class="logbar" data-logbar inert>
+        ${band(sp.id, seen)}<strong>${esc(sp.name)}</strong>
+        <button class="btn btn--primary btn--small" data-log aria-label="Log a sighting of the ${esc(sp.name)}">Log it</button>
+      </div>
     </article>`;
-  let disposeModel = null;
+  // 3D model: three.js arrives on demand. If she has left (or switched back) before it lands, nothing is mounted.
+  let disposeModel = null, alive = true, mounting = false;
   const showHero = async which => {
     $$('[data-hero]', view).forEach(b => b.setAttribute('aria-selected', String(b.dataset.hero === which)));
     if (which === 'card') { openCard(sp, cardInfo); $$('[data-hero]', view).forEach(b => b.setAttribute('aria-selected', String(b.dataset.hero === (disposeModel ? 'model' : 'photo')))); return; }
     const box = $('[data-model]', view);
     $('.hero-photo', view).classList.toggle('hidden', which !== 'photo');
+    $('[data-credit]', view).classList.toggle('hidden', which !== 'photo');
     box.classList.toggle('hidden', which !== 'model');
-    if (which === 'model' && !disposeModel) {
-      box.innerHTML = '<p class="model-loading">Building the model…</p>';
-      try {
-        const { mountBird } = await import('./model3d.js');
-        box.innerHTML = '<p class="model-hint">Drag to turn</p>';
-        disposeModel = mountBird(box, sp);
-      } catch (err) { box.innerHTML = '<p class="model-loading">3D needs a newer browser.</p>'; }
-    }
+    if (which !== 'model' || disposeModel || mounting) return;
+    mounting = true;
+    box.innerHTML = '<p class="model-loading">Building the model…</p>';
+    let mod = null;
+    try { mod = await import('./model3d.js'); } catch (_) {}
+    mounting = false;
+    if (!alive || !box.isConnected) return;
+    if (!mod) { box.innerHTML = '<p class="model-loading">3D needs signal the first time.</p>'; return; }
+    try { box.innerHTML = '<p class="model-hint">Drag to turn</p>'; disposeModel = mod.mountBird(box, sp); }
+    catch (_) { box.innerHTML = '<p class="model-loading">3D needs a newer browser.</p>'; }
   };
+  // Once the Log button has scrolled away, a slim bar with the name and a Log button rises above the tab bar.
+  const logbar = $('[data-logbar]', view), mainLog = $('.bird-actions [data-log]', view);
+  const io = 'IntersectionObserver' in window ? new IntersectionObserver(([e]) => {
+    const show = !e.isIntersecting && e.boundingClientRect.top < 0;
+    logbar.classList.toggle('logbar--on', show);
+    logbar.inert = !show;
+  }) : null;
+  io?.observe(mainLog);
   const audioStops = [];
-  state.cleanup = () => { disposeModel?.(); audioStops.forEach(f => f()); };
+  state.cleanup = () => { alive = false; disposeModel?.(); disposeModel = null; io?.disconnect(); audioStops.forEach(f => f()); };
+  let callsWired;
+  const callsReady = new Promise(r => { callsWired = r; });
   view.onclick = e => {
     if (e.target.closest('[data-log]')) openSightingSheet({ speciesId: id });
     const ed = e.target.closest('[data-edit]');
@@ -1463,20 +1559,29 @@ function renderBird(id) {
     if (h) showHero(h.dataset.hero);
     if (e.target.closest('[data-sharecard]')) shareCard(sp, cardInfo);
     if (e.target.closest('[data-search]')) openSearch();
+    // The call words' play button plays the first recording in Calls, with the same player.
+    if (e.target.closest('[data-callplay]')) callsReady.then(() => $('[data-calls] [data-play="0"]', view)?.click());
   };
   view.onchange = null;
-  // Wikipedia text and photo credit
   wireGallery(photos);
+  const here = () => location.hash === hash;
+  // Learn progress and the curated look-alikes load at start-up; fill them in if they arrive after the page.
+  if (!masteryOf(id)) learnReady().then(() => { const m = here() && $('[data-mastery]', view); if (m) m.innerHTML = masteryMark(id); }).catch(() => {});
+  if (!curated) loadLookalikes().then(() => {
+    const box = here() && $('[data-confuse]', view);
+    if (box && lookalikesOf(id).length) { box.innerHTML = confuseSection(sp); box.dataset.curated = ''; afterDraw(); }
+  });
+  // Wikipedia text and photo credit
   details(sp).then(d => {
-    if (location.hash !== `#/bird/${id}`) return;
-    if (d?.credit && photos[0]?.wiki) { photos[0].credit = d.credit.artist; photos[0].license = d.credit.license; photos[0].page = d.credit.page; photos[0].from = 'Wikimedia Commons'; }
+    if (!here()) return;
+    if (d?.credit && photos[0]?.wiki) { photos[0].credit = d.credit.artist; photos[0].license = d.credit.license; photos[0].page = d.credit.page; }
     const cr = $('[data-credit]', view);
     if (cr && photos[0]?.credit && !cr.dataset.idx) cr.innerHTML = creditHTML(photos[0]);
     const w = $('[data-wiki]', view);
     if (!info && d?.extract && w) w.innerHTML = `<h2 class="h2">About</h2><p>${esc(d.extract)}</p><p class="small muted">From <a href="${esc(d.url)}" target="_blank" rel="noopener">Wikipedia</a>, CC BY-SA 4.0.</p>`;
   }).catch(() => {});
   getCalls(sp).then(list => {
-    if (location.hash !== `#/bird/${id}`) return;
+    if (!here()) return;
     const box = $('[data-calls]', view);
     if (!box) return;
     if (!list.length) {
@@ -1514,7 +1619,11 @@ function renderBird(id) {
       };
       cancelAnimationFrame(raf); tick();
     };
-    const setIcons = () => $$('[data-play]', box).forEach(b => { const on = Number(b.dataset.play) === playing && !audio.paused; b.innerHTML = on ? icon.pause : icon.play; b.setAttribute('aria-label', on ? 'Pause' : `Play recording ${Number(b.dataset.play) + 1}`); });
+    const setIcons = () => {
+      $$('[data-play]', box).forEach(b => { const on = Number(b.dataset.play) === playing && !audio.paused; b.innerHTML = on ? icon.pause : icon.play; b.setAttribute('aria-label', on ? 'Pause' : `Play recording ${Number(b.dataset.play) + 1}`); });
+      const sp0 = $('[data-callplay]', view), on0 = playing === 0 && !audio.paused;
+      if (sp0) { sp0.innerHTML = on0 ? icon.pause : icon.play; sp0.setAttribute('aria-label', on0 ? 'Pause its call' : 'Play its call'); }
+    };
     let stopped = false;
     for (const el of [fx, plain]) {
       el.addEventListener('timeupdate', () => {
@@ -1554,36 +1663,41 @@ function renderBird(id) {
       setIcons();
     });
     audioStops.push(() => { stopped = true; for (const el of [fx, plain]) { el.pause(); el.removeAttribute('src'); } cancelAnimationFrame(raf); actx?.close(); });
-  }).catch(() => { const box = $('[data-calls]', view); if (box) box.innerHTML = '<p class="muted small">Calls need an internet connection the first time.</p>'; });
+  }).catch(() => { const box = $('[data-calls]', view); if (box && here()) box.innerHTML = '<p class="muted small">Calls need an internet connection the first time.</p>'; })
+    .finally(() => callsWired());
 }
 
 function renderCompare(a, b) {
   const A = byId.get(a), B = byId.get(b);
   if (!A || !B) { location.hash = '#/dex'; return; }
+  const hash = location.hash;
   const seen = seenSet();
+  const tellHTML = () => { const t = tellFor(a, b); return t ? `<p class="cmp-tell"><strong>How to tell them apart.</strong> ${esc(t)}</p>` : ''; };
   const col = sp => {
-    const m = monthRates(sp.id);
+    const m = monthRates(sp.id), size = sizeFact(sp);
     return `<div class="cmp-col">
       <a href="#/bird/${sp.id}" class="cmp-img">${birdImg(sp, 'large', '', { whole: true })}</a>
-      <div class="cmp-id">${band(sp.id, seen.has(sp.id))}${pips(sp.rarity)}</div>
+      <div class="cmp-id">${band(sp.id, seen.has(sp.id))}${kindTag(sp)}${pips(sp.rarity)}</div>
       <h2>${esc(sp.name)}</h2>
       <p class="sci small">${esc(sp.sci)}</p>
-      <dl class="cmp-facts"><dt>Size</dt><dd>${sp.size} cm</dd><dt>Look in</dt><dd>${sp.habitats.map(h => HABITATS[h]).join(', ')}</dd></dl>
+      <dl class="cmp-facts">${size ? `<dt>${size[0]}</dt><dd>${esc(size[1])}</dd>` : ''}<dt>Look in</dt><dd>${sp.habitats.map(h => HABITATS[h]).join(', ')}</dd></dl>
       ${m ? `<div class="season season--mini">${m.rel.map(v => `<i style="height:${Math.max(3, v * 100)}%"></i>`).join('')}</div><div class="season-labels">${[...'JFMAMJJASOND'].map(c => `<span>${c}</span>`).join('')}</div>` : ''}
       <p class="small">${esc(sp.notes)}</p>
-      <button class="btn btn--small" data-cplay="${sp.id}">${icon.play} Call</button>
+      ${hasCalls(sp.id) ? `<button class="btn btn--small" data-cplay="${sp.id}" aria-label="Play the call of the ${esc(sp.name)}">${icon.play} Call</button>` : ''}
     </div>`;
   };
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/bird/${A.id}" aria-label="Back">${icon.back}</a><h1>Compare</h1></header>
+    <div class="cmp-tellbox" data-tell>${tellHTML()}</div>
     <div class="cmp">${col(A)}${col(B)}</div>`;
+  if (!tellFor(a, b)) loadLookalikes().then(() => { const box = location.hash === hash && $('[data-tell]', view); if (box) box.innerHTML = tellHTML(); });
   let audio = null;
   view.onclick = async e => {
     const p = e.target.closest('[data-cplay]');
     if (!p) return;
     audio?.pause();
     const list = await getCalls(byId.get(Number(p.dataset.cplay)));
-    if (!list.length) { toast('No recording for this bird yet.'); return; }
+    if (!list.length) { toast('No recording for this one yet.'); return; }
     audio = new Audio(await audioUrl(list[0].src)); audio.play().catch(() => toast('That recording would not play.'));
   };
   view.onchange = null;
@@ -1594,16 +1708,17 @@ function whereSection(sp) {
   const m = monthRates(sp.id);
   if (!m) return '';
   const now = new Date().getMonth();
-  const spots = spotsFor(sp.id, 6);
+  const spots = spotsFor(sp.id, 6), near = spots[0]?.near;
   const L = 'JFMAMJJASOND';
-  return `<section class="where">
-    <h2 class="h2">When it's reported</h2>
+  return `<section class="where" aria-labelledby="where-h">
+    <h2 class="h2" id="where-h">When and where</h2>
+    <h3 class="h3">When it's reported</h3>
     <div class="season" role="img" aria-label="Reporting rate by month, highest in ${MONTHS[m.rel.indexOf(1)]}">${m.rel.map((v, i) => `<i class="${i === now ? 'now' : ''}" style="height:${Math.max(3, Math.round(v * 100))}%"></i>`).join('')}</div>
     <div class="season-labels" aria-hidden="true">${[...L].map(c => `<span>${c}</span>`).join('')}</div>
     <p class="small muted">How often it's reported in SEQ each month, from ${recordCount(sp.id).toLocaleString('en-AU')} records since 2016 in the Atlas of Living Australia.</p>
-    ${spots.length ? `<h2 class="h2">Best places in SEQ</h2>
+    ${spots.length ? `<h3 class="h3">${near ? 'Places near its records' : 'Best places in SEQ'}</h3>
     <ul class="spots">${spots.map(({ h, c }) => `<li><span>${esc(h.name)}</span><span class="num">${c.toLocaleString('en-AU')}</span></li>`).join('')}</ul>
-    <p class="small muted">Number of records at each spot.</p>` : ''}
+    <p class="small muted">${near ? 'Named places within 3 km of where it has been recorded, with the number of records around each.' : 'Number of records at each spot.'}</p>` : ''}
     <a class="btn" href="#/map/sp/${sp.id}">${icon.pin} Show where it's reported</a>
   </section>`;
 }
@@ -1635,7 +1750,7 @@ function renderLists() {
 
     <section class="block">
       <div class="block-h"><h2 class="h2">Patches</h2><a href="#/map" data-newpatch>New patch</a></div>
-      <p class="muted small">A patch is a place you bird often, like your yard or a local park. Any sighting inside its circle counts automatically.</p>
+      <p class="muted small">A patch is a place you visit often, like your yard or a local park. Any sighting inside its circle counts automatically.</p>
       ${state.patches.length ? `<ul class="patches">${state.patches.map(p => {
         const inside = state.sightings.filter(s => inPatch(s, p));
         const pt = totals(inside, now);
@@ -1649,7 +1764,7 @@ function renderLists() {
       ${outings.length ? `<ul class="rows">${outings.slice(0, 12).map(o => {
         const n = state.sightings.filter(s => s.outingId === o.id).length;
         return `<li><a class="row" href="#/outing/${o.id}"><span class="row-main"><strong>${esc(o.place || 'Unnamed place')}</strong><span class="muted small">${fmtDate(o.date)}, ${o.time}${o.endedAt ? (o.durationMin ? `, ${o.durationMin} min` : '') : ', in progress'}</span></span><span class="row-n">${n}</span></a></li>`;
-      }).join('')}</ul>` : '<p class="empty-inline">Start an outing with the + button to tally every bird at a spot.</p>'}
+      }).join('')}</ul>` : '<p class="empty-inline">Start an outing with the + button to tally everything you see at one spot.</p>'}
     </section>
 
     ${years.length ? `<section class="block"><h2 class="h2">Past years</h2><ul class="rows">${years.map(y => `<li><a class="row" href="#/list/${y.year}"><span class="row-main"><strong>${y.year}</strong></span><span class="row-n">${y.count}</span></a></li>`).join('')}</ul></section>` : ''}
@@ -1787,13 +1902,13 @@ function renderOuting(id) {
     <header class="page-head page-head--back"><a class="iconbtn" href="#/lists" aria-label="Back to lists">${icon.back}</a>
       <div><h1>${esc(o.place || 'Outing')}</h1><p class="muted small">${fmtDate(o.date)}, started ${o.time}${mins != null ? `, ${mins} min` : ''}${!live ? (o.complete ? '. Complete checklist.' : '.') : ''}</p></div></header>
     <p class="list-count"><b>${recs.length}</b> species${!live && o.distanceKm ? `, ${o.distanceKm} km` : ''}</p>
-    ${editing ? `<div class="searchbox searchbox--sticky">${icon.search}<input type="search" placeholder="Add a bird: type a name" value="${esc(q)}" data-tq aria-label="Find a bird to add"></div>
-      ${q ? `<ul class="tally-list">${results.map(tallyRow).join('') || '<li class="muted pad">No bird by that name in the dex.</li>'}</ul><hr class="rule">` : ''}` : ''}
-    <ul class="tally-list">${ordered.map(tallyRow).join('') || (editing ? '<li class="muted pad">Search above to add the first bird. Tap + again each time you count another.</li>' : '')}</ul>
+    ${editing ? `<div class="searchbox searchbox--sticky">${icon.search}<input type="search" placeholder="Add a species: type a name" value="${esc(q)}" data-tq aria-label="Find a species to add"></div>
+      ${q ? `<ul class="tally-list">${results.map(tallyRow).join('') || '<li class="muted pad">Nothing by that name in the dex.</li>'}</ul><hr class="rule">` : ''}` : ''}
+    <ul class="tally-list">${ordered.map(tallyRow).join('') || (editing ? '<li class="muted pad">Search above to add the first species. Tap + again each time you count another.</li>' : '')}</ul>
     ${o.notes ? `<p class="pad-x">${esc(o.notes)}</p>` : ''}
     <div class="row-end pad">
       ${live ? `<button class="btn btn--danger btn--quiet" data-cancel>Discard</button><span class="spacer"></span><button class="btn btn--primary" data-finish>Finish outing</button>`
-             : `<button class="btn btn--danger btn--quiet" data-cancel>Delete outing</button><span class="spacer"></span><button class="btn" data-editbirds>${editing ? 'Done editing birds' : 'Edit birds'}</button><button class="btn" data-finish>Edit details</button>`}
+             : `<button class="btn btn--danger btn--quiet" data-cancel>Delete outing</button><span class="spacer"></span><button class="btn" data-editbirds>${editing ? 'Done editing species' : 'Edit species'}</button><button class="btn" data-finish>Edit details</button>`}
     </div>`;
   const tq = $('[data-tq]', view);
   tq?.addEventListener('input', () => {
@@ -1833,7 +1948,7 @@ function renderLog() {
       const sp = byId.get(s.speciesId);
       return `<li><button class="row row--sp" data-edit="${s.id}"><span class="row-thumb">${s.photoId ? `<img data-photo="${s.photoId}" alt="">` : birdImg(sp)}</span>
         <span class="row-main"><strong>${esc(sp?.name)}</strong><span class="muted small">${s.time || ''} ${esc(s.place || '')}</span></span><span class="row-n">${s.count ?? 'X'}</span></button></li>`;
-    }).join('')}</ul></section>`).join('') || '<div class="empty"><p>No sightings yet. Tap + to log your first bird.</p></div>'}`;
+    }).join('')}</ul></section>`).join('') || '<div class="empty"><p>No sightings yet. Tap + to log your first sighting.</p></div>'}`;
   view.onclick = e => { const ed = e.target.closest('[data-edit]'); if (ed) openSightingSheet({ sightingId: Number(ed.dataset.edit) }); };
   view.onchange = null;
 }
@@ -1940,7 +2055,7 @@ async function renderMap(spId = null, at = null) {
         : { radius: 4 + Math.min(6, h.rich / 30), color: '#3A2A00', weight: 1.5, fillColor: gold, fillOpacity: 0.9, bubblingMouseEvents: false };
       const mk = L.circleMarker([h.lat, h.lng], style);
       hotMarkers.push({ h, mk });
-      mk.addTo(map).bindPopup(`<div data-desc><span class="pop-h">${esc(h.name)}</span>${h.rich} dex species recorded here. You have seen ${got}.<p class="pop-src">Looking up this place…</p></div>
+      mk.addTo(map).bindPopup(`<div data-desc><span class="pop-h">${esc(h.name)}</span>${h.rich} dex birds recorded here. You have seen ${got}.<p class="pop-src">Looking up this place…</p></div>
           ${need.length ? `Still to find (${needAll.length}):<ul class="pop-need">${need.map(sp => `<li><a href="#/bird/${sp.id}">${esc(sp.name)}</a></li>`).join('')}</ul>` : ''}
           <a href="https://www.google.com/maps/dir/?api=1&destination=${h.lat},${h.lng}" target="_blank" rel="noopener">Directions</a>`, { maxWidth: 260 });
       mk.on('popupopen', async ev => {
@@ -2066,8 +2181,18 @@ async function renderMap(spId = null, at = null) {
   setTimeout(() => map.invalidateSize(), 50);
 }
 
-// Badges
-let badgesWaited = false;
+// Badges: a trophy shelf. Each section has its own emblem (inline SVG, drawn in the section's colour by the CSS).
+// Earned badges are filled and come first; the rest are outlined, with a ring that fills as she gets closer.
+const EMBLEM = {
+  milestone: '<path class="e-tail" d="M21 40l-6 20 9-4.5 5 7.5 4-17zM43 40l6 20-9-4.5-5 7.5-4-17z"/><circle class="e-body" cx="32" cy="28" r="22"/><circle class="e-line" cx="32" cy="28" r="17"/>',
+  kind: '<path class="e-body" d="M32 4l24 14v28L32 60 8 46V18z"/><path class="e-line" d="M32 11l18 10.5v21L32 53 14 42.5v-21z"/>',
+  rarity: '<path class="e-body" d="M20 8h24l14 16-26 34L6 24z"/><path class="e-line" d="M6 24h52M20 8l6 16 6-16 6 16 6-16M26 24l6 34 6-34"/>',
+  habit: '<path class="e-body" d="M32 5l23 8v17c0 15-10 25-23 29C19 55 9 45 9 30V13z"/><path class="e-line" d="M32 11l17 6v13c0 11-7.5 19-17 22.5C22.5 49 15 41 15 30V17z"/>',
+  learning: '<rect class="e-tail" x="15" y="7" width="36" height="46" rx="6" transform="rotate(9 33 30)"/><rect class="e-body" x="12" y="10" width="36" height="46" rx="6" transform="rotate(-5 30 33)"/>',
+  habitat: '<path class="e-body" d="M32 4c15 9 23 23 20 37-2.5 10-11 16-20 19-9-3-17.5-9-20-19C9 27 17 13 32 4z"/><path class="e-line" d="M32 13v46M32 27l-9-7M32 27l9-7M32 39l-11-8M32 39l11-8M32 50l-8-6M32 50l8-6"/>',
+  group: '<rect class="e-body" x="5" y="17" width="54" height="30" rx="8"/><path class="e-line" d="M11 22.5h42"/>',
+};
+let badgesWaited = false, badgesEarned = 0;
 function renderBadges() {
   const learning = learnStats();
   // Learning progress loads from the kv store at start-up; draw again once it's in.
@@ -2076,16 +2201,24 @@ function renderBadges() {
   const earned = list.filter(b => b.done).length;
   const sections = [['milestone', 'Milestones'], ['kind', 'Animals & plants'], ['rarity', 'Rarities'], ['habit', 'Habits'], ['learning', 'Learning'], ['habitat', 'Habitats'], ['group', 'Complete a group']]
     .filter(([k]) => list.some(b => b.kind === k));
+  const shown = k => k !== 'rarity' && k !== 'habitat'; // gems and leaves carry no number
+  const badge = (b, k) => `<li class="badge badge--${k} ${b.done ? 'badge--done' : ''}${k === 'kind' ? ` kind--${b.id.split('-')[1]}` : ''}" style="--p:${Math.round(b.have / b.need * 100)}">
+      <span class="emb" aria-hidden="true">${b.done ? '' : '<span class="emb-ring"></span>'}<svg viewBox="0 0 64 64">${EMBLEM[k]}</svg>${shown(k) ? `<b class="emb-n">${b.need}</b>` : ''}</span>
+      <strong class="badge-name">${esc(b.name)}</strong>
+      <span class="badge-desc">${esc(b.desc)}<span class="sr-only">. ${b.done ? 'Earned' : `${b.have} of ${b.need} so far`}.</span></span></li>`;
   view.innerHTML = `
     <header class="page-head"><h1>Badges</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button><a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a></div></header>
     <div class="quicklinks pad-x"><a class="btn" href="#/learn">${icon.learn} Learn</a><a class="btn" href="#/stats">${icon.chart} Stats</a>${leaderboardLink()}</div>
-    <p class="list-count"><b>${earned}</b> of ${list.length} earned</p>
-    ${sections.map(([k, title]) => `<section class="block"><h2 class="h2">${title}</h2><ul class="badges">${list.filter(b => b.kind === k).map(b => `
-      <li class="badge ${b.done ? 'badge--done' : ''} badge--${k}${k === 'kind' ? ` kind--${b.id.split('-')[1]}` : ''}">
-        <span class="medal" aria-hidden="true"><span>${b.done ? '✓' : b.need}</span></span>
-        <span class="badge-txt"><strong>${esc(b.name)}</strong><span class="small muted">${esc(b.desc)}</span>
-        ${b.done ? '' : `<span class="meter meter--thin" style="--p:${Math.round(b.have / b.need * 100)}%"><span></span></span><span class="small muted">${b.have} of ${b.need}</span>`}</span>
-      </li>`).join('')}</ul></section>`).join('')}`;
+    <p class="list-count shelf-count"><b data-earned>${earned}</b> of ${list.length} earned</p>
+    ${sections.map(([k, title]) => {
+      const items = list.filter(b => b.kind === k);
+      const done = items.filter(b => b.done);
+      return `<section class="block shelf-sec"><h2 class="h2 shelf-h"><span>${title}</span><span class="shelf-n" aria-hidden="true">${done.length}/${items.length}</span></h2>
+        <ul class="shelf">${[...done, ...items.filter(b => !b.done)].map(b => badge(b, k)).join('')}</ul></section>`;
+    }).join('')}`;
+  // The earned count stamps up from where it was last time (from nothing on the first visit).
+  countUp($('[data-earned]', view), badgesEarned, earned, { delay: 150 });
+  badgesEarned = earned;
   view.onclick = e => { if (e.target.closest('[data-search]')) openSearch(); }; view.onchange = null;
 }
 
@@ -2263,7 +2396,7 @@ function openSearch(initial = '') {
     const sec = (title, items) => items ? `<h2 class="h2 pad-x">${title}</h2><ul class="rows pad-x">${items}</ul>` : '';
     res.innerHTML = [
       sec(kindsPresent.length > 1 ? 'Species' : 'Birds', birds.map(s => `<li><a class="row row--sp kind--${s.kind}" href="#/bird/${s.id}"><span class="row-thumb ${seen.has(s.id) ? 'row-thumb--seen' : ''}">${birdImg(s)}</span><span class="row-main"><strong>${esc(s.name)}</strong><span class="small muted">${esc(GROUPS[s.group])}</span></span>${band(s.id, seen.has(s.id))}</a></li>`).join('')),
-      sec('Hotspots', hs.map(h => `<li><a class="row" href="#/map/at/${h.lat},${h.lng}"><span class="row-main"><strong>${esc(h.name)}</strong><span class="small muted">${h.rich} dex species recorded</span></span></a></li>`).join('')),
+      sec('Hotspots', hs.map(h => `<li><a class="row" href="#/map/at/${h.lat},${h.lng}"><span class="row-main"><strong>${esc(h.name)}</strong><span class="small muted">${h.rich} dex birds recorded</span></span></a></li>`).join('')),
       sec('Your patches', pats.map(p => `<li><a class="row" href="#/patch/${p.id}"><span class="row-main"><strong>${esc(p.name)}</strong></span></a></li>`).join('')),
       sec('Your sightings', mine.map(s => `<li><a class="row" href="#/bird/${s.speciesId}"><span class="row-main"><strong>${esc(byId.get(s.speciesId)?.name)}</strong><span class="small muted">${fmtDate(s.date)}${s.place ? `, ${esc(s.place)}` : ''}</span></span></a></li>`).join('')),
     ].join('') || '<p class="muted pad">Nothing found. Check the spelling, or try part of a name.</p>';
@@ -2484,7 +2617,7 @@ async function showWelcome() {
     <h1>Hi Sarah</h1>
     <p>This is your BirdyDex: ${BIRDS.length} South East Queensland birds to find${ANIMALS.length > BIRDS.length ? `, plus ${ANIMALS.length - BIRDS.length} other native animals` : ''}${ofKind('plant').length ? ` and ${ofKind('plant').length} native plants` : ''}, starting with this Eastern Yellow Robin.</p>
     <ul class="welcome-list">
-      <li><strong>Log</strong> a bird with the + button, or press and hold any bird in the dex.</li>
+      <li><strong>Log</strong> a sighting with the + button, or press and hold anything in the dex.</li>
       <li><strong>Listen</strong> and <strong>Scan</strong> name birds from a call or a photo.</li>
       <li><strong>Hotspots, targets and badges</strong> show where to go next.</li>
     </ul>

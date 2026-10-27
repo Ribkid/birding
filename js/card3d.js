@@ -178,7 +178,7 @@ export async function shareCard(sp, info) {
   const blob = await cardImage(sp, info);
   const file = new File([blob], `${sp.name.replace(/\W+/g, '-')}.png`, { type: 'image/png' });
   if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: sp.name, text: `${sp.name}: number ${sp.id} in Sarah's BirdyDex` }); return; } catch (_) { return; }
+    try { await navigator.share({ files: [file], title: sp.name, text: `${sp.name}, number ${dexCode(sp.id)} in Sarah's BirdyDex` }); return; } catch (_) { return; }
   }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
 }

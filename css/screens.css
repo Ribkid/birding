@@ -79,3 +79,150 @@
 .empty-h { margin: 0 0 4px; font-weight: 700; font-size: var(--fs-3); color: var(--ink); }
 .empty .small { max-width: 36ch; margin: 0 auto var(--sp-2); }
 .row--sp .row-main i { font-style: italic; }
+
+/* ---------- species page: a short lesson ----------
+   The photo stays clear: a small counter bottom-left, the view switch bottom-right, the credit on a line beneath. */
+.hero-count, .hero-tabs { background: color-mix(in srgb, var(--ink) 74%, transparent); color: var(--paper); }
+.hero-count {
+  position: absolute; left: 12px; bottom: 12px; padding: 5px 10px 4px; border-radius: var(--r-pill); pointer-events: none;
+  font: 600 var(--fs-2)/1 var(--stamp); letter-spacing: .05em; font-variant-numeric: tabular-nums;
+}
+.hero-count b { font-weight: 800; }
+.hero-tabs { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); }
+.hero-tabs button {
+  min-height: 36px; padding: 6px 12px; border: 0; border-radius: var(--r-pill); background: transparent; color: inherit;
+  font: 600 var(--fs-1)/1 var(--font); white-space: nowrap; cursor: pointer; transition: background-color var(--dur-2), color var(--dur-2);
+}
+.hero-tabs button[aria-selected="true"] { background: var(--paper); color: var(--ink); }
+.hero-credit {
+  margin: 0; padding: 6px var(--sp-4) 0; min-height: calc(1.45em + 6px); font-size: var(--fs-1); line-height: 1.45; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hero-credit a { color: inherit; }
+
+/* Name block */
+.bird-body { padding: var(--sp-3) var(--sp-4) calc(var(--sp-7) + 40px); }
+.bird-id { flex-wrap: wrap; gap: var(--sp-2); }
+.rarity-line { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-2); color: var(--ink-2); }
+.bird .bird-name { margin: var(--sp-3) 0 2px; }
+.sci-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0 0 var(--sp-4); }
+.sci-row .sci { margin: 0; }
+.mastery {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 7px; border-radius: var(--r-pill);
+  background: var(--azure-soft); color: var(--ink); font-size: var(--fs-1); font-weight: 700; line-height: 1.2;
+}
+.mastery i { width: 12px; height: 12px; border-radius: 50%; background: conic-gradient(var(--azure) calc(var(--p) * 1%), color-mix(in srgb, var(--azure) 22%, transparent) 0); }
+.mastery svg { width: 14px; height: 14px; }
+.mastery--done { background: var(--seen); color: var(--on-seen); }
+
+/* How to spot it */
+.spot-marks { display: grid; gap: var(--sp-2); margin: 0 0 var(--sp-4); padding: 0; list-style: none; }
+.spot-marks li { position: relative; padding-left: 20px; line-height: 1.5; max-width: 62ch; }
+.spot-marks li::before { content: ''; position: absolute; left: 3px; top: .6em; width: 8px; height: 8px; border-radius: 50%; background: var(--kc, var(--azure)); }
+.spot-call {
+  display: flex; align-items: center; gap: var(--sp-3); margin: 0 0 var(--sp-4); padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-2);
+  border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-1);
+}
+.spot-call p { margin: 0; line-height: 1.4; }
+.spot-call q { font-weight: 700; }
+.spot-play { width: 44px; height: 44px; }
+.spot-call-ic { display: grid; place-items: center; width: 44px; height: 44px; flex: none; color: var(--ink-2); }
+.spot-call-ic svg { width: 22px; height: 22px; }
+.spot-hab { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--sp-3) 0 0; padding: 0; list-style: none; }
+.spot-hab li { padding: 5px 11px; border-radius: var(--r-pill); background: var(--surface-2); font-size: var(--fs-2); font-weight: 500; }
+.spot-hab .spot-hab--night { background: var(--ink); color: var(--paper); }
+.spot-test { margin-top: var(--sp-4); }
+.spot-test svg { color: var(--azure); }
+
+/* Easy to confuse with */
+.confuse-list { margin: var(--sp-2) 0 0; padding: 0; list-style: none; }
+.confuse-row { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
+.confuse-sp { flex: 1; display: flex; align-items: center; gap: var(--sp-3); min-width: 0; color: var(--ink); text-decoration: none; }
+.confuse-sp .row-thumb { width: 56px; height: 56px; align-self: flex-start; }
+.confuse-sp .row-main { gap: 2px; }
+.confuse-tell { color: var(--ink); line-height: 1.4; }
+
+/* When and where */
+.h3 { margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-3); font-weight: 700; }
+.where .h2 + .h3 { margin-top: 0; }
+
+/* The slim Log bar that rises above the tab bar once the main button has scrolled away. Above the outing bar if
+   one is showing. */
+.logbar {
+  position: fixed; left: var(--sp-2); right: var(--sp-2); bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--sp-2)); z-index: 19;
+  display: flex; align-items: center; gap: var(--sp-3); max-width: 640px; min-height: 56px; margin: 0 auto; padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
+  border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-2);
+  transform: translateY(calc(100% + 24px)); opacity: 0; visibility: hidden;
+  transition: transform var(--dur-3) var(--ease-in), opacity var(--dur-2) var(--ease-in), visibility 0s linear var(--dur-3);
+}
+.logbar--on { transform: none; opacity: 1; visibility: visible; transition: transform var(--dur-3) var(--ease-out), opacity var(--dur-2) var(--ease-out), visibility 0s; }
+.logbar strong { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.logbar .btn { flex: none; min-height: 40px; }
+body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 66px); }
+@media (prefers-reduced-motion: reduce) {
+  .logbar { transform: none; transition: opacity var(--dur-2) linear, visibility 0s linear var(--dur-2); }
+  .logbar--on { transition: opacity var(--dur-2) linear, visibility 0s; }
+  .hero-tabs button { transition: none; }
+}
+
+/* Compare */
+.cmp-tellbox:empty { display: none; }
+.cmp-tell { margin: 0 var(--sp-4) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-1); line-height: 1.45; }
+.cmp-id { flex-wrap: wrap; }
+
+/* ---------- badges: a trophy shelf ----------
+   One emblem per section, in that section's colour: milestones a medal, animals and plants a kind-coloured hexagon,
+   rarities a gem, habits a shield, learning a pair of cards, habitats a leaf and groups a leg band. */
+.shelf-count { margin-top: var(--sp-3); }
+.shelf-count b { display: inline-block; }
+.shelf-h { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); }
+.shelf-n { font: 600 var(--fs-4)/1 var(--stamp); color: var(--ink-2); letter-spacing: .03em; font-variant-numeric: tabular-nums; }
+.shelf { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-3); margin: var(--sp-2) 0 var(--sp-3); padding: 0; list-style: none; }
+@media (min-width: 600px) { .shelf { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); } }
+.badge { display: grid; justify-items: center; align-content: start; gap: 2px; text-align: center; min-width: 0; }
+.badge--milestone { --ef: var(--azure); --eo: var(--on-azure); --ny: 44%; }
+.badge--kind { --ef: var(--kc); --eo: var(--on-kind); --ny: 50%; }
+.badge--rarity { --ef: var(--gold); --eo: var(--paper); }
+.badge--habit { --ef: var(--lori); --eo: var(--on-kind); --ny: 49%; }
+.badge--learning { --ef: var(--ink); --eo: var(--paper); --ny: 53%; }
+.badge--habitat { --ef: var(--k-plant); --eo: var(--on-kind); }
+.badge--group { --ef: var(--seen); --eo: var(--on-seen); --ny: 54%; }
+.emb { position: relative; display: grid; place-items: center; width: 76px; height: 76px; margin-bottom: var(--sp-1); }
+.emb svg { width: 66px; height: 66px; overflow: visible; }
+.emb .e-body, .emb .e-tail { fill: var(--ef); }
+.emb .e-tail { opacity: .7; }
+.emb .e-line { fill: none; stroke: var(--eo); stroke-width: 1.6; opacity: .55; }
+.emb-n {
+  position: absolute; left: 0; right: 0; top: var(--ny, 50%); transform: translateY(-50%);
+  font: 800 var(--fs-4)/1 var(--stamp); color: var(--eo); letter-spacing: .02em; font-variant-numeric: tabular-nums;
+}
+/* Not yet earned: an outline in the same shape, and a ring around it that fills with progress. */
+.badge:not(.badge--done) .e-body, .badge:not(.badge--done) .e-tail { fill: var(--surface); stroke: var(--line-strong); stroke-width: 2; opacity: 1; }
+.badge:not(.badge--done) .e-line { stroke: var(--line-strong); opacity: .7; }
+.badge:not(.badge--done) .emb-n { color: var(--ink-2); }
+.emb-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(var(--sun-ink) calc(var(--p) * 1%), var(--surface-2) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), black calc(100% - 3.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), black calc(100% - 3.5px));
+}
+.badge:not(.badge--done) .emb svg { width: 52px; height: 52px; }
+.badge-name { font-size: var(--fs-2); font-weight: 700; line-height: 1.25; }
+.badge:not(.badge--done) .badge-name { color: var(--ink-2); }
+.badge-desc { font-size: var(--fs-1); color: var(--ink-2); line-height: 1.35; }
+
+/* ---------- + sheet: every option has an icon, and logging one sighting leads ---------- */
+.plus-opt { grid-template-columns: auto 1fr; column-gap: var(--sp-3); align-items: center; color: var(--ink); }
+.plus-opt > svg { grid-row: span 2; width: 26px; height: 26px; color: var(--azure); }
+.plus-opt--main { background: var(--azure); color: var(--on-azure); }
+.plus-opt--main > svg, .plus-opt--main span { color: inherit; }
+.plus-opt--main span { opacity: .88; }
+.plus-opt--id { grid-template-columns: 1fr; align-items: start; }
+.plus-opt--id > svg { grid-row: auto; }
+
+/* ---------- stats: group bars under their kind ---------- */
+.gkind + .gkind { margin-top: var(--sp-4); }
+.gkind-h { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); margin: 0 0 var(--sp-2); font-size: var(--fs-3); }
+.gkind-h > span:first-child::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: var(--sp-2); border-radius: 50%; background: var(--kc); }
+.gkind-h .num { font: 600 var(--fs-4)/1 var(--stamp); color: var(--ink-2); }
+.gkind .meter span { background: var(--kc); box-shadow: none; }

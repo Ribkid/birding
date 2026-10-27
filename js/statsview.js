@@ -1,5 +1,5 @@
 // Stats page: life list growth, months, calendar heatmap, places.
-import { byId, SPECIES } from './species.js';
+import { byId, SPECIES, KINDS, kindsPresent } from './species.js';
 import { MONTHS } from './stats.js';
 
 export function renderStats(ctx) {
@@ -32,13 +32,13 @@ export function renderStats(ctx) {
     <div class="statgrid">
       <div><b>${seen.size}</b><span>species</span></div>
       <div><b>${S.length}</b><span>sightings</span></div>
-      <div><b>${individuals.toLocaleString('en-AU')}</b><span>birds counted</span></div>
+      <div><b>${individuals.toLocaleString('en-AU')}</b><span>individuals counted</span></div>
       <div><b>${perDay.size}</b><span>days out</span></div>
     </div>
     ${S.length ? '' : '<p class="empty-inline pad-x">Charts appear here once there are a few sightings.</p>'}
     <section class="block"><h2 class="h2">Life list growth</h2>${growthChart(growth)}</section>
     <section class="block"><h2 class="h2">Species each month in ${year}</h2>${monthBars(perMonth.map(s => s.size), now.getMonth())}</section>
-    <section class="block"><h2 class="h2">Birding days</h2><p class="small muted">The last 26 weeks. Darker squares mean more species that day.</p>${heatmap(perDay, now)}
+    <section class="block"><h2 class="h2">Days out</h2><p class="small muted">The last 26 weeks. Darker squares mean more species that day.</p>${heatmap(perDay, now)}
       ${bestDay ? `<p class="small">Best day: <strong>${bestDay[1].size} species</strong> on ${fmtDate(bestDay[0])}.</p>` : ''}</section>
     ${topPlaces.length ? `<section class="block"><h2 class="h2">Top places</h2><ul class="spots">${topPlaces.map(([p, set]) => `<li><span>${esc(p)}</span><span class="num">${set.size}</span></li>`).join('')}</ul></section>` : ''}
     ${topBirds.length ? `<section class="block"><h2 class="h2">Most logged</h2><ul class="spots">${topBirds.map(([id, n]) => `<li><a href="#/bird/${id}">${esc(byId.get(id)?.name)}</a><span class="num">${n}</span></li>`).join('')}</ul></section>` : ''}
@@ -84,11 +84,19 @@ function heatmap(perDay, now) {
     const n = perDay.get(k)?.size || 0;
     days.push(`<i style="--v:${n ? 0.25 + 0.75 * n / max : 0}" title="${k}: ${n} species"></i>`);
   }
-  return `<div class="heat" role="img" aria-label="Calendar of birding days">${days.join('')}</div>`;
+  return `<div class="heat" role="img" aria-label="Calendar of days out">${days.join('')}</div>`;
 }
 
+// Groups sit under their kind, each kind with its own tally, so 18 bird groups and 26 others don't run together.
 function groupBars(ctx, seen) {
-  const groups = {};
-  for (const s of SPECIES) { (groups[s.group] ||= { n: 0, got: 0 }); groups[s.group].n++; if (seen.has(s.id)) groups[s.group].got++; }
-  return `<ul class="gbars">${Object.entries(groups).map(([g, v]) => `<li><span>${ctx.GROUPS[g]}</span><span class="meter meter--thin" style="--p:${Math.round(v.got / v.n * 100)}%"><span></span></span><span class="num">${v.got}/${v.n}</span></li>`).join('')}</ul>`;
+  const kinds = kindsPresent.length > 1;
+  return kindsPresent.map(k => {
+    const all = SPECIES.filter(s => s.kind === k);
+    const got = all.filter(s => seen.has(s.id)).length;
+    const groups = {};
+    for (const s of all) { (groups[s.group] ||= { n: 0, got: 0 }); groups[s.group].n++; if (seen.has(s.id)) groups[s.group].got++; }
+    return `<div class="gkind kind--${k}">
+      ${kinds ? `<h3 class="gkind-h"><span>${KINDS[k].label}</span><span class="num"><span aria-hidden="true">${got}/${all.length}</span><span class="sr-only">${got} of ${all.length} seen</span></span></h3>` : ''}
+      <ul class="gbars">${Object.entries(groups).map(([g, v]) => `<li><span>${ctx.esc(ctx.GROUPS[g])}</span><span class="meter meter--thin" style="--p:${Math.round(v.got / v.n * 100)}%"><span></span></span><span class="num">${v.got}/${v.n}</span></li>`).join('')}</ul></div>`;
+  }).join('');
 }
