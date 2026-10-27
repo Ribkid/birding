@@ -1,8 +1,9 @@
 // BirdyDex service worker.
 //
-// Shell and data are precached at install; photos, map tiles and call clips are cached on first
-// use. The 88 MB photo model is deliberately left out: src/core/photoid.js downloads it on demand
-// with progress and keeps it in its own 'birddex-models' cache.
+// Shell and data are precached at install. Wikimedia photos ('birddex-images') and map tiles
+// ('birddex-tiles') are cached on first use; call clips ('birddex-calls') are stored whole. The
+// BioCLIP .bin parts bypass the worker and are joined by src/core/photoid.js into
+// 'birddex-models'; BirdNET files and /vendor bundles use the same model cache.
 //
 // Rule learned the hard way: never rebuild a cached Response (no new Response(res.body, …), no
 // forged url/type). Cached responses are served as they are. Rebuilding them makes CORS-mode
@@ -13,7 +14,10 @@ const SHELL = 'birdydex-shell-' + VERSION;
 const RUNTIME = 'birdydex-runtime-v3';
 const PHOTOS = 'birdydex-photos-v3';
 const CALLS = 'birddex-calls';
+const IMAGES = 'birddex-images';
+const TILES = 'birddex-tiles';
 const PHOTO_LIMIT = 400;
+const TILE_LIMIT = 3000;
 const PRECACHE = __PRECACHE__;
 
 // Cached responses carry the server's Vary header, but requests for module scripts, styles and
@@ -77,6 +81,28 @@ async function cacheFirst(request, cacheName, event) {
   return res;
 }
 
+// Cross-origin photos and map tiles. Ask for a CORS response so Cache Storage can keep it;
+// fall back to the original request when the host will not allow that.
+async function cacheFirstCross(request, cacheName, event, limit) {
+  const hit = await caches.match(request, MATCH);
+  if (hit) return hit;
+  let res;
+  try {
+    res = await fetch(new Request(request.url, { mode: 'cors', credentials: 'omit' }));
+  } catch {
+    res = await fetch(request);
+  }
+  if (res.ok) {
+    const work = caches.open(cacheName)
+      .then((cache) => cache.put(request, res.clone()))
+      .then(() => (limit ? trim(cacheName, limit) : undefined))
+      .catch(() => {});
+    if (event) event.waitUntil(work);
+    else await work;
+  }
+  return res;
+}
+
 // Call clips: audio elements ask for byte ranges, and Safari will not play a plain 200 answer to a
 // range request, so the whole file is kept and the range is cut from it.
 async function callClip(request) {
@@ -116,7 +142,16 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // Wikipedia / ALA photos are the app's business
+  // v1 caches Wikipedia photos and map tiles so the field guide, quizzes and map work offline.
+  if ((url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org') && request.destination !== 'audio') {
+    event.respondWith(cacheFirstCross(request, IMAGES, event).catch(() => Response.error()));
+    return;
+  }
+  if (/(^|\.)tile\.openstreetmap\.org$/.test(url.hostname) || url.hostname === 'server.arcgisonline.com') {
+    event.respondWith(cacheFirstCross(request, TILES, event, TILE_LIMIT).catch(() => Response.error()));
+    return;
+  }
+  if (url.origin !== self.location.origin) return; // other third-party requests are the app's business
 
   // Navigations: network first so a deploy lands, cached shell as the offline fallback.
   if (request.mode === 'navigate') {
