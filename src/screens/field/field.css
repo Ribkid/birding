@@ -1,131 +1,50 @@
-/* Field-tools slice: small additions on top of the v1 scan/listen classes. */
+/* Working with no signal: Settings' "Ready for the field" card and the map's no-signal note (js/app.js). */
 
-.field-model {
-  display: grid;
-  gap: 4px;
-  margin: 10px 0 14px;
-  padding: 12px 14px;
-  border: 1.5px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
-}
-.field-model--error { border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); }
-.field-model-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.field-model-h strong { font-weight: 700; }
-.field-model-note { margin: 2px 0 0; }
-.field-model .meter { margin: 4px 0 2px; }
-.field-model .btn { margin-top: 8px; }
-.field-pill {
-  flex: none;
-  padding: 3px 9px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--paper);
-  color: var(--ink-2);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-.field-pill--ok {
-  border-color: color-mix(in srgb, var(--seen-green) 60%, var(--line));
-  background: color-mix(in srgb, var(--seen-green) 16%, var(--surface));
-  color: var(--ink);
-}
+/* ---------- Ready for the field ---------- */
+.ready-list { list-style: none; margin: var(--sp-3) 0 0; padding: 0 var(--sp-4); border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-1); }
+.ready-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); min-height: 64px; padding: var(--sp-3) 0; }
+.ready-row + .ready-row { border-top: 1px solid var(--line); }
+.ready-main { display: grid; gap: 2px; min-width: 0; }
+.ready-main strong { font-weight: 700; }
+.ready-main [data-field-text] { outline-offset: 3px; }
+.ready-main .meter { margin: var(--sp-1) 0 0; }
+.ready-act:empty { display: none; }
+.ready-act .btn { min-height: var(--tap); white-space: nowrap; }
 
-/* File picker: present and focusable, but out of the visual layout. */
-.scan-pick { position: relative; }
-.scan-file {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
+/* The mark says the same as the text: a tick when it works offline, an open ring when it doesn't yet. */
+.ready-mark { position: relative; width: 24px; height: 24px; border-radius: 50%; box-shadow: inset 0 0 0 2px var(--line-strong); }
+.ready-row--ok .ready-mark { background: var(--seen); box-shadow: none; }
+.ready-row--ok .ready-mark::after {
+  content: ''; position: absolute; left: 7px; top: 6px; width: 10px; height: 6px;
+  border: solid var(--on-seen); border-width: 0 0 2.5px 2.5px; transform: rotate(-45deg);
 }
-.scan-pick:focus-within .scan-drop {
-  outline: 3px solid var(--azure);
-  outline-offset: 2px;
+.ready-row--busy .ready-mark { box-shadow: inset 0 0 0 2px var(--surface-2); }
+.ready-row--busy .ready-mark::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--sun-ink);
+  animation: ready-spin 900ms linear infinite;
 }
-.scan-drop { display: block; cursor: pointer; }
-
-.crop-stage:focus-visible { outline: 3px solid var(--azure); outline-offset: 2px; }
-.crop-stage img { user-select: none; }
-
-.field-status { margin: 12px 0 6px; }
-.field-status:empty { display: none; }
-
-.field-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  border: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.hit-band {
-  display: inline-block;
-  padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.35;
-  color: var(--ink-2);
-  background: var(--paper);
-}
-.hit-band--likely {
-  border-color: var(--seen-green);
-  background: color-mix(in srgb, var(--seen-green) 16%, var(--surface));
-  color: var(--ink);
-}
-
-.listen-status { margin: 2px 0 0; max-width: 34em; }
-.level-meter {
-  --p: 0%;
-  width: min(320px, 100%);
-  height: 10px;
-  border-radius: 5px;
-  margin-top: 2px;
-}
-.listen-level-label { margin: 0; font-size: 0.75rem; }
-.field-spectro { margin-top: 4px; }
-
-.field-location {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin: 14px 0 4px;
-  padding: 12px 14px;
-  border: 1.5px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
-}
-.field-location > div { flex: 1; min-width: 180px; }
-.field-location p { margin: 2px 0 0; }
-.field-location .btn { flex: none; }
-
-.field-footnote { margin: 18px 0 24px; }
-
-/* Keep the row actions comfortable for a thumb on a phone. */
-@media (pointer: coarse) {
-  .hit .btn--small,
-  .field-location .btn--small {
-    min-height: 44px;
-    padding: 8px 14px;
-  }
-}
-
+@keyframes ready-spin { to { transform: rotate(1turn); } }
 @media (prefers-reduced-motion: reduce) {
-  .micbtn.on { animation: none; }
-  .crop-box { transition: none; }
-  .level-meter span { transition: none; }
+  .ready-row--busy .ready-mark::after { animation: none; border-color: var(--sun-ink) transparent; }
+}
+
+/* ---------- map with no signal ---------- */
+/* Sits below the search bar and the filter chips, so neither hides it. */
+.map-note {
+  position: absolute; z-index: 510; left: var(--sp-4); right: var(--sp-4); top: calc(134px + env(safe-area-inset-top));
+  max-width: 440px; margin: 0 auto; padding: var(--sp-4); border-radius: var(--r-2);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-2);
+}
+.map-note p { margin: 0; font-size: var(--fs-2); color: var(--ink-2); }
+.map-note p strong { color: var(--ink); }
+.map-note-h { margin: 0 0 var(--sp-1); font-size: var(--fs-3); font-weight: 700; }
+.map-note--nolib .btn { margin-top: var(--sp-3); }
+.map-note--tiles { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-4); }
+.map-note--tiles p { flex: 1; }
+.map-note--tiles .iconbtn { flex: none; }
+
+/* Narrow phones: the button goes under its text instead of squeezing it. */
+@media (max-width: 359px) {
+  .ready-row { grid-template-columns: 24px minmax(0, 1fr); }
+  .ready-act { grid-column: 2; }
 }

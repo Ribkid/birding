@@ -1,0 +1,293 @@
+/* The Me tab, public profiles and profile photos (js/me.js). Photo-first: a full-bleed cover with your picture on
+   it, a content sheet that slides over it, cards on --surface and chrome in glass. Loaded after css/look.css. */
+
+/* ---------- hero: cover photo, scrim, picture and name ---------- */
+.me-hero {
+  position: relative; height: clamp(300px, 46vh, 420px); overflow: hidden; isolation: isolate;
+  background: #18233A; color: #fff; /* deep night blue while the cover loads, or if it can't */
+}
+.me-cover { position: absolute; inset: 0; z-index: -2; }
+/* A photo that can't load shows its placeholder, not its alt text. */
+.me-cover img, .me-fan-card img, .me-tile .tile-img img, .me-av img { color: transparent; }
+.me-cover img.img-missing, .me-fan-card img.img-missing { opacity: 0; }
+.me-cover img, .me-cover .img-missing { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 35%; }
+.me-scrim {
+  position: absolute; inset: 0; z-index: -1;
+  background:
+    linear-gradient(to bottom, rgba(6, 18, 15, .42), transparent calc(env(safe-area-inset-top) + 96px)),
+    linear-gradient(to top, var(--tint-deep, rgba(6, 18, 15, .82)) 0%, color-mix(in srgb, var(--tint-deep, rgb(6, 18, 15)) 55%, transparent) 30%, transparent 62%);
+}
+.me-hero::after { content: ''; position: absolute; inset: 0; z-index: -1; background: var(--tint-deep, rgb(6, 18, 15)); opacity: 0; pointer-events: none; }
+.me-hero-top { position: absolute; top: calc(10px + env(safe-area-inset-top)); right: 12px; display: flex; gap: 8px; }
+.me-glassbtn {
+  display: grid; place-items: center; width: var(--tap); height: var(--tap); border-radius: 50%; color: var(--ink);
+  transition: scale var(--dur-1) var(--ease-out);
+}
+.me-glassbtn:active { scale: .92; }
+.me-glassbtn svg, .me-head .iconbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.me-back { position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 12px; padding: 0; z-index: 2; }
+.me-back .iconbtn { margin: 0; }
+.me-id { position: absolute; left: 16px; right: 16px; bottom: 44px; display: flex; align-items: flex-end; gap: 14px; }
+.me-id-txt { min-width: 0; padding-bottom: 2px; }
+.me-name {
+  margin: 0; font: 400 clamp(1.75rem, 8vw, 2.5rem)/1.02 var(--display); letter-spacing: 0; color: #fff;
+  overflow-wrap: break-word; hyphens: auto; text-wrap: balance; text-shadow: 0 1px 12px rgba(0, 0, 0, .35);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.me-sub { margin: 6px 0 0; font-size: var(--fs-2); font-weight: 600; color: rgba(255, 255, 255, .9); line-height: 1.3; }
+.me-sub + .me-sub { margin-top: 2px; }
+.me-sync:empty { display: none; }
+.me-you { color: #fff; }
+
+/* Your picture: a photo, a species or a letter, with the green "seen" ring. */
+.me-av-ring { flex: none; border-radius: 50%; padding: 3px; background: var(--seen); box-shadow: 0 14px 30px -12px rgba(0, 0, 0, .7); }
+.me-av { width: clamp(72px, 22vw, 92px); height: clamp(72px, 22vw, 92px); border: 3px solid #fff; background: var(--surface-2); }
+.me-av .acct-av-letter, .me-av-xl .acct-av-letter { font: 400 2.75rem/1 var(--display); color: var(--seen); }
+.me-av:has(.acct-av-letter), .me-av-xl:has(.acct-av-letter) { background: var(--surface); }
+.acct-av { position: relative; }
+.acct-av-letter { color: var(--ink); }
+.acct-av--photo img { object-position: 50% 50%; }
+
+/* Parallax: the cover moves slower than the page and the scrim deepens. Decorative, so no fallback. */
+@supports ((animation-timeline: scroll()) and (animation-range: 0% 100%)) {
+  @media (prefers-reduced-motion: no-preference) {
+    .me-cover { animation: me-par linear both; animation-timeline: scroll(root); animation-range: 0 60vh; }
+    .me-hero::after { animation: me-dim linear both; animation-timeline: scroll(root); animation-range: 0 45vh; }
+    @keyframes me-par { to { transform: translateY(22%) scale(1.08); } }
+    @keyframes me-dim { to { opacity: .55; } }
+  }
+}
+
+/* ---------- the content sheet over the hero ---------- */
+.me-sheet {
+  position: relative; z-index: 1; margin-top: -24px; border-radius: 28px 28px 0 0; background: var(--paper);
+  padding: 20px 16px 8px; display: flex; flex-direction: column; gap: 24px;
+}
+.me--guest .me-sheet { margin-top: 0; border-radius: 0; padding-top: 16px; background: none; }
+.me-head { align-items: center; }
+.me-head h1 { flex: 1; }
+
+.me-card { background: var(--surface); border-radius: var(--r-card); box-shadow: var(--shadow-card); padding: 16px 14px 14px; }
+.me-card-h { margin: 0 0 12px 2px; font-size: var(--fs-3); font-weight: 700; letter-spacing: -0.01em; }
+
+/* Kind rings: one per kind, filling on first view. */
+.me-rings { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 6px; }
+.me-ring-item { display: grid; justify-items: center; text-align: center; min-width: 0; }
+.me-ring { position: relative; width: 60px; height: 60px; display: grid; place-items: center; margin-bottom: 6px; }
+.me-ring > svg, .me-medal-disc > svg { position: absolute; inset: 0; width: 100%; height: 100%; rotate: -90deg; overflow: visible; }
+.me-ring-track { fill: none; stroke: var(--surface-2); stroke-width: 5; }
+.me-ring-fill {
+  fill: none; stroke: var(--kc, var(--seen)); stroke-width: 5; stroke-linecap: round;
+  stroke-dasharray: 100 100; stroke-dashoffset: 100; transition: stroke-dashoffset 1100ms var(--ease-out);
+}
+.me-ring[style*="--p:0.0000"] .me-ring-fill { visibility: hidden; }
+.is-in .me-ring-fill { stroke-dashoffset: calc(100 - var(--p) * 100); }
+.me-ring-n { font: 800 1.375rem/1 var(--stamp); font-variant-numeric: tabular-nums; color: var(--ink); }
+.me-ring-l { font-size: var(--fs-2); font-weight: 700; line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-ring-of { font-size: var(--fs-1); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+.me-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.me-stats div { display: flex; flex-direction: column-reverse; align-items: center; gap: 4px; }
+.me-stats div + div { border-left: 1px solid var(--line); }
+.me-stats dd { margin: 0; font: 800 2rem/1 var(--stamp); font-variant-numeric: tabular-nums; }
+.me-stats dt { font-size: var(--fs-2); font-weight: 600; color: var(--ink-2); }
+
+/* Profile actions */
+.me-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.me-acts--one { grid-template-columns: 1fr; }
+.me-act {
+  display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 10px 14px; border: 0; border-radius: var(--r-card);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-card); font: 700 var(--fs-2)/1.25 var(--font);
+  text-align: left; text-decoration: none; cursor: pointer; transition: scale var(--dur-1) var(--ease-out);
+}
+.me-act:active { scale: .96; transition-timing-function: var(--ease-out); }
+.me-act svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.me-act--primary { background: var(--accent, var(--azure)); color: var(--on-accent, var(--on-azure)); box-shadow: 0 10px 22px -10px var(--accent, var(--azure)); }
+@media (prefers-reduced-motion: no-preference) { .me-act { transition: scale var(--dur-2) var(--ease-spring); } .me-act:active { transition-duration: var(--dur-1); } }
+
+/* Sections */
+.me-sec-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.me-sec-h h2 { margin: 0; font-size: var(--fs-4); font-weight: 700; letter-spacing: -0.015em; }
+.me-sec-h a { display: inline-flex; align-items: center; min-height: var(--tap); padding: 0 2px; font-weight: 600; color: color-mix(in srgb, var(--accent, var(--azure)) 80%, var(--ink)); text-decoration: none; }
+.me-sec-sub { margin: -4px 0 12px; font-size: var(--fs-2); color: var(--ink-2); }
+
+.me-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 6px; }
+.me-totals a {
+  display: grid; gap: 4px; padding: 14px 12px 12px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card);
+  color: var(--ink); text-decoration: none; transition: scale var(--dur-1) var(--ease-out);
+}
+.me-totals a:active { scale: .96; }
+.me-totals b { font: 800 2.25rem/1 var(--stamp); font-variant-numeric: tabular-nums; }
+.me-totals span { font-size: var(--fs-2); font-weight: 600; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Inset grouped list, iOS style: dividers start after the icon. */
+.me-links { list-style: none; margin: 12px 0 0; padding: 0; background: var(--surface); border-radius: var(--r-card); box-shadow: var(--shadow-card); overflow: hidden; }
+.me-sec > .me-links:first-child { margin-top: 0; }
+.me-links a { display: flex; align-items: stretch; gap: 12px; padding-left: 14px; min-height: 60px; color: var(--ink); text-decoration: none; transition: background-color var(--dur-2) var(--ease-out); }
+.me-links a:active { background: var(--surface-2); }
+.me-li-ico { flex: none; align-self: center; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent, var(--azure)) 14%, var(--surface)); color: var(--accent, var(--azure)); }
+.me-li-ico svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.me-li-main { flex: 1; min-width: 0; display: grid; align-content: center; gap: 1px; padding: 11px 12px 11px 0; margin-right: -12px; }
+.me-li-main strong { font-weight: 700; }
+.me-li-main span { font-size: var(--fs-2); color: var(--ink-2); line-height: 1.35; }
+.me-chev { flex: none; display: grid; place-items: center; padding: 0 12px 0 4px; color: var(--ink-2); }
+.me-chev svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.me-links li + li .me-li-main, .me-links li + li .me-chev { box-shadow: inset 0 1px 0 var(--line); }
+
+/* Medals: a short shelf that scrolls sideways, with soft edges. */
+.me-medals {
+  position: relative; list-style: none; display: flex; gap: 14px; margin: 0 -16px; padding: 4px 16px 6px; overflow-x: auto; scroll-snap-type: x mandatory;
+  scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 24px), transparent);
+}
+.me-medals::-webkit-scrollbar { display: none; }
+.me-medal { flex: 0 0 88px; scroll-snap-align: start; }
+.me-medal a { position: relative; display: grid; justify-items: center; gap: 8px; color: var(--ink); text-decoration: none; text-align: center; }
+.me-medal strong { font-size: var(--fs-1); font-weight: 700; line-height: 1.25; }
+.me-medal-disc { position: relative; width: 74px; height: 74px; display: grid; place-items: center; }
+.me-medal-disc .me-ring-track { stroke-width: 4; }
+.me-medal-disc .me-ring-fill { stroke: var(--gold); stroke-width: 4; }
+.me-medal-face {
+  position: relative; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; overflow: hidden;
+  background: var(--surface-2); color: var(--ink-2);
+}
+.me-medal-face b { font: 800 1.25rem/1 var(--stamp); font-variant-numeric: tabular-nums; }
+.me-medal-face small { font-size: .7em; color: var(--ink-2); }
+.me-medal--done .me-medal-face {
+  background: radial-gradient(circle at 34% 28%, #FFF1BE 0, #F2C443 38%, #C8901A 78%, #9C6B0C 100%); color: #4A3300;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, .35), 0 6px 14px -6px rgba(120, 80, 0, .6);
+}
+.me-medal--done .me-medal-face svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; }
+.me-medal-face::after { content: ''; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, .8) 50%, transparent 65%); transform: translateX(-130%); }
+@media (prefers-reduced-motion: no-preference) {
+  .is-in .me-medal--done .me-medal-face::after { animation: me-foil 1100ms var(--ease-out) 400ms both; }
+  @keyframes me-foil { to { transform: translateX(130%); } }
+}
+@media (prefers-reduced-motion: reduce) { .me-ring-fill { transition: none; } }
+
+/* ---------- the invitation (signed out) ---------- */
+.me-join {
+  position: relative; margin: 4px 16px 0; padding: 22px 18px 14px; border-radius: var(--r-card); overflow: hidden;
+  background: linear-gradient(160deg, #22355A 0%, #131D33 70%); color: #fff; box-shadow: var(--shadow-card);
+}
+.me-fan { --fw: clamp(78px, 26vw, 104px); position: relative; height: calc(var(--fw) * 1.25 + 24px); }
+.me-fan-card {
+  position: absolute; left: 50%; top: 4px; width: var(--fw); aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden;
+  background: rgba(255, 255, 255, .15); border: 3px solid rgba(255, 255, 255, .92); box-shadow: 0 16px 30px -12px rgba(0, 0, 0, .65);
+  translate: -50% 0; transform-origin: 50% 110%;
+}
+.me-fan-card img, .me-fan-card .img-missing { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+.me-fan-card:nth-child(1) { rotate: -11deg; translate: -128% 14px; }
+.me-fan-card:nth-child(2) { z-index: 1; }
+.me-fan-card:nth-child(3) { rotate: 11deg; translate: 28% 14px; }
+@media (prefers-reduced-motion: no-preference) {
+  .me-join--play .me-fan-card { animation: me-fan var(--dur-4) var(--ease-spring) both; }
+  .me-join--play .me-fan-card:nth-child(1) { animation-delay: 80ms; }
+  .me-join--play .me-fan-card:nth-child(3) { animation-delay: 140ms; }
+  @keyframes me-fan { from { rotate: 0deg; translate: -50% 18px; opacity: 0; } }
+}
+.me-join-h { margin: 14px 0 8px; font: 400 1.75rem/1.05 var(--display); letter-spacing: 0; color: #fff; text-align: center; }
+.me-join-p { margin: 0 auto; max-width: 30em; font-size: var(--fs-3); line-height: 1.45; color: rgba(255, 255, 255, .93); text-align: center; text-wrap: pretty; }
+.me-join-note { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; padding: 9px 12px; border-radius: 12px; background: rgba(255, 255, 255, .12); font-size: var(--fs-2); font-weight: 600; }
+.me-join-note svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.me-join-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.me-join .btn { min-height: 50px; padding-inline: 10px; box-shadow: none; white-space: nowrap; }
+.me-join-go { background: #fff; color: #121821; font-weight: 800; }
+.me-join-in { background: rgba(255, 255, 255, .14); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .4) !important; }
+.me-join-later { width: 100%; margin-top: 4px; min-height: var(--tap) !important; color: rgba(255, 255, 255, .88); }
+.me-join--slim { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; }
+.me-join--slim .me-join-body { flex: 1; min-width: 0; }
+.me-join--slim .me-join-h { margin: 0; font: 700 var(--fs-3)/1.25 var(--font); text-align: left; }
+.me-join--slim p { margin: 2px 0 0; font-size: var(--fs-2); color: rgba(255, 255, 255, .9); }
+.me-join--slim .me-join-go { flex: none; min-height: var(--tap); padding: 8px 16px; }
+.me-fan--mini { --fw: 32px; flex: none; width: 66px; height: 46px; }
+.me-fan--mini .me-fan-card { top: 2px; border-width: 2px; border-radius: 8px; }
+.me-fan--mini .me-fan-card:nth-child(1) { translate: -100% 4px; }
+.me-fan--mini .me-fan-card:nth-child(3) { translate: 0% 4px; }
+
+/* ---------- someone's profile ---------- */
+.me-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 10px; }
+.me-tile { display: grid; gap: 6px; color: var(--ink); text-decoration: none; }
+.me-tile .tile-img { position: relative; display: block; aspect-ratio: 1; overflow: hidden; background: var(--surface-2); transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2); }
+.me-tile .tile-img img, .me-tile .tile-img .img-missing { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+.me-tile:active .tile-img { transform: scale(.95); }
+.me-tile-name { font-size: var(--fs-2); font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+.me-both {
+  position: absolute; left: 6px; bottom: 6px; display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px 3px 5px;
+  border-radius: var(--r-pill); background: var(--seen); color: var(--on-seen); font-size: .6875rem; font-weight: 700; line-height: 1.2;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+}
+.me-both svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+.me-empty { margin: 0; padding: 18px 16px; border-radius: var(--r-card); background: var(--surface-2); color: var(--ink-2); }
+.me-msg { padding: 24px 16px; color: var(--ink-2); font-size: var(--fs-3); }
+.me-msg p { margin: 0 0 8px; }
+.me-cta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.me--loading .me-cover { background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, #fff 35%, transparent) 50%, transparent 80%) var(--surface-2); background-size: 220% 100%; animation: shimmer 1.3s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .me--loading .me-cover { animation: none; } }
+
+/* ---------- Edit profile and the photo framer ---------- */
+.me-edit-av { display: flex; align-items: center; gap: 16px; margin: 0 0 6px; }
+.me-edit-pic { flex: none; border-radius: 50%; padding: 3px; background: var(--seen); }
+.me-av-xl { width: 96px; height: 96px; border: 3px solid var(--surface); }
+.me-edit-picks { display: grid; gap: 8px; justify-items: start; min-width: 0; }
+.me-edit-picks .btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.me-edit-msg { min-height: 1.45em; margin: 4px 0 10px; color: var(--ink); font-weight: 600; }
+.me-edit .field { margin-bottom: 12px; }
+.me-check { align-items: flex-start; margin-bottom: 10px; }
+.me-check input { margin-top: 2px; }
+.me-check > span { display: grid; gap: 2px; }
+.me-signin-lead { margin-top: -6px; }
+
+.me-crop {
+  position: relative; width: min(100%, 340px); aspect-ratio: 1; margin: 6px auto 12px; overflow: hidden; border-radius: 18px;
+  background: #000; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none;
+}
+.me-crop:active { cursor: grabbing; }
+.me-crop img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; pointer-events: none; }
+.me-crop-mask { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px rgba(0, 0, 0, .45), inset 0 0 0 2px rgba(255, 255, 255, .85); pointer-events: none; }
+.me-zoom { margin-bottom: 4px; }
+
+/* ---------- the Me tab: your picture, or a dot while there is something to do ---------- */
+.tabbar .tab-av { position: relative; z-index: 1; width: 28px; height: 28px; box-shadow: 0 0 0 2px var(--surface); }
+.tabbar a[aria-current=page] .tab-av { box-shadow: 0 0 0 2px var(--azure); }
+.tabbar .tab-av .acct-av-letter { font-size: .9rem; }
+.tab-dot { position: absolute; z-index: 2; top: 1px; right: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--lori); box-shadow: 0 0 0 2px var(--surface); }
+
+/* ---------- Settings: the "Your profile" row ---------- */
+.me-row-link {
+  display: flex; align-items: center; gap: 12px; margin: 4px 16px 8px; padding: 12px 4px 12px 12px; border-radius: var(--r-card);
+  background: var(--surface); box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none;
+}
+.me-row-av { width: 52px; height: 52px; }
+.me-row-av--guest { background: var(--azure-soft); color: var(--azure); }
+.me-row-av--guest svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.me-row-main { flex: 1; min-width: 0; display: grid; }
+.me-row-main strong { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- leaderboard rows open profiles ---------- */
+.lb-row:has(> .lb-link) { padding: 0; }
+.lb-link { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 10px 8px; color: inherit; text-decoration: none; border-radius: inherit; }
+a.lb-link:active { background: var(--surface-2); }
+
+/* ---------- the sign-up nudge ---------- */
+.me-nudge {
+  position: fixed; z-index: 45; left: 12px; right: 12px; bottom: calc(var(--chrome-bottom) + 8px); max-width: 520px; margin: 0 auto;
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 12px; align-items: center; padding: 12px 12px 10px 14px; border-radius: 22px;
+  color: var(--ink); transition: opacity var(--dur-2) var(--ease-out), translate var(--dur-2) var(--ease-out);
+}
+.me-nudge-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--azure-soft); color: var(--azure); }
+.me-nudge-ico svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.me-nudge-txt { margin: 0; display: grid; gap: 1px; }
+.me-nudge-txt span { font-size: var(--fs-2); color: var(--ink-2); }
+.me-nudge-acts { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px; }
+.me-nudge-acts .btn { min-height: var(--tap); }
+.me-nudge--out { opacity: 0; translate: 0 16px; }
+@media (prefers-reduced-motion: no-preference) {
+  .me-nudge { animation: me-rise var(--dur-4) var(--ease-spring) both; }
+  @keyframes me-rise { from { opacity: 0; translate: 0 40px; } }
+}
+
+/* ---------- outdoor: firm edges instead of soft shadows ---------- */
+:root[data-theme="outdoor"] .me-card, :root[data-theme="outdoor"] .me-act:not(.me-act--primary), :root[data-theme="outdoor"] .me-totals a,
+:root[data-theme="outdoor"] .me-links, :root[data-theme="outdoor"] .me-row-link { box-shadow: var(--shadow-1); }
+:root[data-theme="outdoor"] .me-join { background: #0B1220; }

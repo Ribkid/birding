@@ -1,0 +1,441 @@
+/* Screens: the dex home (collection first), species pages that teach, and the badge shelf.
+   Loaded after app.css; uses only its tokens. */
+
+/* ---------- dex home: photo first ----------
+   Today's pick runs full-bleed under the status bar with the wordmark and a glass progress capsule over a scrim.
+   The content sheet slides up over it: the kind rail (the tally), the Today rail, the sticky search tools (glass once
+   stuck) and the photo grid. */
+.dex-hero {
+  --hero-deep: var(--tint-deep, color-mix(in srgb, var(--kc, #121821) 30%, #06120F));
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: space-between;
+  height: calc(clamp(300px, 42svh, 440px) + env(safe-area-inset-top));
+  padding: calc(var(--sp-2) + env(safe-area-inset-top)) var(--sp-4) calc(24px + var(--sp-5));
+  background: var(--hero-deep); color: #fff;
+}
+.dex-hero-photo { position: absolute; inset: 0; z-index: -2; transform-origin: 50% 20%; }
+.dex-hero-photo img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 32%; }
+.dex-hero-photo .img-missing { display: none; }
+/* Scrims: a light one at the top for the status bar and buttons, a deep one (the photo's own colour) under the type. */
+.dex-hero::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(7, 11, 16, .55) 0, rgba(7, 11, 16, .2) 18%, rgba(7, 11, 16, 0) 32%),
+    linear-gradient(to top, color-mix(in srgb, var(--hero-deep) 94%, transparent) 0, color-mix(in srgb, var(--hero-deep) 72%, transparent) 36%, color-mix(in srgb, var(--hero-deep) 30%, transparent) 56%, transparent 72%);
+}
+.dex-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+.dex-hero-pick {
+  display: grid; align-content: center; min-width: 0; min-height: var(--tap); padding-right: var(--sp-2);
+  color: #fff; text-decoration: none; text-shadow: 0 1px 10px rgba(0, 0, 0, .5); line-height: 1.2;
+}
+.dex-hero-pick span { font-size: var(--fs-1); font-weight: 600; opacity: .92; }
+.dex-hero-pick strong { font-size: var(--fs-2); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dex-hero-actions { flex: none; display: flex; align-items: center; gap: var(--sp-2); }
+.hero-btn {
+  display: grid; place-items: center; width: var(--tap); height: var(--tap); padding: 0; border: 0; border-radius: 50%;
+  color: var(--ink); cursor: pointer; transition: scale var(--dur-1) var(--ease-out);
+}
+.hero-btn:active { scale: .9; }
+.hero-btn svg { width: 22px; height: 22px; }
+.dex-hero .acct-chip { padding: 3px; min-height: var(--tap); background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float); }
+.dex-hero .acct-chip-name { display: none; }
+.dex-hero .wordmark {
+  display: grid; gap: 6px; margin: 0; color: #fff;
+  font: 400 clamp(1.75rem, 8.2vw, 2.6rem)/1 var(--display); letter-spacing: -0.01em; text-shadow: 0 2px 20px rgba(0, 0, 0, .35);
+}
+.dex-hero .wordmark small { font: 600 var(--fs-2)/1.2 var(--font); letter-spacing: 0; opacity: .92; }
+.dex-cap {
+  display: flex; align-items: center; gap: var(--sp-2); width: fit-content; max-width: 100%; margin: var(--sp-4) 0 0; padding: 6px 16px 6px 6px;
+  border-radius: var(--r-pill); color: var(--ink); font-size: var(--fs-2); font-weight: 600; line-height: 1.2;
+}
+.dex-cap b { display: inline-block; margin-right: 1px; font: 800 var(--fs-4)/1 var(--stamp); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.dex-cap-ring { --kc: var(--seen); width: 34px; height: 34px; }
+
+/* Rings: a track and an arc in the kind colour, filled from empty on the first draw of a session. */
+.ring { flex: none; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 4.5; }
+.ring-track { stroke: color-mix(in srgb, var(--kc, var(--seen)) 20%, transparent); }
+.ring-fill { stroke: var(--kc, var(--seen)); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: var(--off); }
+.ring--zero .ring-fill { visibility: hidden; }
+.rings-in .ring-fill { animation: ring-fill 1.1s var(--ease-out) .15s backwards; }
+@keyframes ring-fill { from { stroke-dashoffset: 100; } }
+
+/* Parallax: the photo drifts slower than the page and the scrim deepens as the sheet covers it. */
+@supports ((animation-timeline: scroll()) and (animation-range: 0% 100%)) {
+  @media (prefers-reduced-motion: no-preference) {
+    .dex-hero-photo { animation: dex-drift linear both; animation-timeline: scroll(root); animation-range: 0 45svh; }
+    .dex-hero::after {
+      content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: var(--hero-deep);
+      animation: dex-dim linear both; animation-timeline: scroll(root); animation-range: 0 45svh;
+    }
+    .dex-hero-foot { animation: dex-lift linear both; animation-timeline: scroll(root); animation-range: 0 40svh; }
+  }
+}
+@keyframes dex-drift { from { transform: none; } to { transform: translateY(24%) scale(1.08); } }
+@keyframes dex-dim { from { opacity: 0; } to { opacity: .6; } }
+@keyframes dex-lift { to { transform: translateY(-18px); opacity: .3; } }
+
+/* The content sheet overlaps the hero by 24px. */
+.dex-sheet { position: relative; z-index: 1; margin-top: -24px; padding-top: var(--sp-4); border-radius: 28px 28px 0 0; background: var(--paper); }
+
+/* Rails scroll sideways with snap points and soft edges. Their bottom padding keeps the card shadows visible. */
+.kind-tabs, .today {
+  position: relative; display: flex; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; scroll-padding-inline: var(--sp-4);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--sp-3), #000 calc(100% - var(--sp-5)), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 var(--sp-3), #000 calc(100% - var(--sp-5)), transparent);
+}
+.kind-tabs::-webkit-scrollbar, .today::-webkit-scrollbar { display: none; }
+
+/* Kind rail: pills with a small ring, the label and seen/total. The chosen kind is filled with its colour. */
+.kind--all { --kc: var(--ink); }
+.kind-tabs { gap: var(--sp-2); margin: 0; padding: 6px var(--sp-4) 14px; scroll-snap-type: x proximity; }
+.kind-tab {
+  position: relative; flex: none; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 6px 18px 6px 8px; scroll-snap-align: start;
+  border: 0; border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--shadow-card); color: var(--ink); text-align: left; cursor: pointer;
+  transition: background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out), scale var(--dur-1) var(--ease-out);
+}
+.kind-tab:active { scale: .95; }
+.kind-ring { width: 38px; height: 38px; }
+.kind-tab-txt { display: grid; gap: 2px; }
+.kind-tab-l { font-size: var(--fs-2); font-weight: 700; line-height: 1.1; white-space: nowrap; }
+.kind-tab-n { font: 600 var(--fs-2)/1 var(--stamp); color: var(--ink-2); letter-spacing: .03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kind-tab-n b { display: inline-block; font-weight: 800; font-size: var(--fs-3); color: var(--ink); }
+.kind-tab[aria-selected="true"] { background: var(--kc); color: var(--on-kind); }
+.kind-tab[aria-selected="true"] :is(.kind-tab-n, .kind-tab-n b) { color: inherit; }
+.kind-tab[aria-selected="true"] .ring-track { stroke: color-mix(in srgb, currentColor 30%, transparent); }
+.kind-tab[aria-selected="true"] .ring-fill { stroke: currentColor; }
+/* Plants close the rail, a step quieter than the animals. */
+.kind-tab--quiet { margin-left: var(--sp-2); }
+.kind-tab--quiet:not([aria-selected="true"]) { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.kind-tab--quiet:not([aria-selected="true"]) .kind-tab-l { font-weight: 600; color: var(--ink-2); }
+
+/* Today: Listen, Scan and Learn as tonal cards, and the pick of the day as a photo card. */
+.today { gap: var(--sp-3); margin: 0; padding: 2px var(--sp-4) 18px; scroll-snap-type: x mandatory; }
+.today .lt-wrap { display: contents; }
+.today-card, .today .lt, .today .lt-due {
+  flex: none; scroll-snap-align: start; height: 118px; min-height: 0; margin: 0; border: 0; border-radius: var(--r-card);
+  background: var(--surface); box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none; font: inherit; text-align: left; cursor: pointer;
+  transition: scale var(--dur-1) var(--ease-out);
+}
+.today-card:active, .today .lt:active, .today .lt-due:active { scale: .96; }
+.today-tool { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; width: 144px; padding: 12px 14px; }
+.today-ic { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--azure-soft); color: var(--azure); }
+.today-ic svg { width: 22px; height: 22px; }
+.today-t { display: grid; gap: 1px; line-height: 1.25; }
+.today-t strong { font-size: var(--fs-2); font-weight: 700; white-space: nowrap; }
+.today-t span, .today .lt-main span {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: var(--fs-1); color: var(--ink-2);
+}
+.today .lt {
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: "pips streak" "main main"; align-content: space-between; gap: 6px;
+  width: 216px; padding: 14px; background: color-mix(in srgb, var(--sun) 14%, var(--surface));
+}
+.today .lt-pips { grid-area: pips; align-self: start; }
+.today .lt-streak { grid-area: streak; justify-items: end; text-align: right; line-height: 1.1; }
+.today .lt-main { grid-area: main; align-self: end; gap: 1px; line-height: 1.25; }
+.today .lt-main strong { font-size: var(--fs-2); }
+.today .lt-due { display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start; width: 132px; padding: 14px; font-weight: 600; font-size: var(--fs-2); line-height: 1.25; }
+.today-day { position: relative; display: flex; align-items: flex-end; width: 232px; padding: 12px 14px; overflow: hidden; background: var(--surface-2); color: #fff; }
+.today-day .botd-img { position: absolute; inset: 0; border-radius: inherit; }
+.today-day .botd-img img, .today-day .botd-img .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+.today-day::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgba(7, 11, 16, .84) 0, rgba(7, 11, 16, .4) 58%, rgba(7, 11, 16, 0) 85%); }
+.today-day-txt { position: relative; z-index: 1; display: grid; gap: 1px; min-width: 0; line-height: 1.2; text-shadow: 0 1px 6px rgba(0, 0, 0, .4); }
+.today-day-k { font-size: var(--fs-1); font-weight: 600; opacity: .92; }
+.today-day-txt strong { font-size: var(--fs-3); font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.today-day-txt > span:nth-child(3) { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--fs-1); opacity: .92; }
+:root[data-theme="outdoor"] :is(.kind-tab:not(.kind-tab--quiet), .today-card, .today .lt, .today .lt-due) { box-shadow: var(--shadow-1); }
+
+/* Sticky search tools: on paper at rest, frosted glass once stuck over the tiles. Group headings scroll away. */
+.dex-stick { height: 1px; margin-bottom: -1px; }
+.dex-tools { padding: 6px var(--sp-4); border-radius: 0 0 22px 22px; transition: background-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out); }
+.dex-tools.is-stuck {
+  padding-top: calc(6px + env(safe-area-inset-top)); background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 -1px 0 var(--glass-edge), 0 14px 28px -18px rgba(12, 18, 27, .45);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .dex-tools.is-stuck { background: var(--glass-strong); } }
+@media (prefers-reduced-transparency: reduce) { .dex-tools.is-stuck { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+.dex-tools .searchbox input { border-radius: var(--r-pill); }
+.dex-tools .iconbtn--tool { border-radius: 50%; }
+.dex-sheet .dex-group-h { position: static; background: none; }
+.dex-sheet .chips--dex { padding-top: 8px; }
+
+/* Groups further down skip layout and paint until they come near the screen; their height is estimated inline. */
+.dex-group--later { content-visibility: auto; }
+.empty-h { margin: 0 0 4px; font-weight: 700; font-size: var(--fs-3); color: var(--ink); }
+.empty .small { max-width: 36ch; margin: 0 auto var(--sp-2); }
+.row--sp .row-main i { font-style: italic; }
+@media (prefers-reduced-motion: reduce) {
+  .kind-tab, .today-card, .today .lt, .today .lt-due, .hero-btn, .dex-tools { transition: none; }
+  .rings-in .ring-fill { animation: none; }
+}
+
+/* ---------- species page: a short lesson ----------
+   The photo stays clear: a small counter bottom-left, the view switch bottom-right, the credit on a line beneath. */
+.hero-count, .hero-tabs { background: color-mix(in srgb, var(--ink) 74%, transparent); color: var(--paper); }
+.hero-count {
+  position: absolute; left: 12px; bottom: 12px; padding: 5px 10px 4px; border-radius: var(--r-pill); pointer-events: none;
+  font: 600 var(--fs-2)/1 var(--stamp); letter-spacing: .05em; font-variant-numeric: tabular-nums;
+}
+.hero-count b { font-weight: 800; }
+.hero-tabs { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); }
+.hero-tabs button {
+  min-height: 36px; padding: 6px 12px; border: 0; border-radius: var(--r-pill); background: transparent; color: inherit;
+  font: 600 var(--fs-1)/1 var(--font); white-space: nowrap; cursor: pointer; transition: background-color var(--dur-2), color var(--dur-2);
+}
+.hero-tabs button[aria-selected="true"] { background: var(--paper); color: var(--ink); }
+.hero-credit {
+  margin: 0; padding: 6px var(--sp-4) 0; min-height: calc(1.45em + 6px); font-size: var(--fs-1); line-height: 1.45; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hero-credit a { color: inherit; }
+
+/* Name block */
+.bird-body { padding: var(--sp-3) var(--sp-4) calc(var(--sp-7) + 40px); }
+.bird-id { flex-wrap: wrap; gap: var(--sp-2); }
+.rarity-line { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-2); color: var(--ink-2); }
+.bird .bird-name { margin: var(--sp-3) 0 2px; }
+.sci-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); margin: 0 0 var(--sp-4); }
+.sci-row .sci { margin: 0; }
+.mastery {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 7px; border-radius: var(--r-pill);
+  background: var(--azure-soft); color: var(--ink); font-size: var(--fs-1); font-weight: 700; line-height: 1.2;
+}
+.mastery i { width: 12px; height: 12px; border-radius: 50%; background: conic-gradient(var(--azure) calc(var(--p) * 1%), color-mix(in srgb, var(--azure) 22%, transparent) 0); }
+.mastery svg { width: 14px; height: 14px; }
+.mastery--done { background: var(--seen); color: var(--on-seen); }
+
+/* How to spot it */
+.spot-marks { display: grid; gap: var(--sp-2); margin: 0 0 var(--sp-4); padding: 0; list-style: none; }
+.spot-marks li { position: relative; padding-left: 20px; line-height: 1.5; max-width: 62ch; }
+.spot-marks li::before { content: ''; position: absolute; left: 3px; top: .6em; width: 8px; height: 8px; border-radius: 50%; background: var(--kc, var(--azure)); }
+.spot-call {
+  display: flex; align-items: center; gap: var(--sp-3); margin: 0 0 var(--sp-4); padding: var(--sp-2) var(--sp-4) var(--sp-2) var(--sp-2);
+  border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-1);
+}
+.spot-call p { margin: 0; line-height: 1.4; }
+.spot-call q { font-weight: 700; }
+.spot-play { width: 44px; height: 44px; }
+.spot-call-ic { display: grid; place-items: center; width: 44px; height: 44px; flex: none; color: var(--ink-2); }
+.spot-call-ic svg { width: 22px; height: 22px; }
+.spot-hab { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--sp-3) 0 0; padding: 0; list-style: none; }
+.spot-hab li { padding: 5px 11px; border-radius: var(--r-pill); background: var(--surface-2); font-size: var(--fs-2); font-weight: 500; }
+.spot-hab .spot-hab--night { background: var(--ink); color: var(--paper); }
+.spot-test { margin-top: var(--sp-4); }
+.spot-test svg { color: var(--azure); }
+
+/* Easy to confuse with */
+.confuse-list { margin: var(--sp-2) 0 0; padding: 0; list-style: none; }
+.confuse-row { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
+.confuse-sp { flex: 1; display: flex; align-items: center; gap: var(--sp-3); min-width: 0; color: var(--ink); text-decoration: none; }
+.confuse-sp .row-thumb { width: 56px; height: 56px; align-self: flex-start; }
+.confuse-sp .row-main { gap: 2px; }
+.confuse-tell { color: var(--ink); line-height: 1.4; }
+
+/* When and where */
+.h3 { margin: var(--sp-4) 0 var(--sp-2); font-size: var(--fs-3); font-weight: 700; }
+.where .h2 + .h3 { margin-top: 0; }
+
+/* The slim Log bar that rises above the tab bar once the main button has scrolled away. Above the outing bar if
+   one is showing. */
+.logbar {
+  position: fixed; left: var(--sp-2); right: var(--sp-2); bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--sp-2)); z-index: 19;
+  display: flex; align-items: center; gap: var(--sp-3); max-width: 640px; min-height: 56px; margin: 0 auto; padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
+  border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-2);
+  transform: translateY(calc(100% + 24px)); opacity: 0; visibility: hidden;
+  transition: transform var(--dur-3) var(--ease-in), opacity var(--dur-2) var(--ease-in), visibility 0s linear var(--dur-3);
+}
+.logbar--on { transform: none; opacity: 1; visibility: visible; transition: transform var(--dur-3) var(--ease-out), opacity var(--dur-2) var(--ease-out), visibility 0s; }
+.logbar strong { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.logbar .btn { flex: none; min-height: 40px; }
+body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 66px); }
+@media (prefers-reduced-motion: reduce) {
+  .logbar { transform: none; transition: opacity var(--dur-2) linear, visibility 0s linear var(--dur-2); }
+  .logbar--on { transition: opacity var(--dur-2) linear, visibility 0s; }
+  .hero-tabs button { transition: none; }
+}
+
+/* Compare */
+.cmp-tellbox:empty { display: none; }
+.cmp-tell { margin: 0 var(--sp-4) var(--sp-3); padding: var(--sp-3) var(--sp-4); border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-1); line-height: 1.45; }
+.cmp-id { flex-wrap: wrap; }
+
+/* ---------- badges: a trophy shelf ----------
+   A trophy card on top (a ring of everything earned and the badge she is closest to), then one shelf card per
+   section. One emblem per section, in that section's colour: milestones a medal, animals and plants a kind-coloured
+   hexagon, rarities a gem, habits a shield, learning a pair of cards, habitats a leaf and groups a leg band.
+   As a shelf first comes into view its rings fill and its earned medals catch the light (once per session). */
+.trophy {
+  margin: var(--sp-1) var(--sp-4) var(--sp-5); padding: var(--sp-4); border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--gold) 16%, var(--surface)); box-shadow: var(--shadow-card);
+}
+.trophy-top { display: flex; align-items: center; gap: var(--sp-4); }
+.trophy-ring { --kc: var(--gold-ink); position: relative; flex: none; width: 104px; height: 104px; }
+.trophy-ring .ring { width: 100%; height: 100%; }
+.trophy-ring .ring circle { stroke-width: 3.4; }
+.trophy-n { position: absolute; inset: 0; display: grid; place-content: center; margin: 0; text-align: center; line-height: 1; }
+.trophy-n b { display: inline-block; font: 800 var(--fs-6)/1 var(--stamp); font-variant-numeric: tabular-nums; }
+.trophy-n span { font: 600 var(--fs-2)/1.2 var(--stamp); color: var(--ink-2); letter-spacing: .04em; }
+.trophy-txt { min-width: 0; }
+.trophy-h { margin: 0 0 var(--sp-1); font-size: var(--fs-4); font-weight: 800; line-height: 1.2; letter-spacing: -0.01em; }
+.trophy-next { margin: 0; font-size: var(--fs-2); line-height: 1.4; color: var(--ink-2); }
+.trophy-next strong { color: var(--ink); }
+.trophy-links { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); }
+.trophy-links .btn { flex: 1 1 auto; justify-content: center; min-height: var(--tap); padding: 6px 16px; border-radius: var(--r-pill); background: var(--surface); box-shadow: none; font-size: var(--fs-2); }
+:root[data-theme="outdoor"] .trophy-links .btn { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+
+.shelf-sec { margin: 0 var(--sp-4) var(--sp-4); padding: 0 var(--sp-4) var(--sp-4); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
+.shelf-h { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); margin: 0; padding: var(--sp-4) 0 var(--sp-3); }
+.shelf-n { font: 600 var(--fs-4)/1 var(--stamp); color: var(--ink-2); letter-spacing: .03em; font-variant-numeric: tabular-nums; }
+.shelf { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-2); margin: 0; padding: 0; list-style: none; }
+@media (min-width: 600px) { .shelf { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); } }
+@media (max-width: 359px) { .shelf-sec { margin-inline: var(--sp-3); padding-inline: var(--sp-3); } .trophy { margin-inline: var(--sp-3); } .trophy-ring { width: 88px; height: 88px; } }
+.badge { display: grid; justify-items: center; align-content: start; gap: 2px; text-align: center; min-width: 0; }
+.badge--milestone { --ef: var(--azure); --eo: var(--on-azure); --ny: 44%; }
+.badge--kind { --ef: var(--kc); --eo: var(--on-kind); --ny: 50%; }
+.badge--rarity { --ef: var(--gold); --eo: var(--paper); }
+.badge--habit { --ef: var(--lori); --eo: var(--on-kind); --ny: 49%; }
+.badge--learning { --ef: var(--ink); --eo: var(--paper); --ny: 53%; }
+.badge--habitat { --ef: var(--k-plant); --eo: var(--on-kind); }
+.badge--group { --ef: var(--seen); --eo: var(--on-seen); --ny: 54%; }
+.emb { position: relative; display: grid; place-items: center; width: 76px; height: 76px; margin-bottom: var(--sp-1); }
+.emb svg { width: 66px; height: 66px; overflow: visible; }
+.badge--done .emb svg { filter: drop-shadow(0 4px 3px color-mix(in srgb, var(--ef) 28%, transparent)); }
+.emb .e-body, .emb .e-tail { fill: var(--ef); }
+.emb .e-tail { opacity: .7; }
+.emb .e-line { fill: none; stroke: var(--eo); stroke-width: 1.6; opacity: .55; }
+.emb-n {
+  position: absolute; left: 0; right: 0; top: var(--ny, 50%); transform: translateY(-50%);
+  font: 800 var(--fs-4)/1 var(--stamp); color: var(--eo); letter-spacing: .02em; font-variant-numeric: tabular-nums;
+}
+/* Not yet earned: an outline in the same shape, and a ring around it that fills with progress. */
+.badge:not(.badge--done) .e-body, .badge:not(.badge--done) .e-tail { fill: var(--surface); stroke: var(--line-strong); stroke-width: 2; opacity: 1; }
+.badge:not(.badge--done) .e-line { stroke: var(--line-strong); opacity: .7; }
+.badge:not(.badge--done) .emb-n { color: var(--ink-2); }
+@property --pf { syntax: '<number>'; inherits: true; initial-value: 0; }
+.badge { --pf: var(--p); }
+.emb-ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  background: conic-gradient(var(--sun-ink) calc(var(--pf) * 1%), var(--surface-2) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), black calc(100% - 3.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), black calc(100% - 3.5px));
+}
+.badge:not(.badge--done) .emb svg { width: 52px; height: 52px; }
+.badge-name { font-size: var(--fs-2); font-weight: 700; line-height: 1.25; }
+.badge:not(.badge--done) .badge-name { color: var(--ink-2); }
+.badge-desc { font-size: var(--fs-1); color: var(--ink-2); line-height: 1.35; }
+/* First view: rings fill from empty, earned medals get one sweep of foil light inside their own shape. */
+.shelf--play:not(.is-in) .badge { --pf: 0; }
+.shelf--play.is-in .badge { transition: --pf 1.1s var(--ease-out) calc(var(--i, 0) * 50ms + 100ms); }
+.badge--done .emb::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, .8) 50%, transparent 62%) 100% 0 / 300% 100% no-repeat;
+  -webkit-mask: var(--emask) center / 66px 66px no-repeat; mask: var(--emask) center / 66px 66px no-repeat;
+}
+.shelf--play.is-in .badge--done .emb::after { animation: foil 1.3s var(--ease-out) calc(var(--i, 0) * 110ms + 150ms) both; }
+@keyframes foil { 0% { opacity: 1; background-position: 100% 0; } 85% { opacity: 1; } 100% { opacity: 0; background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .shelf--play .badge { --pf: var(--p) !important; transition: none !important; }
+  .badge--done .emb::after { display: none; }
+}
+
+/* ---------- sheets I own: + sheet, sighting, outing start and finish ----------
+   The page behind blurs a little under the scrim; the sheet springs up. */
+.sheet-wrap:is(.sheet-wrap--plus, .sheet-wrap--log, .sheet-wrap--outing) .sheet-scrim { -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px); }
+@media (prefers-reduced-transparency: reduce) { .sheet-wrap:is(.sheet-wrap--plus, .sheet-wrap--log, .sheet-wrap--outing) .sheet-scrim { -webkit-backdrop-filter: none; backdrop-filter: none; } }
+@media (prefers-reduced-motion: no-preference) {
+  .sheet-wrap--plus.open:not([data-closing]):not(.sheet-wrap--drag) .sheet { transition: transform var(--dur-4) var(--ease-spring); }
+}
+
+.sheet-wrap:is(.sheet-wrap--log, .sheet-wrap--outing) .loc > .chips--scroll { padding-inline: 0; }
+:root[data-theme="outdoor"] .sheet-wrap:is(.sheet-wrap--log, .sheet-wrap--outing) .btn:not(.btn--primary):not(.btn--quiet) { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+
+/* The species she picked, as a photo card with its name over a scrim. */
+.picker .chosen { position: relative; display: block; height: 176px; padding: 0; overflow: hidden; border-radius: var(--r-card); background: var(--surface-2); box-shadow: var(--shadow-card); color: #fff; }
+.picker .chosen-img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; object-fit: cover; object-position: 50% 30%; }
+.picker .chosen::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgba(7, 11, 16, .82) 0, rgba(7, 11, 16, .3) 50%, rgba(7, 11, 16, 0) 75%); }
+.picker .chosen-txt { position: absolute; left: 14px; right: 14px; bottom: 12px; z-index: 1; display: grid; justify-items: start; gap: 3px; text-shadow: 0 1px 8px rgba(0, 0, 0, .4); }
+.picker .chosen-txt strong { font-size: var(--fs-4); font-weight: 800; line-height: 1.15; }
+.picker .chosen-txt em { font-size: var(--fs-2); color: rgba(255, 255, 255, .9); }
+.picker .chosen-txt .band { text-shadow: none; }
+.sheet .picker .btn.chosen-change { position: absolute; top: 10px; right: 10px; z-index: 1; min-height: 40px; border-radius: var(--r-pill); background: var(--glass-strong); color: var(--ink); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float); }
+
+/* + sheet: a floating glass panel with four big action tiles, logging one sighting first. */
+.sheet-wrap--plus .sheet {
+  width: calc(100% - 20px); margin-bottom: calc(10px + env(safe-area-inset-bottom)); padding: 8px var(--sp-4) var(--sp-4); border-radius: 28px;
+  background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-2);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @starting-style { .sheet-wrap--plus.open .sheet { transform: translateY(calc(100% + 40px)); } }
+  .sheet-wrap--plus[data-closing] .sheet { transform: translateY(calc(100% + 40px)); }
+}
+.plus-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+.plus-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 152px; padding: 14px;
+  border: 0; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); color: var(--ink);
+  font: inherit; text-align: left; text-decoration: none; cursor: pointer;
+  transition: scale var(--dur-3) var(--ease-spring);
+}
+.plus-tile:active { scale: .95; transition-duration: var(--dur-1); transition-timing-function: var(--ease-out); }
+.plus-ic { display: grid; place-items: center; width: 46px; height: 46px; margin-bottom: auto; border-radius: 50%; background: var(--azure-soft); color: var(--azure); }
+.plus-ic svg { width: 24px; height: 24px; }
+.plus-tile strong { margin-top: var(--sp-3); font-size: var(--fs-3); font-weight: 800; line-height: 1.2; }
+.plus-tile > span:last-child { font-size: var(--fs-2); line-height: 1.3; color: var(--ink-2); }
+.plus-tile--main { background: var(--azure); color: var(--on-azure); box-shadow: 0 16px 28px -16px var(--azure), var(--shadow-card); }
+.plus-tile--main .plus-ic { background: color-mix(in srgb, var(--on-azure) 20%, transparent); color: inherit; }
+.plus-tile--main > span:last-child { color: inherit; opacity: .9; }
+.plus-more { margin: var(--sp-3) var(--sp-1) 0; }
+:root[data-theme="outdoor"] .plus-tile:not(.plus-tile--main) { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+@media (max-width: 359px) { .plus-tile { min-height: 140px; padding: 12px; } .plus-tile > span:last-child { font-size: var(--fs-1); } }
+@media (prefers-reduced-motion: reduce) { .plus-tile { transition: none; } }
+
+/* ---------- search everything ----------
+   A frosted bar over the results; before she types, ideas to tap. Places get a pin, her sightings their photo. */
+.search-ov .search-bar {
+  padding: calc(8px + env(safe-area-inset-top)) 8px 8px 16px; border-bottom: 0; border-radius: 0 0 22px 22px;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 -1px 0 var(--glass-edge), 0 14px 28px -20px rgba(12, 18, 27, .45);
+  animation: search-drop var(--dur-3) var(--ease-out) both;
+}
+.search-ov .search-bar:focus-within { box-shadow: inset 0 -3px 0 var(--azure), 0 14px 28px -20px rgba(12, 18, 27, .45); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .search-ov .search-bar { background: var(--glass-strong); } }
+@media (prefers-reduced-transparency: reduce) { .search-ov .search-bar { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+@keyframes search-drop { from { transform: translateY(-16px); opacity: 0; } }
+.search-try { padding: var(--sp-4) var(--sp-4) 0; }
+.search-try .chips { padding: var(--sp-2) 0 0; }
+.search-res .row-thumb { width: 52px; height: 52px; border-radius: 14px; }
+.row-ic { display: grid; place-items: center; width: 52px; height: 52px; flex: none; border-radius: 50%; background: var(--azure-soft); color: var(--azure); }
+.row-ic svg { width: 22px; height: 22px; }
+@media (prefers-reduced-motion: reduce) { .search-ov .search-bar { animation: none; } }
+
+/* ---------- stats: totals as stat cards, group bars under their kind ----------
+   On the first visit the totals count up, the life-list line draws, month bars grow up and group bars fill as each
+   chart comes into view (.stats-play, then .is-in per section). */
+.stats-page .statgrid { gap: var(--sp-3); padding: var(--sp-2) var(--sp-4) var(--sp-1); }
+.stats-page .statgrid div { padding: var(--sp-4) 14px; border-radius: var(--r-card); box-shadow: var(--shadow-card); }
+.stats-page .statgrid b { display: inline-block; justify-self: start; }
+.stats-page .block { margin: var(--sp-4) var(--sp-4) 0; padding: 0 var(--sp-4) var(--sp-4); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
+.stats-page .block > .h2 { margin: 0; padding: var(--sp-4) 0 var(--sp-3); }
+.stats-page :is(.spots, .rows) li:last-child, .stats-page .rows li:last-child .row { border-bottom: 0; }
+.stats-page .rows .num { font: 600 var(--fs-4)/1 var(--stamp); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.stats-page .block:last-child { margin-bottom: var(--sp-5); }
+:root[data-theme="outdoor"] .stats-page :is(.block, .statgrid div) { box-shadow: var(--shadow-1); }
+.gkind + .gkind { margin-top: var(--sp-5); }
+.gkind-h { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-3); font-size: var(--fs-3); }
+.gkind-h > span:first-of-type { flex: 1; }
+.gkind-h .ring { width: 28px; height: 28px; }
+.gkind-h .num { font: 600 var(--fs-4)/1 var(--stamp); color: var(--ink-2); }
+.gkind .meter span { background: var(--kc); box-shadow: none; }
+.stats-page .meter span { width: 100%; transform: scaleX(var(--s, 1)); transform-origin: left; transition: none; }
+.stats-page .season i { transform-origin: bottom; }
+.stats-page .chart .line { stroke-dasharray: 1; stroke-dashoffset: 0; }
+.stats-play .block:not(.is-in) .meter span { transform: scaleX(0); }
+.stats-play .block:not(.is-in) .season i { transform: scaleY(0); }
+.stats-play .block:not(.is-in) .chart .line { stroke-dashoffset: 1; }
+.stats-play .block:not(.is-in) .chart .area { opacity: 0; }
+.stats-play .block:not(.is-in) .ring-fill { stroke-dashoffset: 100; }
+.stats-play .block.is-in .meter span { transition: transform .9s var(--ease-out) calc(var(--i, 0) * 25ms); }
+.stats-play .block.is-in .season i { transition: transform .7s var(--ease-spring) calc(var(--i, 0) * 35ms); }
+.stats-play .block.is-in .chart .line { transition: stroke-dashoffset 1.2s var(--ease-out); }
+.stats-play .block.is-in .chart .area { transition: opacity .6s var(--ease-out) .7s; }
+.stats-play .block.is-in .ring-fill { transition: stroke-dashoffset 1s var(--ease-out) .1s; }
