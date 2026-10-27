@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { KINDS, byId, type QuizQuestion, type RoundState } from '../../lib/data';
+import { HABITATS, KINDS, byId, type QuizQuestion, type RoundState } from '../../lib/data';
 import { useMedia, useSightings } from '../../lib/hooks';
 import { CountUp } from '../../components/Motion';
 import * as Q from '../../core/quiz.js';
@@ -515,7 +515,7 @@ function Deck({ onBack }: { onBack: () => void }) {
           <span className="lq-bar" role="progressbar" aria-label={`Card ${game.n! + 1} of ${game.total}`} aria-valuemin={1} aria-valuemax={game.total} aria-valuenow={game.n! + 1}><span style={{ transform: `scaleX(${(game.n! / Math.max(1, game.total!)).toFixed(3)})` }} /></span>
           <span className="lq-count" aria-hidden="true">{game.queue!.length}<span> left</span></span>
         </header>
-        <p className="lq-kicker">Review deck<span>Box {c.box || 1}, {c.skill === 'call' ? 'by call' : 'by sight'}</span></p>
+        <p className="lq-kicker">Review deck<span>Box {(getLearn()?.cards?.[c.id]?.[c.skill]?.box) || 1}, {c.skill === 'call' ? 'by call' : 'by sight'}</span></p>
         <div className="lq ld-card">
           <h1 className="lq-prompt" tabIndex={-1}>{c.skill === 'call' ? 'Whose call is this?' : `Which ${KINDS[sp.kind]?.one || 'species'} is this?`}</h1>
           {c.skill === 'call' ? <CallPlayer key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} call={(Q.callsOf(sp.id) as CallClip[])[0]} seed={sp.id} /> : <PhotoBox key={`${c.id}|${c.skill}|${game.n}|${game.queue!.length}`} photos={photos} alt={`Mystery ${KINDS[sp.kind]?.one}`} missing={`This photo needs a connection. Its field notes: ${Q.blankNotes(sp)}`} />}
@@ -528,7 +528,7 @@ function Deck({ onBack }: { onBack: () => void }) {
               {mates[0] && <p className="lq-tell"><strong>Not to be confused with the {mates[0].name}.</strong> {Q.tellFor(sp.id, mates[0].id)}</p>}
               <dl className="ld-facts">
                 {peaks && <div><dt>Most reported</dt><dd>{peaks.charAt(0).toUpperCase() + peaks.slice(1)}</dd></div>}
-                <div><dt>Where</dt><dd>{sp.habitats.map((h) => h).join(', ') || 'Not recorded'}</dd></div>
+                <div><dt>Where</dt><dd>{sp.habitats.map((h) => HABITATS[h]).join(', ') || 'Not recorded'}</dd></div>
               </dl>
               {c.skill === 'call' && <PhotoBox photos={photos} alt={sp.name} cls="lq-photo lq-photo--answer" />}
               <div className="ld-grade" role="group" aria-label="How did you go?">
