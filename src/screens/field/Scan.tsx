@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { KINDS, type ScanResult } from '../../lib/data';
 import { useSeen } from '../../lib/hooks';
 import { resizeImage } from '../../core/profile.js';
@@ -8,6 +8,7 @@ import {
   topResults, scanHeadline, scanAdvice, bandLevel, bandWord, pct, words, article, firstSentence,
   scanRefs, markChosen,
 } from '../../core/scan.js';
+import { setPending } from './scanHandoff';
 import './scan.css';
 
 const KEEP_MS = 30 * 60 * 1000;
@@ -27,7 +28,6 @@ function clampBox(photo: Chosen, b: Box): Box {
 
 export default function Scan() {
   const navigate = useNavigate();
-  const location = useLocation();
   const seen = useSeen();
   const [info, setInfo] = useState<any>(null);
   const [photo, setPhoto] = useState<Chosen | null>(null);
@@ -135,7 +135,8 @@ export default function Scan() {
 
   const chosen = async (id: number) => {
     await markChosen(logAt, id);
-    navigate(`/add?species=${id}`, { state: { scan: true, at: location.pathname } });
+    if (photo) setPending({ blob: photo.blob, notes: 'Identified from a photo.', autoGps: true });
+    navigate(`/add?species=${id}`, { state: { scan: true } });
   };
   const none = (why: string) => { void markChosen(logAt, 'none'); setStatus(why); };
 

@@ -1,6 +1,8 @@
-import { useState, type FormEvent } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../components/Icon';
+import { db } from '../../core/db.js';
+import { takePending } from '../field/scanHandoff';
 import {
   SightingFields,
   buildSighting,
@@ -13,7 +15,9 @@ import './lists.css';
 
 export default function AddSighting() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [params] = useSearchParams();
+  const fromScan = useRef(false);
   const [draft, setDraft] = useState<SightingDraft>(() => {
     const d = emptyDraft();
     const species = Number(params.get('species'));
@@ -24,6 +28,8 @@ export default function AddSighting() {
   const [status, setStatus] = useState('No location yet');
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
+  const [photoUrl, setPhotoUrl] = useState('');
 
   const locate = async () => {
     setLocating(true);
@@ -43,6 +49,33 @@ export default function AddSighting() {
     }
   };
 
+  useEffect(() => {
+    if (!location.state?.scan) return;
+    const pending = takePending();
+    if (!pending) return;
+    fromScan.current = true;
+    setPhotoBlob(pending.blob);
+    setDraft((current) => ({ ...current, note: pending.notes || current.note }));
+    if (pending.autoGps) void locate();
+    // Run once when the scan hand-off opens this form.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!photoBlob) {
+      setPhotoUrl('');
+      return;
+    }
+    const url = URL.createObjectURL(photoBlob);
+    setPhotoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photoBlob]);
+
+  const cancel = () => {
+    if (fromScan.current) navigate(-1);
+    else navigate('/lists');
+  };
+
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
@@ -52,10 +85,13 @@ export default function AddSighting() {
       return;
     }
     setSaving(true);
+    let photoId: number | null = null;
     try {
-      await saveSighting(rec);
+      if (photoBlob) photoId = (await db.add('photos', { blob: photoBlob, at: Date.now() })) as number;
+      await saveSighting(photoId != null ? { ...rec, photoId } : rec);
       navigate('/lists');
     } catch {
+      if (photoId != null) await db.del('photos', photoId).catch(() => {});
       setError('The sighting could not be saved. Try again.');
       setSaving(false);
     }
@@ -64,9 +100,9 @@ export default function AddSighting() {
   return (
     <>
       <header className="page-head page-head--back">
-        <Link className="iconbtn" to="/lists" aria-label="Back to lists">
+        <button type="button" className="iconbtn" aria-label={fromScan.current ? 'Back to the scan result' : 'Back to lists'} onClick={cancel}>
           <Icon name="back" />
-        </Link>
+        </button>
         <h1>Log a sighting</h1>
       </header>
 
@@ -76,6 +112,21 @@ export default function AddSighting() {
       </p>
 
       <form className="form pad" onSubmit={save} noValidate>
+        {photoBlob && photoUrl && (
+          <div className="scan-preview">
+            <img src={photoUrl} alt="The photo you scanned" />
+            <div className="scan-preview-acts">
+              <label className="btn">
+                Replace photo
+                <input type="file" accept="image/*" className="visually-hidden" onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) setPhotoBlob(file);
+                }} />
+              </label>
+              <button type="button" className="btn btn--quiet" onClick={() => setPhotoBlob(null)}>Remove</button>
+            </div>
+          </div>
+        )}
         <SightingFields
           draft={draft}
           onChange={setDraft}
@@ -85,9 +136,9 @@ export default function AddSighting() {
           error={error}
         />
         <div className="row-end">
-          <Link className="btn" to="/lists">
+          <button type="button" className="btn" onClick={cancel}>
             Cancel
-          </Link>
+          </button>
           <button type="submit" className="btn btn--primary" disabled={saving}>
             {saving ? 'Saving…' : 'Save sighting'}
           </button>
