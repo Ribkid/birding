@@ -101,6 +101,14 @@ const toHsl = ([r, g, b]) => {
   return [h * 60, s, l];
 };
 const hsl = (h, s, l) => `hsl(${h.toFixed(0)} ${(s * 100).toFixed(0)}% ${(l * 100).toFixed(0)}%)`;
+// WCAG contrast of white text on an HSL colour, so the accent can be darkened until white text passes 4.5:1.
+function whiteContrast(h, s, l) {
+  const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const ch = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  const lin = c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const Y = 0.2126 * lin(ch(0)) + 0.7152 * lin(ch(8)) + 0.0722 * lin(ch(4));
+  return 1.05 / (Y + 0.05);
+}
 
 // Accent colours that stay readable: a mid tone for fills (white text passes), a deep tone for gradients behind
 // white titles, and a soft wash for tinted surfaces. Dark mode lifts the ink tone.
@@ -109,7 +117,9 @@ export async function applyTint(el, url, fallback = null) {
   if (!el?.isConnected) return;
   if (!t) { if (fallback) el.style.setProperty('--tint', fallback); return; }
   const [h, s0] = toHsl(t.rgb), s = Math.min(0.75, Math.max(0.28, s0));
-  el.style.setProperty('--tint', hsl(h, s, 0.36));
+  let L = 0.36;
+  while (L > 0.18 && whiteContrast(h, s, L) < 4.6) L -= 0.02;
+  el.style.setProperty('--tint', hsl(h, s, L));
   el.style.setProperty('--tint-deep', hsl(h, Math.min(0.6, s), 0.16));
   el.style.setProperty('--tint-soft', hsl(h, Math.min(0.5, s), 0.92));
   el.style.setProperty('--tint-soft-dark', hsl(h, Math.min(0.45, s), 0.2));
