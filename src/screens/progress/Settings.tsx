@@ -20,7 +20,6 @@ import { configured, getMyCloud, getProfile, myName, saveMyProfile, signedIn } f
 import { openWelcome } from '../../components/Welcome';
 import { Icon } from '../../components/Icon';
 import { stagger } from '../../lib/look';
-import { focusables } from '../../lib/layers';
 import { countUp } from '../../lib/motion';
 import { ConfirmDialog, Modal, fmtDate, plural } from '../lists/shared';
 import { AccountAvatar, SignInForm, trophyIcon, useProfile } from '../me/accountBits';
@@ -73,19 +72,6 @@ function download(name: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 const message = (e: unknown) => (e instanceof Error ? e.message : String((e as { message?: unknown })?.message ?? e ?? ''));
-
-// v1's openSheet puts focus on the sheet's first control (Cancel, or "Keep a copy") once it is up
-// (js/app.js openSheet); the shared Sheet leaves it on the page, so Settings' sheets do it here.
-function useSheetFocus(open: boolean) {
-  useEffect(() => {
-    if (!open) return;
-    const t = setTimeout(() => {
-      const sheet = document.querySelector<HTMLElement>('.sheet-wrap:not([data-closing]) .sheet');
-      if (sheet && !sheet.contains(document.activeElement)) focusables(sheet)[0]?.focus({ preventScroll: true });
-    }, 50);
-    return () => clearTimeout(t);
-  }, [open]);
-}
 
 // ---------- the "Your profile" row (v1 js/me.js profileRow) ----------
 function ProfileRow() {
@@ -242,7 +228,6 @@ function AccountCard({ onChange }: { onChange: () => void }) {
   const [lb, setLb] = useState(() => getProfile().showOnLeaderboard !== false);
   const [signOutAsk, setSignOutAsk] = useState(false);
   const [deleteAsk, setDeleteAsk] = useState(false);
-  useSheetFocus(signOutAsk || deleteAsk);
 
   const countPending = () => { void Promise.resolve(pendingCount()).then((n: number) => setPending(n || 0)).catch(() => {}); };
   const loadProfile = async () => {
@@ -402,7 +387,6 @@ export default function Settings() {
   const [restore, setRestore] = useState<BackupData | null>(null);
   const [wipeAsk, setWipeAsk] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  useSheetFocus(wipeAsk || !!restore);
 
   useEffect(() => {
     let alive = true;
@@ -436,7 +420,9 @@ export default function Settings() {
     for (const p of (await db.all('photos')) as { id: number; at?: number; blob?: Blob }[]) {
       if (p.blob) photos.push({ id: p.id, at: p.at, data: await blobToDataUrl(p.blob) });
     }
-    const [sightings, outings, patches, settings] = await Promise.all([db.all('sightings'), db.all('outings'), db.all('patches'), storedSettings()]);
+    const [sightings, outings, patches, stored] = await Promise.all([db.all('sightings'), db.all('outings'), db.all('patches'), storedSettings()]);
+    // v1 saves its settings state: the defaults (js/app.js:26) with whatever is stored laid over them.
+    const settings = { colourUnseen: false, theme: 'auto', ...stored };
     const data = { app: 'birddex', version: 1, savedAt: new Date().toISOString(), sightings, outings, patches, settings, photos };
     download(`birddex-backup-${todayStr()}.json`, new Blob([JSON.stringify(data)], { type: 'application/json' }));
   };
@@ -514,7 +500,7 @@ export default function Settings() {
         <div className="set-list"><button type="button" className="set-row" onClick={() => void exportEbird()}><span className="set-row-l">Export for eBird</span>{chev}</button></div>
       </Card>
       <Card id="backup-h" title="Backup">
-        <p className="set-note small muted">Your sightings and photos live only on this phone{persisted ? '' : ", and clearing the browser's site data would erase them"}. Save a backup now and then. {usage}</p>
+        <p className="set-note small muted">{`Your sightings and photos live only on this phone${persisted ? '' : ", and clearing the browser's site data would erase them"}. Save a backup now and then. ${usage}`}</p>
         <div className="set-list">
           <button type="button" className="set-row" onClick={() => void saveBackup()}><span className="set-row-l">Save backup</span>{chev}</button>
           <button type="button" className="set-row" onClick={() => fileRef.current?.click()}><span className="set-row-l">Restore backup</span>{chev}</button>

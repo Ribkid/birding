@@ -291,7 +291,8 @@ export default function Leaderboard() {
     const parts = kindsPresent
       .filter((k) => Number(row[k] ?? 0) > 0 && k !== 'bird')
       .map((k) => `${Number(row[k] ?? 0)} ${word(k)}`);
-    return parts.length ? <span className="small muted">{Number(row.bird ?? 0)} {word('bird')}, {parts.join(', ')}</span> : null;
+    // One text run, as in v1's markup, so the line shapes (kerns) the same.
+    return parts.length ? <span className="small muted">{`${Number(row.bird ?? 0)} ${word('bird')}, ${parts.join(', ')}`}</span> : null;
   };
 
   const renderRow = (row: LeaderRow) => {
@@ -307,7 +308,7 @@ export default function Leaderboard() {
             {row.is_me && <> <span className="lb-you">You</span></>}
           </strong>{' '}
           <span className="small muted">
-            {plural(row.outings, 'outing')}, {plural(row.badges, 'badge')}
+            {`${plural(row.outings, 'outing')}, ${plural(row.badges, 'badge')}`}
           </span>{' '}
           {kindLine(row)}
         </span>{' '}

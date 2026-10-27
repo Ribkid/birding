@@ -7,11 +7,13 @@ import { CountUp } from '../../components/Motion';
 import { configured, signedIn, initProfile, loadPublicProfile, memberSince, dayPick, getPublicProfileCache, problem } from '../../core/profile.js';
 import { onAuth } from '../../core/cloud.js';
 import { authSettled } from '../../core/account.js';
-import { applyTint } from '../../lib/look';
+import { applyTint, stagger } from '../../lib/look';
 import { AccountAvatar, AccountCta } from './accountBits';
 import './me.css';
 
 const back = <path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />;
+// The hero's glass back button uses v1 me.js I.back, a bare path that me.css strokes (.me-glassbtn svg).
+const heroBack = <path d="M15 5l-7 7 7 7" />;
 const edit = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" /></svg>;
 const tick = <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>;
 
@@ -57,7 +59,10 @@ export default function PublicProfile() {
     const img = hero?.querySelector('[data-hero-frame] img') as HTMLImageElement | null;
     if (hero && img) void applyTint(hero, img.src);
     document.querySelectorAll<HTMLElement>('.me-rings').forEach((el) => el.classList.add('is-in'));
-  }, [row]);
+    // The species tiles rise in once per profile per session (v1 paintProfile: stagger '.me-grid > li').
+    const id = requestAnimationFrame(() => stagger(document.querySelector('.me--profile'), '.me-grid > li', { key: `me-u-${publicId}`, max: 15 }));
+    return () => cancelAnimationFrame(id);
+  }, [row, publicId]);
 
   const dex = useMemo(() => (row?.dex || []).map((n) => byId.get(n)).filter(Boolean), [row]);
   const mineSeen = seen;
@@ -69,19 +74,19 @@ export default function PublicProfile() {
   if (state === 'signedout') {
     return (
       <div className="me">
-        <header className="page-head page-head--back"><Link className="iconbtn" to={backHref} aria-label="Back"><svg viewBox="0 0 24 24">{back}</svg></Link><h1>Profile</h1></header>
+        <header className="page-head page-head--back"><Link className="iconbtn" to={backHref} aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true">{back}</svg></Link><h1>Profile</h1></header>
         <div className="me-msg"><p>Sign in to see other people's profiles. It's free, and your dex comes with you.</p><AccountCta /></div>
       </div>
     );
   }
   if (state === 'loading') {
-    return <div className="me me--loading"><header className="page-head page-head--back"><Link className="iconbtn" to={backHref} aria-label="Back"><svg viewBox="0 0 24 24">{back}</svg></Link><h1>Loading profile</h1></header><div className="me-msg"><p className="muted" role="status">Loading…</p></div></div>;
+    return <div className="me me--loading"><header className="page-head page-head--back"><Link className="iconbtn" to={backHref} aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true">{back}</svg></Link><h1>Loading profile</h1></header><div className="me-msg"><p className="muted" role="status">Loading…</p></div></div>;
   }
   if (state === 'offline') {
-    return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to={backHref} aria-label="Back"><svg viewBox="0 0 24 24">{back}</svg></Link><h1>Profile</h1></header><div className="me-msg"><p>Profiles need a connection. Your own dex works offline as usual.</p></div></div>;
+    return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to={backHref} aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true">{back}</svg></Link><h1>Profile</h1></header><div className="me-msg"><p>Profiles need a connection. Your own dex works offline as usual.</p></div></div>;
   }
   if (state === 'error' || !row) {
-    return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to={backHref} aria-label="Back"><svg viewBox="0 0 24 24">{back}</svg></Link><h1>Profile</h1></header><div className="me-msg"><p>{err || 'This profile could not be loaded.'}</p></div></div>;
+    return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to={backHref} aria-label="Back"><svg viewBox="0 0 24 24" aria-hidden="true">{back}</svg></Link><h1>Profile</h1></header><div className="me-msg"><p>{err || 'This profile could not be loaded.'}</p></div></div>;
   }
 
   return (
@@ -89,7 +94,7 @@ export default function PublicProfile() {
       <section className="me-hero">
         <div className="me-cover" data-hero-frame aria-hidden="true">{cover && <SpeciesImage sp={cover} size="large" />}</div>
         <div className="me-scrim" aria-hidden="true" />
-        <div className="page-head--back me-back"><Link className="iconbtn me-glassbtn glass" to={backHref} aria-label={isMe ? 'Back to Me' : 'Back to the leaderboard'}><svg viewBox="0 0 24 24">{back}</svg></Link></div>
+        <div className="page-head--back me-back"><Link className="iconbtn me-glassbtn glass" to={backHref} aria-label={isMe ? 'Back to Me' : 'Back to the leaderboard'}><svg viewBox="0 0 24 24" aria-hidden="true">{heroBack}</svg></Link></div>
         <div className="me-id">
           <span className="me-av-ring">
             <AccountAvatar spId={row.avatar_species_id} path={row.avatar_path} name={row.display_name} cls="acct-av me-av" size="large" />

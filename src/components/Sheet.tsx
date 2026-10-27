@@ -34,9 +34,16 @@ export function Sheet({ open, onClose, children, label, wide = false, cls = '', 
       close: () => closeRef.current(),
     });
     const raf = requestAnimationFrame(() => wrap.classList.add('open'));
+    // v1 openSheet (js/app.js:229-231): once the sheet is up, focus its first control, unless the screen
+    // already put focus inside it or the control opts out with data-noautofocus.
+    const first = card.querySelector<HTMLElement>('input:not([type=hidden]):not([type=file]), select, textarea, button, a[href]');
+    const focusTimer = first && !first.matches('[data-noautofocus]')
+      ? setTimeout(() => { if (!card.contains(document.activeElement)) first.focus({ preventScroll: true }); }, 50)
+      : undefined;
     const key = (e: KeyboardEvent) => { onLayerKey(e); };
     document.addEventListener('keydown', key);
     return () => {
+      clearTimeout(focusTimer);
       cancelAnimationFrame(raf);
       document.removeEventListener('keydown', key);
       closeLayer(layer);
