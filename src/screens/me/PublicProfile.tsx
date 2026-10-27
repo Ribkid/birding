@@ -84,7 +84,7 @@ export default function PublicProfile() {
   return (
     <div className="me me--profile">
       <section className="me-hero">
-        <div className="me-cover" data-hero-frame aria-hidden="true">{cover && <SpeciesImage sp={cover} size="large" whole />}</div>
+        <div className="me-cover" data-hero-frame aria-hidden="true">{cover && <SpeciesImage sp={cover} size="large" />}</div>
         <div className="me-scrim" aria-hidden="true" />
         <div className="page-head--back me-back"><Link className="iconbtn me-glassbtn glass" to={backHref} aria-label={isMe ? 'Back to Me' : 'Back to the leaderboard'}><svg viewBox="0 0 24 24">{back}</svg></Link></div>
         <div className="me-id">

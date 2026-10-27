@@ -135,7 +135,7 @@ export default function Me() {
     <div className={`me ${u ? 'me--in' : 'me--guest'}`}>
       {u ? (
         <section className="me-hero">
-          <div className="me-cover" data-hero-frame aria-hidden="true">{cover && <SpeciesImage sp={cover} size="large" whole />}</div>
+          <div className="me-cover" data-hero-frame aria-hidden="true">{cover && <SpeciesImage sp={cover} size="large" />}</div>
           <div className="me-scrim" aria-hidden="true" />
           <div className="me-hero-top"><Link className="me-glassbtn glass" to="/settings" aria-label="Settings"><svg viewBox="0 0 24 24">{I.gear}</svg></Link></div>
           <div className="me-id">
