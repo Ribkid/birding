@@ -577,13 +577,13 @@ body.has-sheet .tabbar .tab-plus { rotate: 45deg; }
 .card3d { width: min(330px, 86vw); aspect-ratio: 63 / 88; --mx: 50%; --my: 50%; --angle: 0deg; touch-action: none; }
 .card-inner { width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .05s linear; }
 .card-face { position: relative; height: 100%; border-radius: 18px; padding: 12px; overflow: hidden; display: flex; flex-direction: column; gap: 6px;
-  background: linear-gradient(160deg, #F7F3D8, #EDF1EE 40%, #DDE6E0); color: #142E29;
-  box-shadow: 0 24px 50px rgba(0,0,0,.45), inset 0 0 0 6px #F5C518, inset 0 0 0 8px #142E29; }
-.card--unseen .card-face { background: linear-gradient(160deg, #2A403B, #142E29); color: #CFDAD5; box-shadow: 0 24px 50px rgba(0,0,0,.45), inset 0 0 0 6px #4F6861; }
+  background: linear-gradient(160deg, #F7F3D8, #F1F4F8 40%, #E2E8F0); color: #121821;
+  box-shadow: 0 24px 50px rgba(0,0,0,.45), inset 0 0 0 6px #F5C518, inset 0 0 0 8px #121821; }
+.card--unseen .card-face { background: linear-gradient(160deg, #2A3340, #121821); color: #D5DCE6; box-shadow: 0 24px 50px rgba(0,0,0,.45), inset 0 0 0 6px #556070; }
 .card--unseen .card-photo img { filter: grayscale(1) brightness(.4) contrast(1.3); }
 .card-top { display: flex; justify-content: space-between; align-items: center; padding: 6px 6px 0; }
 .card-rarity { font-weight: 700; font-size: .8rem; }
-.card-photo { flex: 1; min-height: 0; border-radius: 10px; overflow: hidden; background: #2A403B; border: 2px solid #142E29; }
+.card-photo { flex: 1; min-height: 0; border-radius: 10px; overflow: hidden; background: #2A3340; border: 2px solid #121821; }
 .card-photo .whole { width: 100%; height: 100%; }
 .card-name { margin: 2px 6px 0; font-size: 1.3rem; line-height: 1.15; }
 .card-sci { margin: 0 6px; font-style: italic; font-size: .85rem; opacity: .75; }
@@ -595,8 +595,8 @@ body.has-sheet .tabbar .tab-plus { rotate: 45deg; }
 .card--foil .card-holo { opacity: .55; mix-blend-mode: color-dodge;
   background: linear-gradient(var(--angle), transparent 20%, rgba(255,0,140,.35) 35%, rgba(255,230,0,.35) 45%, rgba(0,255,190,.35) 55%, rgba(0,140,255,.35) 65%, transparent 80%);
   background-size: 200% 200%; background-position: var(--mx) var(--my); }
-.card--foil-5 .card-face { box-shadow: 0 24px 50px rgba(0,0,0,.45), inset 0 0 0 6px #D9A21B, inset 0 0 0 8px #142E29; }
-.card-hint { color: #CFDAD5; font-size: .85rem; margin: 6px 0 0; }
+.card--foil-5 .card-face { box-shadow: 0 24px 50px rgba(0,0,0,.45), inset 0 0 0 6px #D9A21B, inset 0 0 0 8px #121821; }
+.card-hint { color: #D5DCE6; font-size: .85rem; margin: 6px 0 0; }
 .confetti { position: fixed; inset: 0; z-index: 95; pointer-events: none; width: 100vw; height: 100vh; }
 
 /* search overlay */
@@ -742,7 +742,7 @@ body.has-sheet .tabbar .tab-plus { rotate: 45deg; }
 .kindtag { display: inline-block; padding: 2px 9px; border-radius: var(--r-pill); font-size: var(--fs-1); font-weight: 700; color: var(--on-kind); background: var(--kc); text-transform: capitalize; }
 .dex-group:not(.kind--bird) .dex-group-h > span:first-child::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--kc); margin-right: 8px; vertical-align: 1px; }
 .chip--kind.chip--on { background: var(--kc); border-color: var(--kc); color: var(--on-kind); }
-.card3d:not(.kind--bird) .card-face { box-shadow: 0 24px 50px rgba(0,0,0,.45), inset 0 0 0 6px var(--kc), inset 0 0 0 8px #142E29; }
+.card3d:not(.kind--bird) .card-face { box-shadow: 0 24px 50px rgba(0,0,0,.45), inset 0 0 0 6px var(--kc), inset 0 0 0 8px #121821; }
 
 /* species page gallery + sources */
 .gallery { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
