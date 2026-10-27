@@ -265,8 +265,9 @@ const clueHTML = clue => esc(clue).replace(/\u0001/g, '<span class="lq-blank"><s
 // the new screen's heading so she keeps her place and hears the next question.
 const focusWithin = view => view.contains(document.activeElement) && document.activeElement !== view;
 const focusHead = (view, had) => { if (had) view.querySelector('h1')?.focus({ preventScroll: true }); };
-// Screens drawn here (not by the router) still tell the frosted top bar which title and back control are on screen.
-const drawn = (ctx, had) => { focusHead(ctx.view, had); lookAfterDraw(ctx.view); };
+// Screens drawn here (not by the router) start at the top, as a new route does (after a long answer she would
+// otherwise land halfway down the next question), and tell the frosted top bar which title is on screen.
+const drawn = (ctx, had) => { window.scrollTo(0, 0); focusHead(ctx.view, had); lookAfterDraw(ctx.view); };
 
 // The progress bar fills from where the last screen left it, so it visibly grows between questions and cards.
 let barWas = 0;
