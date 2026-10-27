@@ -24,7 +24,6 @@ import SignIn from './screens/me/SignIn';
 import PublicProfile from './screens/me/PublicProfile';
 import { Placeholder } from './screens/Placeholder';
 import { TabBar } from './components/TabBar';
-import { OutingBar } from './screens/OutingBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Welcome } from './components/Welcome';
 import { useSeqReady } from './lib/seq';
@@ -129,7 +128,6 @@ export default function App() {
         </Routes>
         </ErrorBoundary>
       </main>
-      <OutingBar />
       <TabBar />
     </>
   );
