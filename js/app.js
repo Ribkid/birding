@@ -1069,32 +1069,63 @@ function dexFilter(seen) {
 }
 function lastSeenOf(id) { const h = sightingsOf(id); return h[0] ? h[0].date + (h[0].time || '') : ''; }
 
-// '<Kind> of the day' follows the kind tab (a bird for All animals). The pick holds all day.
-function ofTheDay(seen, scope) {
+// '<Kind> of the day' follows the kind tab (a bird for All animals). The pick holds all day; it is worked out once per
+// day, tab and dex size, not on every keystroke in the filter.
+let dayMemo = { key: '', pick: null };
+function dayPick(seen, scope) {
   const k = scope === 'animals' || scope === 'all' ? 'bird' : scope;
-  const now = new Date(), month = now.getMonth() + 1;
+  const now = new Date(), month = now.getMonth() + 1, today = todayStr(now);
+  const memo = `${today} ${k} ${seen.size} ${!!seq()}`;
+  if (dayMemo.key === memo) return dayMemo.pick;
   let pool = targets({ seen, month, kinds: [k], ...targetOpts() }).slice(0, 40);
   if (!pool.length) pool = ofKind(k);
-  if (!pool.length) return '';
-  const key = Number(todayStr(now).replace(/-/g, ''));
-  const sp = pool[(key * 2654435761 >>> 0) % pool.length];
-  const spot = spotsFor(sp.id, 1)[0];
-  const when = k === 'plant' && sp.season && inSeason(sp, month) ? 'Flowering now' : relRate(sp.id, month) >= 0.8 ? 'Often reported right now' : 'Around this month';
-  const why = seen.has(sp.id) ? 'One of yours. Say hello again today.' : `${when}${spot ? `. Try ${spot.h.name}.` : '.'}`;
-  return `<a class="today-card botd kind--${sp.kind}" href="#/bird/${sp.id}">
-    <span class="botd-img">${birdImg(sp, 'small', '', { alt: '' })}</span>
-    <span class="botd-txt"><span class="botd-k">${cap(KINDS[k].one)} of the day</span><strong>${esc(sp.name)}</strong><span class="botd-why">${esc(why)}</span></span></a>`;
+  let pick = null;
+  if (pool.length) {
+    const sp = pool[(Number(today.replace(/-/g, '')) * 2654435761 >>> 0) % pool.length];
+    const spot = spotsFor(sp.id, 1)[0];
+    const when = k === 'plant' && sp.season && inSeason(sp, month) ? 'Flowering now' : relRate(sp.id, month) >= 0.8 ? 'Often reported right now' : 'Around this month';
+    const why = seen.has(sp.id) ? 'One of yours. Say hello again today.' : `${when}${spot ? `. Try ${spot.h.name}.` : '.'}`;
+    pick = { sp, label: `${cap(KINDS[k].one)} of the day`, why };
+  }
+  dayMemo = { key: memo, pick };
+  return pick;
+}
+
+// A progress ring (0-1). Its arc fills from empty the first time the dex is drawn in a session (.rings-in).
+const ring = (p, cls = '') => {
+  const f = Math.max(0, Math.min(1, p || 0));
+  return `<svg class="ring ${cls}${f ? '' : ' ring--zero'}" viewBox="0 0 36 36" aria-hidden="true"><circle class="ring-track" cx="18" cy="18" r="15"/><circle class="ring-fill" cx="18" cy="18" r="15" pathLength="100" style="--off:${(100 - f * 100).toFixed(1)}"/></svg>`;
+};
+
+// The hero: today's pick full-bleed under the status bar, the wordmark, and a glass capsule with her progress.
+function dexHero(seen, scope, day) {
+  const list = SPECIES.filter(s => inScope(s, scope));
+  const got = list.filter(s => seen.has(s.id)).length, n = list.length;
+  return `<header class="dex-hero kind--${day ? day.sp.kind : 'bird'}">
+    <div class="dex-hero-photo" aria-hidden="true">${day ? birdImg(day.sp, 'large', '', { alt: '' }) : ''}</div>
+    <div class="dex-hero-top">
+      ${day ? `<a class="dex-hero-pick" href="#/bird/${day.sp.id}"><span>${day.label}</span><strong>${esc(day.sp.name)}</strong></a>` : '<span></span>'}
+      <div class="dex-hero-actions">${accountChip()}
+        <button class="hero-btn glass" data-search aria-label="Search everything">${icon.search}</button>
+        <a class="hero-btn glass" href="#/settings" aria-label="Settings">${icon.gear}</a></div>
+    </div>
+    <div class="dex-hero-foot">
+      <h1 class="wordmark">Sarah's BirdyDex<small>South East Queensland</small></h1>
+      <p class="dex-cap glass">${ring(got / n, 'dex-cap-ring')}<span><b data-capn="${got}">${got}</b> of ${n} ${scopeNoun(scope, n)} ${scope === 'plant' ? 'found' : 'seen'}</span></p>
+    </div>
+  </header>`;
 }
 
 // What photo ID covers (from data/photoid.json, read once), so Scan isn't offered for kinds it can't name.
 let photoKinds = null, photoKindsP = null;
 function scanCard(scope) {
   const single = scope !== 'animals' && scope !== 'all';
-  const labels = (photoKinds || []).map(k => KINDS[k].label.toLowerCase());
-  const missing = single && labels.length && !photoKinds.includes(scope);
-  const title = missing ? `Scan a photo (${listWords(labels)})` : 'Scan a photo';
-  const sub = missing ? `No ${KINDS[scope].label.toLowerCase()} yet` : labels.length ? `${cap(listWords(labels))} by photo` : 'Name it from a photo';
-  return `${icon.scan}<span><strong>${esc(title)}</strong><span>${esc(sub)}</span></span>`;
+  const pk = photoKinds || [];
+  const missing = single && pk.length && !pk.includes(scope);
+  const all = pk.length && kindsPresent.every(k => pk.includes(k));
+  const sub = missing ? `Not for ${KINDS[scope].label.toLowerCase()} yet` : all || !pk.length ? 'Name it from a photo'
+    : `${cap(listWords(pk.map(k => KINDS[k].label.toLowerCase())))} by photo`;
+  return `<span class="today-ic">${icon.scan}</span><span class="today-t"><strong>Scan a photo</strong><span>${esc(sub)}</span></span>`;
 }
 function knowPhotoKinds() {
   photoKindsP ||= import('./photoid.js').then(m => m.photoInfo()).then(info => {
@@ -1104,28 +1135,31 @@ function knowPhotoKinds() {
   }).catch(() => { photoKindsP = null; });
 }
 
-// Today: one scrolling row of small cards. Listen and Scan, the pick of the day for this tab, and Learn.
-function todayRail(seen, scope) {
+// Today: one snapping row of cards. Listen and Scan, Learn, and the pick of the day (photo-backed).
+function todayRail(seen, scope, day) {
   const single = scope !== 'animals' && scope !== 'all';
   const [lt, ls] = single && scope !== 'bird' ? ['Listen (birds)', scope === 'frog' ? 'Frog calls to compare' : 'Birds by call'] : ['Listen', 'Birds by call'];
+  const tool = (ic, title, sub) => `<span class="today-ic">${ic}</span><span class="today-t"><strong>${title}</strong><span>${sub}</span></span>`;
   return `<section class="today" aria-label="Today">
-    ${state.installPrompt ? `<button class="today-card today-tool" data-install>${icon.install}<span><strong>Install</strong><span>Add to your home screen</span></span></button>` : ''}
-    <a class="today-card today-tool" href="#/listen">${icon.mic}<span><strong>${lt}</strong><span>${ls}</span></span></a>
+    ${state.installPrompt ? `<button class="today-card today-tool" data-install>${tool(icon.install, 'Install', 'Add to your home screen')}</button>` : ''}
+    <a class="today-card today-tool" href="#/listen">${tool(icon.mic, lt, ls)}</a>
     <a class="today-card today-tool" href="#/scan" data-scancard>${scanCard(scope)}</a>
-    ${ofTheDay(seen, scope)}
     ${learnTeaser(ctx)}
+    ${day ? `<a class="today-card today-day kind--${day.sp.kind}" href="#/bird/${day.sp.id}">
+      <span class="botd-img">${birdImg(day.sp, 'small', '', { alt: '' })}</span>
+      <span class="today-day-txt"><span class="today-day-k">${day.label}</span><strong>${esc(day.sp.name)}</strong><span>${esc(day.why)}</span></span></a>` : ''}
   </section>`;
 }
 
-// The kind rail is the tally: each tab carries its own seen/total and a thin progress bar.
+// The kind rail is the tally: each pill carries a small ring, its label and seen/total.
 function kindRail(seen, scope) {
   if (kindsPresent.length < 2) return '';
   const tab = (k, label, list, cls = '') => {
     const got = list.filter(s => seen.has(s.id)).length, n = list.length;
     return `<button role="tab" class="kind-tab kind--${k === 'animals' ? 'all' : k} ${cls}" aria-selected="${scope === k}" data-kind="${k}">
-      <span class="kind-tab-l">${label}</span>
-      <span class="kind-tab-n" aria-hidden="true"><b data-kn="${got}" data-of="${n}">${got}</b>/${n}</span>
-      <span class="kind-tab-bar" aria-hidden="true"><i style="transform:scaleX(${(got / Math.max(1, n)).toFixed(3)})"></i></span>
+      ${ring(got / Math.max(1, n), 'kind-ring')}
+      <span class="kind-tab-txt"><span class="kind-tab-l">${label}</span>
+      <span class="kind-tab-n" aria-hidden="true"><b data-kn="${got}" data-of="${n}">${got}</b>/${n}</span></span>
       <span class="sr-only">, ${got} of ${n} ${k === 'plant' ? 'found' : 'seen'}</span></button>`;
   };
   return `<div class="kind-tabs" role="tablist" aria-label="What to show">
@@ -1133,18 +1167,30 @@ function kindRail(seen, scope) {
     ${ANIMAL_KINDS.filter(k => kindsPresent.includes(k)).map(k => tab(k, KINDS[k].label, ofKind(k))).join('')}
     ${kindsPresent.includes('plant') ? tab('plant', 'Plants', ofKind('plant'), 'kind-tab--quiet') : ''}</div>`;
 }
-// A count that changed since the last draw (a new sighting) counts up; the first draw just shows the numbers.
+// A count that changed since the last draw (a new sighting) counts up and its ring sweeps on; the first draw of a
+// session fills every ring from empty and stamps the hero's number up from nothing.
 let dexCounts = null;
+const sweepRing = (svg, from, to) => {
+  const c = svg?.querySelector('.ring-fill');
+  if (c && motionOK()) c.animate([{ strokeDashoffset: 100 - from * 100 }, { strokeDashoffset: 100 - to * 100 }], { duration: 700, delay: 200, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'backwards' });
+};
 function countKindTabs() {
   const now = {};
+  const first = !dexCounts;
+  if (first) { view.classList.add('rings-in'); setTimeout(() => view.classList.remove('rings-in'), 1400); }
   for (const b of $$('[data-kn]', view)) {
     const k = b.closest('[data-kind]').dataset.kind, n = Number(b.dataset.kn), of = Math.max(1, Number(b.dataset.of));
     const was = dexCounts?.[k];
     now[k] = n;
     if (was == null || was === n) continue;
     countUp(b, was, n, { delay: 200 });
-    if (motionOK()) b.closest('.kind-tab').querySelector('.kind-tab-bar i').animate(
-      [{ transform: `scaleX(${was / of})` }, { transform: `scaleX(${n / of})` }], { duration: 600, delay: 200, easing: 'cubic-bezier(.2, .8, .2, 1)', fill: 'backwards' });
+    sweepRing($('.kind-ring', b.closest('.kind-tab')), was / of, n / of);
+  }
+  const cap = $('[data-capn]', view);
+  if (cap) {
+    now.cap = Number(cap.dataset.capn);
+    if (first) countUp(cap, 0, now.cap, { delay: 250, duration: 900 });
+    else if (dexCounts.cap !== now.cap) countUp(cap, dexCounts.cap, now.cap, { delay: 150 });
   }
   dexCounts = now;
 }
@@ -1197,6 +1243,17 @@ function groupSize(n, layout) {
   return 60 + rows * ((w - (cols - 1) * 10) / cols + 64) + (rows - 1) * 16;
 }
 
+// The search tools stick to the top of the screen; once stuck they turn to frosted glass over the tiles.
+let toolsIO = null;
+function watchDexTools() {
+  toolsIO?.disconnect();
+  const mark = $('.dex-stick', view), tools = $('.dex-tools', view);
+  if (!mark || !tools || !('IntersectionObserver' in window)) return;
+  tools.classList.toggle('is-stuck', mark.getBoundingClientRect().top < 0); // no flash while she types
+  toolsIO = new IntersectionObserver(([en]) => tools.classList.toggle('is-stuck', !en.isIntersecting && en.boundingClientRect.top < 0));
+  toolsIO.observe(mark);
+}
+
 function renderDex() {
   keepRails(drawDex);
   countKindTabs();
@@ -1238,19 +1295,13 @@ function drawDex() {
       : (a, b) => lastSeenOf(b.id).localeCompare(lastSeenOf(a.id)) || a.id - b.id);
     body = `<section class="dex-group">${block(sorted)}</section>`;
   }
+  const day = dayPick(seen, f.kind);
   view.innerHTML = `
-    <header class="dex-head">
-      <div class="dex-head-top">
-        <h1 class="wordmark"><img class="logo" src="icons/logo.svg" alt="" width="40" height="40"><span class="wordmark-txt">Sarah's BirdyDex<small>South East Queensland</small></span></h1>
-        <div class="head-actions">
-          ${accountChip()}
-          <button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button>
-          <a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a>
-        </div>
-      </div>
-      ${kindRail(seen, f.kind)}
-      ${todayRail(seen, f.kind)}
-    </header>
+    ${dexHero(seen, f.kind, day)}
+    <div class="dex-sheet">
+    ${kindRail(seen, f.kind)}
+    ${todayRail(seen, f.kind, day)}
+    <div class="dex-stick" aria-hidden="true"></div>
     <div class="dex-tools">
       <div class="searchbox searchbox--dex">${icon.search}<input type="search" placeholder="Filter ${scopeAll.length} ${scopeNoun(f.kind, 2)}" value="${esc(f.q)}" data-q aria-label="Filter by name"></div>
       <button class="iconbtn iconbtn--tool" data-layout aria-label="${f.layout === 'list' ? 'Show as grid' : 'Show as list'}">${f.layout === 'list' ? icon.grid : icon.list}</button>
@@ -1270,7 +1321,12 @@ function drawDex() {
     </div>
     ${(f.q || filtersOn) && list.length ? `<p class="list-count"><b>${list.length}</b> ${scopeNoun(f.kind, list.length)}</p>` : ''}
     <div class="dex ${state.settings.colourUnseen ? 'dex--colour' : ''}">${body}</div>
-    <p class="small muted pad dex-tip">Tip: press and hold anything in the dex to log it quickly.</p>`;
+    <p class="small muted pad dex-tip">Tip: press and hold anything in the dex to log it quickly.</p>
+    </div>`;
+  const hero = $('.dex-hero', view), himg = $('.dex-hero-photo img', hero);
+  if (himg) { himg.loading = 'eager'; himg.fetchPriority = 'high'; applyTint(hero, himg.getAttribute('src')); }
+  watchDexTools();
+  stagger(view, '.today > .today-card, .today .lt, .today .lt-due, .dex-grid > li, .rows > li', { key: 'dex', max: 16 });
   const qi = $('[data-q]', view);
   // Typing redraws without motion (tiles sliding on every key would be noise); the count is read out once she pauses.
   qi.addEventListener('input', () => {
