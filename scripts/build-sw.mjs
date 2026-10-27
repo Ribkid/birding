@@ -12,7 +12,15 @@ const DIST = new URL('../dist/', import.meta.url).pathname.replace(/^\/([A-Za-z]
 const SHELL_EXT = new Set(['.html', '.js', '.css', '.woff2', '.svg', '.png', '.webmanifest']);
 
 /** Directories that are cached on demand rather than at install time. */
-const RUNTIME_ONLY = ['models/', 'data/', 'vendor/', 'photos/'];
+const RUNTIME_ONLY = ['vendor/', 'photos/'];
+
+/** Data and model files the app needs on a cold start offline. Call clips stay on the calls route. */
+const EXTRA_SHELL = new Set([
+  '/data/species-new.json', '/data/tiers.json', '/data/info.json', '/data/gallery.json',
+  '/data/seq.json', '/data/birdnet-map.json', '/data/lookalikes.json', '/data/calls.json',
+  '/data/photoid.json', '/data/photoid.bin',
+  '/models/bioclip/manifest.json', '/models/bioclip/vision-int4.part1.bin', '/models/bioclip/vision-int4.part2.bin',
+]);
 
 async function walk(dir, out = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -29,10 +37,12 @@ let bytes = 0;
 
 for (const file of files) {
   const rel = relative(DIST, file).split(sep).join('/');
+  const url = '/' + rel;
   if (rel === 'sw.js') continue;
   if (RUNTIME_ONLY.some((prefix) => rel.startsWith(prefix))) continue;
-  if (!SHELL_EXT.has(extname(rel))) continue;
-  shell.push('/' + rel);
+  if ((rel.startsWith('data/') || rel.startsWith('models/')) && !EXTRA_SHELL.has(url)) continue;
+  if (!SHELL_EXT.has(extname(rel)) && !EXTRA_SHELL.has(url)) continue;
+  shell.push(url);
   bytes += (await stat(file)).size;
 }
 
