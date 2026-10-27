@@ -1636,7 +1636,7 @@ function renderOuting(id) {
       e.preventDefault();
       await tally(o, Number((inc || dec).dataset.inc || (inc || dec).dataset.dec), inc ? 1 : -1);
       if (inc && state.tallyQ) state.tallyQ = '';
-      renderOuting(id);
+      keepFocus(() => renderOuting(id), { fallback: '[data-tq], #view h1' });
     }
     if (e.target.closest('[data-finish]')) openFinishOuting(o);
     if (e.target.closest('[data-editbirds]')) { state.editOuting = editing ? null : id; state.tallyQ = ''; renderOuting(id); }
@@ -1722,9 +1722,9 @@ async function renderMap(spId = null, at = null) {
         ${focus ? `<a class="chip chip--on" href="#/map" aria-label="Stop showing ${esc(focus.name)}">${esc(focus.name)} ✕</a>` : ''}
         <button class="chip ${hotOn ? 'chip--on' : ''}" data-hot aria-pressed="${hotOn}">Hotspots</button>
         ${!focus ? `<button class="chip ${f.need ? 'chip--on' : ''}" data-need aria-pressed="${f.need}">Birds I need</button>` : ''}
-        <button class="chip ${f.show === 'all' ? 'chip--on' : ''}" data-mshow="all">My sightings</button>
-        <button class="chip ${f.show === 'photos' ? 'chip--on' : ''}" data-mshow="photos">With photos</button>
-        <button class="chip ${f.show === 'none' ? 'chip--on' : ''}" data-mshow="none">Hide mine</button>
+        <button class="chip ${f.show === 'all' ? 'chip--on' : ''}" data-mshow="all" aria-pressed="${f.show === 'all'}">My sightings</button>
+        <button class="chip ${f.show === 'photos' ? 'chip--on' : ''}" data-mshow="photos" aria-pressed="${f.show === 'photos'}">With photos</button>
+        <button class="chip ${f.show === 'none' ? 'chip--on' : ''}" data-mshow="none" aria-pressed="${f.show === 'none'}">Hide mine</button>
         <button class="chip" data-locate>${icon.pin} Me</button>
       </div>
       <button class="btn btn--primary map-patch" data-patch>New patch here</button>
@@ -1877,10 +1877,10 @@ async function renderMap(spId = null, at = null) {
     const ri = e.target.closest('[data-ri]');
     if (ri) { goTo(results[Number(ri.dataset.ri)]); return; }
     if (e.target.closest('[data-mqx]')) { mq.value = ''; mqx.classList.add('hidden'); tempMarker?.remove(); mq.focus(); showRes(localResults('')); return; }
-    if (e.target.closest('[data-need]')) { f.need = !f.need; renderMap(spId); return; }
+    if (e.target.closest('[data-need]')) { f.need = !f.need; keepFocus(() => renderMap(spId)); return; }
     const ms = e.target.closest('[data-mshow]');
-    if (ms) { f.show = ms.dataset.mshow; renderMap(spId); }
-    if (e.target.closest('[data-hot]')) { if (focus) f.hotFocus = !f.hotFocus; else f.hot = !f.hot; renderMap(spId); }
+    if (ms) { f.show = ms.dataset.mshow; keepFocus(() => renderMap(spId)); }
+    if (e.target.closest('[data-hot]')) { if (focus) f.hotFocus = !f.hotFocus; else f.hot = !f.hot; keepFocus(() => renderMap(spId)); }
     if (e.target.closest('[data-patch]')) startPatch();
     if (e.target.closest('[data-locate]')) {
       try { const p = await getPosition(); map.setView([p.lat, p.lng], 15); L.circleMarker([p.lat, p.lng], { radius: 7, color: '#fff', weight: 3, fillColor: ink, fillOpacity: 1 }).addTo(map); }
@@ -2267,6 +2267,8 @@ const ctx = {
   state, view, $, $$, esc, icon, birdImg, band, pips, toast, fmtDate, plural, GROUPS,
   seenSet, sightingsOf, openSightingSheet, getCalls, hasCalls, audioUrl,
   openSheet, closeSheet, confirmSheet, refresh: refreshFromSync,
+  // shell helpers for other screens: motion (js/motion.js), focus and layers (js/layers.js), the live region
+  vt, flip, countUp, keepFocus, announce, openLayer, closeLayer,
 };
 
 // Data changed under us (cloud sync, sign in or out): reload, and redraw unless that would interrupt something.
