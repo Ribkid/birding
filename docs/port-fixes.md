@@ -737,4 +737,23 @@ Duplicate keys can happen:
 
 ## Status
 
-(deepcode: fill in as you go: what you fixed, with commit ids, and what you skipped and why.)
+Tier 1 fixed (items 1–17), each verified against the current code before the fix and committed separately or as a small related group:
+
+- 1 — `6d6e167`: editing a sighting now spreads the whole stored record (`uid`, `updatedAt`, `acc`, `outingUid`, …) and only writes `notes`; legacy `note` is mapped on read. Added `src/__tests__/sighting.test.ts`.
+- 2 — `ca001d5`: Learn gates `packProgress()` on `ready`, `learn.js` is null-safe, a loading shell renders before the hub, and `src/components/ErrorBoundary.tsx` wraps the routes.
+- 3 — `4b3d6ae`: `src/main.tsx` now imports stylesheets in v1's order before `App`; dist CSS has `.btn{display:inline-flex` before `.me-join-in{` and `.lq-act{`.
+- 4 and 5 — `0ba446c`: `restart`, `startWithIds`, `pick`, `next` and `play` are declared before every early return; rapid-fire resets its clock on a new round, finishes in an effect, and Practise uses a photo round.
+- 6 — `e876342`: media and call players are keyed per question/card, the player resets on clip change and when loading, and changing questions stops the old audio. Untested by browser here; code path checked.
+- 7 and 8 — `1f0280f`: LearnPlay awaits `learnReady`, `loadSeq`, `loadExtras` and `cachedIndex`, then reads sightings from IndexedDB before building a round; route changes reset error/game.
+- 9 and 10 — `a5b23cc`: the service worker uses `birddex-calls` and fetches call clips whole by URL (no Range forwarding), so 206 responses are never sent to `cache.put`.
+- 11 — `135b5ec`: `.bin` model parts bypass the worker, `/models/` and `/vendor/` use `birddex-models`, the cache write no longer holds `respondWith`, and old runtime entries are cleaned on activate.
+- 12 — `1f4e24e`: navigations only store good HTML; app URLs replace `/index.html` only when the body has `#root`, and other pages are stored under their own request. Offline fallback checks the request first.
+- 13 — `2ed4fcb`: Wikimedia photos and OSM/ArcGIS tiles are cached with a CORS fetch into `birddex-images` / `birddex-tiles` (tiles trimmed to 3000).
+- 14 — `6b7d042`: Scan's tools, kind chips, Identify button and status now sit outside the centred `.scan-vf`, and `.scan-vf--empty` / `.scan-vf--busy` are applied.
+- 15 — `3b84b54`: added `scanHandoff.ts`; "This one" carries the blob, "Identified from a photo." and auto-location into Add sighting, which previews/replaces/removes the photo, stores it as a photo record (deleting it if save fails), and cancels back to Scan.
+- 16 — `626e666`: Settings has v1's "Delete my account and cloud data" button and confirm sheet, calls core `deleteAccount()`, refuses offline, and reports the v1 messages.
+- 17 — `4524735`: Badges now uses v1's trophy/shelf/emblem markup, section order, earned-first ordering, `is-in` animation and Learning progress; Stats' broken bottom Badges block is removed.
+
+Status update itself is committed separately after this list.
+
+Tier 2 and 3 not started yet; the remaining items are untouched.
