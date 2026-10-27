@@ -80,20 +80,23 @@ export function stopCalls() {
 }
 
 /** The big call player: progress ring, play/pause and a moving waveform. */
-export function CallPlayer({ call, seed, extra }: { call?: CallClip | null; seed: string | number; extra?: ReactNode }) {
+export function CallPlayer({ call, seed, extra, onFail }: { call?: CallClip | null; seed: string | number; extra?: ReactNode; onFail?: () => void }) {
   const audio = useRef<HTMLAudioElement | null>(null);
   const [state, setState] = useState<'idle' | 'loading' | 'playing'>('idle');
   const [progress, setProgress] = useState(0);
+  const [failMsg, setFailMsg] = useState('');
   useEffect(() => () => {
     audio.current?.pause();
     if (audio.current) live.delete(audio.current);
     audio.current = null;
     setState('idle');
     setProgress(0);
+    setFailMsg('');
   }, [call?.src, call?.local]);
   const toggle = async () => {
     if (!call?.src && !call?.local) return;
     if (state === 'loading') return;
+    setFailMsg('');
     if (audio.current && state === 'playing') { audio.current.pause(); setState('idle'); return; }
     if (audio.current && state === 'idle') { await audio.current.play().catch(() => {}); setState('playing'); return; }
     setState('loading');
@@ -101,9 +104,18 @@ export function CallPlayer({ call, seed, extra }: { call?: CallClip | null; seed
     audio.current = a;
     live.add(a);
     a.onended = () => { setState('idle'); setProgress(0); live.delete(a); };
-    a.onerror = () => { setState('idle'); live.delete(a); };
+    a.onerror = () => {
+      setState('idle');
+      live.delete(a);
+      setFailMsg(navigator.onLine ? 'That recording would not play.' : 'This recording needs a connection.');
+      onFail?.();
+    };
     a.ontimeupdate = () => { if (a.duration) setProgress(a.currentTime / a.duration); };
-    try { await a.play(); setState('playing'); } catch { setState('idle'); }
+    try { await a.play(); setState('playing'); } catch {
+      setState('idle');
+      setFailMsg(navigator.onLine ? 'That recording would not play.' : 'This recording needs a connection.');
+      onFail?.();
+    }
   };
   return (
     <div className="lq-call">
@@ -117,7 +129,7 @@ export function CallPlayer({ call, seed, extra }: { call?: CallClip | null; seed
         </button>
       </span>
       <Wave seed={String(seed)} />
-      <p className="lq-status" aria-live="polite">{state === 'playing' ? 'Playing' : state === 'loading' ? 'Loading the call…' : 'Tap to listen'}</p>
+      <p className="lq-status" aria-live="polite">{failMsg || (state === 'playing' ? 'Playing' : state === 'loading' ? 'Loading the call…' : 'Tap to listen')}</p>
       {call?.artist && <p className="lq-credit">Recording: {String(call.artist || 'Unknown').slice(0, 50)}{call.license ? `, ${call.license}` : ''}</p>}
       {extra}
     </div>

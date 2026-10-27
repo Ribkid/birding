@@ -39,6 +39,7 @@ function promptFor(q: QuizQuestion) {
 }
 
 function Media({ q }: { q: QuizQuestion }) {
+  const [showHint, setShowHint] = useState(false);
   const sp = byId.get(q.focus);
   if (!sp) return null;
   const missing = `This photo needs a connection. Here are its field notes instead: ${Q.blankNotes(sp, q.wrong || [])}`;
@@ -47,7 +48,12 @@ function Media({ q }: { q: QuizQuestion }) {
     return <><SilhouetteFilter /><PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, shown as a silhouette`} cls={`lq-photo lq-photo--sil${q.picked != null ? ' is-revealed' : ''}`} missing={missing} /></>;
   }
   if (q.type === 'zoom') return <PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, close up`} cls={`lq-photo lq-photo--zoom${q.picked != null ? ' is-revealed' : ''}`} style={{ '--zx': `${q.zoom?.x ?? 50}%`, '--zy': `${q.zoom?.y ?? 50}%`, '--zs': q.zoom?.scale ?? 2 } as React.CSSProperties} missing={missing} />;
-  if (q.type === 'call') return <CallPlayer call={q.call as CallClip} seed={q.call?.src || sp.id} />;
+  if (q.type === 'call') return (
+    <>
+      <CallPlayer call={q.call as CallClip} seed={q.call?.src || sp.id} onFail={() => setShowHint(true)} />
+      {showHint && q.picked == null && <p className="lq-hint">Field notes: {cleanClue(Q.blankNotes(sp, q.wrong || []))}</p>}
+    </>
+  );
   if (q.type === 'whoami') return <blockquote className="lq-clue">{cleanClue(q.clue || '')}</blockquote>;
   if (q.type === 'fact' && q.photos?.length) return <PhotoBox photos={q.photos} alt={speciesName(q.img)} cls="lq-photo lq-photo--small" />;
   return null;
