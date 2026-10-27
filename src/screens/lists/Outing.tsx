@@ -295,7 +295,6 @@ export default function Outing() {
           lng: outing.lng ?? null,
           acc: null,
           place: outing.place ?? '',
-          note: '',
           notes: '',
           photoId: null,
           outingId: outing.id,

@@ -179,7 +179,7 @@ export default function Bird() {
               <li className="row" key={s.id}>
                 <span className="row-main">
                   <strong>{s.date}</strong>
-                  <span className="muted small">{s.time}{s.note ? ` — ${s.note}` : ''}</span>
+                  <span className="muted small">{s.time}{s.notes ? ` — ${s.notes}` : ''}</span>
                 </span>
                 <span className="row-n">{s.count ?? 1}</span>
               </li>

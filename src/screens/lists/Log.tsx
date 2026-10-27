@@ -52,13 +52,7 @@ function EditSighting({ sighting, onClose }: { sighting: SightingRow; onClose: (
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
-    const { rec, error: problem } = buildSighting(draft, {
-      id: sighting.id,
-      outingId: sighting.outingId ?? null,
-      photoId: sighting.photoId ?? null,
-      heard: sighting.heard ?? false,
-      createdAt: sighting.createdAt,
-    });
+    const { rec, error: problem } = buildSighting(draft, { ...sighting });
     if (!rec) {
       setError(problem ?? 'That sighting is not complete.');
       return;
@@ -190,7 +184,7 @@ export default function Log() {
                       <strong>{sp?.name ?? 'Unknown species'}</strong>
                       <span className="muted small">
                         {rec.time || ''} {rec.place || ''}
-                        {rec.note || rec.notes ? ` — ${rec.note ?? rec.notes}` : ''}
+                        {rec.notes ? ` — ${rec.notes}` : ''}
                       </span>
                     </span>
                     <span className="row-n">{rec.count ?? 'X'}</span>

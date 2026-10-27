@@ -12,7 +12,7 @@ export interface Sighting {
   count?: number;
   lat?: number | null;
   lng?: number | null;
-  note?: string;
+  notes?: string;
 }
 
 export interface Outing {
@@ -24,13 +24,22 @@ export interface Outing {
   durationMin?: number | null;
 }
 
+/** v1 stores the note as `notes`; older React records also wrote a duplicate `note`. */
+export function normaliseSighting<T extends { notes?: string; note?: string }>(row: T): T {
+  if (row.note != null) {
+    if (row.notes == null) row.notes = row.note;
+    delete row.note;
+  }
+  return row;
+}
+
 /** All sightings, kept fresh as the database changes. */
 export function useSightings(): Sighting[] {
   const [rows, setRows] = useState<Sighting[]>([]);
   useEffect(() => {
     let alive = true;
     const load = async () => {
-      const all = (await db.all('sightings')) as Sighting[];
+      const all = ((await db.all('sightings')) as Sighting[]).map(normaliseSighting);
       if (alive) setRows(all);
     };
     void load();

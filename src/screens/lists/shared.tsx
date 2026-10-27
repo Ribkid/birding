@@ -21,7 +21,6 @@ export interface SightingRow extends Omit<Sighting, 'count'> {
   count?: number | null;
   place?: string;
   notes?: string;
-  note?: string;
   heard?: boolean;
   photoId?: number | null;
   acc?: number | null;
@@ -482,7 +481,7 @@ export function draftFromSighting(s: SightingRow): SightingDraft {
     place: s.place ?? '',
     lat: s.lat != null ? String(s.lat) : '',
     lng: s.lng != null ? String(s.lng) : '',
-    note: s.note ?? s.notes ?? '',
+    note: s.notes ?? '',
   };
 }
 
@@ -524,7 +523,6 @@ export function buildSighting(
     place: draft.place.trim(),
     lat,
     lng,
-    note,
     notes: note,
   };
   return { rec };
