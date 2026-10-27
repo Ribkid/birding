@@ -229,9 +229,10 @@ export async function calls(species) {
 // cached and played offline. The ALA originals can't be: that server sends no CORS header.
 export const CALLS_CACHE = 'birddex-calls';
 let pack = null, packPromise = null;
+// A failed load isn't remembered, so the next call (opening Settings or Listen again) tries again.
 export function loadCallPack() {
-  return packPromise ||= fetch('data/calls.json').then(r => (r.ok ? r.json() : {})).catch(() => ({}))
-    .then(p => (pack = p));
+  return packPromise ||= fetch('data/calls.json').then(r => (r.ok ? r.json() : null)).catch(() => null)
+    .then(p => { if (!p) { packPromise = null; return {}; } return (pack = p); });
 }
 const clipUrl = c => new URL(`data/${c.file}${c.v ? `?v=${c.v}` : ''}`, location.href).href;
 // Sync check, true once the pack has loaded.
