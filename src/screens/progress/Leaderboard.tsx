@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { KINDS, byId, kindsPresent } from '../../lib/data';
-import { avatarUrl } from '../../core/profile.js';
+import { Link, Navigate, useLocation } from 'react-router-dom';
+import { KINDS, kindsPresent } from '../../lib/data';
 import {
   client,
   configured,
@@ -10,8 +9,8 @@ import {
   user as currentUser,
 } from '../../core/cloud.js';
 import { schedule } from '../../core/sync.js';
-import { SpeciesImage } from '../../components/SpeciesImage';
 import { Icon } from '../../components/Icon';
+import { AccountAvatar } from '../me/accountBits';
 import './progress.css';
 
 type Period = 'life' | 'year' | 'month';
@@ -55,21 +54,6 @@ function friendly(error: unknown) {
 }
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
-
-function LeaderAvatar({ speciesId, path, name }: { speciesId?: number | null; path?: string | null; name: string }) {
-  const sp = speciesId != null ? byId.get(Number(speciesId)) : undefined;
-  return (
-    <span className={`acct-av${path ? ' acct-av--photo' : ''}`}>
-      {path ? (
-        <img src={avatarUrl(path)} alt="" loading="lazy" decoding="async" onError={(e) => e.currentTarget.remove()} />
-      ) : sp ? (
-        <SpeciesImage sp={sp} />
-      ) : (
-        <span className="lb-avatar-letter">{(name || '?').slice(0, 1).toUpperCase()}</span>
-      )}
-    </span>
-  );
-}
 
 export default function Leaderboard() {
   const location = useLocation();
@@ -300,29 +284,33 @@ export default function Leaderboard() {
     period === 'life' ? 'yet' : period === 'year' ? 'this year' : 'this month'
   }.`;
 
+  // "120 birds, 19 mammals, 1 frog" under the name when the board mixes kinds (v1 js/account.js kindLine).
   const kindLine = (row: LeaderRow) => {
-    if (kind || kindsPresent.length < 2) return '';
+    if (kind || kindsPresent.length < 2) return null;
+    const word = (k: string) => (Number(row[k] ?? 0) === 1 ? KINDS[k].one : KINDS[k].label.toLowerCase());
     const parts = kindsPresent
-      .filter((k) => k !== 'bird' && Number(row[k] ?? 0) > 0)
-      .map((k) => `${Number(row[k] ?? 0)} ${KINDS[k].label.toLowerCase()}`);
-    return parts.length ? ` · ${Number(row.bird ?? 0)} birds, ${parts.join(', ')}` : '';
+      .filter((k) => Number(row[k] ?? 0) > 0 && k !== 'bird')
+      .map((k) => `${Number(row[k] ?? 0)} ${word(k)}`);
+    return parts.length ? <span className="small muted">{Number(row.bird ?? 0)} {word('bird')}, {parts.join(', ')}</span> : null;
   };
 
   const renderRow = (row: LeaderRow) => {
     const inner = (
       <>
-        <span className="lb-rank">{row.rank}</span>
-        <LeaderAvatar speciesId={row.avatar_species_id} path={row.avatar_path} name={row.display_name} />
+        {/* The spaces keep the link's accessible name readable ("1 Alice Wren 12 outings…"); flex and grid
+            layout ignore them, as with v1's markup whitespace. */}
+        <span className="lb-rank">{row.rank}</span>{' '}
+        <AccountAvatar spId={row.avatar_species_id} path={row.avatar_path} name={row.display_name} />{' '}
         <span className="row-main">
           <strong>
             {row.display_name}
-            {row.is_me && <span className="lb-you">You</span>}
-          </strong>
+            {row.is_me && <> <span className="lb-you">You</span></>}
+          </strong>{' '}
           <span className="small muted">
-            {plural(row.outings, 'outing')} · {plural(row.badges, 'badge')}
-            {kindLine(row)}
-          </span>
-        </span>
+            {plural(row.outings, 'outing')}, {plural(row.badges, 'badge')}
+          </span>{' '}
+          {kindLine(row)}
+        </span>{' '}
         <span className="row-n" aria-label={`${row.species} ${what}`}>
           {row.species}
         </span>
@@ -352,19 +340,8 @@ export default function Leaderboard() {
     </header>
   );
 
-  if (!configured) {
-    return (
-      <>
-        {header}
-        <div className="empty">
-          <p>Accounts and the leaderboard are not configured in this copy of the app.</p>
-          <Link className="btn btn--primary" to="/badges">
-            Back to badges
-          </Link>
-        </div>
-      </>
-    );
-  }
+  // Without accounts there is no leaderboard; v1 sends the route back to Me.
+  if (!configured) return <Navigate to="/me" replace />;
 
   if (!authReady) {
     return (
@@ -488,13 +465,13 @@ export default function Leaderboard() {
         </ol>
         {online && !loading && !boardError && hiddenFromBoard && (
           <p className="small muted">
-            You are hidden from the Everyone board. Turn on "Show me on the leaderboard" in
-            Settings to appear.
+            You are hidden from the Everyone board. Turn on "Show me on the leaderboard" in{' '}
+            <Link to="/me/edit">Edit profile</Link> to appear.
           </p>
         )}
       </section>
 
-      <section className="block" id="groups" ref={groupsRef}>
+      <section className="block" id="groups" data-groups ref={groupsRef}>
         <h2 className="h2">Groups</h2>
         <p className="muted small">
           Make a group for family or friends. Share its code; anyone with it can join and see the

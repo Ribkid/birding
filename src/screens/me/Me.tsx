@@ -7,13 +7,13 @@ import { usePatches } from '../lists/shared';
 import { totals, badges as computeBadges, MONTHS } from '../../core/stats.js';
 import { learnReady, learnStats } from '../../core/learn.js';
 import {
-  initProfile, getProfile, getMyCloud, fetchCloud, signedIn, myName, memberSince, coverSpecies,
-  kindCounts, avatarUrl, dayPick, configured, refreshProfile, myPublicId,
+  getProfile, getMyCloud, signedIn, myName, memberSince, coverSpecies, kindCounts, dayPick, configured, myPublicId,
 } from '../../core/profile.js';
 import { onStatus, syncStatus } from '../../core/account.js';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { CountUp } from '../../components/Motion';
 import { applyTint } from '../../lib/look';
+import { AccountAvatar as Avatar, useProfile } from './accountBits';
 import './me.css';
 
 const I = {
@@ -33,18 +33,11 @@ const I = {
   person: <><circle cx="12" cy="8.5" r="4" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></>,
 };
 
-function Avatar({ spId, path, name, cls = 'acct-av', size = 'small' }: { spId?: number | null; path?: string | null; name?: string; cls?: string; size?: 'small' | 'large' }) {
-  const sp = byId.get(Number(spId));
-  return (
-    <span className={`${cls}${path ? ' acct-av--photo' : ''}`} aria-hidden="true">
-      {path ? <img src={avatarUrl(path)} alt="" loading="lazy" decoding="async" /> : sp ? <SpeciesImage sp={sp} size={size} /> : <span className="acct-av-letter">{(name || '?').slice(0, 1).toUpperCase()}</span>}
-    </span>
-  );
-}
 
 
 export default function Me() {
   const [, force] = useReducer((x: number) => x + 1, 0);
+  useProfile();
   const sightings = useSightings();
   const outings = useOutings();
   const patches = usePatches();
@@ -54,7 +47,6 @@ export default function Me() {
   useMedia();
 
   useEffect(() => {
-    void initProfile(() => force());
     void learnReady().then(() => force()).catch(() => {});
     let alive = true;
     void db.kvGet('me:notnow').then((value) => { if (alive) setNotNow(!!value); }).catch(() => {});
@@ -97,10 +89,20 @@ export default function Me() {
     requestAnimationFrame(() => {
       const hero = document.querySelector('.me-hero') as HTMLElement | null;
       if (hero && cover) void applyTint(hero, (hero.querySelector('[data-hero-frame] img') as HTMLImageElement)?.src || '');
-      document.querySelectorAll<HTMLElement>('.me-rings, .me-medals').forEach((el) => el.classList.add('is-in'));
     });
   };
   useEffect(paint, [cover?.id, u]);
+  // Rings and medals fill the first time they come into view (v1 js/me.js animateIn).
+  useEffect(() => {
+    const els = [...document.querySelectorAll<HTMLElement>('.me-rings, .me-medals')].filter((el) => !el.classList.contains('is-in'));
+    if (!els.length) return;
+    if (!('IntersectionObserver' in window)) { els.forEach((el) => el.classList.add('is-in')); return; }
+    const io = new IntersectionObserver((ents) => {
+      for (const en of ents) if (en.isIntersecting) { en.target.classList.add('is-in'); io.unobserve(en.target); }
+    }, { threshold: 0.25 });
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [u, sightings.length]);
 
   const link = (href: string, ico: React.ReactNode, title: string, sub: string) => (
     <li><Link to={href}><span className="me-li-ico" aria-hidden="true"><svg viewBox="0 0 24 24">{ico}</svg></span><span className="me-li-main"><strong>{title}</strong><span>{sub}</span></span><span className="me-chev"><svg viewBox="0 0 24 24">{I.chev}</svg></span></Link></li>
@@ -119,7 +121,7 @@ export default function Me() {
                   <svg viewBox="0 0 64 64"><circle className="me-ring-track" cx="32" cy="32" r="29" /><circle className="me-ring-fill" cx="32" cy="32" r="29" pathLength="100" /></svg>
                   <span className="me-medal-face">{b.done ? <svg viewBox="0 0 24 24">{I.tick}</svg> : <b>{b.have}<small>/{b.need}</small></b>}</span>
                 </span>
-                <strong>{b.name}</strong><span className="sr-only">{b.done ? 'Earned' : `${b.have} of ${b.need}`}. {b.desc}</span>
+                <strong>{b.name}</strong>{' '}<span className="sr-only">{b.done ? 'Earned' : `${b.have} of ${b.need}`}. {b.desc}</span>
               </Link>
             </li>
           );
@@ -128,8 +130,9 @@ export default function Me() {
     );
   };
 
-  const fan = [...seen].slice(-3).map((id) => byId.get(id)).filter(Boolean) as Species[];
-  while (fan.length < 3) fan.push(dayPick(fan.length * 7));
+  // Three of her own finds, newest last-logged first, topped up with today's species (v1 js/me.js joinCard).
+  const mineSp = [...seen].map((id) => byId.get(id)).filter(Boolean).slice(-3).reverse() as Species[];
+  const fan = mineSp.length >= 3 ? mineSp : [...mineSp, dayPick(0), dayPick(7), dayPick(19)].slice(0, 3) as Species[];
 
   return (
     <div className={`me ${u ? 'me--in' : 'me--guest'}`}>
@@ -151,9 +154,9 @@ export default function Me() {
               <div className="me-fan me-fan--mini" aria-hidden="true">{fan.map((sp, i) => <span className="me-fan-card" key={i}><SpeciesImage sp={sp} /></span>)}</div>
               <div className="me-join-body">
                 <h2 className="me-join-h" id="me-join-h">Back up your dex</h2>
-                <p>{seen.size} species saved on this phone only.</p>
+                <p>{seen.size ? `${seen.size} species saved on this phone only.` : 'Sign up free, use it on any phone.'}</p>
               </div>
-              <Link className="btn me-join-go" to="/me/signup">Sign up</Link>
+              <Link className="btn btn--small me-join-go" to="/me/signup">Sign up</Link>
             </section>
           ) : (
             <section className="me-join" aria-labelledby="me-join-h">
