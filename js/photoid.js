@@ -440,6 +440,12 @@ function scorer(month) {
   });
 }
 const argmax = a => a.reduce((b, v, i) => (v > a[b] ? i : b), 0);
+// Each view holds this thread for a second or more, so give the page one frame to show the progress first.
+// (A hidden tab gets no animation frames; the timer keeps it moving.)
+const breathe = () => new Promise(r => {
+  const t = setTimeout(r, 50);
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => setTimeout(() => { clearTimeout(t); r(); }, 0));
+});
 
 export async function identifyPhoto(src, opts = {}) {
   const { crop = null, kinds = null, month = new Date().getMonth() + 1, onProgress, topK = 10 } = opts;
@@ -457,6 +463,7 @@ export async function identifyPhoto(src, opts = {}) {
   try {
     for (let i = 0; i < names.length; i++) {
       say({ phase: 'view', index: i + 1, count: names.length, view: names[i] });
+      await breathe();
       const tv = performance.now();
       const f = l2(await embedRGB(job.rgb(names[i])));
       feats.push(f);
