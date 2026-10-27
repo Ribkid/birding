@@ -44,6 +44,10 @@ export default function Scan() {
   const [needsReload, setNeedsReload] = useState(false);
   const [at, setAt] = useState(S.at);
   const stageRef = useRef<HTMLDivElement>(null);
+  const workRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLElement>(null);
+  const kindsRef = useRef<HTMLDivElement>(null);
+  const [freshResult, setFreshResult] = useState(false);
   const drag = useRef<{ mode: 'move' | 'resize'; id: number; start: { x: number; y: number; cx: number; cy: number; s: number } } | null>(null);
   const picks = useRef(0);
   const currentFile = useRef<File | null>(null);
@@ -52,6 +56,14 @@ export default function Scan() {
     S.at = at; S.photo = photo; S.box = box; S.whole = whole; S.kind = kind;
     S.result = result; S.logAt = logAt; S.yours = yours;
   }, [at, photo, box, whole, kind, result, logAt, yours]);
+
+  useEffect(() => {
+    if (!freshResult) return;
+    document.getElementById('scan-verdict')?.focus({ preventScroll: true });
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(() => resultRef.current?.scrollIntoView({ block: 'start', behavior: reduced ? 'auto' : 'smooth' }));
+    setFreshResult(false);
+  }, [freshResult]);
 
   const covered: string[] = info?.kinds?.filter((k: string) => KINDS[k]) || [];
   const multi = covered.length > 1;
@@ -126,14 +138,23 @@ export default function Scan() {
     const file = photo.file;
     const run = ++identifyRun.current;
     setBusy(true); setError(''); setNeedsReload(false); setResult(null); setStatus('Starting photo ID…');
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    requestAnimationFrame(() => workRef.current?.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' }));
     const MB = photoModelMb();
     try {
       const cached = await modelCached();
       if (!cached) {
         if (navigator.onLine === false) throw new Error('offline-first-run');
         setStatus(`Getting photo ID ready: a one-time download of about ${MB} MB. Wi-Fi is best.`);
+        let said = 0;
         await ensureModel((f: number) => {
-          if (currentFile.current === file && run === identifyRun.current) setProgress({ phase: 'model', frac: f });
+          if (currentFile.current !== file || run !== identifyRun.current) return;
+          setProgress({ phase: 'model', frac: f });
+          const quarter = Math.floor(f * 4) / 4;
+          if (quarter > said && f < 1) {
+            said = quarter;
+            setStatus(`Downloading photo ID: ${Math.round(quarter * 100)}% done.`);
+          }
         });
       } else {
         await ensureModel();
@@ -154,6 +175,7 @@ export default function Scan() {
       setResult({ ...res, whole, kind });
       setLogAt(logged);
       setYours(makeYours(photo, box, whole));
+      setFreshResult(true);
       setStatus('');
     } catch (err: any) {
       if (currentFile.current !== file || run !== identifyRun.current) return;
@@ -213,6 +235,31 @@ export default function Scan() {
   const sure = result ? Math.min(99, Math.max(1, Math.round((result.results[0]?.p || 0) * 100))) : 0;
   const boxAt = photo ? boxPct(photo, box) : undefined;
 
+  const renderCard = (x: any, i: number) => {
+    if (!result) return null;
+    const sp = x.sp;
+    const refs = scanRefs(sp.id);
+    const credits = refs.filter((p2: any) => p2.credit).map((p2: any) => String(p2.credit).slice(0, 40));
+    const level = bandLevel(x.p, result.bands);
+    return (
+      <article key={sp.id} className={`scan-card kind--${sp.kind} ${i < lead ? 'scan-card--lead' : ''}`}>
+        <div className="scan-strip">
+          <figure className="scan-yours">{yours ? <img src={yours} alt="Your photo" /> : <span className="scan-tile-missing" />}<figcaption>Yours</figcaption></figure>
+          {[0, 1].map((j) => refs[j] ? <img key={j} src={refs[j].src} alt={`${sp.name}, reference photo`} loading="lazy" decoding="async" /> : <span key={j} className="scan-tile-missing" />)}
+        </div>
+        <div className="scan-card-body">
+          {credits.length > 0 && <p className="scan-credit">Photos: {words(credits, 'and')}{refs.some((p2: any) => p2.from && p2.credit) ? ` (${refs.find((p2: any) => p2.credit)?.from || ''})` : ''}</p>}
+          <div className="scan-card-head"><h3><Link to={`/bird/${sp.id}`}>{sp.name}</Link></h3><span className="scan-kind">{KINDS[sp.kind]?.one}</span>{!seen.has(sp.id) && <span className="scan-new">New for your dex</span>}</div>
+          {sp.notes && <p className="scan-tip">{firstSentence(sp.notes)}</p>}
+          <div className="scan-card-foot">
+            <div className={`scan-conf scan-conf--${level}`}><p><strong>{bandWord(level)}</strong> <span>{pct(x.p)}</span></p><span className="scan-bar" aria-hidden="true"><i style={{ '--p': Math.max(0.02, Math.min(1, x.p)).toFixed(3) } as CSSProperties} /></span></div>
+            <button type="button" className={`btn scan-this ${i < lead ? 'btn--primary' : 'scan-this--soft'}`} onClick={() => void chosen(sp.id)} aria-label={`This one: ${sp.name}`}>This one</button>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
   return (
     <div className="scan">
       <section className="scan-cam" data-hero-zone>
@@ -263,7 +310,7 @@ export default function Scan() {
                 </div>
               </div>
               {multi && (
-                <div className="scan-kinds" role="group" aria-label="What kind is it?">
+                <div ref={kindsRef} className="scan-kinds" role="group" aria-label="What kind is it?">
                   <button type="button" className={`scan-chip ${kind ? `kind--${kind}` : ''}`} aria-pressed={!kind} onClick={() => setKind('')}>Anything</button>
                   {covered.map((k) => <button key={k} type="button" className={`scan-chip kind--${k}`} aria-pressed={kind === k} onClick={() => setKind(k)}>{KINDS[k].label}</button>)}
                 </div>
@@ -271,7 +318,7 @@ export default function Scan() {
               <button type="button" className="scan-go" disabled={busy} onClick={() => void identify()} aria-disabled={busy}><span>◱</span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
             </>
           )}
-          <div className="scan-work">
+          <div ref={workRef} className="scan-work">
             <p className="scan-status" role="status" aria-live="polite">{status}</p>
             {progress?.phase === 'model' && <div className="scan-progress"><div className="meter"><span style={{ width: `${Math.round(progress.frac * 100)}%` }} /></div><p className="scan-mb">{Math.round(progress.frac * photoModelMb())} of {photoModelMb()} MB</p></div>}
           </div>
@@ -279,7 +326,7 @@ export default function Scan() {
       </section>
 
       <div className="scan-sheet pad-x">
-        <section className="scan-result" aria-labelledby="scan-verdict">
+        <section ref={resultRef} className="scan-result" aria-labelledby="scan-verdict">
           {error && <p className="form-error" role="alert">{error}</p>}
           {needsReload && <button type="button" className="btn btn--primary btn--block" onClick={() => window.location.reload()}>Reload BirdyDex</button>}
           {result && top.length > 0 && (
@@ -295,35 +342,27 @@ export default function Scan() {
                 </div>
               </div>
               <div className="scan-cards">
-                {top.map((x: any, i: number) => {
-                  const sp = x.sp;
-                  const refs = scanRefs(sp.id);
-                  const credits = refs.filter((p2: any) => p2.credit).map((p2: any) => String(p2.credit).slice(0, 40));
-                  const level = bandLevel(x.p, result.bands);
-                  return (
-                    <article key={sp.id} className={`scan-card kind--${sp.kind} ${i < lead ? 'scan-card--lead' : ''}`}>
-                      <div className="scan-strip">
-                        <figure className="scan-yours">{yours ? <img src={yours} alt="Your photo" /> : <span className="scan-tile-missing" />}<figcaption>Yours</figcaption></figure>
-                        {[0, 1].map((j) => refs[j] ? <img key={j} src={refs[j].src} alt={`${sp.name}, reference photo`} loading="lazy" decoding="async" /> : <span key={j} className="scan-tile-missing" />)}
-                      </div>
-                      <div className="scan-card-body">
-                        {credits.length > 0 && <p className="scan-credit">Photos: {words(credits, 'and')}{refs.some((p2: any) => p2.from && p2.credit) ? ` (${refs.find((p2: any) => p2.credit)?.from || ''})` : ''}</p>}
-                        <div className="scan-card-head"><h3><Link to={`/bird/${sp.id}`}>{sp.name}</Link></h3><span className="scan-kind">{KINDS[sp.kind]?.one}</span>{!seen.has(sp.id) && <span className="scan-new">New for your dex</span>}</div>
-                        {sp.notes && <p className="scan-tip">{firstSentence(sp.notes)}</p>}
-                        <div className="scan-card-foot">
-                          <div className={`scan-conf scan-conf--${level}`}><p><strong>{bandWord(level)}</strong> <span>{pct(x.p)}</span></p><span className="scan-bar" aria-hidden="true"><i style={{ '--p': Math.max(0.02, Math.min(1, x.p)).toFixed(3) } as CSSProperties} /></span></div>
-                          <button type="button" className={`btn scan-this ${i < lead ? 'btn--primary' : 'scan-this--soft'}`} onClick={() => void chosen(sp.id)} aria-label={`This one: ${sp.name}`}>This one</button>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
+                {top.slice(0, lead).map(renderCard)}
+                {top.length > lead && <h3 className="scan-also">{lead ? 'Also worth comparing' : 'Closest matches'}</h3>}
+                {top.slice(lead).map((x: any, i: number) => renderCard(x, lead + i))}
               </div>
               <section className="scan-none" aria-labelledby="scan-none-h">
                 <h3 id="scan-none-h">None of these?</h3>
                 <div className="scan-none-acts">
-                  <button type="button" className="btn" onClick={() => { none('Move the box onto just the part you want named, then choose Identify.'); setWhole(false); setBox((b) => clampBox(photo!, { ...b, s: b.s * 0.75 })); }}>Try a tighter box</button>
-                  {multi && <button type="button" className="btn" onClick={() => none('Choose what kind it is, then try again.')}>Pick a kind</button>}
+                  <button type="button" className="btn" onClick={() => {
+                    none('Move the box onto just the part you want named, then choose Identify.');
+                    setWhole(false);
+                    setBox((b) => clampBox(photo!, { ...b, s: b.s * 0.75 }));
+                    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    stageRef.current?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
+                    stageRef.current?.focus({ preventScroll: true });
+                  }}>Try a tighter box</button>
+                  {multi && <button type="button" className="btn" onClick={() => {
+                    none('Choose what kind it is, then try again.');
+                    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                    kindsRef.current?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
+                    (kindsRef.current?.querySelector('[aria-pressed="true"]') as HTMLElement | null)?.focus();
+                  }}>Pick a kind</button>}
                   <Link className="btn" to="/dex">Search the dex</Link>
                 </div>
               </section>
