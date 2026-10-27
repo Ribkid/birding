@@ -239,7 +239,8 @@ export default function Scan() {
     if (photo) setPending({ blob: photo.blob, notes: 'Identified from a photo.', autoGps: true });
     navigate(`/add?species=${id}`, { state: { scan: true } });
   };
-  const none = (why: string) => { void markChosen(logAt, 'none'); setStatus(why); };
+  // None of these: the scan log records that no match was taken (v1 marks it for Tighter, Pick a kind and Search).
+  const none = () => { void markChosen(logAt, 'none'); };
 
   const toImg = (e: ReactPointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -450,6 +451,7 @@ export default function Scan() {
                 <h3 id="scan-none-h">None of these?</h3>
                 <div className="scan-none-acts">
                   <button type="button" className="btn" onClick={() => {
+                    none();
                     const wasWhole = whole;
                     if (!wasWhole) setBox((b) => clampBox(photo!, { ...b, s: b.s * 0.75 }));
                     setWhole(false);
@@ -459,12 +461,13 @@ export default function Scan() {
                     stageRef.current?.focus({ preventScroll: true });
                   }}>Try a tighter box</button>
                   {multi && <button type="button" className="btn" onClick={() => {
+                    none();
                     setStatus('Choose what kind it is, then try again.');
                     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
                     kindsRef.current?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
                     (kindsRef.current?.querySelector('[aria-pressed="true"]') as HTMLElement | null)?.focus();
                   }}>Pick a kind</button>}
-                  <Link className="btn" to="/dex">Search the dex</Link>
+                  <Link className="btn" to="/dex" onClick={none}>Search the dex</Link>
                 </div>
               </section>
             </>
