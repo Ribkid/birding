@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
-import { badges, periodFilter } from '../../core/stats.js';
+import { periodFilter } from '../../core/stats.js';
 import { GROUPS, SPECIES, byId } from '../../lib/data';
 import { Icon } from '../../components/Icon';
 import {
@@ -14,15 +14,6 @@ import './lists.css';
 
 type Period = 'all' | 'year' | 'month';
 
-interface Badge {
-  id: string;
-  name: string;
-  desc: string;
-  have: number;
-  need: number;
-  done: boolean;
-  kind: string;
-}
 
 const shortDate = (date: string): string => {
   const [year, month] = date.split('-');
@@ -277,13 +268,6 @@ export default function Stats() {
       .sort((a, b) => b.label.localeCompare(a.label));
   }, [all]);
 
-  const badgeList = useMemo(
-    () => badges(sightings, outings) as Badge[],
-    [sightings, outings],
-  );
-  const earned = badgeList.filter((badge) => badge.done).length;
-  const nextBadges = badgeList.filter((badge) => !badge.done).slice(0, 3);
-
   const periodLabel =
     period === 'all' ? 'all time' : period === 'year' ? year : MONTH_NAMES[now.getMonth()];
 
@@ -441,35 +425,6 @@ export default function Stats() {
         )}
       </section>
 
-      <section className="block">
-        <div className="block-h">
-          <h2 className="h2">Badges</h2>
-          <Link to="/badges">See all</Link>
-        </div>
-        <p className="muted small">
-          {badgeList.length > 0
-            ? `You've earned ${earned} of ${badgeList.length} badges.`
-            : 'Badges appear once there is something to count.'}
-        </p>
-        {nextBadges.length > 0 ? (
-          <ul className="rows">
-            {nextBadges.map((badge) => (
-              <li className="badge" key={badge.id}>
-                <span className="medal">{badge.have}</span>
-                <span className="badge-txt">
-                  <strong>{badge.name}</strong>
-                  <span className="muted small">{badge.desc}</span>
-                </span>
-                <span className="row-n lists-badge-count">
-                  {badge.have}/{badge.need}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="empty-inline">Every badge earned. Extraordinary.</p>
-        )}
-      </section>
     </>
   );
 }
