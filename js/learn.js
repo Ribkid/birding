@@ -203,7 +203,8 @@ async function playCall(ctx, call, btn, status, onFail) {
   a.onerror = fail;
   a.play().then(() => { if (audio === a) { setPlay(btn, true); trackRing(btn, a); if (status) status.textContent = 'Playing'; } }).catch(fail);
 }
-// The big call player: a play button inside a progress ring, over a waveform that moves while it plays.
+// The big call player: a play button inside a progress ring, over a waveform that moves while it plays. It takes the
+// colour of the kind being practised, never the answer's own kind (that would give a bird or frog away).
 // The bars are a drawing, not the sound itself (most recordings come from servers that don't allow reading them).
 function waveHTML(seed) {
   const rng = Q.seeded(Q.hashStr(String(seed)));
@@ -212,7 +213,7 @@ function waveHTML(seed) {
     return `<i style="--h:${(0.16 + 0.84 * env * (0.3 + 0.7 * rng())).toFixed(2)};--j:${i % 7}"></i>`;
   }).join('')}</span>`;
 }
-const callPlayerHTML = (sp, { play = 'answer', call = null, extra = '' } = {}) => `<div class="lq-call kind--${sp.kind}">
+const callPlayerHTML = (sp, { play = 'answer', call = null, extra = '' } = {}) => `<div class="lq-call">
   <span class="lq-player"><svg class="lq-ring" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" pathLength="100"/><circle class="lq-ring-fg" data-ring cx="60" cy="60" r="54" pathLength="100"/></svg>
   <button class="lq-play" ${play ? `data-play="${play}"` : 'data-play'} aria-label="Play the call"><span data-ic>${I.play}</span></button></span>
   ${waveHTML(call?.src || sp.id)}
@@ -546,13 +547,13 @@ function headHTML() {
   const total = game.qs.length;
   if (game.mode === 'rapid') {
     const left = Math.max(0, game.endsAt - Date.now());
-    return `<header class="lq-head"><button class="iconbtn" data-quit aria-label="Stop and go back to Learn">${I.close}</button>
+    return `<header class="lq-head glass"><button class="iconbtn" data-quit aria-label="Stop and go back to Learn">${I.close}</button>
       <span class="lq-bar lq-bar--time" aria-hidden="true"><span data-timebar style="transform:scaleX(${(left / RAPID_MS).toFixed(3)})"></span></span>
       <span class="lq-count" data-secs aria-label="Seconds left">${Math.ceil(left / 1000)}<span>s</span></span></header>
       <p class="lq-hud" role="status"><span>In a row <b data-streak>${game.streak}</b></span><span>Best this round <b data-top>${game.top}</b></span></p>`;
   }
   const n = game.i + 1, filled = game.qs[game.i]?.picked != null ? n : n - 1;
-  return `<header class="lq-head"><button class="iconbtn" data-quit aria-label="${game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'}">${game.daily ? I.back : I.close}</button>
+  return `<header class="lq-head glass"><button class="iconbtn" data-quit aria-label="${game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'}">${game.daily ? I.back : I.close}</button>
     <span class="lq-bar" role="progressbar" aria-label="Question ${n} of ${total}" aria-valuemin="1" aria-valuemax="${total}" aria-valuenow="${n}">${barSpan(filled / total)}</span>
     <span class="lq-count" aria-hidden="true">${n}<span>/${total}</span></span></header>
     <p class="lq-kicker">${game.daily ? "Today's challenge" : esc(MODE_INFO[game.mode]?.[0] || '')}${game.practice ? '<span>The ones you missed</span>' : ''}</p>`;
@@ -796,7 +797,7 @@ function drawResults(ctx) {
 // The score sits inside a ring that fills to the share she got right; the number counts up the first time.
 function scoreHTML(big, of, frac, note) {
   return `<section class="lr-hero" aria-label="Your score"><div class="lr-ring">
-      <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" pathLength="100"/><circle class="lr-ring-fg" data-scorering cx="60" cy="60" r="52" pathLength="100" style="stroke-dashoffset:${(100 - frac * 100).toFixed(1)}"/></svg>
+      <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" pathLength="100"/><circle class="lr-ring-fg${frac > 0 ? '' : ' is-zero'}" data-scorering cx="60" cy="60" r="52" pathLength="100" style="stroke-dashoffset:${(100 - frac * 100).toFixed(1)}"/></svg>
       <p class="lr-score" role="status"><b data-score aria-hidden="true">${big}</b><span aria-hidden="true">${esc(of)}</span><span class="sr">${big} ${esc(of)}</span></p></div>
     <p class="lr-note">${esc(note)}</p></section>`;
 }
@@ -895,7 +896,7 @@ function drawCard(ctx) {
   const mates = Q.lookalikesOf(sp.id).map(id => byId.get(id)).filter(Boolean);
   const peaks = Q.peaksOf(sp.id), cw = Q.callWords(sp);
   view.innerHTML = `<div class="lq-screen lq-screen--deck" data-own-topbar>
-    <header class="lq-head"><a class="iconbtn" href="#/learn/deck" data-quit aria-label="Stop reviewing">${I.close}</a>
+    <header class="lq-head glass"><a class="iconbtn" href="#/learn/deck" data-quit aria-label="Stop reviewing">${I.close}</a>
       <span class="lq-bar" role="progressbar" aria-label="Card ${game.n + 1} of ${game.total}" aria-valuemin="1" aria-valuemax="${game.total}" aria-valuenow="${game.n + 1}">${barSpan(game.n / Math.max(1, game.total))}</span>
       <span class="lq-count" aria-hidden="true">${game.queue.length}<span> left</span></span></header>
     <p class="lq-kicker">Review deck<span>Box ${L.cards[sp.id]?.[c.skill]?.box || 1}, ${c.skill === 'call' ? 'by call' : 'by sight'}</span></p>
