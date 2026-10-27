@@ -4,11 +4,14 @@
 // The shell is every built file with a SHELL_EXT extension outside /data/, /models/, /vendor/ and
 // /photos/ (the page, the hashed /assets/, /js/, fonts, icons, privacy and terms), plus EXTRA_SHELL:
 // the /data/ files the app needs on a cold start offline, the photo model's manifest and the Supabase
-// client. Everything heavy is kept at runtime by the service worker:
-//   - the photo model's .bin parts bypass it; src/core/photoid.js joins them into 'birddex-models'
-//   - BirdNET files and the other /vendor libraries go to 'birddex-models' on first use
+// client. Everything else is saved on first use (scripts/sw-template.js has the full map):
+//   - the photo model's .bin parts bypass the service worker; src/core/photoid.js joins them into
+//     'birddex-models'
+//   - BirdNET files and the other /vendor libraries go to 'birddex-models'
 //   - call clips (/data/calls/) go to 'birddex-calls' when played or saved from Settings
+//   - /photos/ and other same-origin images go to 'birdydex-photos-v3'
 //   - Wikimedia photos go to 'birddex-images', map tiles to 'birddex-tiles'
+//   - Commons recordings bypass the service worker; src/core/media.js keeps them in 'birddex-audio'
 //
 // Run after `vite build` (npm run build does). No dependencies.
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';

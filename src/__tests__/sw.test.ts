@@ -215,6 +215,19 @@ describe('service worker runtime caching', () => {
     expect(await get(tile, { mode: 'no-cors', destination: 'image' })).toMatchObject({ status: 200, text: 'png' });
   });
 
+  it('leaves Commons recordings to media.js, so they are not stored as photos too', async () => {
+    const rec = 'https://upload.wikimedia.org/wikipedia/commons/9/95/Magpie_Caroling.ogg?utm_source=commons.wikimedia.org';
+    const mp3 = 'https://upload.wikimedia.org/wikipedia/commons/transcoded/9/95/Magpie_Caroling.ogg/Magpie_Caroling.ogg.mp3';
+    const photo = 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Bird.jpg/320px-Bird.jpg';
+    const { caches, state, get } = setup();
+    // audioUrl fetches the recording itself (destination ''), and an <audio> element streams it.
+    expect(await get(rec)).toBeNull();
+    expect(await get(mp3, { destination: 'audio', mode: 'no-cors' })).toBeNull();
+    expect(state.seen).toEqual([]);
+    expect(await get(photo, { mode: 'no-cors', destination: 'image' })).toMatchObject({ status: 200, text: 'jpeg' });
+    expect(caches.urls('birddex-images')).toEqual([photo]);
+  });
+
   it('does not keep an HTML fallback page as a file', async () => {
     const { caches, get } = setup();
     await get('/fonts/nope.woff2');

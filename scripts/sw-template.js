@@ -3,9 +3,13 @@
 //
 // Where things are kept:
 //   birdydex-shell-<VERSION>  this release's files, saved at install: PRECACHE, with Listen's worker under
-//                             the address src/core/listen.js asks for. Pages (the app, privacy, terms)
-//                             and /js/ scripts are stored here again whenever they load online.
-//   birdydex-older-<VERSION>  the previous release's own /assets/ chunks, for a page still running it.
+//                             the address src/core/listen.js asks for. A listed /assets/ chunk or the
+//                             Supabase client, if missing here when asked for, is fetched and stored
+//                             here again. Pages (the app, privacy, terms), /js/ scripts and other worker
+//                             scripts are stored here again whenever they load online.
+//   birdydex-older-<VERSION>  /assets/ chunks this release does not list, for a page still running an
+//                             earlier release: the earlier shells' chunks, copied at activate, and any
+//                             unlisted chunk fetched later. The next activate deletes it.
 //   birdydex-runtime-v3       other same-origin files fetched at runtime. It outlives releases, so what an
 //                             earlier release kept here (main kept the BirdNET model there) still works.
 //   birdydex-photos-v3        same-origin images (icons, /photos/, other .png/.jpg/.webp), about 400.
@@ -17,6 +21,8 @@
 //                             use. The photo model's .bin parts never pass through here:
 //                             src/core/photoid.js fetches them and keeps the joined model and the ONNX
 //                             runtime's .wasm in this cache itself.
+//   birddex-audio             recordings from Wikimedia Commons, which src/core/media.js (audioUrl) stores
+//                             itself when one is first played. The worker never answers or stores them.
 // activate deletes every other birdydex-* cache (earlier shells and older caches, main's calls cache).
 // The birddex-* caches are never deleted.
 //
@@ -24,7 +30,8 @@
 // forged url/type). Cached responses are served as they are. Rebuilding them makes CORS-mode
 // requests (module scripts and modulepreload) fail with net::ERR_FAILED while plain requests
 // such as CSS still work, which is a very confusing way to go offline. The only responses made
-// here are new ones: a call clip's 206 slice, a 416, and the offline page.
+// here are new ones: a call clip's 206 slice, a 416, the offline page, and Response.error() for a
+// request that fails.
 //
 // A response is copied with clone() before it is handed to respondWith, never after: by then the
 // page is reading its body, and clone() throws. event.waitUntil keeps the worker alive while the copy
@@ -124,10 +131,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      // A page still running the previous release may lazy-load one of its content-hashed chunks, so that
-      // release's own /assets/ files are copied into this release's OLDER cache. Shells hold only their
-      // own release's files, and the OLDER caches are dropped below, so old chunks are kept for one
-      // release and never pile up.
+      // A page still running the previous release may lazy-load one of its content-hashed chunks, so the
+      // /assets/ files of every earlier shell (normally just the previous release's) that this release
+      // does not list are copied into this release's OLDER cache. Shells hold only their own release's
+      // files, and earlier OLDER caches are deleted below, so an old chunk is kept for one release and
+      // old chunks never pile up.
       const older = await caches.open(OLDER);
       for (const name of await caches.keys()) {
         if (name === SHELL || !name.startsWith('birdydex-shell-')) continue;
@@ -171,6 +179,8 @@ self.addEventListener('activate', (event) => {
 const isCallClip = (url) => url.pathname.startsWith('/data/calls/');
 const isData = (url) => url.pathname.startsWith('/data/');
 const isPhoto = (url) => /(^\/icons\/)|(^\/photos\/)/.test(url.pathname) || /\.(png|jpe?g|webp)$/i.test(url.pathname);
+// A sound file (Commons recordings, including their .mp3 transcodes).
+const isRecording = (url) => /\.(ogg|oga|opus|mp3|wav|flac|m4a|aac|webm|midi?)$/i.test(url.pathname);
 
 // Delete the oldest entries (Cache Storage lists them in the order they were stored) beyond `limit`.
 async function trim(cacheName, limit) {
@@ -210,7 +220,8 @@ async function cacheFirstCross(event, cacheName, limit = 0) {
 // /js/ scripts and workers: the network for up to SCRIPT_WAIT, so a new release's worker reaches the
 // phone, stored in this release's shell under the full address. Then a saved copy under that same
 // address: this release's shell first, then any cache (such as an earlier release's runtime copy). A copy
-// saved without the query is the last resort, for a script that does not read one.
+// saved without the query comes last, for a script that does not read one. With no saved copy it keeps
+// waiting for the network.
 async function networkFirstScript(event) {
   const { request } = event;
   const net = fetch(request).then(keep(event, SHELL, request.url));
@@ -259,11 +270,12 @@ async function callClip(request) {
   });
 }
 
-// Navigations: the network for up to NAV_WAIT so a deploy lands, then the saved page, then the app shell.
-// Every good answer is stored again, however long it took: the app under /index.html, and the privacy and
-// terms pages under their own address. A captive portal or a host error page can answer any address with
-// its own HTML, so only a page with BirdyDex's root element is kept as the app, only a page that names
-// BirdyDex is kept as privacy or terms, and no other address is stored.
+// Navigations: the network for up to NAV_WAIT so a deploy lands, then the saved page, then the app shell,
+// then the network however long it takes, then a short offline page. Every good answer is stored again,
+// however long it took: the app under /index.html, and the privacy and terms pages under their own
+// address. A captive portal or a host error page can answer any address with its own HTML, so only a page
+// with BirdyDex's root element is kept as the app, only a page that names BirdyDex is kept as privacy or
+// terms, and no other address is stored.
 async function navigation(event, url) {
   const { request } = event;
   const isApp = url.pathname === '/' || url.pathname === '/index.html';
@@ -301,7 +313,9 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   // Wikimedia photos and map tiles, as v1 keeps them, so the field guide, quizzes and map work offline.
-  if ((url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org') && request.destination !== 'audio') {
+  // Commons recordings are not photos: an <audio> element streams them, and src/core/media.js keeps the
+  // ones it plays in birddex-audio, so they go straight to the network and are never stored twice.
+  if ((url.hostname === 'upload.wikimedia.org' || url.hostname === 'thumb.wikimedia.org') && request.destination !== 'audio' && !isRecording(url)) {
     event.respondWith(cacheFirstCross(event, IMAGES).catch(() => Response.error()));
     return;
   }
@@ -322,7 +336,8 @@ self.addEventListener('fetch', (event) => {
   }
 
   // /data/ files: this release's shell copy (build-sw.mjs precaches the .json files the app needs), else
-  // a saved copy refreshed in the background into the runtime cache, else the network.
+  // a saved copy refreshed in the background, else the network. Both network answers are kept in the
+  // runtime cache.
   if (isData(url)) {
     event.respondWith(
       (async () => {
@@ -346,7 +361,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Same-origin images (the icons are in the shell too): cache first.
+  // Same-origin images (the icons are in the shell too): cache first, kept in the photos cache, which
+  // drops its oldest entries beyond PHOTO_LIMIT.
   if (isPhoto(url)) {
     event.respondWith(cacheFirst(event, PHOTOS, PHOTO_LIMIT).catch(() => Response.error()));
     return;
