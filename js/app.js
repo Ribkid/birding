@@ -290,6 +290,8 @@ function wireSheetDrag(wrap, sheet) {
     const r = sheet.getBoundingClientRect();
     const handle = e.clientY - r.top < 56;
     if (!handle && sheet.scrollTop > 0) return;
+    // A list scrolled inside the sheet (the avatar picker) scrolls back up rather than dragging the sheet away.
+    for (let n = e.target; n && n !== sheet; n = n.parentElement) if (n.scrollTop > 0 && n.scrollHeight > n.clientHeight) return;
     g = { id: e.pointerId, x: e.clientX, y: e.clientY, h: r.height, handle, on: false, dy: 0, pts: [[e.timeStamp, e.clientY]] };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
