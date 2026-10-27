@@ -6,7 +6,7 @@
    The content sheet slides up over it: the kind rail (the tally), the Today rail, the sticky search tools (glass once
    stuck) and the photo grid. */
 .dex-hero {
-  --hero-deep: var(--tint-deep, color-mix(in srgb, var(--kc, #10302A) 30%, #06120F));
+  --hero-deep: var(--tint-deep, color-mix(in srgb, var(--kc, #121821) 30%, #06120F));
   position: relative; isolation: isolate; overflow: hidden;
   display: flex; flex-direction: column; justify-content: space-between;
   height: calc(clamp(300px, 42svh, 440px) + env(safe-area-inset-top));
@@ -20,7 +20,7 @@
 .dex-hero::before {
   content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background:
-    linear-gradient(to bottom, rgba(6, 18, 15, .55) 0, rgba(6, 18, 15, .2) 18%, rgba(6, 18, 15, 0) 32%),
+    linear-gradient(to bottom, rgba(7, 11, 16, .55) 0, rgba(7, 11, 16, .2) 18%, rgba(7, 11, 16, 0) 32%),
     linear-gradient(to top, color-mix(in srgb, var(--hero-deep) 94%, transparent) 0, color-mix(in srgb, var(--hero-deep) 72%, transparent) 36%, color-mix(in srgb, var(--hero-deep) 30%, transparent) 56%, transparent 72%);
 }
 .dex-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
@@ -138,7 +138,7 @@
 .today-day { position: relative; display: flex; align-items: flex-end; width: 232px; padding: 12px 14px; overflow: hidden; background: var(--surface-2); color: #fff; }
 .today-day .botd-img { position: absolute; inset: 0; border-radius: inherit; }
 .today-day .botd-img img, .today-day .botd-img .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
-.today-day::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgba(6, 18, 15, .84) 0, rgba(6, 18, 15, .4) 58%, rgba(6, 18, 15, 0) 85%); }
+.today-day::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgba(7, 11, 16, .84) 0, rgba(7, 11, 16, .4) 58%, rgba(7, 11, 16, 0) 85%); }
 .today-day-txt { position: relative; z-index: 1; display: grid; gap: 1px; min-width: 0; line-height: 1.2; text-shadow: 0 1px 6px rgba(0, 0, 0, .4); }
 .today-day-k { font-size: var(--fs-1); font-weight: 600; opacity: .92; }
 .today-day-txt strong { font-size: var(--fs-3); font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -151,7 +151,7 @@
 .dex-tools.is-stuck {
   padding-top: calc(6px + env(safe-area-inset-top)); background: var(--glass);
   -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-  box-shadow: inset 0 -1px 0 var(--glass-edge), 0 14px 28px -18px rgba(10, 30, 26, .45);
+  box-shadow: inset 0 -1px 0 var(--glass-edge), 0 14px 28px -18px rgba(12, 18, 27, .45);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .dex-tools.is-stuck { background: var(--glass-strong); } }
 @media (prefers-reduced-transparency: reduce) { .dex-tools.is-stuck { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
@@ -353,7 +353,7 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 /* The species she picked, as a photo card with its name over a scrim. */
 .picker .chosen { position: relative; display: block; height: 176px; padding: 0; overflow: hidden; border-radius: var(--r-card); background: var(--surface-2); box-shadow: var(--shadow-card); color: #fff; }
 .picker .chosen-img { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; object-fit: cover; object-position: 50% 30%; }
-.picker .chosen::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgba(6, 18, 15, .82) 0, rgba(6, 18, 15, .3) 50%, rgba(6, 18, 15, 0) 75%); }
+.picker .chosen::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(to top, rgba(7, 11, 16, .82) 0, rgba(7, 11, 16, .3) 50%, rgba(7, 11, 16, 0) 75%); }
 .picker .chosen-txt { position: absolute; left: 14px; right: 14px; bottom: 12px; z-index: 1; display: grid; justify-items: start; gap: 3px; text-shadow: 0 1px 8px rgba(0, 0, 0, .4); }
 .picker .chosen-txt strong { font-size: var(--fs-4); font-weight: 800; line-height: 1.15; }
 .picker .chosen-txt em { font-size: var(--fs-2); color: rgba(255, 255, 255, .9); }
@@ -394,10 +394,10 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 .search-ov .search-bar {
   padding: calc(8px + env(safe-area-inset-top)) 8px 8px 16px; border-bottom: 0; border-radius: 0 0 22px 22px;
   background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
-  box-shadow: inset 0 -1px 0 var(--glass-edge), 0 14px 28px -20px rgba(10, 30, 26, .45);
+  box-shadow: inset 0 -1px 0 var(--glass-edge), 0 14px 28px -20px rgba(12, 18, 27, .45);
   animation: search-drop var(--dur-3) var(--ease-out) both;
 }
-.search-ov .search-bar:focus-within { box-shadow: inset 0 -3px 0 var(--azure), 0 14px 28px -20px rgba(10, 30, 26, .45); }
+.search-ov .search-bar:focus-within { box-shadow: inset 0 -3px 0 var(--azure), 0 14px 28px -20px rgba(12, 18, 27, .45); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .search-ov .search-bar { background: var(--glass-strong); } }
 @media (prefers-reduced-transparency: reduce) { .search-ov .search-bar { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 @keyframes search-drop { from { transform: translateY(-16px); opacity: 0; } }

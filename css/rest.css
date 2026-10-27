@@ -42,7 +42,7 @@
 .lh-stat--photo .lh-stat-l { color: #fff; font-weight: 700; }
 .lh-stat-img { position: absolute; inset: 0; z-index: -1; }
 .lh-stat-img img, .lh-stat-img .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
-.lh-stat-img::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6, 18, 15, .05) 20%, rgba(6, 18, 15, .5) 55%, rgba(6, 18, 15, .86)); }
+.lh-stat-img::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7, 11, 16, .05) 20%, rgba(7, 11, 16, .5) 55%, rgba(7, 11, 16, .86)); }
 .lh-stat-new { max-width: 100%; font-size: var(--fs-1); color: rgba(255, 255, 255, .88); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lh-links { display: flex; gap: 10px; padding: 12px 16px 2px; }
 .lh-link {
@@ -74,7 +74,7 @@
 .tcard:active { scale: .96; transition-duration: var(--dur-1); }
 .tcard .tcard-img { position: absolute; inset: 0; z-index: -1; width: auto; height: auto; border-radius: 0; box-shadow: none; }
 .tcard .tcard-img img, .tcard .tcard-img .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
-.tcard-txt { position: absolute; inset: auto 0 0; display: grid; gap: 2px; padding: 44px 12px 12px; background: linear-gradient(180deg, rgba(6, 18, 15, 0), rgba(6, 18, 15, .62) 38%, rgba(6, 18, 15, .88)); }
+.tcard-txt { position: absolute; inset: auto 0 0; display: grid; gap: 2px; padding: 44px 12px 12px; background: linear-gradient(180deg, rgba(7, 11, 16, 0), rgba(7, 11, 16, .62) 38%, rgba(7, 11, 16, .88)); }
 .tcard-txt strong { font-weight: 800; font-size: .9375rem; line-height: 1.15; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tcard-r { font-size: var(--fs-1); color: rgba(255, 255, 255, .86); }
 @media (hover: hover) { .tcard:hover { box-shadow: var(--shadow-float); } }
@@ -129,7 +129,7 @@
   color: var(--ink-2); font-weight: 700; font-size: var(--fs-2); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
 }
-.lseg-btn[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(16, 48, 42, .1), 0 4px 12px -6px rgba(16, 48, 42, .3); }
+.lseg-btn[aria-current="page"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(15, 23, 35, .1), 0 4px 12px -6px rgba(15, 23, 35, .3); }
 :root[data-theme="outdoor"] .lseg-btn[aria-current="page"] { box-shadow: inset 0 0 0 2px var(--ink); }
 .lsort { flex: none; min-height: var(--tap); }
 .lbar + .chips { padding-top: 0; }
@@ -275,9 +275,9 @@ button.set-row:active, label.set-row:active { background: var(--surface-2); }
 .map-ctl { top: calc(74px + env(safe-area-inset-top)); gap: 8px; padding: 2px 12px 12px; }
 .map-ctl .chip {
   min-height: 40px; gap: 7px; border: 0; color: var(--ink); font-weight: 600;
-  background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--glass-edge), 0 6px 16px -8px rgba(10, 30, 26, .5);
+  background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--glass-edge), 0 6px 16px -8px rgba(12, 18, 27, .5);
 }
-.map-ctl .chip--on { background: var(--ink); color: var(--paper); box-shadow: 0 6px 16px -8px rgba(10, 30, 26, .6); }
+.map-ctl .chip--on { background: var(--ink); color: var(--paper); box-shadow: 0 6px 16px -8px rgba(12, 18, 27, .6); }
 /* Each layer chip carries the colour of its marks on the map, so the chips double as the key. */
 .map-ctl [data-hot]::before, .map-ctl [data-need]::before, .map-ctl [data-mshow="all"]::before {
   content: ''; flex: none; width: 11px; height: 11px; border-radius: 50%; background: var(--gold); box-shadow: inset 0 0 0 1.5px #3A2A00;
@@ -349,10 +349,10 @@ body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
 .locpick-mapwrap .layer-toggle { left: 12px; right: auto; bottom: 36px; }
 .locpick-bottom {
   position: relative; z-index: 600; margin-top: -24px; padding: 20px 16px calc(14px + env(safe-area-inset-bottom));
-  border: 0; border-radius: 28px 28px 0 0; background: var(--surface); box-shadow: 0 -12px 30px -14px rgba(10, 30, 26, .4);
+  border: 0; border-radius: 28px 28px 0 0; background: var(--surface); box-shadow: 0 -12px 30px -14px rgba(12, 18, 27, .4);
 }
 .locpick-bottom .field input { background: var(--paper); }
-.locpick-dot { position: absolute; left: 50%; top: 50%; z-index: 549; width: 10px; height: 4px; margin: 2px 0 0 -5px; border-radius: 50%; background: rgba(6, 18, 15, .45); pointer-events: none; transition: scale var(--dur-3) var(--ease-spring), opacity var(--dur-3) var(--ease-out); }
+.locpick-dot { position: absolute; left: 50%; top: 50%; z-index: 549; width: 10px; height: 4px; margin: 2px 0 0 -5px; border-radius: 50%; background: rgba(7, 11, 16, .45); pointer-events: none; transition: scale var(--dur-3) var(--ease-spring), opacity var(--dur-3) var(--ease-out); }
 .locpick-pin { transition: translate var(--dur-3) var(--ease-spring); }
 .locpick-pin--lift { translate: 0 -12px; transition-duration: var(--dur-2); transition-timing-function: var(--ease-out); }
 .locpick-dot:has(+ .locpick-pin--lift) { scale: 1.6; opacity: .6; }
@@ -418,7 +418,7 @@ body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
 /* ---------- account and leaderboard (js/account.js): same cards, rows and segmented control as Lists ---------- */
 .seg { padding: 3px; border: 0; border-radius: var(--r-pill); background: var(--surface-2); }
 .seg-btn { min-height: 38px; padding: 6px 16px; border-radius: var(--r-pill); font-weight: 700; transition: background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
-.seg-btn--on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(16, 48, 42, .1), 0 4px 12px -6px rgba(16, 48, 42, .3); }
+.seg-btn--on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(15, 23, 35, .1), 0 4px 12px -6px rgba(15, 23, 35, .3); }
 :root[data-theme="outdoor"] .seg-btn--on { box-shadow: inset 0 0 0 2px var(--ink); }
 .lb-list { padding: 4px 10px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
 .lb-row { min-height: 64px; padding: 10px 6px; gap: 12px; }

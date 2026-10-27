@@ -40,7 +40,7 @@
 .bird .hero-scrim {
   position: absolute; inset: 0; z-index: 1; pointer-events: none;
   background:
-    linear-gradient(to bottom, rgba(6, 18, 15, .42), rgba(6, 18, 15, 0) 26%),
+    linear-gradient(to bottom, rgba(7, 11, 16, .42), rgba(7, 11, 16, 0) 26%),
     linear-gradient(to top, var(--deep) 0, color-mix(in srgb, var(--deep) 88%, transparent) 16%, color-mix(in srgb, var(--deep) 55%, transparent) 34%, transparent 58%);
 }
 .bird .hero-scrim::after { content: ''; position: absolute; inset: 0; background: var(--deep); opacity: 0; }
@@ -61,7 +61,7 @@
 .bird .bird-hero .sci { margin: 2px 0 0; color: rgba(255, 255, 255, .88); font-size: var(--fs-3); }
 .bird .hero-count {
   position: static; margin-left: auto; padding: 5px 10px 4px; border-radius: var(--r-pill);
-  background: rgba(6, 18, 15, .42); color: #fff; font: 600 var(--fs-2)/1 var(--stamp); letter-spacing: .05em;
+  background: rgba(7, 11, 16, .42); color: #fff; font: 600 var(--fs-2)/1 var(--stamp); letter-spacing: .05em;
 }
 .bird .hero-credit {
   margin: -7px 0 -13px; padding: 13px 0; min-height: 0; /* padded so the credit link is a full-height target */ color: rgba(255, 255, 255, .78); font-size: var(--fs-1); line-height: 1.4;
@@ -105,7 +105,7 @@
 .bird .hero-model canvas { touch-action: pan-y; }
 .bird .model-loading, .bird .model-hint {
   top: calc(66px + env(safe-area-inset-top)); left: var(--sp-4); right: auto; width: max-content; max-width: calc(100% - 32px);
-  padding: 6px 12px; border-radius: var(--r-pill); background: rgba(6, 18, 15, .45); color: #fff; font-weight: 600;
+  padding: 6px 12px; border-radius: var(--r-pill); background: rgba(7, 11, 16, .45); color: #fff; font-weight: 600;
 }
 
 /* Parallax: the photo drifts slower than the page and swells a little; the scrim deepens. Decorative only. */
@@ -259,7 +259,7 @@ body.has-outing .bird .logbar { bottom: calc(var(--chrome-bottom) + 62px); }
 .compare .cmp-card > img, .compare .cmp-card > .img-missing { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 38%; }
 .compare .cmp-card::after {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
-  background: linear-gradient(to top, rgba(6, 18, 15, .82) 0, rgba(6, 18, 15, .5) 24%, transparent 50%);
+  background: linear-gradient(to top, rgba(7, 11, 16, .82) 0, rgba(7, 11, 16, .5) 24%, transparent 50%);
 }
 .compare .cmp-cap { position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; display: grid; justify-items: start; gap: 6px; padding: 12px; }
 .compare .cmp-stage:has(.cmp-tell) .cmp-cap { padding-bottom: 34px; }

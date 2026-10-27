@@ -136,7 +136,7 @@
 
 .lh-seg {
   position: relative; display: grid; grid-template-columns: repeat(var(--n, 3), 1fr); padding: 4px; border-radius: var(--r-pill);
-  background: var(--surface-2); box-shadow: inset 0 1px 2px rgba(16, 48, 42, .1);
+  background: var(--surface-2); box-shadow: inset 0 1px 2px rgba(15, 23, 35, .1);
 }
 .lh-seg-thumb {
   position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / var(--n, 3)); border-radius: var(--r-pill);
@@ -167,7 +167,7 @@
 .lh-mode-bg.is-split { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
 .lh-mode::before {
   content: ''; position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(180deg, rgba(6, 18, 15, .34) 0%, rgba(6, 18, 15, 0) 28%, rgba(6, 18, 15, .5) 50%, rgba(6, 18, 15, .9) 100%);
+  background: linear-gradient(180deg, rgba(7, 11, 16, .34) 0%, rgba(7, 11, 16, 0) 28%, rgba(7, 11, 16, .5) 50%, rgba(7, 11, 16, .9) 100%);
 }
 .lh-mode-top { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-2); }
 .lh-mode-ic {
@@ -177,7 +177,7 @@
 .lh-mode-ic svg { width: 22px; height: 22px; }
 .lh-best {
   display: inline-flex; align-items: baseline; gap: 4px; padding: 5px 10px; border-radius: var(--r-pill);
-  background: rgba(6, 18, 15, .5); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .26); font-size: var(--fs-1); font-weight: 600; white-space: nowrap;
+  background: rgba(7, 11, 16, .5); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .26); font-size: var(--fs-1); font-weight: 600; white-space: nowrap;
 }
 .lh-best b { font: 800 var(--fs-4)/1 var(--stamp); font-variant-numeric: tabular-nums; }
 .lh-best span { font: 700 var(--fs-2)/1 var(--stamp); }
