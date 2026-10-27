@@ -32,6 +32,8 @@ import {
 } from '../../core/sync.js';
 import { Icon } from '../../components/Icon';
 import { SpeciesImage } from '../../components/SpeciesImage';
+import { deleteAccount as deleteMyAccount } from '../../core/account.js';
+import { ConfirmDialog } from '../lists/shared';
 import './progress.css';
 
 interface Settings {
@@ -177,6 +179,8 @@ export default function Settings() {
   const [accountError, setAccountError] = useState('');
   const [accountNote, setAccountNote] = useState('');
   const [signOutAsk, setSignOutAsk] = useState(false);
+  const [deleteAsk, setDeleteAsk] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [signOutBusy, setSignOutBusy] = useState(false);
 
   const refreshPending = async () => {
@@ -594,6 +598,29 @@ export default function Settings() {
     }
   };
 
+  const doDeleteAccount = async () => {
+    setAccountError('');
+    if (!navigator.onLine) {
+      setDeleteAsk(false);
+      setAccountNote('Deleting your account needs a connection.');
+      return;
+    }
+    setDeleteBusy(true);
+    setAccountNote('Deleting your account…');
+    try {
+      await deleteMyAccount();
+      setAccountUser(null);
+      setProfile((await localProfile()) as Profile);
+      setDeleteAsk(false);
+      setAccountNote('Account deleted. Your sightings are still on this device.');
+      await refreshPending();
+    } catch (err) {
+      setAccountError(`Couldn't delete the account: ${friendly(err)}`);
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   const avatarSp = profile?.avatarSpeciesId ? byId.get(profile.avatarSpeciesId) ?? null : null;
   const shownName =
     profile?.displayName ||
@@ -735,7 +762,20 @@ export default function Settings() {
           <button className="btn" onClick={askSignOut}>
             Sign out
           </button>
+          <button className="btn btn--danger btn--quiet" disabled={deleteBusy} onClick={() => setDeleteAsk(true)}>
+            Delete my account and cloud data
+          </button>
         </div>
+        {deleteAsk && (
+          <ConfirmDialog
+            title="Delete your account?"
+            body="This permanently deletes your account, your cloud copy of every sighting, outing, patch and photo, and your place on the leaderboard and in groups. What is on this device stays here, as a guest."
+            confirmLabel={deleteBusy ? 'Deleting…' : 'Delete my account'}
+            danger
+            onCancel={() => setDeleteAsk(false)}
+            onConfirm={() => void doDeleteAccount()}
+          />
+        )}
         {pendingSync > 0 && (
           <p className="small muted">
             {pendingSync} change{pendingSync === 1 ? '' : 's'} waiting to sync.
