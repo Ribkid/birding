@@ -2246,7 +2246,7 @@ async function renderListen() {
       const ago = Math.round((Date.now() - h.last) / 1000);
       const fresh = !shown.has(key);
       return `<li class="hit ${Date.now() - h.last < 4000 ? 'hit--live' : ''} ${fresh ? 'hit--in' : ''}"${fresh ? ` style="--i:${n++}"` : ''}>
-        <span class="hit-photo">${sp ? birdImg(sp) : `<span class="hit-nophoto">${icon.mic}</span>`}</span>
+        <span class="row-thumb hit-photo">${sp ? birdImg(sp) : `<span class="hit-nophoto">${icon.mic}</span>`}</span>
         <span class="hit-main"><strong>${esc(sp ? sp.name : h.name)}</strong>
           <span class="small muted">${Math.round(h.best * 100)}% sure, ${ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)} min ago`}${sp ? (seen.has(sp.id) ? '' : '. New for your dex') : '. Not in the dex'}</span>
           <span class="hit-bar" aria-hidden="true"><i style="--p:${Math.min(1, h.best).toFixed(3)}"></i></span></span>

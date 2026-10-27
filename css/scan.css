@@ -93,7 +93,7 @@
 }
 .scan-stage:focus-visible { outline: 3px solid var(--bracket); outline-offset: 6px; }
 .scan-photo { position: relative; border-radius: var(--r-card); overflow: hidden; background: var(--cam-2); box-shadow: 0 24px 48px -20px rgba(0, 0, 0, .9); }
-.scan-photo img { display: block; max-width: 100%; max-height: min(56vh, 520px); width: auto; height: auto; pointer-events: none; -webkit-user-drag: none; }
+.scan-photo img { display: block; max-width: 100%; max-height: min(46vh, 480px); width: auto; height: auto; pointer-events: none; -webkit-user-drag: none; }
 /* Shade everything outside the box; the photo's rounded edge clips it. */
 .scan-dim { position: absolute; pointer-events: none; border-radius: 4px; box-shadow: 0 0 0 100vmax rgba(4, 10, 8, .58); }
 .scan-box { position: absolute; cursor: move; border-radius: 4px; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .72); }
