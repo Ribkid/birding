@@ -407,9 +407,33 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 .row-ic svg { width: 22px; height: 22px; }
 @media (prefers-reduced-motion: reduce) { .search-ov .search-bar { animation: none; } }
 
-/* ---------- stats: group bars under their kind ---------- */
-.gkind + .gkind { margin-top: var(--sp-4); }
-.gkind-h { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); margin: 0 0 var(--sp-2); font-size: var(--fs-3); }
-.gkind-h > span:first-child::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: var(--sp-2); border-radius: 50%; background: var(--kc); }
+/* ---------- stats: totals as stat cards, group bars under their kind ----------
+   On the first visit the totals count up, the life-list line draws, month bars grow up and group bars fill as each
+   chart comes into view (.stats-play, then .is-in per section). */
+.stats-page .statgrid { gap: var(--sp-3); padding: var(--sp-2) var(--sp-4) var(--sp-1); }
+.stats-page .statgrid div { padding: var(--sp-4) 14px; border-radius: var(--r-card); box-shadow: var(--shadow-card); }
+.stats-page .statgrid b { display: inline-block; justify-self: start; }
+.stats-page .block { margin: var(--sp-4) var(--sp-4) 0; padding: 0 var(--sp-4) var(--sp-4); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
+.stats-page .block > .h2 { margin: 0; padding: var(--sp-4) 0 var(--sp-3); }
+.stats-page .spots li:last-child { border-bottom: 0; }
+.stats-page .block:last-child { margin-bottom: var(--sp-5); }
+:root[data-theme="outdoor"] .stats-page :is(.block, .statgrid div) { box-shadow: var(--shadow-1); }
+.gkind + .gkind { margin-top: var(--sp-5); }
+.gkind-h { display: flex; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-3); font-size: var(--fs-3); }
+.gkind-h > span:first-of-type { flex: 1; }
+.gkind-h .ring { width: 28px; height: 28px; }
 .gkind-h .num { font: 600 var(--fs-4)/1 var(--stamp); color: var(--ink-2); }
 .gkind .meter span { background: var(--kc); box-shadow: none; }
+.stats-page .meter span { width: 100%; transform: scaleX(var(--s, 1)); transform-origin: left; transition: none; }
+.stats-page .season i { transform-origin: bottom; }
+.stats-page .chart .line { stroke-dasharray: 1; stroke-dashoffset: 0; }
+.stats-play .block:not(.is-in) .meter span { transform: scaleX(0); }
+.stats-play .block:not(.is-in) .season i { transform: scaleY(0); }
+.stats-play .block:not(.is-in) .chart .line { stroke-dashoffset: 1; }
+.stats-play .block:not(.is-in) .chart .area { opacity: 0; }
+.stats-play .block:not(.is-in) .ring-fill { stroke-dashoffset: 100; }
+.stats-play .block.is-in .meter span { transition: transform .9s var(--ease-out) calc(var(--i, 0) * 25ms); }
+.stats-play .block.is-in .season i { transition: transform .7s var(--ease-spring) calc(var(--i, 0) * 35ms); }
+.stats-play .block.is-in .chart .line { transition: stroke-dashoffset 1.2s var(--ease-out); }
+.stats-play .block.is-in .chart .area { transition: opacity .6s var(--ease-out) .7s; }
+.stats-play .block.is-in .ring-fill { transition: stroke-dashoffset 1s var(--ease-out) .1s; }
