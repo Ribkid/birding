@@ -1870,7 +1870,7 @@ function renderLists() {
       <a class="lh-stat lh-stat--life ${newSp ? 'lh-stat--photo' : ''}" href="#/list/life">
         ${newSp ? `<span class="lh-stat-img">${birdImg(newSp, 'small', '', { alt: '' })}</span>` : ''}
         <b data-count-key="life">${t.life}</b><span class="lh-stat-l">Life list</span>
-        ${newSp ? `<span class="lh-stat-new">Newest: ${esc(newSp.name)}</span>` : ''}</a>
+        ${newSp ? `<span class="lh-stat-new">Newest: ${esc(newSp.name)}</span>` : '<span class="lh-stat-new lh-stat-hint">Your first find shows up here, photo and all.</span>'}</a>
       <a class="lh-stat" href="#/list/year"><b data-count-key="year">${t.year}</b><span class="lh-stat-l">${now.getFullYear()} list</span></a>
       <a class="lh-stat" href="#/list/month"><b data-count-key="month">${t.month}</b><span class="lh-stat-l">${MONTHS[now.getMonth()]}</span></a>
     </div>
@@ -1920,6 +1920,13 @@ function renderLists() {
   view.onchange = null;
 }
 
+// What an empty list says: which kind, which period, and for a patch how it fills.
+function emptyList(lk, period, now, patch) {
+  const what = lk === 'all' ? 'Nothing' : `No ${KINDS[lk].label.toLowerCase()}`;
+  const when = period === 'life' ? '' : period === 'year' ? ` in ${now.getFullYear()}` : period === 'month' ? ` in ${MONTHS[now.getMonth()]}` : ` in ${period}`;
+  return patch ? `${what} logged inside this patch${when} yet. Any sighting within ${patch.radiusKm} km of its centre counts here.`
+    : `${what} logged${when} yet. Tap + to log a sighting.`;
+}
 function rowSpecies(s, sub, right = '', extra = '') {
   const seen = seenSet().has(s.id);
   return `<li><a class="row row--sp" href="#/bird/${s.id}"><span class="row-thumb ${seen ? 'row-thumb--seen' : ''}">${birdImg(s)}</span>
@@ -1965,7 +1972,7 @@ function renderList(period, patchId = null) {
     </div>
     ${kindChips(lk)}
     <p class="list-count"><b data-count-key="${base}/${period}/${lk}">${entries.length}</b> species</p>
-    ${rowSections(entries, groupOf, e => rowSpecies(e.sp, `First ${fmtDate(e.first.date)}${e.count > 1 ? `, seen ${e.count} times` : ''}`)) || '<p class="empty-inline lempty">Nothing on this list yet.</p>'}
+    ${rowSections(entries, groupOf, e => rowSpecies(e.sp, `First ${fmtDate(e.first.date)}${e.count > 1 ? `, seen ${e.count} times` : ''}`)) || `<p class="empty-inline lempty">${emptyList(lk, period, now, patch)}</p>`}
     ${patch ? `<div class="row-end pad"><button class="btn btn--danger btn--quiet" data-delpatch>Delete patch</button></div>` : ''}`;
   countIn(view);
   view.onclick = async e => {
