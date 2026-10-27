@@ -19,7 +19,7 @@
 /* Things that stay put while the page changes under them. */
 .tabbar { view-transition-name: tabbar; }
 #outing-bar { view-transition-name: outing-bar; }
-.toast { view-transition-name: toast; }
+.toast:not(.toast--out) { view-transition-name: toast; } /* never two at once, even while one fades */
 .update-bar { view-transition-name: update-bar; }
 .sync-banner { view-transition-name: sync-banner; }
 /* The species page's floating controls arrive after the photo lands rather than riding up with the page. */

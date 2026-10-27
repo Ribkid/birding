@@ -403,6 +403,7 @@ function openLocationPicker(init = {}) {
     };
     // Escape closes only this picker; the sighting sheet underneath stays as it was.
     const layer = openLayer(ov, { label: 'Choose a place', close: reason => close(null, reason) });
+    ov.focus({ preventScroll: true });
     try { await loadLeaflet(); } catch (_) { toast('The map needs an internet connection the first time.'); close(null); return; }
     if (closed) return;
     const L = window.L;
@@ -449,7 +450,7 @@ function openLocationPicker(init = {}) {
       }
     });
     // On a phone the main path is dragging the map, so don't pop the keyboard over it.
-    if (matchMedia('(pointer: coarse)').matches) ov.focus({ preventScroll: true }); else q.focus();
+    if (!matchMedia('(pointer: coarse)').matches && (document.activeElement === ov || document.activeElement === document.body)) q.focus();
   });
 }
 
