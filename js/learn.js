@@ -514,7 +514,7 @@ function feedbackHTML(q, right, brief) {
   const ansLabel = q.options.find(o => o.key === q.answer)?.label || '';
   const speciesQ = q.type !== 'fact' || q.ttype === 'Calls';
   const verdictText = right ? 'Correct.' : q.type === 'duel' ? `Not quite. That one is the ${pickedSp?.name}.`
-    : speciesQ ? `Not quite. It's the ${ans.name}.` : `Not quite. It's ${ansLabel}.`;
+    : speciesQ ? `Not quite. It's the ${ans.name}.` : q.options.find(o => o.key === q.answer)?.sp ? `Not quite. It's the ${ansLabel}.` : `Not quite. It's ${ansLabel}.`;
   const verdict = `<p class="lq-verdict">${right ? I.tick : I.cross}<span>${esc(verdictText)}</span></p>`;
   if (brief) return verdict;
   const tell = q.type === 'duel' ? q.tell : !right && pickedSp ? Q.tellFor(ans.id, pickedSp.id) : null;
@@ -584,7 +584,7 @@ function drawResults(ctx) {
     <div class="lr-actions">
       ${missed.length && !game.daily ? `<button class="btn btn--primary btn--block" data-again-missed>Practise ${missed.length === 1 ? 'the one' : missed.length > ROUND ? `${ROUND} of the ${missed.length}` : `the ${missed.length}`} you missed</button>` : ''}
       ${game.daily ? '<a class="btn btn--primary btn--block" href="#/learn">Back to Learn</a>' : `<button class="btn ${missed.length ? '' : 'btn--primary'} btn--block" data-again>Play again</button>`}
-      ${missed.length && game.daily ? '<a class="btn btn--block" href="#/learn/deck">Review the ones you missed</a>' : ''}
+      ${game.daily && missed.some(x => x.type !== 'fact') ? '<a class="btn btn--block" href="#/learn/deck">Review the ones you missed</a>' : ''}
       ${game.daily ? '' : '<button class="btn btn--quiet btn--block" data-hub>Back to Learn</button>'}
     </div>
     ${game.mode === 'rapid' && missed.length ? '<h2 class="lr-h">The ones you missed</h2>' : ''}
