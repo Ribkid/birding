@@ -96,6 +96,13 @@ describe('Scan', () => {
     expect({ left: box.style.left, top: box.style.top, width: box.style.width, height: box.style.height }).toEqual(at);
   });
 
+  it('puts the Change photo icon beside its label, as v1 does (new 5)', () => {
+    mount();
+    const chip = document.querySelector('.scan-change') as HTMLElement;
+    expect([...chip.children].map((e) => e.tagName.toLowerCase())).toEqual(['svg', 'span', 'input']);
+    expect(chip.querySelector(':scope > span')?.textContent).toBe('Change photo');
+  });
+
   describe('a module that will not load (offline-sw new 3)', () => {
     const DOWNLOAD = 'Photo ID needs a one-time download of about 104 MB. Connect to the internet (Wi-Fi is best) and try again.';
     const page = (entry: string) => `<!doctype html><head><script type="module" crossorigin src="${entry}"></script></head><body><div id="root"></div></body>`;
