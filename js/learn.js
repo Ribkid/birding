@@ -455,7 +455,9 @@ function answer(ctx, q, key) {
     game.streak = right ? game.streak + 1 : 0;
     game.top = Math.max(game.top, game.streak);
     showAnswer(ctx, q, { brief: true });
-    setTimeout(() => { if (game && game.qs[game.i] === q) { game.i++; drawQuestion(ctx); } }, right ? 450 : 1100);
+    // Only move on if she's still on this round: leaving within the pause must not paint the quiz over another screen.
+    const g = game;
+    setTimeout(() => { if (game === g && location.hash === g.route && g.qs[g.i] === q) { g.i++; drawQuestion(ctx); } }, right ? 450 : 1100);
     return;
   }
   showAnswer(ctx, q);
