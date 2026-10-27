@@ -504,7 +504,6 @@
 .lh-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
 .lh-ring circle { fill: rgba(7, 11, 16, .45); stroke: rgba(255, 255, 255, .3); stroke-width: 3.5; }
 .lh-ring .lh-ring-fg { fill: none; stroke: #fff; stroke-linecap: round; stroke-dasharray: 100 200; transition: stroke-dashoffset 1s var(--ease-settle) .25s; }
-.lh-ring .lh-ring-fg.is-zero { visibility: hidden; }
 .lh-ring b { position: relative; font: 800 .875rem/1 var(--stamp); font-variant-numeric: tabular-nums; }
 .lh-ring b span { font-size: .625rem; }
 .lh-packs[data-grow]:not(.is-in) .lh-ring-fg { stroke-dashoffset: 100 !important; }

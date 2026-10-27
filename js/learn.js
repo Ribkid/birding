@@ -443,11 +443,11 @@ function renderHub(ctx) {
   view.innerHTML = `
     <header class="page-head lh-head"><h1 class="lh-title">Learn</h1><p class="lh-lede">Quizzes on the birds, wildlife and plants of South East Queensland.</p></header>
     <div class="learn">
-      <ul class="lh-stats" aria-label="How you're going at a glance">
-        <li><b data-count="${streak}">${streak}</b><span>${streak === 1 ? 'day' : 'days'} in a row</span></li>
+      ${streak || packsDone || mastered ? `<ul class="lh-stats" aria-label="How you're going at a glance">
+        <li><b data-count="${streak}">${streak}</b><span>day streak</span></li>
         <li><b data-count="${packsDone}">${packsDone}</b><span>of ${packN} packs done</span></li>
         <li><b data-count="${mastered}">${mastered}</b><span>species mastered</span></li>
-      </ul>
+      </ul>` : ''}
       ${navigator.onLine ? '' : '<p class="lh-offline" role="status">No signal. Questions use the photos and calls saved on this phone, plus field notes.</p>'}
       <a class="lh-daily${doneToday ? ' is-done' : ''}${hero ? ` kind--${hero.kind}` : ''}" href="#/learn/daily">
         ${hero ? `<span class="lh-daily-photo" aria-hidden="true">${imgTag(faceSrc(hero.id, 'large'))}</span>` : ''}
@@ -561,8 +561,10 @@ function packCovers() {
   if (covers.key === key) return covers.v;
   const used = new Set(), v = {};
   for (const p of Q.PACKS) {
-    const list = Q.packSpecies(p.key).filter(Q.hasPhoto);
+    let list = Q.packSpecies(p.key).filter(Q.hasPhoto);
     if (!list.length) continue;
+    const framed = list.filter(s => tintable(faceSrc(s.id))); // Wikipedia lead photos are framed on the animal
+    if (framed.length >= 3) list = framed;
     const common = list.filter(s => s.rarity <= 3);
     const pool = Q.shuffle((common.length >= 3 ? common : list).slice(), Q.seeded(Q.hashStr(`pack|${key}|${p.key}`)));
     const s = pool.find(x => !used.has(x.id)) || pool[0];
@@ -583,7 +585,7 @@ function packsHTML(all) {
     const label = `${p.name}. ${n} species${right ? `, ${right} got right` : ''}${st.best != null ? `. Best ${st.best} of ${st.of}` : ''}.`;
     return `<li${!all && i++ >= PACKS_SHOWN ? ' hidden' : ''}><a class="lh-mode lh-pack${p.kind ? ` kind--${p.kind}` : ''}" href="#/learn/play/${p.key}" aria-label="${esc(label)}">
       <span class="lh-mode-bg" aria-hidden="true">${cov[p.key] ? imgTag(faceSrc(cov[p.key])) : ''}</span>
-      <span class="lh-mode-top" aria-hidden="true"><span class="lh-ring"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" pathLength="100"/><circle class="lh-ring-fg${right ? '' : ' is-zero'}" cx="20" cy="20" r="16" pathLength="100" style="stroke-dashoffset:${(100 - frac * 100).toFixed(1)}"/></svg><b>${Math.round(frac * 100)}<span>%</span></b></span>
+      <span class="lh-mode-top" aria-hidden="true">${right ? `<span class="lh-ring"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" pathLength="100"/><circle class="lh-ring-fg" cx="20" cy="20" r="16" pathLength="100" style="stroke-dashoffset:${(100 - frac * 100).toFixed(1)}"/></svg><b>${Math.max(1, Math.round(frac * 100))}<span>%</span></b></span>` : '<span></span>'}
         ${st.best != null ? `<span class="lh-best">Best <b>${st.best}</b><span>/${st.of}</span></span>` : ''}</span>
       <span class="lh-mode-txt" aria-hidden="true"><strong>${esc(p.name)}</strong><span class="lh-mode-desc">${esc(p.blurb)}</span><span class="lh-pack-n">${n} species</span></span></a></li>`;
   }).join('');
@@ -686,7 +688,7 @@ function mediaHTML(q) {
 // all that's left. A drawing filter on the picture, not a read of its pixels, so any photo host works.
 const ink = [0.075, 0.125, 0.114], ground = [0.914, 0.937, 0.925];
 const SIL_FILTER = `<svg class="lq-defs" aria-hidden="true" focusable="false"><filter id="lq-sil" color-interpolation-filters="sRGB">
-  <feGaussianBlur stdDeviation="1.2"/><feColorMatrix type="matrix" values=".2126 .7152 .0722 0 0 .2126 .7152 .0722 0 0 .2126 .7152 .0722 0 0 0 0 0 1 0"/>
+  <feGaussianBlur stdDeviation="2"/><feColorMatrix type="matrix" values=".2126 .7152 .0722 0 0 .2126 .7152 .0722 0 0 .2126 .7152 .0722 0 0 0 0 0 1 0"/>
   <feComponentTransfer>${['R', 'G', 'B'].map((c, i) => `<feFunc${c} type="discrete" tableValues="${[...Array(5).fill(ink[i]), ...Array(6).fill(ground[i])].join(' ')}"/>`).join('')}</feComponentTransfer>
 </filter></svg>`;
 

@@ -148,6 +148,8 @@ export function badges(sightings, outings, learning = {}) {
   add('learn-daily', 'Daily habit', "Finish today's challenge", lv('dailyDone'), 1, 'learning');
   add('learn-streak7', 'Seven-day streak', "Do today's challenge 7 days in a row", lv('bestStreak'), 7, 'learning');
   add('learn-perfect', 'Perfect round', 'Get all 10 right in a round on Normal or Hard', lv('perfect'), 1, 'learning');
+  add('learn-packs5', 'Pack rat', 'Finish 5 different quiz packs', lv('packsDone'), 5, 'learning');
+  add('learn-sweep', 'Clean sweep', 'Get every question right in a quiz pack', lv('packPerfect'), 1, 'learning');
   add('learn-duels20', 'Look-alike pro', 'Win 20 look-alike duels', lv('duelsWon'), 20, 'learning');
   add('learn-calls10', 'Ear for it', 'Master 10 calls in the review deck', lv('callsMastered'), 10, 'learning');
   add('learn-master25', 'Walking field guide', 'Master 25 species in the review deck', lv('mastered'), 25, 'learning');
