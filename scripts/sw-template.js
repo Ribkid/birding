@@ -31,6 +31,7 @@ const ROOT = new URL('/', self.location.href).href;
 const LISTEN_WORKER = `/js/birdnet-worker.js?tf=${encodeURIComponent(ROOT + 'vendor/tfjs/tf.min.js')}&root=${encodeURIComponent(ROOT + 'models')}&lang=en_uk`;
 const SHELL_FILES = PRECACHE.map((path) => (path === '/js/birdnet-worker.js' ? LISTEN_WORKER : path));
 const href = (path) => new URL(path, ROOT).href;
+const OWN = new Set(SHELL_FILES.map(href));
 
 // Cached responses carry the server's Vary header, but requests for module scripts, styles and
 // fonts send different Accept* headers than the install-time fetch did. Without ignoreVary the
@@ -227,6 +228,42 @@ async function callClip(request) {
   });
 }
 
+// Navigations: the network for up to NAV_WAIT so a deploy lands, then the saved page, then the app shell.
+// Every good answer is stored again, however long it took: the app under /index.html, and the privacy and
+// terms pages under their own address. A captive portal or a host error page can answer any address with
+// its own HTML, so only a page with BirdyDex's root element is kept as the app, only a page that names
+// BirdyDex is kept as privacy or terms, and no other address is stored.
+async function navigation(event, url) {
+  const { request } = event;
+  const isApp = url.pathname === '/' || url.pathname === '/index.html';
+  const net = fetch(request).then((fresh) => {
+    if (fresh.ok && isHtml(fresh) && (isApp || OWN.has(request.url))) {
+      const copy = fresh.clone();
+      waitFor(event, (async () => {
+        const text = await copy.clone().text();
+        if (!text.includes(isApp ? '<div id="root">' : 'BirdyDex')) return;
+        await (await caches.open(SHELL)).put(isApp ? '/index.html' : request.url, copy);
+      })().catch(() => {}));
+    }
+    return fresh;
+  });
+  waitFor(event, net.catch(() => {}));
+
+  const timer = new Promise((resolve) => setTimeout(() => resolve(null), NAV_WAIT));
+  const first = await Promise.race([net.catch(() => null), timer]);
+  if (first) return first;
+
+  const saved = (await caches.match(request, MATCH)) || (await caches.match('/index.html', MATCH));
+  if (saved) return saved;
+
+  const late = await net.catch(() => null);
+  if (late) return late;
+  return new Response('<h1>Offline</h1><p>BirdyDex has not been opened online yet.</p>', {
+    status: 503,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  });
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
@@ -243,46 +280,8 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.origin !== self.location.origin) return; // other third-party requests are the app's business
 
-  // Navigations: network first so a deploy lands, cached shell as the offline fallback.
   if (request.mode === 'navigate') {
-    event.respondWith(
-      (async () => {
-        // The copy is cloned the moment the answer arrives, before the page reads it.
-        const navFetch = fetch(request).then((fresh) => {
-          if (fresh.ok && isHtml(fresh)) {
-            const isApp = url.pathname === '/' || url.pathname === '/index.html';
-            const copy = fresh.clone();
-            waitFor(event, (async () => {
-              const cache = await caches.open(SHELL);
-              if (!isApp) {
-                // Privacy, terms and error pages belong under their own URL, never as the app shell.
-                await cache.put(request, copy);
-              } else if ((await copy.clone().text()).includes('<div id="root">')) {
-                // A captive portal can answer with HTML; only store a real BirdyDex shell.
-                await cache.put('/index.html', copy);
-              }
-            })().catch(() => {}));
-          }
-          return fresh;
-        });
-        // A slow answer still refreshes the shell, but never holds the launch open.
-        waitFor(event, navFetch.catch(() => {}));
-
-        const timer = new Promise((resolve) => setTimeout(() => resolve(null), NAV_WAIT));
-        const first = await Promise.race([navFetch.catch(() => null), timer]);
-        if (first) return first;
-
-        const cached = (await caches.match(request, MATCH)) || (await caches.match('/index.html', MATCH));
-        if (cached) return cached;
-
-        const late = await navFetch.catch(() => null);
-        if (late) return late;
-        return new Response('<h1>Offline</h1><p>BirdyDex has not been opened online yet.</p>', {
-          status: 503,
-          headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        });
-      })(),
-    );
+    event.respondWith(navigation(event, url));
     return;
   }
 

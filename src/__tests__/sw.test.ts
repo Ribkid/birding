@@ -189,7 +189,7 @@ function setup(precache: string[] = ['/index.html', '/assets/index-a.js'], opts:
     await dispatch(sw.install, {});
     await dispatch(sw.activate, {});
   };
-  return { sw, caches, state, get, update };
+  return { sw, caches, state, get, update, files };
 }
 
 describe('service worker runtime caching', () => {
@@ -328,5 +328,56 @@ describe('Listen offline', () => {
     let status: unknown = null;
     await dispatch(sw.message, { data: { type: 'shell-status' }, ports: [{ postMessage: (s: unknown) => { status = s; } }] });
     expect(status).toMatchObject({ total: 3, saved: 3 });
+  });
+});
+
+describe('navigations', () => {
+  const precache = ['/index.html', '/assets/index-a.js', '/privacy.html'];
+  const privacy = { body: '<!doctype html><title>Privacy: Sarah\'s BirdyDex</title><p>Privacy</p>', type: 'text/html' };
+  const nav = { mode: 'navigate', destination: 'document' };
+  const shellOf = (caches: FakeCaches) => [...caches.map.keys()].find((n) => n.startsWith('birdydex-shell-'))!;
+  const text = async (caches: FakeCaches, url: string) => {
+    const hit = await (await caches.open(shellOf(caches))).match(url);
+    return hit ? hit.text() : null;
+  };
+
+  it('stores good pages again on every online visit, each under its own address', async () => {
+    const { caches, get, update, files } = setup(precache, { files: { '/privacy.html': privacy } });
+    await update();
+    const shell = await caches.open(shellOf(caches));
+    await shell.delete('/index.html');
+    await shell.delete('/privacy.html');
+    await get('/', nav);
+    await get('/privacy.html', nav);
+    expect(await text(caches, '/index.html')).toContain('<div id="root">');
+    expect(await text(caches, '/privacy.html')).toContain('Privacy');
+    // A newer page replaces the saved one straight away.
+    files[abs('/privacy.html')] = { body: '<title>Privacy: Sarah\'s BirdyDex</title><p>Privacy v2</p>', type: 'text/html' };
+    await get('/privacy.html', nav);
+    expect(await text(caches, '/privacy.html')).toContain('Privacy v2');
+  });
+
+  it('never stores a captive portal, an error page or an unknown address', async () => {
+    const { caches, get, update, files, state } = setup(precache, { files: { '/privacy.html': privacy } });
+    await update();
+    const portal = { body: '<!doctype html><title>Free Wi-Fi</title><p>Log in to continue</p>', type: 'text/html' };
+    files[abs('/')] = portal;
+    files[abs('/index.html')] = portal;
+    files[abs('/privacy.html')] = portal;
+    files[abs('/does-not-exist')] = { body: '<!doctype html><div id="root"></div>', type: 'text/html' };
+    await get('/', nav);
+    await get('/index.html', nav);
+    await get('/privacy.html', nav);
+    await get('/does-not-exist', nav);
+    files[abs('/terms.html')] = { body: 'Not found', type: 'text/html', status: 404 };
+    await get('/terms.html', nav);
+    expect(await text(caches, '/index.html')).toContain('<div id="root">');
+    expect(await text(caches, '/privacy.html')).toContain('Privacy');
+    expect(caches.urls(shellOf(caches)).sort()).toEqual([abs('/assets/index-a.js'), abs('/index.html'), abs('/privacy.html')]);
+    // Offline the app and the privacy page still open.
+    state.online = false;
+    expect((await get('/', nav)).text).toContain('<div id="root">');
+    expect((await get('/privacy.html', nav)).text).toContain('Privacy');
+    expect((await get('/does-not-exist', nav)).text).toContain('<div id="root">');
   });
 });
