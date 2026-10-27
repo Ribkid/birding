@@ -4,12 +4,14 @@ import { HashRouter } from 'react-router-dom';
 // v1's stylesheet order (birding-refresh index.html): globals first, then screens.
 import './styles/app.css';
 import './screens/field/field.css';
-import './screens/learn/learn.css';
 import './styles/motion.css';
 import './styles/look.css';
 import './screens/screens.css';
 import './screens/species.css';
 import './screens/rest.css';
+// v1 links learn.css twice, after field.css and again here, so its rules win over look.css (.btn radius) and the
+// screen sheets. A bundle keeps one copy, so it goes in the later place, which gives the same cascade.
+import './screens/learn/learn.css';
 import './screens/field/calls.css';
 import './screens/field/scan.css';
 import './screens/me/me.css';
