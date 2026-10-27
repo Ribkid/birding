@@ -40,6 +40,7 @@ export default function AddSighting() {
         ...current,
         lat: pos.lat.toFixed(6),
         lng: pos.lng.toFixed(6),
+        acc: pos.acc,
       }));
       setStatus(`${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)} (±${pos.acc} m)`);
     } catch (err) {
