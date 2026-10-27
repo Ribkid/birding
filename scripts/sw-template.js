@@ -283,6 +283,37 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(cacheFirst(request, RUNTIME, event).catch(() => Response.error()));
 });
 
+async function shellStatus() {
+  const have = new Set((await (await caches.open(SHELL)).keys()).map((req) => new URL(req.url).pathname));
+  return {
+    version: VERSION,
+    total: PRECACHE.length,
+    saved: PRECACHE.filter((url) => have.has(url)).length,
+  };
+}
+
+async function shellFill() {
+  const cache = await caches.open(SHELL);
+  const have = new Set((await cache.keys()).map((req) => new URL(req.url).pathname));
+  for (const url of PRECACHE) {
+    if (have.has(url)) continue;
+    try {
+      await cache.add(new Request(url, { cache: 'reload' }));
+    } catch {
+      const old = await caches.match(url, MATCH);
+      if (old) await cache.put(url, old).catch(() => {});
+    }
+  }
+  return shellStatus();
+}
+
 self.addEventListener('message', (event) => {
-  if (event.data === 'skip-waiting') void self.skipWaiting();
+  const data = event.data;
+  if (data === 'skip-waiting') void self.skipWaiting();
+  if (data?.type === 'shell-status') {
+    event.waitUntil(shellStatus().then((status) => event.ports[0]?.postMessage(status)).catch(() => {}));
+  }
+  if (data?.type === 'shell-fill') {
+    event.waitUntil(shellFill().then((status) => event.ports[0]?.postMessage(status)).catch(() => {}));
+  }
 });

@@ -9,7 +9,6 @@ import {
 import { Link } from 'react-router-dom';
 import { byId } from '../../lib/data';
 import { db } from '../../core/db.js';
-import { downloadAll } from '../../core/media.js';
 import { toEbirdCsv } from '../../core/ebird.js';
 import {
   configured,
@@ -34,6 +33,7 @@ import { Icon } from '../../components/Icon';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { deleteAccount as deleteMyAccount } from '../../core/account.js';
 import { ConfirmDialog } from '../lists/shared';
+import { FIELD, checkField, fieldJob, fieldJobs, fieldLabel, type FieldKey, type FieldReport, type FieldResult } from './fieldReady';
 import './progress.css';
 
 interface Settings {
@@ -151,13 +151,9 @@ export default function Settings() {
   const [usage, setUsage] = useState('');
   const [persisted, setPersisted] = useState(false);
 
-  const [download, setDownload] = useState({
-    running: false,
-    done: 0,
-    total: 0,
-    text: '',
-    error: false,
-  });
+  const [field, setField] = useState<Partial<Record<FieldKey, FieldResult & { busy?: boolean; prog?: number }>>>({});
+  const [fieldAnnounce, setFieldAnnounce] = useState('');
+  const fieldAlive = useRef(true);
 
   const [backupMsg, setBackupMsg] = useState('');
   const [restoring, setRestoring] = useState(false);
@@ -307,53 +303,6 @@ export default function Settings() {
       await db.kvSet('settings', next);
     } catch (err) {
       setSettingsMsg(`Couldn't save that setting: ${friendly(err)}`);
-    }
-  };
-
-  const runDownload = async () => {
-    if (download.running) return;
-    if (!navigator.onLine) {
-      setDownload({
-        running: false,
-        done: 0,
-        total: 0,
-        text: 'You are offline. Downloading needs a connection.',
-        error: true,
-      });
-      return;
-    }
-    setDownload({ running: true, done: 0, total: 0, text: 'Starting…', error: false });
-    try {
-      await downloadAll((done: number, total: number) => {
-        setDownload({
-          running: true,
-          done,
-          total,
-          text: `Saving ${done} of ${total}…`,
-          error: false,
-        });
-      });
-      try {
-        await navigator.storage?.persist?.();
-      } catch {
-        /* persistence is a bonus */
-      }
-      setDownload((prev) => ({
-        ...prev,
-        running: false,
-        text:
-          prev.total > 0
-            ? `Finished checking ${prev.total} species. Open a few photos offline to confirm they were kept.`
-            : 'No photos were available to save. Check your connection and try again.',
-        error: prev.total === 0,
-      }));
-    } catch (err) {
-      setDownload((prev) => ({
-        ...prev,
-        running: false,
-        text: `Couldn't finish the download: ${friendly(err)}. Try again with a connection.`,
-        error: true,
-      }));
     }
   };
 
@@ -831,9 +780,84 @@ export default function Settings() {
     );
   }
 
-  const downloadPct =
-    download.total > 0 ? Math.round((download.done / download.total) * 100) : 0;
   const backupIsError = /Couldn't|not a BirdyDex/.test(backupMsg);
+
+  const paintField = (key: FieldKey, result: FieldResult) => {
+    setField((current) => ({ ...current, [key]: { ...result, busy: false } }));
+  };
+
+  const followField = (key: FieldKey, job: ReturnType<typeof fieldJob>) => {
+    setField((current) => ({
+      ...current,
+      [key]: { ...(current[key] || { ok: false, text: '' }), busy: true, prog: current[key]?.prog || 0, text: job.last[1] || 'Saving…' },
+    }));
+    const on: FieldReport = (fraction, text) => {
+      if (!fieldAlive.current) return;
+      setField((current) => {
+        const row = current[key] || { ok: false, text: '' };
+        return {
+          ...current,
+          [key]: {
+            ...row,
+            busy: true,
+            text: text || row.text,
+            prog: fraction == null ? row.prog || 0 : Math.round(fraction * 100),
+          },
+        };
+      });
+    };
+    job.subs.add(on);
+    on(...job.last);
+    job.p.then(async () => {
+      const result = await checkField(key).catch(() => ({ ok: false, text: "Couldn't check this one. Open Settings again to retry." }));
+      if (!fieldAlive.current) return;
+      paintField(key, result);
+      setFieldAnnounce(`${fieldLabel(key)}: ${result.text}`);
+    }, (err: unknown) => {
+      if (!fieldAlive.current) return;
+      const message = err instanceof Error ? err.message : String(err);
+      const result = { ok: false, text: `Couldn't finish: ${message}. Check the connection and try again.`, get: true };
+      paintField(key, result);
+      setFieldAnnounce(`${fieldLabel(key)}: ${result.text}`);
+    }).finally(() => job.subs.delete(on));
+  };
+
+  const requestField = (key: FieldKey) => {
+    if (!navigator.onLine) {
+      setField((current) => ({
+        ...current,
+        [key]: { ...(current[key] || { ok: false, text: '' }), busy: false, text: "You're offline. Connect to the internet, then try again.", get: true },
+      }));
+      return;
+    }
+    followField(key, fieldJob(key));
+  };
+
+  useEffect(() => {
+    fieldAlive.current = true;
+    for (const { key } of FIELD) {
+      const running = fieldJobs.get(key);
+      if (running) followField(key, running);
+      else {
+        void checkField(key)
+          .then((result) => { if (fieldAlive.current) paintField(key, result); })
+          .catch(() => {
+            if (fieldAlive.current) paintField(key, { ok: false, text: "Couldn't check this one. Open Settings again to retry." });
+          });
+      }
+    }
+    return () => { fieldAlive.current = false; };
+    // Check the six rows once when Settings opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fieldDone = FIELD.filter(({ key }) => field[key]).length;
+  const fieldReady = FIELD.filter(({ key }) => field[key]?.ok).length;
+  const fieldSummary = fieldDone < FIELD.length
+    ? 'Checking what works with no signal…'
+    : fieldReady === FIELD.length
+      ? 'Everything here works with no signal.'
+      : `${fieldReady} of ${FIELD.length} ready. ${navigator.onLine ? 'Get the rest while you have Wi-Fi.' : 'The rest needs signal to save.'}`;
 
   return (
     <>
@@ -885,36 +909,47 @@ export default function Settings() {
         )}
       </section>
 
-      <section className="block">
-        <h2 className="h2">Use it offline</h2>
-        <p className="muted small">
-          Download every photo and description so the dex works with no signal. Takes about 30
-          MB. Calls are saved each time you play one.
-        </p>
-        <button className="btn" onClick={() => void runDownload()} disabled={download.running}>
-          {download.running ? 'Downloading…' : 'Download for offline'}
-        </button>
-        {download.total > 0 && (
-          <div
-            className="meter meter--thin"
-            style={{ '--p': `${downloadPct}%` } as CSSProperties}
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={download.total}
-            aria-valuenow={download.done}
-            aria-label="Offline download progress"
-          >
-            <span />
-          </div>
-        )}
-        {download.text && (
-          <span
-            className={`small progress-status ${download.error ? 'progress-status--error' : 'muted'}`}
-            role="status"
-          >
-            {download.text}
+      <section className="set-card set-ready" aria-labelledby="field-h">
+        <div className="ready-head">
+          <span className="ready-ring" style={{ '--p': fieldReady / FIELD.length } as CSSProperties} aria-hidden="true">
+            <svg viewBox="0 0 48 48"><circle className="ready-ring-track" cx="24" cy="24" r="20" /><circle className="ready-ring-fill" cx="24" cy="24" r="20" /></svg>
+            <b>{fieldReady}</b>
           </span>
-        )}
+          <div className="ready-head-txt">
+            <h2 className="set-title" id="field-h">Ready for the field</h2>
+            <p className="small muted" role="status">{fieldSummary}</p>
+          </div>
+        </div>
+        <ul className="ready-list">
+          {FIELD.map(({ key, label }) => {
+            const row = field[key];
+            return (
+              <li key={key} className={`ready-row${row?.ok ? ' ready-row--ok' : row ? ' ready-row--todo' : ''}${row?.busy ? ' ready-row--busy' : ''}`}>
+                <strong className="ready-name">{label}</strong>
+                <div className="ready-act">
+                  {row?.busy ? (
+                    <span className="ready-chip ready-chip--busy">Saving</span>
+                  ) : row?.ok ? (
+                    <span className="ready-chip ready-chip--ok"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>Saved</span>
+                  ) : row?.get ? (
+                    <button type="button" className="ready-chip ready-chip--get" onClick={() => requestField(key)} aria-label={`Get it now: ${label}`}>Get it now</button>
+                  ) : row?.link ? (
+                    <a className="ready-chip ready-chip--get" href={row.link}>{row.linkText}</a>
+                  ) : (
+                    <span className="ready-chip ready-chip--wait">Not yet</span>
+                  )}
+                </div>
+                <span className="ready-text small muted" role="status">{row?.text || 'Checking…'}</span>
+                {row?.busy && (
+                  <div className="meter meter--thin" style={{ '--p': `${row.prog || 0}%` } as CSSProperties} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={row.prog || 0} aria-label={`${label} download progress`}>
+                    <span />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <p className="sr-only" role="status" aria-live="polite">{fieldAnnounce}</p>
       </section>
 
       <section className="block">
