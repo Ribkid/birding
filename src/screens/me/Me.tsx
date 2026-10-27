@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer } from 'react';
+import { useEffect, useMemo, useReducer, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { KINDS, byId, kindsPresent, ofKind, type Species } from '../../lib/data';
 import { useOutings, useSightings, useMedia } from '../../lib/hooks';
@@ -7,7 +7,7 @@ import { totals, badges as computeBadges, MONTHS } from '../../core/stats.js';
 import { learnReady, learnStats } from '../../core/learn.js';
 import {
   initProfile, getProfile, getMyCloud, fetchCloud, signedIn, myName, memberSince, coverSpecies,
-  kindCounts, avatarUrl, dayPick, configured, refreshProfile,
+  kindCounts, avatarUrl, dayPick, configured, refreshProfile, myPublicId,
 } from '../../core/profile.js';
 import { syncStatus } from '../../core/account.js';
 import { SpeciesImage } from '../../components/SpeciesImage';
@@ -48,6 +48,7 @@ export default function Me() {
   const outings = useOutings();
   const patches = usePatches();
   const navigate = useNavigate();
+  const [profileMsg, setProfileMsg] = useState('');
   useMedia();
 
   useEffect(() => {
@@ -71,6 +72,18 @@ export default function Me() {
   const nOut = outings.length;
   const lastOut = outings.slice().sort((a, b) => ((b as any).startedAt ?? 0) - ((a as any).startedAt ?? 0))[0];
   const sync = syncStatus();
+
+  const openProfile = async () => {
+    setProfileMsg('');
+    if (!navigator.onLine) { setProfileMsg('Your public profile needs a connection.'); return; }
+    try {
+      const id = await myPublicId();
+      if (id) navigate(`/u/${id}`);
+      else setProfileMsg("Your profile hasn't reached the cloud yet. Try again in a minute.");
+    } catch {
+      setProfileMsg("Your profile hasn't reached the cloud yet. Try again in a minute.");
+    }
+  };
 
   const paint = () => {
     requestAnimationFrame(() => {
@@ -166,11 +179,16 @@ export default function Me() {
         {u && (
           <nav className="me-acts" aria-label="Your profile">
             <Link className="me-act me-act--primary" to="/me/edit"><svg viewBox="0 0 24 24">{I.edit}</svg><span>Edit profile</span></Link>
-            <Link className="me-act" to={m?.publicId ? `/u/${m.publicId}` : '/me'}><svg viewBox="0 0 24 24">{I.eye}</svg><span>View my public profile</span></Link>
+            {m?.publicId ? (
+              <Link className="me-act" to={`/u/${m.publicId}`}><svg viewBox="0 0 24 24">{I.eye}</svg><span>View my public profile</span></Link>
+            ) : (
+              <button type="button" className="me-act" onClick={() => void openProfile()}><svg viewBox="0 0 24 24">{I.eye}</svg><span>View my public profile</span></button>
+            )}
             <Link className="me-act" to="/leaderboard"><svg viewBox="0 0 24 24">{I.trophy}</svg><span>Leaderboard</span></Link>
             <Link className="me-act" to="/leaderboard?groups=1"><svg viewBox="0 0 24 24">{I.people}</svg><span>Groups</span></Link>
           </nav>
         )}
+        {profileMsg && <p className="small muted" role="status">{profileMsg}</p>}
 
         <section className="me-sec" aria-labelledby="me-lists-h">
           <div className="me-sec-h"><h2 id="me-lists-h">My lists</h2><Link to="/lists">Open lists</Link></div>

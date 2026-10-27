@@ -29,6 +29,7 @@ export async function initProfile(onChange) {
     onRemoteChange(async () => { prof = await localProfile(); onChange?.(); });
   }
   prof = await localProfile();
+  if (!cloud) cloud = (await db.kvGet('me:cloud').catch(() => null)) || null;
   if (signedIn()) await fetchCloud();
   onChange?.();
   return prof;
