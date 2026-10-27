@@ -12,7 +12,7 @@ export const redirectUrl = () => location.origin + location.pathname;
 
 export function client() {
   if (!configured) return Promise.reject(new Error('Accounts are not set up'));
-  clientP ||= import('../vendor/supabase/supabase.js').then(({ createClient }) => {
+  clientP ||= import(/* @vite-ignore */ new URL('/vendor/supabase/supabase.js', location.href).href).then(({ createClient }) => {
     const c = createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: STORAGE_KEY },
     });

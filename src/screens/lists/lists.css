@@ -1,0 +1,46 @@
+/* Styles owned by the lists slice. Reuse the v1 classes wherever possible. */
+
+/* A text action that sits in a .block-h next to an <a>, so it matches those links. */
+.lists-linkbtn {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--azure);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lists-linkbtn:hover {
+  text-decoration: underline;
+}
+
+/* "In progress" marker on an active outing in the lists hub. */
+.lists-live {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sun);
+  color: #2a2000;
+  font: 700 0.72rem/1.3 var(--font);
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+
+/* Header block that holds a long patch or outing name. */
+.lists-head-text {
+  min-width: 0;
+}
+
+.lists-head-text h1 {
+  overflow-wrap: anywhere;
+}
+
+/* Badge teaser count, inside a .badge row. */
+.lists-badge-count {
+  margin-left: 4px;
+  color: var(--ink-2);
+  font-size: 1.05rem;
+}

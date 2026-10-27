@@ -1,0 +1,115 @@
+/*
+ * Map slice styles. Everything that already exists in v1 lives in src/styles/app.css; these
+ * rules only make room for the accessible text summary below the map and keep the fixed
+ * v1 map layout inside the scrolling page.
+ */
+
+.map-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - var(--tabbar-h) - env(safe-area-inset-bottom));
+}
+
+/* v1's .mapwrap is fixed to the viewport. On this screen it becomes the top half of the
+   page so the summary under it can be reached. Two classes beat the shared .mapwrap rule
+   regardless of stylesheet order. */
+.mapwrap.mapwrap--page {
+  position: relative;
+  inset: auto;
+  flex: none;
+  height: min(64vh, 620px);
+  min-height: 360px;
+  /* Keep Leaflet's high z-index panes inside the map. v1 got this for free because
+     .mapwrap was position: fixed; the page version needs it explicitly so the patch
+     sheet and the summary stay above the tiles. */
+  z-index: 0;
+  isolation: isolate;
+}
+
+.map-location-note {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 68px;
+  z-index: 500;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Marker for a place picked from search. */
+.map-temp-pin span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--lori);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
+}
+
+/* Text summary below the map. */
+.map-summary {
+  padding-bottom: 32px;
+}
+
+.map-summary h3 {
+  margin: 22px 0 8px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.map-summary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.map-summary-list > li {
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.map-summary-list > li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.map-summary-details {
+  margin: 4px 0 0;
+}
+
+.map-summary-details > summary {
+  cursor: pointer;
+  padding: 8px 0;
+  font-weight: 700;
+}
+
+.map-note {
+  margin: 10px 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--line);
+}
+
+.map-note p {
+  margin: 4px 0;
+}
+
+/* Visually hidden but readable by assistive technology. */
+.map-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

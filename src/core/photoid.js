@@ -85,7 +85,10 @@ export function loadPhotoModel(onProgress) {
     const report = (f, label) => { try { onProgress?.(Math.max(0, Math.min(1, f)), label); } catch (_) {} };
     report(0, 'Starting');
     manifest = await (await fetch(MODEL_DIR + 'manifest.json')).json();
-    const [ortMod] = await Promise.all([import(ORT_DIR + 'ort.wasm.min.mjs'), loadClasses()]);
+    const [ortMod] = await Promise.all([
+      import(/* @vite-ignore */ ORT_DIR + 'ort.wasm.min.mjs'),
+      loadClasses(),
+    ]);
     ort = ortMod.default || ortMod;
     ort.env.wasm.wasmPaths = ORT_DIR;
     ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 2) : 1;

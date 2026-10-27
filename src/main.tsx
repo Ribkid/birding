@@ -14,3 +14,14 @@ createRoot(root).render(
     </HashRouter>
   </StrictMode>,
 );
+
+// Offline shell. Only in a production build; the dev server has no sw.js.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  const register = () => {
+    void navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Registers on the next visit; the app still works online without it.
+    });
+  };
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register, { once: true });
+}
