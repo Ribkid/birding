@@ -1,7 +1,7 @@
 import { SPECIES, GROUPS, HABITATS, RARITY, byId, KINDS, ANIMAL_KINDS, ANIMALS, BIRDS, ofKind, dexCode, kindsPresent } from './species.js';
 import { loadExtras, galleryFor, infoFor } from './gallery.js';
 import { db } from './db.js';
-import { loadIndex, photoFor, sized, details, calls, audioUrl, downloadAll, onMediaReady, loadCallPack, localCalls, hasLocalCall, callPackStatus, saveCallPack } from './media.js';
+import { loadIndex, cachedIndex, photoFor, sized, details, calls, audioUrl, downloadAll, onMediaReady, loadCallPack, localCalls, hasLocalCall, callPackStatus, saveCallPack } from './media.js';
 import { speciesList, periodFilter, totals, yearTotals, targets, badges, inPatch, haversineKm, MONTHS, inSeason } from './stats.js';
 import { toEbirdCsv } from './ebird.js';
 import { loadSeq, seq, monthRates, likelihood, recordCount, spotsFor, pointsFor, hotspots, nearbyTargets } from './seqdata.js';
@@ -1730,15 +1730,35 @@ function renderLog() {
 }
 
 // Map
+// One load at a time; a failed one (no signal, not saved yet) is tidied away so the next try starts clean.
+let leafletP = null;
 function loadLeaflet() {
   if (window.L) return Promise.resolve();
-  return new Promise((res, rej) => {
+  return leafletP ||= new Promise((res, rej) => {
     const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'vendor/leaflet/leaflet.css'; document.head.append(css);
-    const s = document.createElement('script'); s.src = 'vendor/leaflet/leaflet.js'; s.onload = res; s.onerror = rej; document.head.append(s);
+    const s = document.createElement('script'); s.src = 'vendor/leaflet/leaflet.js'; s.onload = res;
+    s.onerror = () => { s.remove(); css.remove(); leafletP = null; rej(new Error('The map could not load')); };
+    document.head.append(s);
   });
 }
+// No signal: a card below the map's controls (the search bar and chips stay usable above it).
+// 'nolib': the map itself isn't on the phone yet. 'tiles': the map works, but areas not opened before stay blank.
+function mapNote(kind) {
+  const wrap = $('.mapwrap', view);
+  if (!wrap || $('.map-note', wrap) || (kind === 'tiles' && state.mapNoteHidden)) return;
+  const n = document.createElement('div');
+  n.className = `map-note map-note--${kind}`;
+  n.innerHTML = kind === 'nolib'
+    ? `<h2 class="map-note-h">The map needs signal the first time</h2>
+      <p>Open it once with signal and it works offline after that, showing the areas you looked at.</p>
+      <button type="button" class="btn btn--small btn--primary" data-map-retry>Try again</button>`
+    : `<p><strong>No signal.</strong> Areas you haven't opened before stay blank. Hotspots and your sightings still show.</p>
+      <button type="button" class="iconbtn" data-map-note-x aria-label="Hide this message">${icon.close}</button>`;
+  wrap.append(n);
+  announce(kind === 'nolib' ? 'The map needs signal the first time.' : "No signal. Areas you haven't opened before stay blank.");
+}
 // Map or satellite base layers, remembered on this device. Returns a control element to put in the page.
-function baseLayers(map, L) {
+function baseLayers(map, L, { onTileError } = {}) {
   const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' });
   const sat = L.layerGroup([
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, maxNativeZoom: 19, crossOrigin: true, attribution: 'Imagery &copy; <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics and the GIS User Community' }),
@@ -1754,6 +1774,7 @@ function baseLayers(map, L) {
     ctl.querySelectorAll('[data-layer]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.layer === mode)));
   };
   set(state.settings.mapLayer === 'sat' ? 'sat' : 'map');
+  if (onTileError) [osm, ...sat.getLayers()].forEach(l => l.on('tileerror', onTileError));
   ctl.addEventListener('click', e => {
     const b = e.target.closest('[data-layer]');
     if (!b) return;
@@ -1794,12 +1815,19 @@ async function renderMap(spId = null, at = null) {
       <div class="map-cross hidden" aria-hidden="true"></div>
     </div>`;
   view.onchange = null;
-  try { await loadLeaflet(); } catch (_) { $('#map').innerHTML = '<p class="pad">The map needs an internet connection the first time.</p>'; return; }
+  try { await loadLeaflet(); } catch (_) {
+    if (!location.hash.startsWith('#/map')) return;
+    mapNote('nolib');
+    view.onclick = e => { if (e.target.closest('[data-map-retry]')) keepFocus(() => renderMap(spId, at), { fallback: '[data-map-retry], [data-mq]' }); };
+    return;
+  }
   if (!location.hash.startsWith('#/map')) return;
   const L = window.L;
   const map = state.map = L.map('map', { zoomControl: false, attributionControl: true }).setView(state.mapView?.c || [-27.47, 153.02], state.mapView?.z || 9);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
-  $('.mapwrap', view).append(baseLayers(map, L));
+  // Offline, a map square not opened before fails to load: say why the map has gaps (again on the next visit).
+  $('.mapwrap', view).append(baseLayers(map, L, { onTileError: () => { if (!navigator.onLine) { state.tilesOffline = true; mapNote('tiles'); } } }));
+  if (!navigator.onLine && state.tilesOffline) mapNote('tiles');
   map.on('moveend', () => { state.mapView = { c: map.getCenter(), z: map.getZoom() }; });
   const css = getComputedStyle(document.documentElement);
   const accent = css.getPropertyValue('--azure').trim(), ink = css.getPropertyValue('--lori').trim();
@@ -1939,6 +1967,7 @@ async function renderMap(spId = null, at = null) {
   view.onclick = async e => {
     const ri = e.target.closest('[data-ri]');
     if (ri) { goTo(results[Number(ri.dataset.ri)]); return; }
+    if (e.target.closest('[data-map-note-x]')) { state.mapNoteHidden = true; $('.map-note', view)?.remove(); mq.focus(); return; }
     if (e.target.closest('[data-mqx]')) { mq.value = ''; mqx.classList.add('hidden'); tempMarker?.remove(); mq.focus(); showRes(localResults('')); return; }
     if (e.target.closest('[data-need]')) { f.need = !f.need; keepFocus(() => renderMap(spId)); return; }
     const ms = e.target.closest('[data-mshow]');
@@ -1985,33 +2014,27 @@ async function renderSettings() {
   const pack = await loadCallPack();
   const packKinds = {};
   for (const id of Object.keys(pack)) { const k = kindOf(Number(id)); packKinds[k] = (packKinds[k] || 0) + 1; }
-  const callsBlurb = Object.keys(pack).length
-    ? `Short clips of the calls of ${Object.entries(packKinds).map(([k, n]) => plural(n, KINDS[k].one, KINDS[k].label.toLowerCase())).join(' and ')}, for the call quiz, the frog board on Listen and each species page. A clip is also kept once you have played it.`
-    : 'The call clips could not be loaded. Check your connection and open Settings again.';
+  const callWho = Object.entries(packKinds).map(([k, n]) => plural(n, KINDS[k].one, KINDS[k].label.toLowerCase())).join(' and ');
   let usage = '';
   try { const est = await navigator.storage.estimate(); usage = `${(est.usage / 1e6).toFixed(1)} MB used on this phone`; } catch (_) {}
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   if (location.hash !== '#/settings') return; // left while the call pack was loading
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/badges" aria-label="Back">${icon.back}</a><h1>Settings</h1></header>
+    <section class="block ready" aria-labelledby="field-h">
+      <h2 class="h2" id="field-h">Ready for the field</h2>
+      <p class="muted small" data-field-sum>What works on this phone with no signal.</p>
+      <ul class="ready-list" data-field-list>${FIELD.map(f => `<li class="ready-row" data-field="${f.key}">
+        <span class="ready-mark" aria-hidden="true"></span>
+        <div class="ready-main"><strong>${f.label}</strong><span class="small muted" data-field-text tabindex="-1">Checking…</span>
+          <div class="meter meter--thin hidden" data-field-prog style="--p:0%"><span></span></div></div>
+        <div class="ready-act" data-field-act></div></li>`).join('')}</ul>
+    </section>
     <section class="block" data-account></section>
     <section class="block">
       <label class="field"><span>Theme</span><select data-theme>${[['auto', 'Match my phone'], ['light', 'Light'], ['dark', 'Dark'], ['outdoor', 'Outdoor (high contrast for bright sun)']].map(([v, l]) => `<option value="${v}" ${state.settings.theme === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${state.installPrompt ? '<button class="btn btn--primary" data-install>Install app on this phone</button>' : `<p class="small muted">${matchMedia('(display-mode: standalone)').matches ? "Installed on this phone." : 'To install: open the browser menu, then Add to Home screen.'}</p>`}
       <button class="btn btn--quiet" data-welcome>Show the welcome screen</button>
-    </section>
-    <section class="block">
-      <h2 class="h2">Use it offline</h2>
-      <div class="offline-part">
-        <p class="muted small">Download every photo and description so the dex works with no signal. Takes about 30 MB.</p>
-        <button class="btn" data-dl>Download photos for offline</button> <span class="small muted" data-dlstatus role="status"></span>
-      </div>
-      <div class="offline-part" data-callpack>
-        <p class="muted small">${callsBlurb}</p>
-        <div class="callpack-ctl" data-callctl aria-live="polite"></div>
-        <div class="meter meter--thin hidden" data-callprog style="--p:0%"><span></span></div>
-        <p class="small muted" data-callstatus role="status"></p>
-      </div>
     </section>
     <section class="block">
       <h2 class="h2">Send to eBird</h2>
@@ -2035,7 +2058,7 @@ async function renderSettings() {
       <button class="btn btn--danger btn--quiet" data-wipe>Delete all my sightings</button>
     </section>`;
   renderAccountSection($('[data-account]', view));
-  wireCallPack();
+  wireField(callWho);
   view.onchange = async e => {
     if (e.target.matches('[data-colour]')) { state.settings.colourUnseen = e.target.checked; await db.kvSet('settings', state.settings); }
     if (e.target.matches('[data-theme]')) { state.settings.theme = e.target.value; applyTheme(); await db.kvSet('settings', state.settings); }
@@ -2061,13 +2084,6 @@ async function renderSettings() {
   view.onclick = async e => {
     if (e.target.closest('[data-install]')) promptInstall();
     if (e.target.closest('[data-welcome]')) showWelcome();
-    if (e.target.closest('[data-dl]')) {
-      const st = $('[data-dlstatus]', view);
-      st.textContent = 'Starting…';
-      await downloadAll((d, t) => { st.textContent = `${d} of ${t}`; });
-      st.textContent = 'All set for offline use.';
-      navigator.storage?.persist?.();
-    }
     if (e.target.closest('[data-ebird]')) {
       if (!state.sightings.some(x => byId.get(x.speciesId)?.kind === 'bird')) { toast('Log a bird first. eBird only takes birds.'); return; }
       download(`birddex-ebird-${todayStr()}.csv`, new Blob([toEbirdCsv(state.sightings, state.outings)], { type: 'text/csv' }));
@@ -2085,41 +2101,184 @@ async function renderSettings() {
     }
   };
 }
-// Settings: "Save calls for offline". The state comes from Cache Storage each time, so it survives a reload.
-async function wireCallPack() {
-  const ctl = $('[data-callctl]', view), status = $('[data-callstatus]', view), prog = $('[data-callprog]', view);
-  if (!ctl) return;
-  const mb = b => `${Math.max(1, Math.round(b / 1e6))} MB`;
-  const show = async () => {
+// ---------- ready for the field ----------
+// What works on this phone with no signal. The checks only read the caches (and ask the service worker what it has
+// saved), so they are quick and never start a download. 'Get it now' runs the same download as everywhere else,
+// and keeps going if she leaves Settings.
+const FIELD = [
+  { key: 'app', label: 'The app' },
+  { key: 'photos', label: 'Species photos' },
+  { key: 'calls', label: 'Call clips' },
+  { key: 'maps', label: 'Maps' },
+  { key: 'listen', label: 'Listen' },
+  { key: 'scan', label: 'Scan a photo' },
+];
+const rootUrl = p => new URL(`../${p}`, import.meta.url).href;
+const mbText = b => `${Math.max(1, Math.round(b / 1e6))} MB`;
+// 'Get it now' for photos saves each species' Wikipedia photo at two sizes and up to four gallery photos.
+// Average sizes measured over the whole set in October 2026 (33 + 174 KB, and 58 KB): about 145 MB in all.
+const PHOTO_WIKI = 207e3, PHOTO_GALLERY = 58e3;
+// Before the photo list has been looked up, count a Wikipedia photo for every species (nearly all have one).
+const photoBytes = (all = false) => SPECIES.reduce((a, s) => a + (all || photoFor(s.id) ? PHOTO_WIKI : 0) + Math.min(4, galleryFor(s.id).length) * PHOTO_GALLERY, 0);
+const cacheUrls = async name => ((await caches.has(name)) ? new Set((await (await caches.open(name)).keys()).map(r => r.url)) : new Set());
+
+// The service worker says how many of its app files are saved ('shell-fill' also fetches any that are missing).
+async function askWorker(type, ms = 3000) {
+  const sw = navigator.serviceWorker?.controller || (await navigator.serviceWorker?.getRegistration().catch(() => null))?.active;
+  if (!sw) return null;
+  return new Promise(res => {
+    const ch = new MessageChannel();
+    const t = setTimeout(() => res(null), ms);
+    ch.port1.onmessage = e => { clearTimeout(t); res(e.data); };
+    sw.postMessage({ type }, [ch.port2]);
+  });
+}
+async function listenSaved() {
+  const model = await caches.match(rootUrl('models/birdnet/model.json'));
+  if (!model) return false;
+  const shards = ((await model.json()).weightsManifest || []).flatMap(w => w.paths || []).map(p => `models/birdnet/${p}`);
+  const files = ['vendor/tfjs/tf.min.js', 'models/birdnet/labels/en_us.txt', 'models/birdnet/labels/en_uk.txt', ...shards];
+  return (await Promise.all(files.map(f => caches.match(rootUrl(f))))).every(Boolean);
+}
+
+async function checkField(key, callWho) {
+  if (key === 'app') {
+    if (!('serviceWorker' in navigator)) return { ok: false, text: "This browser can't keep the app for offline use." };
+    const st = await askWorker('shell-status');
+    if (!st) return { ok: false, text: 'Not saved for offline yet.', get: true };
+    return st.saved >= st.total ? { ok: true, text: 'Saved. It opens and runs with no signal.' }
+      : { ok: false, text: `${st.saved} of ${st.total} app files saved.`, get: true };
+  }
+  if (key === 'photos') {
+    await Promise.all([cachedIndex(), loadExtras()]);
+    const list = SPECIES.filter(s => photoFor(s.id));
+    const size = mbText(photoBytes(!list.length));
+    if (!list.length) return { ok: false, text: `Not saved yet. About ${size}.`, get: true };
+    const have = await cacheUrls('birddex-images');
+    const abs = u => { try { return new URL(u).href; } catch (_) { return u; } };
+    const n = list.filter(s => have.has(abs(sized(s.id, 'small'))) && have.has(abs(sized(s.id, 'large')))).length;
+    return n >= list.length ? { ok: true, text: `Saved for all ${list.length} species with a photo.` }
+      : { ok: false, text: `Saved for ${n} of ${list.length} species. About ${size}.`, get: true };
+  }
+  if (key === 'calls') {
     const st = await callPackStatus();
-    if (!ctl.isConnected || !st.total) return;
-    if (st.saved >= st.total) {
-      ctl.innerHTML = `<p class="callpack-done" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Calls saved for offline: ${st.total} clips, ${(st.bytes / 1e6).toFixed(1)} MB</span></p>`;
-      status.textContent = '';
-      return;
+    if (!st.total) return { ok: false, text: "Couldn't check the call clips. Open Settings again with signal." };
+    return st.saved >= st.total ? { ok: true, text: `Saved: ${st.total} short clips${callWho ? ` of ${callWho}` : ''}.` }
+      : { ok: false, text: `${st.saved} of ${st.total} clips saved. About ${mbText(st.bytes - st.savedBytes)}.`, get: true };
+  }
+  if (key === 'maps') {
+    const n = (await cacheUrls('birddex-tiles')).size;
+    return n ? { ok: true, text: `${n.toLocaleString('en-AU')} map squares saved from areas you've opened. Other areas need signal.` }
+      : { ok: false, text: "No map areas saved yet. Open the map with signal and look over the places you'll visit.", link: '#/map', linkText: 'Open the map' };
+  }
+  if (key === 'listen') {
+    return (await listenSaved()) ? { ok: true, text: 'Sound model saved. Listen names birds by their calls with no signal.' }
+      : { ok: false, text: 'Sound model not saved yet. About 60 MB.', get: true };
+  }
+  const m = await import('./photoid.js');
+  return (await m.isPhotoModelCached()) ? { ok: true, text: 'Photo model saved. Scan works with no signal.' }
+    : { ok: false, text: `Photo model not saved yet. About ${m.PHOTO_MODEL_MB} MB.`, get: true };
+}
+
+// One download per row at a time; Settings opened again picks up the one already running.
+const FIELD_GET = {
+  async app(report) {
+    report(null, 'Saving the app files…');
+    if (!navigator.serviceWorker.controller) {
+      await navigator.serviceWorker.register('sw.js');
+      await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(r, 20000))]);
     }
-    const left = st.bytes - st.savedBytes;
-    ctl.innerHTML = `<button class="btn" data-calls-dl>${st.saved ? `Save the rest of the calls (about ${mb(left)})` : `Save calls for offline (about ${mb(st.bytes)})`}</button>`;
-    status.textContent = st.saved ? `${st.saved} of ${st.total} clips are on this phone already.` : '';
+    const st = await askWorker('shell-fill', 180000);
+    if (!st || st.saved < st.total) throw new Error('some app files did not download');
+  },
+  photos: report => downloadAll((d, t) => report(d / t, `Saving photos: ${d} of ${t} species`)),
+  async calls(report) {
+    const r = await saveCallPack((d, t) => report(d / t, `Saving calls: ${d} of ${t}`));
+    if (r.failed) throw new Error(`${r.failed} clips didn't download`);
+  },
+  async listen(report) {
+    const m = await import('./listen.js');
+    await m.loadListenModel((p, t) => report(p / 100, `${t}: ${p}%`));
+  },
+  async scan(report) {
+    const m = await import('./photoid.js');
+    await m.loadPhotoModel((f, label) => report(f, `${label}: ${Math.round(f * 100)}%`));
+  },
+};
+const fieldJobs = new Map();
+function fieldJob(key) {
+  if (fieldJobs.has(key)) return fieldJobs.get(key);
+  const job = { last: [0, ''], subs: new Set() };
+  const report = (f, t) => { job.last = [f, t]; job.subs.forEach(fn => fn(f, t)); };
+  job.p = Promise.resolve().then(() => FIELD_GET[key](report)).finally(() => fieldJobs.delete(key));
+  fieldJobs.set(key, job);
+  return job;
+}
+
+function wireField(callWho) {
+  const list = $('[data-field-list]', view), sum = $('[data-field-sum]', view);
+  if (!list) return;
+  const results = {};
+  const row = key => $(`[data-field="${key}"]`, list);
+  const label = key => FIELD.find(f => f.key === key).label;
+  const summary = () => {
+    if (!sum.isConnected || FIELD.some(f => !results[f.key])) return;
+    const n = FIELD.filter(f => results[f.key].ok).length;
+    sum.textContent = n === FIELD.length ? 'Everything here works with no signal.'
+      : `${n} of ${FIELD.length} ready. ${navigator.onLine ? 'Get the rest while you have Wi-Fi.' : 'The rest needs signal to save.'}`;
   };
-  await show();
-  ctl.onclick = async e => {
-    const b = e.target.closest('[data-calls-dl]');
-    if (!b || b.disabled) return;
-    if (!navigator.onLine) { status.textContent = 'You are offline. Connect to the internet, then save the calls.'; return; }
-    b.disabled = true; b.textContent = 'Saving calls…';
+  const paint = (key, r) => {
+    const el = row(key);
+    if (!el?.isConnected) return;
+    results[key] = r;
+    el.classList.remove('ready-row--busy');
+    el.classList.toggle('ready-row--ok', !!r.ok);
+    el.classList.toggle('ready-row--todo', !r.ok);
+    $('[data-field-text]', el).textContent = r.text;
+    $('[data-field-act]', el).innerHTML = r.ok ? ''
+      : r.get ? `<button type="button" class="btn btn--small" data-field-get="${key}" aria-label="Get it now: ${esc(label(key))}">Get it now</button>`
+      : r.link ? `<a class="btn btn--small" href="${r.link}">${esc(r.linkText)}</a>` : '';
+    summary();
+  };
+  const check = key => checkField(key, callWho).catch(() => ({ ok: false, text: "Couldn't check this one. Open Settings again to retry." })).then(r => paint(key, r));
+  const follow = (key, job) => {
+    const el = row(key);
+    if (!el) return;
+    const text = $('[data-field-text]', el), prog = $('[data-field-prog]', el), act = $('[data-field-act]', el);
+    const hadFocus = el.contains(document.activeElement);
+    delete results[key];
+    el.classList.remove('ready-row--ok', 'ready-row--todo');
+    el.classList.add('ready-row--busy');
+    act.innerHTML = '';
+    if (hadFocus) text.focus({ preventScroll: true });
     prog.classList.remove('hidden');
-    let last = 0;
-    const res = await saveCallPack((d, t) => {
-      prog.style.setProperty('--p', `${Math.round(d / t * 100)}%`);
-      // Announce every 10 per cent or so, not every clip.
-      if (d === t || d - last >= t / 10) { last = d; status.textContent = `Saving calls: ${d} of ${t}`; }
-    }).catch(() => ({ failed: -1 }));
-    prog.classList.add('hidden');
-    await show();
-    if (res.failed) status.textContent = res.failed > 0 ? `${res.failed} clips didn't download. Check your connection and try again.` : 'Saving calls failed. Check your connection and try again.';
-    else { navigator.storage?.persist?.(); $('.callpack-done', ctl)?.focus(); }
+    const on = (f, t) => {
+      if (f != null) prog.style.setProperty('--p', `${Math.round(f * 100)}%`);
+      if (t) text.textContent = t;
+    };
+    job.subs.add(on);
+    on(...job.last);
+    job.p.then(() => {
+      if (!el.isConnected) return;
+      prog.classList.add('hidden');
+      navigator.storage?.persist?.();
+      check(key).then(() => announce(`${label(key)}: ${results[key]?.text || 'done'}`));
+    }, err => {
+      if (!el.isConnected) return;
+      prog.classList.add('hidden');
+      const msg = `Couldn't finish: ${err?.message || err}. Check the connection and try again.`;
+      paint(key, { ok: false, text: msg, get: true });
+      announce(`${label(key)}: ${msg}`);
+    }).finally(() => job.subs.delete(on));
   };
+  for (const { key } of FIELD) { if (fieldJobs.has(key)) follow(key, fieldJobs.get(key)); else check(key); }
+  list.addEventListener('click', e => {
+    const b = e.target.closest('[data-field-get]');
+    if (!b) return;
+    const key = b.dataset.fieldGet;
+    if (!navigator.onLine) { $('[data-field-text]', row(key)).textContent = "You're offline. Connect to the internet, then try again."; return; }
+    follow(key, fieldJob(key));
+  });
 }
 const blobToDataUrl = b => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(b); });
 function download(name, blob) {
@@ -2262,6 +2421,7 @@ async function renderListen() {
       btn.classList.add('on'); btn.setAttribute('aria-pressed', 'true'); btn.querySelector('span').textContent = 'Stop';
       prog.classList.remove('hidden');
       const loading = mod.loadListenModel((p, t) => { prog.style.setProperty('--p', `${p}%`); status.textContent = `${t}… ${p}%`; });
+      loading.catch(() => {}); // a failed load is reported below, once startListening is done
       await mod.startListening({
         canvas: $('.spectro', view),
         onDetections: hits => {
@@ -2416,9 +2576,21 @@ async function refreshFromSync({ force = false } = {}) {
   if (force ? !sheetOpen() : !busy) render();
 }
 
+// Screens whose content (not just photos) comes from the big regional files: drawn again once they arrive.
+const EXTRAS_SCREENS = /^#\/(?:dex|bird\/\d+|compare\/\d+\/\d+|lists|targets|map(?:\/.*)?|learn)?$/;
+
 async function boot() {
   initLook();
-  await Promise.all([loadData(), loadSeq(), loadExtras()]);
+  // The first paint needs only her sightings, the species list and the saved photo index. The big regional files
+  // (seq, gallery, info: about 1.4 MB) load alongside and never hold it up.
+  const extras = Promise.all([loadSeq(), loadExtras()]);
+  let extrasIn = false;
+  extras.then(() => { extrasIn = true; });
+  await Promise.all([loadData(), cachedIndex()]);
+  // From the phone's own cache they are usually in within a moment, and one draw beats two.
+  // A practice round is built from them, so Learn's rounds wait for them.
+  if (/^#\/learn\//.test(location.hash)) await extras;
+  else await Promise.race([extras, new Promise(r => setTimeout(r, 150))]);
   applyTheme();
   $('#plus').addEventListener('click', e => { e.preventDefault(); openPlusSheet(); });
   document.addEventListener('keydown', e => {
@@ -2431,6 +2603,12 @@ async function boot() {
   window.addEventListener('hashchange', onRouteChange);
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); state.installPrompt = e; if ((location.hash || '#/dex').startsWith('#/dex')) renderDex(); });
   render();
+  // Arrived after the first paint: photos fill in wherever they show, and a screen built from this data draws once
+  // more, without a transition, unless a sheet is open over it.
+  if (!extrasIn) extras.then(() => {
+    patchSpeciesImages(document);
+    if (!sheetOpen() && EXTRAS_SCREENS.test(location.hash || '#/dex')) render();
+  });
   initAccount(ctx).catch(() => {});
   // Better photos arriving are swapped in where they show; nothing is redrawn mid-use (a call keeps playing, the
   // gallery keeps its slide). A species page is redrawn only if its hero had no photo at all.
