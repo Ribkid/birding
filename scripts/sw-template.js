@@ -128,6 +128,27 @@ async function cacheFirstCross(request, cacheName, event, limit) {
   return res;
 }
 
+// Worker scripts and /js/ files: try the network briefly, then this release's shell.
+async function networkFirstScript(request, ms = 2500) {
+  const net = fetch(request)
+    .then((res) => {
+      if (res.ok) {
+        const put = caches.open(SHELL).then((cache) => cache.put(request, res.clone())).catch(() => {});
+        void put;
+      }
+      return res;
+    })
+    .catch(() => null);
+  const timer = new Promise((resolve) => setTimeout(() => resolve(null), ms));
+  const first = await Promise.race([net, timer]);
+  if (first) return first;
+  const own = await (await caches.open(SHELL)).match(request, { ignoreVary: true, ignoreSearch: true });
+  if (own) return own;
+  const any = await caches.match(request, MATCH);
+  if (any) return any;
+  return (await net) || Response.error();
+}
+
 // Call clips: audio elements ask for byte ranges, and Safari will not play a plain 200 answer to a
 // range request, so the whole file is kept and the range is cut from it.
 async function callClip(request) {
@@ -268,6 +289,17 @@ self.addEventListener('fetch', (event) => {
         return res;
       })().catch(() => Response.error()),
     );
+    return;
+  }
+
+  // The BirdNET worker carries a ?tf=&root=&lang= query; a newer worker must reach existing users.
+  if (request.destination === 'worker' || url.pathname.startsWith('/js/')) {
+    event.respondWith(networkFirstScript(request).catch(() => Response.error()));
+    return;
+  }
+  // The Supabase client is a per-release vendor file, like v1's shell.
+  if (url.pathname.startsWith('/vendor/supabase/')) {
+    event.respondWith(cacheFirst(request, SHELL, event).catch(() => Response.error()));
     return;
   }
 
