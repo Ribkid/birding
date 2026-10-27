@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { HABITATS, KINDS, byId, type QuizQuestion, type RoundState } from '../../lib/data';
 import { useMedia, useSightings } from '../../lib/hooks';
-import { CountUp } from '../../components/Motion';
+import { countUp, motionOK } from '../../lib/motion';
 import * as Q from '../../core/quiz.js';
 import { db } from '../../core/db.js';
 import { loadSeq } from '../../core/seqdata.js';
@@ -166,6 +166,35 @@ function Feedback({ q, right, game, onNext, onPlay, playing, restore = false }: 
   );
 }
 
+// v1 scoreHTML/playScore: the score sits inside a ring that fills to the share she got right, in the big stamp
+// numerals (.lr-score b); the first time it is shown the ring fills and the number counts up, not when she comes back
+// to it (v1 game.shown).
+function ScoreHero({ round, big, of, frac, note }: { round: RoundState; big: number; of: string; frac: number; note: string }) {
+  const ringRef = useRef<SVGCircleElement>(null);
+  const numRef = useRef<HTMLElement>(null);
+  const [first] = useState(() => !round.shown);
+  useEffect(() => {
+    round.shown = true;
+    const ring = ringRef.current;
+    if (!first || !motionOK() || !ring) return;
+    const to = ring.style.strokeDashoffset;
+    ring.style.strokeDashoffset = '100';
+    void ring.getBoundingClientRect();
+    ring.classList.add('is-filling');
+    ring.style.strokeDashoffset = to;
+    void countUp(numRef.current, 0, big, { delay: 120 });
+  }, []);
+  return (
+    <section className="lr-hero" aria-label="Your score">
+      <div className="lr-ring">
+        <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" pathLength="100" /><circle ref={ringRef} className={`lr-ring-fg${frac > 0 ? '' : ' is-zero'}`} cx="60" cy="60" r="52" pathLength="100" style={{ strokeDashoffset: (100 - frac * 100).toFixed(1) }} /></svg>
+        <p className="lr-score" role="status"><b ref={numRef} aria-hidden="true">{big}</b><span aria-hidden="true">{of}</span><span className="sr-only">{big} {of}</span></p>
+      </div>
+      <p className="lr-note">{note}</p>
+    </section>
+  );
+}
+
 function Results({ game, total, onAgain, onAgainMissed, onHub }: {
   game: RoundState; total: number; onAgain: () => void; onAgainMissed: (ids: number[]) => void; onHub: () => void;
 }) {
@@ -179,19 +208,11 @@ function Results({ game, total, onAgain, onAgainMissed, onHub }: {
   const wrongs = game.mode === 'rapid' ? missed.slice(0, 15) : missed;
   const roundName = game.daily ? "Today's challenge" : game.testId ? 'Test me' : game.pack ? packBy[game.pack]?.name : MODE_INFO[game.mode] || '';
   const headRef = useRef<HTMLHeadingElement>(null);
-  // The score counts up the first time only, not when she comes back to it (v1 game.shown).
-  const [first] = useState(() => !game.shown);
-  useEffect(() => { game.shown = true; headRef.current?.focus({ preventScroll: true }); }, [game]);
+  useEffect(() => { headRef.current?.focus({ preventScroll: true }); }, [game]);
   return (
     <div className="lr">
       <header className="page-head"><h1 ref={headRef} className="lh-title" tabIndex={-1}>{roundName}</h1></header>
-      <section className="lr-hero" aria-label="Your score">
-        <div className="lr-ring">
-          <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" pathLength="100" /><circle className={`lr-ring-fg${frac > 0 ? '' : ' is-zero'}`} cx="60" cy="60" r="52" pathLength="100" style={{ strokeDashoffset: 100 - frac * 100 }} /></svg>
-          <p className="lr-score" role="status">{first ? <CountUp value={big} /> : <span>{big}</span>}<span aria-hidden="true">{of}</span><span className="sr-only">{big} {of}</span></p>
-        </div>
-        <p className="lr-note">{note}</p>
-      </section>
+      <ScoreHero round={game} big={big} of={of} frac={frac} note={note} />
       <div className="lr-actions">
         {missed.length > 0 && !game.daily && <button type="button" className="btn btn--primary btn--block" onClick={() => onAgainMissed([...new Set(missed.map((q) => q.focus))].slice(0, ROUND))}>Practise {missed.length === 1 ? 'the one' : missed.length > ROUND ? `${ROUND} of the ${missed.length}` : `the ${missed.length}`} you missed</button>}
         {game.daily ? <Link className="btn btn--primary btn--block" to="/learn">Back to Learn</Link> : <button type="button" className={`btn ${missed.length ? '' : 'btn--primary'} btn--block`} onClick={onAgain}>Play again</button>}
@@ -643,10 +664,7 @@ function Deck({ onBack }: { onBack: () => void }) {
     return (
       <div className="lr">
         <header className="page-head"><h1 ref={headRef} className="lh-title" tabIndex={-1}>Deck reviewed</h1></header>
-        <section className="lr-hero" aria-label="Your score">
-          <div className="lr-ring"><svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="52" pathLength="100" /><circle className="lr-ring-fg" cx="60" cy="60" r="52" pathLength="100" style={{ strokeDashoffset: 100 - (seenN ? t.knew / seenN : 0) * 100 }} /></svg><p className="lr-score" role="status"><CountUp value={t.knew} /><span aria-hidden="true">knew it</span></p></div>
-          <p className="lr-note">{t.unsure ? `${t.unsure} unsure. ` : ''}{t.missed ? `${t.missed} missed, and they'll come back soon. ` : ''}Cards you knew come back in a few days.</p>
-        </section>
+        <ScoreHero round={game} big={t.knew} of="knew it" frac={seenN ? t.knew / seenN : 0} note={`${t.unsure ? `${t.unsure} unsure. ` : ''}${t.missed ? `${t.missed} missed, and they'll come back soon. ` : ''}Cards you knew come back in a few days.`} />
         <div className="lr-actions"><Link className="btn btn--primary btn--block" to="/learn">Back to Learn</Link><button type="button" className="btn btn--block" onClick={() => { setGame(null); setMode('overview'); }}>Deck overview</button></div>
       </div>
     );
