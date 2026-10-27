@@ -10,7 +10,7 @@ import { renderQuiz } from './quiz.js';
 import { renderStats } from './statsview.js';
 import { describeArea } from './mapinfo.js';
 import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
-import { vt, nameFor, flip, countUp, motionOK, settle } from './motion.js';
+import { vt, nameFor, flip, countUp, motionOK, settle, report } from './motion.js';
 import { openLayer, closeLayer, closeAllLayers, onLayerKey, topLayer, layers, keepFocus } from './layers.js';
 
 const relRate = (id, month) => { const m = monthRates(id); return m ? m.rel[month - 1] : null; };
@@ -900,7 +900,9 @@ function drawRoute(hash) {
   // A new route starts at the top, except going back, which returns to where she was.
   if (fresh) { window.scrollTo(0, state.navScroll || 0); state.navScroll = 0; lastRoute = hash; }
   afterDraw();
-  if (out && typeof out.then === 'function') out.then(() => { if ((location.hash || '#/dex') === hash) afterDraw(); }, () => {});
+  // A screen that fails while it fills in is reported here, as it was before transitions wrapped it, so what this
+  // returns settles without rejecting.
+  if (out && typeof out.then === 'function') return out.then(() => { if ((location.hash || '#/dex') === hash) afterDraw(); }, report);
   return out;
 }
 // Page title from the screen's heading, the hero photo first in line, cached photos shown at once, her photos lazily.
