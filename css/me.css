@@ -41,7 +41,8 @@
 /* Your picture: a photo, a species or a letter, with the green "seen" ring. */
 .me-av-ring { flex: none; border-radius: 50%; padding: 3px; background: var(--seen); box-shadow: 0 14px 30px -12px rgba(0, 0, 0, .7); }
 .me-av { width: 92px; height: 92px; border: 3px solid #fff; background: var(--surface-2); }
-.me-av .acct-av-letter, .me-av-xl .acct-av-letter { font-size: 2.6rem; color: var(--ink); }
+.me-av .acct-av-letter, .me-av-xl .acct-av-letter { font: 400 2.75rem/1 var(--display); color: var(--seen); }
+.me-av:has(.acct-av-letter), .me-av-xl:has(.acct-av-letter) { background: var(--surface); }
 .acct-av { position: relative; }
 .acct-av-letter { color: var(--ink); }
 .acct-av--photo img { object-position: 50% 50%; }
@@ -134,13 +135,13 @@
 
 /* Medals: a short shelf that scrolls sideways, with soft edges. */
 .me-medals {
-  list-style: none; display: flex; gap: 14px; margin: 0 -16px; padding: 4px 16px 6px; overflow-x: auto; scroll-snap-type: x mandatory;
+  position: relative; list-style: none; display: flex; gap: 14px; margin: 0 -16px; padding: 4px 16px 6px; overflow-x: auto; scroll-snap-type: x mandatory;
   scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 24px), transparent);
   mask-image: linear-gradient(to right, transparent, #000 16px, #000 calc(100% - 24px), transparent);
 }
 .me-medals::-webkit-scrollbar { display: none; }
 .me-medal { flex: 0 0 88px; scroll-snap-align: start; }
-.me-medal a { display: grid; justify-items: center; gap: 8px; color: var(--ink); text-decoration: none; text-align: center; }
+.me-medal a { position: relative; display: grid; justify-items: center; gap: 8px; color: var(--ink); text-decoration: none; text-align: center; }
 .me-medal strong { font-size: var(--fs-1); font-weight: 700; line-height: 1.25; }
 .me-medal-disc { position: relative; width: 74px; height: 74px; display: grid; place-items: center; }
 .me-medal-disc .me-ring-track { stroke-width: 4; }
