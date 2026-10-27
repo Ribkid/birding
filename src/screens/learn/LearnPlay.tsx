@@ -227,11 +227,19 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const [deckGame, setDeckGame] = useState<RoundState | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [rapidLeft, setRapidLeft] = useState(RAPID_MS);
-  const [quickCall, setQuickCall] = useState<CallClip | null>(null);
+  const [playingKey, setPlayingKey] = useState<string | null>(null);
+  const inlineAudio = useRef<HTMLAudioElement | null>(null);
   useMedia();
   const startRef = useRef(0);
   const promptRef = useRef<HTMLHeadingElement>(null);
   const wantHeadFocus = useRef(false);
+
+  const stopInline = () => {
+    inlineAudio.current?.pause();
+    inlineAudio.current = null;
+    setPlayingKey(null);
+  };
+  useEffect(() => () => { inlineAudio.current?.pause(); inlineAudio.current = null; }, []);
 
   const isDeck = pack === 'deck';
   const isDaily = pack === 'daily';
@@ -325,7 +333,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     setActive(null);
     setGame(null);
     setError('');
-    setQuickCall(null);
+    stopInline();
     await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
     const testId = pack === 'test' ? Number(params.id) : null;
     const r = isDaily ? newDailyRound() : testId
@@ -348,7 +356,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const startWithIds = async (ids: number[]) => {
     wantHeadFocus.current = true;
     stopCalls();
-    setQuickCall(null);
+    stopInline();
     await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
     const mode = game?.mode === 'rapid' ? 'photo' : pack === 'test' ? 'quick' : pack;
     const r = await newPracticeRound(mode, {
@@ -368,7 +376,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (!game) return;
     wantHeadFocus.current = true;
     stopCalls();
-    setQuickCall(null);
+    stopInline();
     game.i += 1;
     setRevealed(false);
     force();
@@ -381,7 +389,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (game.mode === 'rapid') {
       const g = game;
       window.setTimeout(() => {
-        if (g.qs[g.i] === q) { wantHeadFocus.current = true; g.i += 1; setRevealed(false); force(); }
+        if (g.qs[g.i] === q) { wantHeadFocus.current = true; stopInline(); g.i += 1; setRevealed(false); force(); }
       }, ok ? 450 : 1100);
     }
     force();
@@ -392,7 +400,19 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     const sp = which === 'answer' ? byId.get(q.focus) : byId.get(Number(which));
     if (!sp) return;
     const list = which === 'answer' && q.call ? [q.call as CallClip] : Q.callsOf(sp.id);
-    if (list.length) setQuickCall(list[Math.floor(Math.random() * list.length)]);
+    const clip = list[Math.floor(Math.random() * list.length)] as CallClip | undefined;
+    if (!clip) return;
+    if (playingKey === which && inlineAudio.current) {
+      stopInline();
+      return;
+    }
+    stopInline();
+    const audio = new Audio(clip.local || clip.src);
+    inlineAudio.current = audio;
+    setPlayingKey(which);
+    audio.onended = () => { inlineAudio.current = null; setPlayingKey(null); };
+    audio.onerror = () => { inlineAudio.current = null; setPlayingKey(null); };
+    void audio.play().catch(() => { inlineAudio.current = null; setPlayingKey(null); });
   };
 
   if (isDeck) return <Deck onBack={() => navigate('/learn')} />;
@@ -444,7 +464,6 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         {picked != null && game.mode !== 'rapid' && <Feedback q={q} right={right} game={game} onNext={next} onPlay={play} />}
         {picked != null && game.mode === 'rapid' && <p className={`lq-verdict lq-fb ${right ? 'is-right' : 'is-wrong'} lq-fb--brief`}><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{right ? 'Correct.' : `Not quite. It's the ${speciesName(q.focus)}.`}</span></p>}
       </div>
-      {quickCall && <CallPlayer call={quickCall} seed={quickCall.src} />}
     </div>
   );
 }
