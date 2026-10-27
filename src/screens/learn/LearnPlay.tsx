@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { KINDS, byId, type QuizQuestion, type RoundState } from '../../lib/data';
 import { useMedia, useSightings } from '../../lib/hooks';
 import { CountUp } from '../../components/Motion';
 import * as Q from '../../core/quiz.js';
+import { db } from '../../core/db.js';
+import { loadSeq } from '../../core/seqdata.js';
+import { loadExtras } from '../../core/gallery.js';
+import { cachedIndex } from '../../core/media.js';
 import {
   learnReady, newPracticeRound, newDailyRound, newDeckRound, answer as recordAnswer, finishRound,
   roundNote, testSet, allCards, dueCards, boxes, nextDue, addCards, gradeCard, dayStr, monthName,
@@ -208,8 +212,6 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const [revealed, setRevealed] = useState(false);
   const [rapidLeft, setRapidLeft] = useState(RAPID_MS);
   const [quickCall, setQuickCall] = useState<CallClip | null>(null);
-  const seen = useSightings();
-  const seenSet = useMemo(() => new Set(seen.map((s) => s.speciesId)), [seen]);
   useMedia();
   const startRef = useRef(0);
 
@@ -218,7 +220,11 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
 
   useEffect(() => {
     let alive = true;
-    void learnReady().then(async () => {
+    setError('');
+    setGame(null);
+    setReady(false);
+    void (async () => {
+      await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
       if (!alive) return;
       setReady(true);
       if (isDeck) return;
@@ -229,12 +235,14 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         setGame(r.game);
         return;
       }
-      const r = await newPracticeRound(pack, { seen: seenSet } as any);
+      const seenNow = new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId));
+      if (!alive) return;
+      const r = await newPracticeRound(pack, { seen: seenNow } as any);
       if (!alive) return;
       if (r.error) { setError(r.error); return; }
       setGame(r.game);
       if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
-    });
+    })();
     return () => { alive = false; };
   }, [pack, isDeck, isDaily]);
 
@@ -273,7 +281,10 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     setGame(null);
     setError('');
     setQuickCall(null);
-    const r = isDaily ? newDailyRound() : await newPracticeRound(pack, { seen: seenSet } as any);
+    await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
+    const r = isDaily ? newDailyRound() : await newPracticeRound(pack, {
+      seen: new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId)),
+    } as any);
     if (r.error) {
       setError(r.error);
       return;
@@ -284,8 +295,12 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const startWithIds = async (ids: number[]) => {
     stopCalls();
     setQuickCall(null);
+    await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
     const mode = game?.mode === 'rapid' ? 'photo' : pack;
-    const r = await newPracticeRound(mode, { ids, seen: seenSet } as any);
+    const r = await newPracticeRound(mode, {
+      ids,
+      seen: new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId)),
+    } as any);
     if (r.error) {
       setError(r.error);
       return;
