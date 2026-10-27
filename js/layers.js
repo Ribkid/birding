@@ -51,7 +51,8 @@ export function keepFocus(fn, { fallback = '' } = {}) {
   if (key) {
     const back = () => { if (lost()) (findByKey(key) || spare())?.focus({ preventScroll: true }); };
     back();
-    if (out && typeof out.then === 'function') out.then(back, () => {});
+    // No rejection handler: a redraw that fails must still surface as an uncaught error.
+    if (out && typeof out.then === 'function') out.then(back);
   }
   return out;
 }

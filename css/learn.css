@@ -96,7 +96,7 @@
 
 /* progress by kind */
 .lh-prog { list-style: none; margin: 0; padding: 0; display: grid; }
-.lh-prog li { display: grid; grid-template-columns: auto 1fr auto; gap: var(--sp-3); align-items: center; padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
+.lh-prog li { display: grid; grid-template-columns: auto 1fr 6.5em; gap: var(--sp-3); align-items: center; padding: var(--sp-3) 0; border-bottom: 1px solid var(--line); }
 .lh-prog li:last-child { border-bottom: 0; }
 .lh-dot { align-self: start; margin-top: 6px; width: 12px; height: 12px; border-radius: var(--r-pill); background: var(--kc); }
 .lh-prog-main { display: grid; gap: 2px; }

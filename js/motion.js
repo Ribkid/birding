@@ -9,6 +9,9 @@ const STAMP = 'cubic-bezier(.2, 1.4, .4, 1)';
 
 // Wait for a promise, but never longer than ms (used so a slow screen can't hold a transition open).
 export const settle = (p, ms) => Promise.race([Promise.resolve(p).catch(noop), new Promise(r => setTimeout(r, ms))]);
+// A screen that throws while it draws must still show up in the console as an uncaught error, not vanish inside
+// the transition's promises.
+export const report = e => { if (typeof reportError === 'function') reportError(e); else setTimeout(() => { throw e; }); };
 
 // ---------- view transitions ----------
 // Temporary view-transition names. A name may sit on one element only, or the browser drops the whole transition.
@@ -30,25 +33,24 @@ export const transitioning = () => !!running;
 // Run update() inside a same-document view transition. nav ('forward' | 'back' | 'swap') is set on <html> as
 // data-nav for the CSS to pick the animation (the {types} form of startViewTransition throws in Chrome 111-124).
 // update() must change the DOM synchronously; it may return a promise, which the browser waits for.
-// Resolves when the transition (or the plain update) is done.
+// Resolves when the transition (or the plain update) is done, never rejects; an error in update() is reported.
 export function vt(update, { nav = 'swap' } = {}) {
   const root = document.documentElement;
   const plain = () => { try { return update(); } finally { clearNames(); } };
+  const direct = () => { try { return Promise.resolve(plain()).then(noop, report); } catch (e) { report(e); return Promise.resolve(); } };
   if (running) {
     // A new change while one is still animating: jump the old one to its end and apply this one straight away.
     const prev = running;
     prev.skipTransition();
-    return prev.updateCallbackDone.then(plain, plain).then(noop, noop);
+    return prev.updateCallbackDone.then(direct, direct);
   }
-  if (!document.startViewTransition || document.hidden || reduce.matches) {
-    return Promise.resolve(plain()).then(noop, noop);
-  }
+  if (!document.startViewTransition || document.hidden || reduce.matches) return direct();
   root.dataset.nav = nav;
   let t;
-  try { t = document.startViewTransition(update); } catch (_) { delete root.dataset.nav; return Promise.resolve(plain()).then(noop, noop); }
+  try { t = document.startViewTransition(update); } catch (_) { delete root.dataset.nav; return direct(); }
   running = t;
   t.ready.catch(noop);
-  t.updateCallbackDone.catch(noop);
+  t.updateCallbackDone.catch(report);
   return t.finished.then(noop, noop).finally(() => {
     if (running === t) running = null;
     if (!running) delete root.dataset.nav;

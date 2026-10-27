@@ -56,7 +56,7 @@ export async function renderScan(ctx) {
   let busy = false;
 
   // ---------- footnote ----------
-  $('[data-foot]', view).textContent = `Photo ID runs on your phone with BioCLIP, a model from the Imageomics Institute (MIT licence). The first scan downloads about ${mod?.PHOTO_MODEL_MB ?? 98} MB once, best on Wi-Fi. After that it works offline.${accuracyLine(known.metrics)}`;
+  $('[data-foot]', view).textContent = `Photo ID runs on your phone with BioCLIP, a model from the Imageomics Institute (MIT licence). The first scan downloads about ${mod?.PHOTO_MODEL_MB ?? 104} MB once, best on Wi-Fi. After that it works offline.${accuracyLine(known.metrics)}`;
 
   // ---------- viewfinder ----------
   function drawVF() {
@@ -209,7 +209,7 @@ export async function renderScan(ctx) {
     out.innerHTML = ''; prog.innerHTML = '';
     status.textContent = 'Starting photo ID…';
     status.closest('.scan-work').scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-    const MB = mod?.PHOTO_MODEL_MB ?? 98;
+    const MB = mod?.PHOTO_MODEL_MB ?? 104;
     try {
       mod = mod || await import('./photoid.js');
       if (!(await mod.isPhotoModelCached())) {

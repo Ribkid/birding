@@ -11,14 +11,41 @@
   <link rel="icon" href="icons/logo.svg" type="image/svg+xml">
   <link rel="icon" href="icons/icon-32.png" sizes="32x32" type="image/png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <!-- Every module app.js imports, and the species lists species.js waits for, are asked for at once instead of
+       level by level (on one bar of signal each level otherwise waits for the one before). Keep in step with the imports. -->
+  <link rel="modulepreload" href="js/app.js">
+  <link rel="modulepreload" href="js/species.js">
+  <link rel="modulepreload" href="js/gallery.js">
+  <link rel="modulepreload" href="js/db.js">
+  <link rel="modulepreload" href="js/media.js">
+  <link rel="modulepreload" href="js/stats.js">
+  <link rel="modulepreload" href="js/ebird.js">
+  <link rel="modulepreload" href="js/seqdata.js">
+  <link rel="modulepreload" href="js/card3d.js">
+  <link rel="modulepreload" href="js/learn.js">
+  <link rel="modulepreload" href="js/quiz.js">
+  <link rel="modulepreload" href="js/statsview.js">
+  <link rel="modulepreload" href="js/scan.js">
+  <link rel="modulepreload" href="js/mapinfo.js">
+  <link rel="modulepreload" href="js/account.js">
+  <link rel="modulepreload" href="js/cloud.js">
+  <link rel="modulepreload" href="js/config.js">
+  <link rel="modulepreload" href="js/sync.js">
+  <link rel="modulepreload" href="js/motion.js">
+  <link rel="modulepreload" href="js/layers.js">
+  <link rel="modulepreload" href="js/look.js">
+  <link rel="preload" href="data/species-new.json" as="fetch" crossorigin>
+  <link rel="preload" href="data/tiers.json" as="fetch" crossorigin>
   <link rel="preload" href="fonts/schibsted-grotesk-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/big-shoulders-display-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/caprasimo-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/field.css">
   <link rel="stylesheet" href="css/learn.css">
   <link rel="stylesheet" href="css/calls.css">
   <link rel="stylesheet" href="css/scan.css">
   <link rel="stylesheet" href="css/motion.css">
+  <link rel="stylesheet" href="css/look.css">
 </head>
 <body>
   <link rel="stylesheet" href="css/screens.css">
