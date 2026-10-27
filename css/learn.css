@@ -91,6 +91,7 @@
   border-radius: var(--r-card); background: var(--surface); color: var(--ink); text-decoration: none; box-shadow: var(--shadow-card);
 }
 .lh-deck-txt { display: grid; gap: 2px; }
+@media (max-width: 359px) { .lh-deck { grid-template-columns: 1fr; gap: var(--sp-3); } }
 .lh-deck-txt strong { font-size: var(--fs-3); font-weight: 700; }
 .lh-deck-txt strong b { font: 800 var(--fs-5)/1 var(--stamp); color: var(--azure); margin-right: 2px; font-variant-numeric: tabular-nums; }
 .lh-boxes { display: grid; grid-template-columns: repeat(5, 20px); gap: 6px; align-items: end; }
@@ -112,7 +113,8 @@
 
 /* ---------- practise: kind pills, glass segmented choices, photo-backed mode cards ---------- */
 .lh-kinds {
-  display: flex; gap: var(--sp-2); overflow-x: auto; margin: 0 calc(var(--sp-4) * -1); padding: var(--sp-1) var(--sp-4) var(--sp-3);
+  /* room below for the pills' shadows, which the scroller would otherwise clip */
+  display: flex; gap: var(--sp-2); overflow-x: auto; margin: 0 calc(var(--sp-4) * -1) calc(var(--sp-3) * -1); padding: var(--sp-1) var(--sp-4) var(--sp-5);
   scroll-snap-type: x proximity; scroll-padding-inline: var(--sp-4); scrollbar-width: none;
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--sp-3), #000 calc(100% - var(--sp-5)), transparent);
   mask-image: linear-gradient(90deg, transparent, #000 var(--sp-3), #000 calc(100% - var(--sp-5)), transparent);
