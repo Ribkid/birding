@@ -151,13 +151,15 @@ export default function Scan() {
       await img.decode();
       if (ticket !== picks.current) { URL.revokeObjectURL(url); return; }
       currentFile.current = file;
+      const next: Chosen = { file, blob, url, W: img.naturalWidth, H: img.naturalHeight };
       setPhoto((previous) => {
         if (previous?.url) URL.revokeObjectURL(previous.url);
-        return { file, blob, url, W: img!.naturalWidth, H: img!.naturalHeight };
+        return next;
       });
       setAt(Date.now());
       setResult(null); setLogAt(null); setError(''); setYours('');
-      setBox({ cx: 0.5, cy: 0.5, s: 0.75 });
+      // Three quarters of the short side, but never under 24 px: v1 clamps the fresh box as well.
+      setBox(clampBox(next, { cx: 0.5, cy: 0.5, s: 0.75 }));
       setLandTick((n) => n + 1);
       setStatus(`Photo ready. Move the box onto ${subject ? `the ${subject}` : 'what you want named'}, then choose Identify.`);
     } catch {

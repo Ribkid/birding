@@ -3,6 +3,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import * as scan from '../core/scan.js';
+import { resizeImage } from '../core/profile.js';
 import Scan from '../screens/field/Scan';
 import { S, resetScan } from '../screens/field/scanSession';
 
@@ -24,6 +25,7 @@ vi.mock('../lib/motion', () => ({ countUp: vi.fn() }));
 
 const LIKELY = { res: { results: [{ id: 11, p: 0.93 }, { id: 12, p: 0.04 }], band: 'likely', bands: { likely: 0.8 } } };
 const file = new File(['photo'], 'teal.jpg', { type: 'image/jpeg', lastModified: Date.UTC(2026, 9, 1) });
+let photoSize = [400, 300];
 
 beforeAll(() => {
   window.matchMedia = ((media: string) => ({ matches: false, media, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false })) as unknown as typeof window.matchMedia;
@@ -33,6 +35,10 @@ beforeAll(() => {
   URL.revokeObjectURL = () => {};
   HTMLCanvasElement.prototype.getContext = (() => null) as unknown as typeof HTMLCanvasElement.prototype.getContext;
   if (!window.requestAnimationFrame) window.requestAnimationFrame = (cb) => window.setTimeout(() => cb(performance.now()), 0);
+  // pick() decodes the resized photo; pickPhoto() sets the size it decodes to.
+  HTMLImageElement.prototype.decode = async () => {};
+  Object.defineProperty(HTMLImageElement.prototype, 'naturalWidth', { get: () => photoSize[0] });
+  Object.defineProperty(HTMLImageElement.prototype, 'naturalHeight', { get: () => photoSize[1] });
 });
 
 // A scan kept in the session, as after a species page, a tab switch or This one → Cancel.
@@ -48,6 +54,14 @@ afterEach(cleanup);
 
 const mount = () => render(<MemoryRouter initialEntries={['/scan']}><Scan /></MemoryRouter>);
 const identifyButton = () => screen.getByText('Identify').closest('button') as HTMLButtonElement;
+// Pick a W x H photo through the Change photo input.
+async function pickPhoto(w: number, h: number) {
+  vi.mocked(resizeImage).mockResolvedValueOnce(new Blob(['x'], { type: 'image/png' }));
+  photoSize = [w, h];
+  const input = document.querySelector('.scan-change input') as HTMLInputElement;
+  fireEvent.change(input, { target: { files: [new File(['x'], 'p.png', { type: 'image/png' })] } });
+  await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Photo ready/));
+}
 
 describe('Scan', () => {
   it('identifies a photo restored from the session (item 38, new 0)', async () => {
@@ -68,5 +82,17 @@ describe('Scan', () => {
     expect(scan.markChosen).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText(label));
     expect(scan.markChosen).toHaveBeenCalledWith(1234, 'none');
+  });
+
+  it.each([
+    [2, 2, { left: '0%', top: '0%', width: '100%', height: '100%' }],
+    [30, 30, { left: '10%', top: '10%', width: '80%', height: '80%' }],
+    [400, 12, { left: '48.5%', top: '0%', width: '3%', height: '100%' }],
+    [1600, 1200, { left: '21.875%', top: '12.5%', width: '56.25%', height: '75%' }],
+  ])('a fresh %ix%i photo gets the same box as v1, never under 24 px (item 64)', async (w, h, at) => {
+    mount();
+    await pickPhoto(w, h);
+    const box = document.querySelector('[data-box]') as HTMLElement;
+    expect({ left: box.style.left, top: box.style.top, width: box.style.width, height: box.style.height }).toEqual(at);
   });
 });
