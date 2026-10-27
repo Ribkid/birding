@@ -19,10 +19,9 @@
 .chance-bar { display: block; height: 5px; border-radius: 3px; background: color-mix(in srgb, currentColor 18%, transparent); overflow: hidden; }
 .chance-bar i { display: block; height: 100%; width: var(--p); border-radius: inherit; background: var(--sun); transform-origin: left center; }
 .chance-txt { font-size: var(--fs-1); font-weight: 600; }
-.row .chance { max-width: 15rem; color: var(--ink-2); }
-.row .chance-bar i { background: var(--sun-ink); }
-:root[data-theme="dark"] .row .chance-bar i { background: var(--sun); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-theme="outdoor"]) .row .chance-bar i { background: var(--sun); } }
+.row .chance { display: flex; align-items: center; gap: 8px; margin-top: 5px; color: var(--ink-2); }
+.row .chance-bar { flex: none; width: 56px; height: 6px; }
+.row .chance-bar i { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sun-ink) 45%, transparent); }
 .chance--on-photo { color: #fff; }
 @media (prefers-reduced-motion: no-preference) {
   .enter .chance-bar i, .chance--grow .chance-bar i { animation: chance-fill 700ms var(--ease-out) 260ms both; }
@@ -180,3 +179,81 @@ body.is-scrolled .tally-search { top: calc(var(--topbar-h) + env(safe-area-inset
   .tally-ctl button, .lh-stat, .lh-link, .tcard, .pcard, .ocard, .press { transition: none; }
   .tally-ctl button:active, .lh-stat:active, .lh-link:active, .tcard:active, .pcard:active, .ocard:active, .press:active { scale: none; }
 }
+
+/* ---------- Settings: grouped inset lists on cards ---------- */
+.set-card { margin: 0 16px 14px; padding: 16px 16px 6px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; }
+.set-card:has(> .set-list:last-child) { padding-bottom: 0; }
+.set-card > p { margin: 0 0 12px; }
+.set-title, .set-card > .h2:first-child { margin: 0 0 6px; font-size: 1.125rem; line-height: 1.25; font-weight: 800; letter-spacing: -0.01em; }
+.set-note { margin: 0 0 12px; }
+.set-list { margin: 6px -16px 0; border-top: 1px solid var(--line); }
+.set-row {
+  position: relative; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 54px; padding: 10px 16px;
+  border: 0; border-radius: 0; background: none; color: var(--ink); font: inherit; font-weight: 600; text-align: left; text-decoration: none; cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+.set-row + .set-row, .set-row + input + .set-row { box-shadow: inset 0 1px 0 var(--line); }
+.set-row--info { cursor: default; }
+button.set-row:active, label.set-row:active { background: var(--surface-2); }
+.set-row:focus-visible { outline-offset: -3px; }
+.set-row-l { flex: 1; min-width: 0; }
+.set-row-v { flex: 0 1 auto; max-width: 62%; text-align: right; font-size: var(--fs-2); font-weight: 500; color: var(--ink-2); }
+.set-chev { flex: none; width: 18px; height: 18px; color: var(--ink-2); }
+.set-row--danger { justify-content: center; color: var(--danger); font-weight: 700; }
+.set-row--danger .set-row-l { flex: none; }
+.set-select {
+  appearance: none; flex: 0 1 auto; min-width: 0; max-width: 64%; min-height: 40px; padding: 6px 32px 6px 14px; border: 0; border-radius: var(--r-pill);
+  background-color: var(--surface-2); color: var(--ink); font: inherit; font-size: var(--fs-2); font-weight: 600; text-overflow: ellipsis; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-2) 50%), linear-gradient(135deg, var(--ink-2) 50%, transparent 50%);
+  background-position: calc(100% - 19px) 52%, calc(100% - 14px) 52%; background-size: 5px 5px; background-repeat: no-repeat;
+}
+.set-select:focus-visible { outline: 3px solid var(--azure); outline-offset: 2px; }
+:root[data-theme="outdoor"] .set-select { box-shadow: inset 0 0 0 1.5px var(--line-strong); background-color: var(--surface); }
+
+/* Ready for the field: a ring of what's ready, then one row per thing with a status chip that says it in words. */
+.ready-head { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+.ready-head-txt { min-width: 0; }
+.ready-head-txt p { margin: 2px 0 0; }
+.ready-ring { position: relative; flex: none; width: 58px; height: 58px; display: grid; place-items: center; }
+.ready-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; rotate: -90deg; }
+.ready-ring circle { fill: none; stroke-width: 5.5; }
+.ready-ring-track { stroke: var(--surface-2); }
+.ready-ring-fill { stroke: var(--seen); stroke-dasharray: calc(var(--p, 0) * 100) 100; transition: stroke-dasharray 900ms var(--ease-out); }
+.ready-ring b { display: inline-block; font: 800 1.5rem/1 var(--stamp); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .ready-ring-fill { transition: none; } }
+.set-ready .ready-list { margin: 10px -16px 0; padding: 0 16px; border-radius: 0; background: none; box-shadow: none; border-top: 1px solid var(--line); }
+.set-ready .ready-row {
+  grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name act" "text text" "prog prog";
+  gap: 2px 12px; min-height: 0; padding: 12px 0 14px;
+}
+.ready-name { grid-area: name; align-self: center; font-weight: 700; }
+.set-ready .ready-act { grid-area: act; align-self: center; }
+.ready-text { grid-area: text; }
+.set-ready .meter { grid-area: prog; }
+.ready-chip {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 3px 12px; border: 0; border-radius: var(--r-pill);
+  font: inherit; font-size: var(--fs-2); font-weight: 700; line-height: 1.2; white-space: nowrap; text-decoration: none;
+}
+.ready-chip svg { width: 16px; height: 16px; margin-left: -2px; }
+.ready-chip--ok { background: color-mix(in srgb, var(--seen) 13%, var(--surface)); color: var(--seen); }
+.ready-chip--wait { background: var(--surface-2); color: var(--ink-2); font-weight: 600; }
+.ready-chip--get {
+  min-height: 40px; padding: 6px 16px; cursor: pointer; color: var(--azure);
+  background: color-mix(in srgb, var(--azure) 9%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--azure) 28%, transparent), 0 8px 18px -12px color-mix(in srgb, var(--azure) 70%, transparent);
+  transition: scale var(--dur-2) var(--ease-spring);
+}
+.ready-chip--get:active { scale: .95; transition-duration: var(--dur-1); }
+:root[data-theme="outdoor"] .ready-chip--get { box-shadow: inset 0 0 0 2px var(--azure); background: var(--surface); }
+:root[data-theme="outdoor"] .ready-chip--ok { box-shadow: inset 0 0 0 1.5px var(--seen); }
+.ready-chip--busy { background: color-mix(in srgb, var(--sun) 22%, var(--surface)); color: var(--ink); }
+.ready-chip--busy::before { content: ''; width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: ready-spin 900ms linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ready-chip--busy::before { animation: none; } .ready-chip--get { transition: none; } }
+.set-ready .ready-row--ok .ready-text { color: var(--ink-2); }
+
+/* The account section (js/account.js) sits in its own card. */
+.set-acct .acct-google { margin: 8px 0 14px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.set-card .field input, .set-card .field textarea, .set-card .field select { background: var(--paper); }
+.set-card .btn:not(.btn--primary):not(.btn--quiet), .set-card .check--card { background: var(--paper); box-shadow: none; }
+.set-acct .acct-card { padding: 12px; margin: 4px 0 12px; border-radius: var(--r-2); background: var(--paper); }
+.set-acct > :last-child { margin-bottom: 10px; }

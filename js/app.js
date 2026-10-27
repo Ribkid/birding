@@ -2334,46 +2334,58 @@ async function renderSettings() {
   try { const est = await navigator.storage.estimate(); usage = `${(est.usage / 1e6).toFixed(1)} MB used on this phone`; } catch (_) {}
   const persisted = await navigator.storage?.persisted?.().catch(() => false);
   if (location.hash !== '#/settings') return; // left while the call pack was loading
+  const chev = '<svg class="set-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const installed = matchMedia('(display-mode: standalone)').matches;
   view.innerHTML = `
     <header class="page-head page-head--back"><a class="iconbtn" href="#/badges" aria-label="Back">${icon.back}</a><h1>Settings</h1></header>
-    <section class="block ready" aria-labelledby="field-h">
-      <h2 class="h2" id="field-h">Ready for the field</h2>
-      <p class="muted small" data-field-sum>What works on this phone with no signal.</p>
+    <section class="set-card set-ready" aria-labelledby="field-h">
+      <div class="ready-head">
+        <span class="ready-ring" data-field-ring style="--p:0" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="ready-ring-track" cx="24" cy="24" r="20"/><circle class="ready-ring-fill" cx="24" cy="24" r="20" pathLength="100"/></svg><b data-field-n>0</b></span>
+        <div class="ready-head-txt"><h2 class="set-title" id="field-h">Ready for the field</h2><p class="small muted" data-field-sum>What works on this phone with no signal.</p></div>
+      </div>
       <ul class="ready-list" data-field-list>${FIELD.map(f => `<li class="ready-row" data-field="${f.key}">
-        <span class="ready-mark" aria-hidden="true"></span>
-        <div class="ready-main"><strong>${f.label}</strong><span class="small muted" data-field-text tabindex="-1">Checking…</span>
-          <div class="meter meter--thin hidden" data-field-prog style="--p:0%"><span></span></div></div>
-        <div class="ready-act" data-field-act></div></li>`).join('')}</ul>
+        <strong class="ready-name">${f.label}</strong>
+        <div class="ready-act" data-field-act><span class="ready-chip ready-chip--wait">Checking</span></div>
+        <span class="ready-text small muted" data-field-text tabindex="-1">Checking…</span>
+        <div class="meter meter--thin hidden" data-field-prog style="--p:0%"><span></span></div></li>`).join('')}</ul>
     </section>
-    <section class="block" data-account></section>
-    <section class="block">
-      <label class="field"><span>Theme</span><select data-theme>${[['auto', 'Match my phone'], ['light', 'Light'], ['dark', 'Dark'], ['outdoor', 'Outdoor (high contrast for bright sun)']].map(([v, l]) => `<option value="${v}" ${state.settings.theme === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      ${state.installPrompt ? '<button class="btn btn--primary" data-install>Install app on this phone</button>' : `<p class="small muted">${matchMedia('(display-mode: standalone)').matches ? "Installed on this phone." : 'To install: open the browser menu, then Add to Home screen.'}</p>`}
-      <button class="btn btn--quiet" data-welcome>Show the welcome screen</button>
+    <section class="set-card set-acct" data-account></section>
+    <section class="set-card" aria-labelledby="phone-h">
+      <h2 class="set-title" id="phone-h">On this phone</h2>
+      <div class="set-list">
+        <label class="set-row"><span class="set-row-l">Theme</span><select class="set-select" data-theme>${[['auto', 'Match my phone'], ['light', 'Light'], ['dark', 'Dark'], ['outdoor', 'Outdoor (high contrast for bright sun)']].map(([v, l]) => `<option value="${v}" ${state.settings.theme === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        ${state.installPrompt ? `<button type="button" class="set-row" data-install><span class="set-row-l">Install app on this phone</span>${chev}</button>`
+          : `<div class="set-row set-row--info"><span class="set-row-l">Install</span><span class="set-row-v">${installed ? 'Installed on this phone' : 'Open the browser menu, then Add to Home screen'}</span></div>`}
+        <button type="button" class="set-row" data-welcome><span class="set-row-l">Show the welcome screen</span>${chev}</button>
+      </div>
     </section>
-    <section class="block">
-      <h2 class="h2">Send to eBird</h2>
-      <p class="muted small">Download your bird sightings as an eBird Record Format file (eBird only takes birds, so other animals and plants are left out). On a computer, go to ebird.org, then Submit, then Import data, and choose "eBird Record Format (Extended)". eBird may ask you to confirm a few bird names and locations.</p>
-      <button class="btn" data-ebird>Export for eBird</button>
+    <section class="set-card" aria-labelledby="ebird-h">
+      <h2 class="set-title" id="ebird-h">Send to eBird</h2>
+      <p class="set-note small muted">Download your bird sightings as an eBird Record Format file (eBird only takes birds, so other animals and plants are left out). On a computer, go to ebird.org, then Submit, then Import data, and choose "eBird Record Format (Extended)". eBird may ask you to confirm a few bird names and locations.</p>
+      <div class="set-list"><button type="button" class="set-row" data-ebird><span class="set-row-l">Export for eBird</span>${chev}</button></div>
     </section>
-    <section class="block">
-      <h2 class="h2">Backup</h2>
-      <p class="muted small">Your sightings and photos live only on this phone${persisted ? '' : ', and clearing the browser\'s site data would erase them'}. Save a backup now and then. ${usage}</p>
-      <div class="row-start"><button class="btn" data-backup>Save backup</button>
-      <label class="btn">Restore backup<input type="file" accept=".json,application/json" data-restore hidden></label></div>
+    <section class="set-card" aria-labelledby="backup-h">
+      <h2 class="set-title" id="backup-h">Backup</h2>
+      <p class="set-note small muted">Your sightings and photos live only on this phone${persisted ? '' : ', and clearing the browser\'s site data would erase them'}. Save a backup now and then. ${usage}</p>
+      <div class="set-list">
+        <button type="button" class="set-row" data-backup><span class="set-row-l">Save backup</span>${chev}</button>
+        <button type="button" class="set-row" data-restore-pick><span class="set-row-l">Restore backup</span>${chev}</button>
+        <input type="file" accept=".json,application/json" data-restore hidden>
+      </div>
     </section>
-    <section class="block">
-      <h2 class="h2">About</h2>
+    <section class="set-card" aria-labelledby="about-h">
+      <h2 class="set-title" id="about-h">About</h2>
       <p class="small">Photos come from Wikipedia, Wikimedia Commons and iNaturalist contributors (via the Atlas of Living Australia), each credited on its page. Each species' write-up lists the sources it is based on. Calls are from iNaturalist (via the ALA) and Wikimedia Commons. The clips saved for offline are shortened, level-matched copies of iNaturalist recordings, each credited where it plays. Maps &copy; OpenStreetMap contributors; satellite imagery &copy; Esri, Maxar and Earthstar Geographics.</p>
       <p class="small">Hotspots, seasons and rarity come from Atlas of Living Australia records for SEQ since 2016 (including eBird and BirdLife Australia data). Birds: 40,000+ records is Common, 15,000+ Fairly common, 4,000+ Uncommon, 800+ Scarce and fewer is Rare. Other animals and plants are recorded far less often than birds, so each kind is ranked against its own kind: the most-recorded fifth of that kind is Common, the next fifth Fairly common, and so on down to Rare. Seasons are also compared within each kind. Record counts lean towards easy-to-see species and popular spots, so treat rarity as a guide.</p>
       <p class="small muted">Version 3.0</p>
     </section>
-    <section class="block">
-      <h2 class="h2">Start over</h2>
-      <button class="btn btn--danger btn--quiet" data-wipe>Delete all my sightings</button>
+    <section class="set-card" aria-labelledby="over-h">
+      <h2 class="set-title" id="over-h">Start over</h2>
+      <div class="set-list"><button type="button" class="set-row set-row--danger" data-wipe><span class="set-row-l">Delete all my sightings</span></button></div>
     </section>`;
   renderAccountSection($('[data-account]', view));
   wireField(callWho);
+  stagger(view, '.set-card', { key: 'settings', max: 8 });
   view.onchange = async e => {
     if (e.target.matches('[data-colour]')) { state.settings.colourUnseen = e.target.checked; await db.kvSet('settings', state.settings); }
     if (e.target.matches('[data-theme]')) { state.settings.theme = e.target.value; applyTheme(); await db.kvSet('settings', state.settings); }
@@ -2399,6 +2411,7 @@ async function renderSettings() {
   view.onclick = async e => {
     if (e.target.closest('[data-install]')) promptInstall();
     if (e.target.closest('[data-welcome]')) showWelcome();
+    if (e.target.closest('[data-restore-pick]')) $('[data-restore]', view).click();
     if (e.target.closest('[data-ebird]')) {
       if (!state.sightings.some(x => byId.get(x.speciesId)?.kind === 'bird')) { toast('Log a bird first. eBird only takes birds.'); return; }
       download(`birddex-ebird-${todayStr()}.csv`, new Blob([toEbirdCsv(state.sightings, state.outings)], { type: 'text/csv' }));
@@ -2541,6 +2554,10 @@ function wireField(callWho) {
     const n = FIELD.filter(f => results[f.key].ok).length;
     sum.textContent = n === FIELD.length ? 'Everything here works with no signal.'
       : `${n} of ${FIELD.length} ready. ${navigator.onLine ? 'Get the rest while you have Wi-Fi.' : 'The rest needs signal to save.'}`;
+    // The ring fills to the share that is ready, and its number counts up.
+    const ring = $('[data-field-ring]', view), num = $('[data-field-n]', view);
+    if (ring) { ring.style.setProperty('--p', n / FIELD.length); ring.classList.toggle('ready-ring--all', n === FIELD.length); }
+    if (num && num.textContent !== String(n)) countUp(num, Number(num.textContent) || 0, n);
   };
   const paint = (key, r) => {
     const el = row(key);
@@ -2550,9 +2567,9 @@ function wireField(callWho) {
     el.classList.toggle('ready-row--ok', !!r.ok);
     el.classList.toggle('ready-row--todo', !r.ok);
     $('[data-field-text]', el).textContent = r.text;
-    $('[data-field-act]', el).innerHTML = r.ok ? ''
-      : r.get ? `<button type="button" class="btn btn--small" data-field-get="${key}" aria-label="Get it now: ${esc(label(key))}">Get it now</button>`
-      : r.link ? `<a class="btn btn--small" href="${r.link}">${esc(r.linkText)}</a>` : '';
+    $('[data-field-act]', el).innerHTML = r.ok ? `<span class="ready-chip ready-chip--ok">${icon.tick}Saved</span>`
+      : r.get ? `<button type="button" class="ready-chip ready-chip--get" data-field-get="${key}" aria-label="Get it now: ${esc(label(key))}">Get it now</button>`
+      : r.link ? `<a class="ready-chip ready-chip--get" href="${r.link}">${esc(r.linkText)}</a>` : '<span class="ready-chip ready-chip--wait">Not yet</span>';
     summary();
   };
   const check = key => checkField(key, callWho).catch(() => ({ ok: false, text: "Couldn't check this one. Open Settings again to retry." })).then(r => paint(key, r));
@@ -2564,7 +2581,7 @@ function wireField(callWho) {
     delete results[key];
     el.classList.remove('ready-row--ok', 'ready-row--todo');
     el.classList.add('ready-row--busy');
-    act.innerHTML = '';
+    act.innerHTML = '<span class="ready-chip ready-chip--busy">Saving</span>';
     if (hadFocus) text.focus({ preventScroll: true });
     prog.classList.remove('hidden');
     const on = (f, t) => {
