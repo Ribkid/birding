@@ -24,6 +24,7 @@ import SignIn from './screens/me/SignIn';
 import PublicProfile from './screens/me/PublicProfile';
 import { Placeholder } from './screens/Placeholder';
 import { TabBar } from './components/TabBar';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
 import { closeAllLayers } from './lib/layers';
@@ -64,6 +65,7 @@ export default function App() {
       <ScrollReset />
       <TopBar />
       <main id="view" tabIndex={-1}>
+        <ErrorBoundary>
         <Routes>
           <Route path="/" element={<Navigate to="/dex" replace />} />
           <Route path="/dex" element={<Dex />} />
@@ -104,6 +106,7 @@ export default function App() {
 
           <Route path="*" element={<Placeholder title="Not found" owner="—" />} />
         </Routes>
+        </ErrorBoundary>
       </main>
       <TabBar />
     </>

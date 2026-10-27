@@ -85,7 +85,7 @@ export default function Learn() {
   const heroSrc = hero ? faceSrc(hero.id, 'large') : '';
   const tintRef = useTint<HTMLAnchorElement>(heroSrc, null);
 
-  const packs = useMemo(() => packProgress().filter((p: { total: number }) => p.total >= 5), [ready, L?.packs]);
+  const packs = useMemo(() => (ready ? packProgress().filter((p: { total: number }) => p.total >= 5) : []), [ready, L?.packs]);
   const packN = packs.length;
   const packsDone = packs.filter((p: { plays: number }) => p.plays > 0).length;
   const mastered = ready ? Object.keys(L?.cards || {}).filter((id) => isMastered(Number(id))).length : 0;
@@ -114,6 +114,8 @@ export default function Learn() {
   };
   const faces = useMemo(() => modeFaces(prefs.kind), [prefs.kind, ready]);
   const hubRef = useStagger<HTMLDivElement>('.lh-daily, .lh-packs > li, .lh-modes[data-modes] > li, .lh-stats > li', 'learn-hub');
+
+  if (!ready) return <div className="learn learn--loading" aria-busy="true" />;
 
   const set = (patch: Record<string, unknown>) => { setPrefs(patch); force(); };
   const callOk = Q.CALL_KINDS.includes(prefs.kind) || prefs.kind === 'animals';
