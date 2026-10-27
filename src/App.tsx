@@ -25,6 +25,7 @@ import PublicProfile from './screens/me/PublicProfile';
 import { Placeholder } from './screens/Placeholder';
 import { TabBar } from './components/TabBar';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Welcome } from './components/Welcome';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
 import { closeAllLayers } from './lib/layers';
@@ -73,6 +74,7 @@ export default function App() {
       <ScrollReset />
       <TopBar />
       <SyncBanner />
+      <Welcome />
       <main id="view" tabIndex={-1}>
         <ErrorBoundary>
         <Routes>

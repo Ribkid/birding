@@ -34,6 +34,7 @@ import { SpeciesImage } from '../../components/SpeciesImage';
 import { deleteAccount as deleteMyAccount } from '../../core/account.js';
 import { ConfirmDialog } from '../lists/shared';
 import { avatarUrl, getMyCloud } from '../../core/profile.js';
+import { openWelcome } from '../../components/Welcome';
 import { FIELD, checkField, fieldJob, fieldJobs, fieldLabel, type FieldKey, type FieldReport, type FieldResult } from './fieldReady';
 import './progress.css';
 
@@ -955,6 +956,11 @@ export default function Settings() {
           })}
         </ul>
         <p className="sr-only" role="status" aria-live="polite">{fieldAnnounce}</p>
+      </section>
+
+      <section className="block">
+        <h2 className="h2">On this phone</h2>
+        <button type="button" className="btn" onClick={openWelcome}>Show the welcome screen</button>
       </section>
 
       <section className="block">
