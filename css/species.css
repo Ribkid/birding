@@ -1,0 +1,296 @@
+/* Species page, Compare and the card overlay: photo-first and glassy.
+   The hero photo runs under the status bar with the name set on a scrim tinted from the photo (--tint-deep from
+   js/look.js) or, when the photo can't be read, from the kind colour. Glass controls float over it; the content is
+   a sheet that slides up over its foot. Every rule is scoped under .bird / .compare so it wins over the older
+   single-class rules in app.css and screens.css whatever order the sheets load in. */
+
+/* ---------- colour ---------- */
+.bird, .compare {
+  --deep: var(--tint-deep, color-mix(in srgb, var(--kc, var(--k-bird)) 28%, #06120F));
+  --card-shadow: var(--shadow-card);
+}
+/* No colour from the photo (its host doesn't allow reading it): the kind colour leads instead. */
+#view:not(.tinted) .bird {
+  --accent: var(--kc); --on-accent: var(--on-kind);
+  --accent-soft: color-mix(in srgb, var(--kc) 13%, var(--surface));
+}
+:root[data-theme="outdoor"] .bird, :root[data-theme="outdoor"] .compare { --card-shadow: 0 0 0 1.5px var(--line-strong); }
+
+/* ---------- hero ---------- */
+.bird .bird-hero {
+  --hero-h: clamp(340px, 60vh, 640px);
+  position: relative; height: var(--hero-h); overflow: hidden; isolation: isolate;
+  background: var(--deep); color: #fff;
+}
+.bird .hero-photo, .bird .hero-model { position: absolute; inset: 0; }
+.bird .gallery, .bird .slide { height: 100%; }
+.bird .slide { background: var(--deep); }
+.bird .slide .whole, .bird .slide .img-missing { height: 100%; aspect-ratio: auto; }
+/* Full-bleed: the photo fills the frame; the blurred copy stays underneath while it loads. */
+.bird .slide .whole-fg { object-fit: cover; object-position: 50% 38%; }
+.bird .slide .img-missing { background: linear-gradient(160deg, color-mix(in srgb, var(--kc) 40%, #0B1F1A), var(--deep)); }
+
+/* The scrim: a little shade at the top for the status bar and controls, the tint rising from the foot for the name. */
+.bird .hero-scrim {
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(6, 18, 15, .42), rgba(6, 18, 15, 0) 26%),
+    linear-gradient(to top, var(--deep) 0, color-mix(in srgb, var(--deep) 88%, transparent) 16%, color-mix(in srgb, var(--deep) 55%, transparent) 34%, transparent 58%);
+}
+.bird .hero-scrim::after { content: ''; position: absolute; inset: 0; background: var(--deep); opacity: 0; }
+.bird .bird-hero--model .hero-scrim { background: linear-gradient(to top, var(--deep) 0, color-mix(in srgb, var(--deep) 60%, transparent) 22%, transparent 42%); }
+
+.bird .hero-cap {
+  position: absolute; z-index: 2; left: 0; right: 0; bottom: 24px; padding: 0 var(--sp-4) var(--sp-4);
+  display: grid; gap: 2px; pointer-events: none;
+}
+.bird .hero-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: 6px; }
+.bird .hero-meta .band { font-size: 1rem; box-shadow: 0 2px 8px rgba(0, 0, 0, .25); }
+.bird .hero-meta .kindtag { box-shadow: 0 2px 8px rgba(0, 0, 0, .25); }
+.bird .bird-hero .bird-name {
+  margin: 0; color: #fff; font: 800 clamp(2rem, 9vw, 2.75rem)/1.02 var(--font); letter-spacing: -0.025em;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, .35); overflow-wrap: anywhere;
+}
+.bird .bird-hero .bird-name:focus { outline: none; }
+.bird .bird-hero .sci { margin: 2px 0 0; color: rgba(255, 255, 255, .88); font-size: var(--fs-3); }
+.bird .hero-count {
+  position: static; margin-left: auto; padding: 5px 10px 4px; border-radius: var(--r-pill);
+  background: rgba(6, 18, 15, .42); color: #fff; font: 600 var(--fs-2)/1 var(--stamp); letter-spacing: .05em;
+}
+.bird .hero-credit {
+  margin: 6px 0 0; padding: 0; min-height: 0; color: rgba(255, 255, 255, .78); font-size: var(--fs-1); line-height: 1.4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto; justify-self: start; max-width: 100%;
+}
+.bird .hero-credit a { color: inherit; }
+.bird .hero-credit:empty { display: none; }
+
+/* Glass controls: back and search circles, and the Photos / 3D model / Card switch between them. */
+.bird .bird-hero > .iconbtn--float, .bird .bird-hero > .hero-tabs {
+  z-index: 3; color: var(--ink);
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+}
+.bird .bird-hero > .iconbtn--float { top: calc(10px + env(safe-area-inset-top)); left: 12px; }
+.bird .bird-hero > .iconbtn--right { left: auto; right: 12px; }
+.bird .bird-hero > .hero-tabs {
+  position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 50%; right: auto; bottom: auto; translate: -50% 0;
+  display: flex; gap: 2px; height: var(--tap); padding: 3px; border-radius: var(--r-pill);
+}
+.bird .hero-tabs button {
+  position: relative; min-height: 38px; padding: 0 12px; border: 0; border-radius: var(--r-pill);
+  background: transparent; color: var(--ink); font: 700 var(--fs-1)/1 var(--font); white-space: nowrap; cursor: pointer;
+  transition: background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out), scale var(--dur-1) var(--ease-out);
+}
+.bird .hero-tabs button::after { content: ''; position: absolute; inset: -3px -1px; } /* full 44px touch height */
+.bird .hero-tabs button[aria-selected="true"] { background: var(--ink); color: var(--paper); }
+.bird .hero-tabs button:active { scale: .96; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .bird .bird-hero > .iconbtn--float, .bird .bird-hero > .hero-tabs, .bird .logbar { background: var(--glass-strong); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .bird .bird-hero > .iconbtn--float, .bird .bird-hero > .hero-tabs, .bird .logbar { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* 3D model: a stage lit in the photo's colour. */
+.bird .hero-model {
+  aspect-ratio: auto; max-height: none; z-index: 0;
+  background: radial-gradient(120% 80% at 50% 36%, color-mix(in srgb, var(--accent, var(--kc)) 55%, #fff) 0, color-mix(in srgb, var(--accent, var(--kc)) 60%, var(--deep)) 48%, var(--deep) 100%);
+}
+.bird .hero-model canvas { touch-action: pan-y; }
+.bird .model-loading, .bird .model-hint {
+  top: calc(66px + env(safe-area-inset-top)); left: 50%; right: auto; translate: -50% 0; width: max-content; max-width: calc(100% - 32px);
+  padding: 6px 12px; border-radius: var(--r-pill); background: rgba(6, 18, 15, .45); color: #fff; font-weight: 600;
+}
+
+/* Parallax: the photo drifts slower than the page and swells a little; the scrim deepens. Decorative only. */
+@supports ((animation-timeline: scroll()) and (animation-range: 0% 100%)) {
+  @media (prefers-reduced-motion: no-preference) {
+    .bird .hero-photo, .bird .hero-scrim::after, .bird .hero-cap {
+      animation: linear both; animation-timeline: scroll(root block); animation-range: 0 var(--hero-h);
+    }
+    .bird .hero-photo { animation-name: sp-hero-drift; }
+    .bird .hero-scrim::after { animation-name: sp-scrim-deepen; }
+    .bird .hero-cap { animation-name: sp-cap-lift; }
+  }
+}
+@keyframes sp-hero-drift { to { transform: translateY(34%) scale(1.08); } }
+@keyframes sp-scrim-deepen { to { opacity: .55; } }
+@keyframes sp-cap-lift { to { transform: translateY(18%); opacity: .2; } }
+
+/* ---------- the sheet ---------- */
+.bird .bird-body {
+  position: relative; z-index: 1; margin-top: -24px; padding: var(--sp-5) var(--sp-4) calc(var(--sp-7) + 24px);
+  background: var(--paper); border-radius: 28px 28px 0 0;
+}
+.bird .bird-sum { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-3); margin-bottom: var(--sp-4); }
+.bird .bird-sum [data-mastery]:empty { display: none; }
+.bird .rarity-line { font-weight: 500; }
+.bird .bird-actions { gap: 10px; }
+.bird .bird-actions .btn--primary { border-radius: var(--r-card); min-height: 54px; font-size: 1.0625rem; }
+.bird .btn--share { width: 54px; min-height: 54px; padding: 0; flex: none; border-radius: var(--r-card); }
+.bird .btn--share svg { width: 22px; height: 22px; }
+.bird .btn--primary { background: var(--accent); color: var(--on-accent); box-shadow: 0 12px 24px -12px var(--accent); }
+.bird .playbtn { background: var(--accent); color: var(--on-accent); }
+.bird .seen-line { margin: var(--sp-3) 2px 0; }
+
+.bird .h2 { font-size: var(--fs-4); margin: var(--sp-6) 0 var(--sp-3); }
+
+/* Section cards: How to spot it is soft-tinted, When and where and Calls are raised; About and Your sightings
+   sit on the page like an article. */
+.bird .spot, .bird .where, .bird .call:not(:empty) {
+  margin-top: var(--sp-5); padding: 2px var(--sp-4) var(--sp-5); border-radius: var(--r-card);
+}
+.bird .spot .h2, .bird .where .h2, .bird .call .h2 { margin-top: var(--sp-5); }
+.bird .spot { background: var(--accent-soft); }
+.bird .where, .bird .call:not(:empty) { background: var(--surface); box-shadow: var(--card-shadow); }
+:root[data-theme="outdoor"] .bird .spot { box-shadow: 0 0 0 1.5px var(--line-strong); }
+
+/* How to spot it */
+.bird .spot-marks li::before { background: var(--accent); }
+.bird .spot-call { background: var(--surface); box-shadow: none; border-radius: var(--r-2); }
+.bird .spot .facts div { border-top-color: color-mix(in srgb, var(--accent) 24%, transparent); }
+.bird .spot-hab li { background: var(--surface); }
+.bird .spot-hab .spot-hab--night { background: var(--ink); color: var(--paper); }
+.bird .spot-test { box-shadow: none; background: var(--surface); }
+.bird .spot-test svg { color: var(--accent); }
+
+/* Easy to confuse with: a snap carousel of photo cards that runs to the screen edges. */
+.bird .confuse .small { margin: 0 0 var(--sp-2); }
+.bird .lk-rail {
+  display: flex; gap: var(--sp-3); margin: 0 calc(-1 * var(--sp-4)); padding: 6px var(--sp-4) 22px; list-style: none;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: var(--sp-4); scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--sp-4), #000 calc(100% - var(--sp-4)), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 var(--sp-4), #000 calc(100% - var(--sp-4)), transparent);
+}
+.bird .lk-rail::-webkit-scrollbar { display: none; }
+.bird .lk-card {
+  flex: 0 0 min(236px, 72%); scroll-snap-align: start; display: flex; flex-direction: column;
+  background: var(--surface); border-radius: var(--r-card); box-shadow: var(--card-shadow); overflow: hidden;
+}
+.bird .lk-sp { display: block; color: var(--ink); text-decoration: none; }
+.bird .lk-photo { position: relative; display: block; aspect-ratio: 4 / 3; border-radius: 0; background: var(--surface-2); overflow: hidden; }
+.bird .lk-photo img, .bird .lk-photo .img-missing { display: block; width: 100%; height: 100%; object-fit: cover; transition: scale var(--dur-3) var(--ease-out); }
+.bird .lk-card:not(.kind--bird) .lk-photo::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--kc); }
+.bird .lk-sp:active .lk-photo img { scale: 1.04; }
+.bird .lk-name { display: block; padding: var(--sp-3) 14px 0; font-weight: 700; line-height: 1.25; }
+.bird .lk-tell { flex: 1; margin: 4px 0 0; padding: 0 14px; font-size: var(--fs-2); line-height: 1.45; }
+.bird .lk-cmp { align-self: flex-start; margin: var(--sp-3) 14px 14px; min-height: var(--tap); background: var(--accent-soft); box-shadow: none; }
+
+/* When and where: the month bars grow up the first time they are seen. */
+.bird .season i, .compare .season i { background: var(--accent, var(--kc)); }
+.bird .season i.now { background: var(--sun); }
+.bird .season, .compare .season { --grow-delay: 26ms; }
+.season[data-grow] i { transform-origin: 50% 100%; transition: transform var(--dur-4) var(--ease-out) calc(var(--i, 0) * var(--grow-delay, 26ms)); }
+.season[data-grow]:not(.is-in) i { transform: scaleY(.04); }
+@media (prefers-reduced-motion: reduce) { .season[data-grow] i { transform: none !important; transition: none; } }
+.bird .where .spots li:last-child { border-bottom: 0; }
+.bird .where .btn { box-shadow: none; background: var(--accent-soft); }
+.bird .where .btn svg { color: var(--accent); }
+
+/* Calls */
+.bird .call .playbtn { box-shadow: 0 8px 18px -10px var(--accent); }
+.bird .call .call-progress span { background: var(--accent); }
+
+/* About */
+.bird .wiki .h2 { margin-top: var(--sp-6); }
+.bird .wiki p { line-height: 1.6; }
+
+/* Your sightings: her photos as a strip, then the list. */
+.bird .mine-strip {
+  display: flex; gap: var(--sp-2); margin: 0 calc(-1 * var(--sp-4)) var(--sp-2); padding: 2px var(--sp-4) 10px; list-style: none;
+  overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: var(--sp-4); scrollbar-width: none;
+}
+.bird .mine-strip::-webkit-scrollbar { display: none; }
+.bird .mine-strip li { flex: none; scroll-snap-align: start; }
+.bird .mine-ph {
+  display: block; width: 112px; height: 140px; padding: 0; border: 0; border-radius: var(--r-2); overflow: hidden;
+  background: var(--surface-2); box-shadow: var(--card-shadow); cursor: pointer; transition: scale var(--dur-1) var(--ease-out);
+}
+.bird .mine-ph:active { scale: .96; }
+.bird .mine-ph img { width: 100%; height: 100%; object-fit: cover; }
+.bird .hist-row { min-height: 56px; color: var(--ink); }
+.bird .hist li:last-child .hist-row { border-bottom: 0; }
+
+/* Prev / next: photo chips. */
+.bird .more-links { margin-top: var(--sp-6); }
+.bird .prevnext { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: var(--sp-4); padding-top: 0; border-top: 0; }
+.bird .prevnext > span:empty { display: block; }
+.bird .pn {
+  display: flex; align-items: center; gap: var(--sp-2); min-width: 0; max-width: none; min-height: 64px; padding: 8px 10px 8px 6px;
+  border-radius: var(--r-card); background: var(--surface); box-shadow: var(--card-shadow); color: var(--ink); text-decoration: none;
+  transition: scale var(--dur-1) var(--ease-out);
+}
+.bird .pn:active { scale: .97; }
+.bird .pn > svg { width: 18px; height: 18px; flex: none; color: var(--ink-2); }
+.bird .pn--next { flex-direction: row-reverse; padding: 8px 6px 8px 10px; text-align: right; }
+.bird .pn--next > svg { transform: scaleX(-1); }
+.bird .pn-ph { flex: none; width: 46px; height: 46px; border-radius: 50%; overflow: hidden; background: var(--surface-2); }
+.bird .pn-ph img, .bird .pn-ph .img-missing { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bird .pn:not(.kind--bird) .pn-ph { box-shadow: 0 0 0 2px var(--kc); }
+.bird .pn-txt { display: grid; min-width: 0; line-height: 1.2; }
+.bird .pn-no { font: 800 var(--fs-2)/1.1 var(--stamp); letter-spacing: .05em; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.bird .pn-txt strong { font-size: var(--fs-2); font-weight: 700; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* ---------- sticky Log bar: glass, above the floating tab bar (and above the outing bar when one shows) ---------- */
+.bird .logbar {
+  left: 12px; right: 12px; bottom: calc(var(--chrome-bottom) + 2px); min-height: 60px; padding: 8px 8px 8px 12px; border-radius: 22px;
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float); color: var(--ink);
+}
+body.has-outing .bird .logbar { bottom: calc(var(--chrome-bottom) + 62px); }
+.bird .logbar .btn { min-height: var(--tap); padding: 8px 18px; border-radius: var(--r-pill); }
+
+/* ---------- Compare ---------- */
+.compare .cmp-stage { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: var(--sp-2) var(--sp-4) 0; }
+.compare .cmp-card {
+  position: relative; display: block; aspect-ratio: 3 / 4; border-radius: var(--r-card); overflow: hidden;
+  background: var(--deep); box-shadow: var(--card-shadow); color: #fff; text-decoration: none; isolation: isolate;
+  transition: scale var(--dur-1) var(--ease-out);
+}
+.compare .cmp-card:active { scale: .97; }
+.compare .cmp-card > img, .compare .cmp-card > .img-missing { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 38%; }
+.compare .cmp-card::after {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: linear-gradient(to top, rgba(6, 18, 15, .82) 0, rgba(6, 18, 15, .5) 24%, transparent 50%);
+}
+.compare .cmp-cap { position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; display: grid; justify-items: start; gap: 6px; padding: 12px; }
+.compare .cmp-stage:has(.cmp-tell) .cmp-cap { padding-bottom: 34px; }
+.compare .cmp-name { margin: 0; color: #fff; font: 800 var(--fs-4)/1.1 var(--font); letter-spacing: -0.015em; text-shadow: 0 1px 12px rgba(0, 0, 0, .35); overflow-wrap: anywhere; }
+.compare .cmp-tellbox { grid-column: 1 / -1; position: relative; z-index: 1; margin: -24px 10px 0; }
+.compare .cmp-tell {
+  margin: 0; padding: 14px 16px; border-radius: var(--r-card); line-height: 1.45; font-size: var(--fs-2);
+  background: var(--glass-strong); box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+}
+.compare .cmp-tell strong { display: block; margin-bottom: 2px; font-size: var(--fs-3); }
+.compare .cmp { grid-template-columns: 1fr 1fr; gap: 10px; padding: var(--sp-4) var(--sp-4) var(--sp-5); }
+.compare .cmp-col { align-content: start; gap: 8px; padding: 14px 12px 16px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--card-shadow); min-width: 0; }
+.compare .cmp-col .sci { margin: 0; }
+.compare .cmp-facts { grid-template-columns: 1fr; gap: 0; }
+.compare .cmp-facts dt { font-size: var(--fs-1); margin-top: 6px; }
+.compare .cmp-facts dd { font-weight: 600; }
+.compare .cmp-notes { margin: 4px 0 0; }
+.compare .cmp-col .btn { justify-self: start; min-height: var(--tap); background: var(--surface-2); box-shadow: none; }
+.compare .season--mini { margin-top: 6px; }
+@media (max-width: 359px) {
+  .compare .cmp-stage, .compare .cmp { gap: 8px; padding-left: 12px; padding-right: 12px; }
+  .compare .cmp-col { padding: 12px 10px 14px; }
+}
+
+/* ---------- the card overlay: a dim, blurred room for the card ---------- */
+.card-overlay {
+  background: radial-gradient(120% 90% at 50% 40%, rgba(16, 40, 34, .72), rgba(4, 12, 10, .9));
+  -webkit-backdrop-filter: blur(14px) saturate(1.2); backdrop-filter: blur(14px) saturate(1.2);
+}
+.card-overlay .row-center { gap: 10px; }
+.card-overlay .btn { min-height: var(--tap); border-radius: var(--r-pill); padding: 10px 22px; }
+.card-overlay .btn:not(.btn--primary) {
+  background: rgba(255, 255, 255, .14); color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28);
+}
+.card-overlay .card-hint { color: rgba(255, 255, 255, .8); }
+@media (prefers-reduced-transparency: reduce) { .card-overlay { background: rgba(4, 12, 10, .94); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+
+/* ---------- press and reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .bird .hero-tabs button, .bird .lk-photo img, .bird .mine-ph, .bird .pn, .compare .cmp-card { transition: none; }
+  .bird .lk-sp:active .lk-photo img, .bird .mine-ph:active, .bird .pn:active, .compare .cmp-card:active { scale: none; }
+}

@@ -1447,12 +1447,14 @@ function confuseSection(sp) {
   const list = [...curated.map(s => ({ s, tell: tellFor(sp.id, s.id) })),
     ...similarSpecies(sp, 4).filter(s => !curated.includes(s)).map(s => ({ s }))].slice(0, Math.max(4, curated.length));
   if (!list.length) return '';
+  // A snap carousel of photo cards. The photo carries .cmp-img so it grows into that species' hero when tapped.
   return `<section class="confuse" aria-labelledby="confuse-h"><h2 class="h2" id="confuse-h">Easy to confuse with</h2>
     <p class="small muted">Easy to mix up. Tap Compare to see them side by side.</p>
-    <ul class="confuse-list">${list.map(({ s, tell }) => `<li class="confuse-row">
-      <a class="confuse-sp row--sp kind--${s.kind}" href="#/bird/${s.id}"><span class="row-thumb">${birdImg(s, 'small', '', { alt: '' })}</span>
-        <span class="row-main"><strong>${esc(s.name)}</strong><span class="small ${tell ? 'confuse-tell' : 'muted'}">${esc(tell || s.sizeText)}</span></span></a>
-      <a class="btn btn--small" href="#/compare/${sp.id}/${s.id}" aria-label="Compare with the ${esc(s.name)}">Compare</a></li>`).join('')}</ul></section>`;
+    <ul class="lk-rail">${list.map(({ s, tell }) => `<li class="lk-card kind--${s.kind}">
+      <a class="lk-sp" href="#/bird/${s.id}"><span class="lk-photo cmp-img">${birdImg(s, 'small', '', { alt: '' })}</span>
+        <strong class="lk-name">${esc(s.name)}</strong></a>
+      <p class="lk-tell${tell ? '' : ' muted'}">${esc(tell || cap(s.sizeText || ''))}</p>
+      <a class="btn btn--small lk-cmp" href="#/compare/${sp.id}/${s.id}" aria-label="Compare with the ${esc(s.name)}">Compare</a></li>`).join('')}</ul></section>`;
 }
 
 function renderBird(id) {
@@ -1468,6 +1470,13 @@ function renderBird(id) {
   const info = infoFor(sp.id);
   const cardInfo = { seen, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
   const curated = lookalikesOf(id).length > 0;
+  const snaps = hist.filter(h => h.photoId);
+  const kindWord = KINDS[sp.kind].label.toLowerCase();
+  // Prev/next: a photo chip for the neighbour in the dex, of the same kind.
+  const chip = (s, dir) => `<a class="pn pn--${dir} kind--${s.kind}" href="#/bird/${s.id}">${icon.back}<span class="pn-ph">${birdImg(s, 'small', '', { alt: '' })}</span>
+    <span class="pn-txt"><span class="sr-only">${dir === 'prev' ? 'Previous' : 'Next'}: </span><span class="pn-no">${dexNo(s.id)}</span><strong>${esc(s.name)}</strong></span></a>`;
+  // The hero runs under the status bar: the photos, a scrim tinted from the photo, and the name set on it. Glass
+  // controls float on top. The page's sheet slides up over its bottom edge.
   view.innerHTML = `
     <article class="bird kind--${sp.kind}">
       <div class="bird-hero" data-hero-box>
@@ -1476,9 +1485,15 @@ function renderBird(id) {
             ${photos.length ? photos.map((ph, i) => `<figure class="slide"${i ? '' : ' data-hero-frame'}>${wholeImg(ph.src, `${sp.name}${photos.length > 1 ? `, photo ${i + 1} of ${photos.length}` : ''}`, 'bird-photo', { lazy: i > 0 })}</figure>`).join('')
               : `<figure class="slide" data-hero-frame><span class="bird-photo img-missing" role="img" aria-label="${esc(sp.name)}"></span></figure>`}
           </div>
-          ${photos.length > 1 ? `<span class="hero-count" aria-hidden="true"><b data-count-i>1</b>/${photos.length}</span>` : ''}
         </div>
         <div class="hero-model hidden" data-model aria-label="3D model of a ${esc(sp.name)}. Drag to turn it."></div>
+        <div class="hero-scrim" aria-hidden="true"></div>
+        <div class="hero-cap">
+          <div class="hero-meta">${band(sp.id, seen)}${kindTag(sp)}${photos.length > 1 ? `<span class="hero-count" data-count aria-hidden="true"><b data-count-i>1</b>/${photos.length}</span>` : ''}</div>
+          <h1 class="bird-name">${esc(sp.name)}</h1>
+          <p class="sci">${esc(sp.sci)}</p>
+          <p class="hero-credit" data-credit>${photos[0]?.credit ? creditHTML(photos[0]) : ''}</p>
+        </div>
         <a class="iconbtn iconbtn--float" href="#/dex" aria-label="Back to the dex">${icon.back}</a>
         <button class="iconbtn iconbtn--float iconbtn--right" data-search aria-label="Search everything">${icon.search}</button>
         <div class="hero-tabs" role="tablist" aria-label="View">
@@ -1487,41 +1502,35 @@ function renderBird(id) {
           <button role="tab" aria-selected="false" data-hero="card">Card</button>
         </div>
       </div>
-      <p class="hero-credit" data-credit>${photos[0]?.credit ? creditHTML(photos[0]) : ''}</p>
       <div class="bird-body">
-        <div class="bird-id">${band(sp.id, seen)}${kindTag(sp)}<span class="rarity-line">${pips(sp.rarity)}<span>${rarityText(sp)}</span></span></div>
-        <h1 class="bird-name">${esc(sp.name)}</h1>
-        <p class="sci-row"><span class="sci">${esc(sp.sci)}</span><span data-mastery>${masteryMark(id)}</span></p>
+        <div class="bird-sum"><span class="rarity-line">${pips(sp.rarity)}<span>${rarityText(sp)}</span></span><span data-mastery>${masteryMark(id)}</span></div>
         <div class="bird-actions">
           <button class="btn btn--primary btn--grow" data-log>${seen ? 'Log another sighting' : 'Log a sighting'}</button>
-          ${seen ? `<button class="btn" data-sharecard aria-label="Share card">${icon.share}</button>` : ''}
+          ${seen ? `<button class="btn btn--share" data-sharecard aria-label="Share card">${icon.share}</button>` : ''}
         </div>
         ${seen ? `<p class="seen-line">Seen ${plural(hist.length, 'time')}. First on ${fmtDate(first.date)}${first.place ? ` at ${esc(first.place)}` : ''}.</p>` : ''}
 
         ${spotSection(sp)}
         <div data-confuse${curated ? ' data-curated' : ''}>${confuseSection(sp)}</div>
         ${whereSection(sp)}
-        ${isBird || sp.kind === 'frog' ? '<section class="call" data-calls aria-live="polite"><p class="muted small">Looking for recordings…</p></section>' : ''}
+        ${isBird || sp.kind === 'frog' ? '<section class="call" data-calls aria-live="polite"><h2 class="h2">Calls</h2><p class="muted small">Looking for recordings…</p></section>' : ''}
 
         <section class="wiki" data-wiki>${info ? infoSection(info) : ''}</section>
 
-        <section>
-          <h2 class="h2">Your sightings</h2>
+        <section class="mine" aria-labelledby="mine-h">
+          <h2 class="h2" id="mine-h">Your sightings</h2>
+          ${snaps.length ? `<ul class="mine-strip">${snaps.map(h => `<li><button class="mine-ph" data-edit="${h.id}" aria-label="Your photo from ${fmtDate(h.date)}"><img data-photo="${h.photoId}" alt=""></button></li>`).join('')}</ul>` : ''}
           ${seen ? `<ul class="hist">${hist.map(h => `<li><button class="hist-row" data-edit="${h.id}">
-            ${h.photoId ? `<img class="hist-photo" data-photo="${h.photoId}" alt="">` : ''}
             <span class="hist-main"><strong>${fmtDate(h.date)}</strong>${h.time ? ` <span class="muted">${h.time}</span>` : ''}<br><span class="muted">${esc(h.place || 'No place name')}</span></span>
             <span class="hist-n">${h.count ? `×${h.count}` : 'X'}${h.heard ? '<br><span class="muted small">heard</span>' : ''}</span></button></li>`).join('')}</ul>`
-          : `<p class="muted">Not seen yet. When you find ${sp.kind === 'plant' ? 'it' : 'one'}, log it here and its card fills in with colour.</p>`}
+          : `<p class="muted mine-empty">Not seen yet. When you find ${sp.kind === 'plant' ? 'it' : 'one'}, log it here and its card fills in with colour.</p>`}
         </section>
 
         <nav class="more-links">
           ${isBird ? `<a href="https://xeno-canto.org/species/${sp.sci.replace(' ', '-')}" target="_blank" rel="noopener">More calls on xeno-canto</a>` : ''}
           <a href="https://bie.ala.org.au/search?q=${encodeURIComponent(sp.sci)}" target="_blank" rel="noopener">Atlas of Living Australia</a>
         </nav>
-        <nav class="prevnext">
-          ${prev ? `<a href="#/bird/${prev.id}">${icon.back}<span>${dexNo(prev.id)} ${esc(prev.name)}</span></a>` : '<span></span>'}
-          ${next ? `<a href="#/bird/${next.id}" class="next"><span>${dexNo(next.id)} ${esc(next.name)}</span>${icon.back}</a>` : ''}
-        </nav>
+        ${prev || next ? `<nav class="prevnext" aria-label="More ${esc(kindWord)}">${prev ? chip(prev, 'prev') : '<span></span>'}${next ? chip(next, 'next') : ''}</nav>` : ''}
       </div>
       <div class="logbar" data-logbar inert>
         ${band(sp.id, seen)}<strong>${esc(sp.name)}</strong>
@@ -1536,6 +1545,8 @@ function renderBird(id) {
     const box = $('[data-model]', view);
     $('.hero-photo', view).classList.toggle('hidden', which !== 'photo');
     $('[data-credit]', view).classList.toggle('hidden', which !== 'photo');
+    $('[data-count]', view)?.classList.toggle('hidden', which !== 'photo');
+    $('.bird-hero', view).classList.toggle('bird-hero--model', which === 'model');
     box.classList.toggle('hidden', which !== 'model');
     if (which !== 'model' || disposeModel || mounting) return;
     mounting = true;
@@ -1556,8 +1567,13 @@ function renderBird(id) {
     logbar.inert = !show;
   }) : null;
   io?.observe(mainLog);
+  // Season bars grow up the first time they come into view.
+  const grow = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('is-in'); grow.unobserve(e.target); }
+  }), { rootMargin: '0px 0px -12% 0px' }) : null;
+  $$('[data-grow]', view).forEach(el => (grow ? grow.observe(el) : el.classList.add('is-in')));
   const audioStops = [];
-  state.cleanup = () => { alive = false; disposeModel?.(); disposeModel = null; io?.disconnect(); audioStops.forEach(f => f()); };
+  state.cleanup = () => { alive = false; disposeModel?.(); disposeModel = null; io?.disconnect(); grow?.disconnect(); audioStops.forEach(f => f()); };
   let callsWired;
   const callsReady = new Promise(r => { callsWired = r; });
   view.onclick = e => {
@@ -1596,8 +1612,8 @@ function renderBird(id) {
     const box = $('[data-calls]', view);
     if (!box) return;
     if (!list.length) {
-      box.innerHTML = !navigator.onLine ? '<p class="muted small">Calls for this one need an internet connection.</p>'
-        : isBird ? '<p class="muted small">No free recording found for this bird. Try the xeno-canto link below.</p>' : '';
+      box.innerHTML = !navigator.onLine ? '<h2 class="h2">Calls</h2><p class="muted small">Calls for this one need an internet connection.</p>'
+        : isBird ? '<h2 class="h2">Calls</h2><p class="muted small">No free recording found for this bird. Try the xeno-canto link below.</p>' : '';
       return;
     }
     box.innerHTML = `<h2 class="h2">Calls</h2><canvas class="viz" data-viz aria-hidden="true"></canvas>` + list.map((c, i) => `<div class="call-row">
@@ -1674,7 +1690,7 @@ function renderBird(id) {
       setIcons();
     });
     audioStops.push(() => { stopped = true; for (const el of [fx, plain]) { el.pause(); el.removeAttribute('src'); } cancelAnimationFrame(raf); actx?.close(); });
-  }).catch(() => { const box = $('[data-calls]', view); if (box && here()) box.innerHTML = '<p class="muted small">Calls need an internet connection the first time.</p>'; })
+  }).catch(() => { const box = $('[data-calls]', view); if (box && here()) box.innerHTML = '<h2 class="h2">Calls</h2><p class="muted small">Calls need an internet connection the first time.</p>'; })
     .finally(() => callsWired());
 }
 
@@ -1684,24 +1700,29 @@ function renderCompare(a, b) {
   const hash = location.hash;
   const seen = seenSet();
   const tellHTML = () => { const t = tellFor(a, b); return t ? `<p class="cmp-tell"><strong>How to tell them apart.</strong> ${esc(t)}</p>` : ''; };
+  // Two tall photo cards side by side, the curated tell line on a glass band across their foot, then the facts.
+  const card = sp => `<a href="#/bird/${sp.id}" class="cmp-card cmp-img kind--${sp.kind}">${birdImg(sp, 'large', '', { alt: '' })}
+    <span class="cmp-cap">${band(sp.id, seen.has(sp.id))}<h2 class="cmp-name">${esc(sp.name)}</h2></span></a>`;
   const col = sp => {
     const m = monthRates(sp.id), size = sizeFact(sp);
-    return `<div class="cmp-col">
-      <a href="#/bird/${sp.id}" class="cmp-img">${birdImg(sp, 'large', '', { whole: true })}</a>
-      <div class="cmp-id">${band(sp.id, seen.has(sp.id))}${kindTag(sp)}${pips(sp.rarity)}</div>
-      <h2>${esc(sp.name)}</h2>
+    return `<div class="cmp-col kind--${sp.kind}">
+      <div class="cmp-id">${kindTag(sp)}${pips(sp.rarity)}</div>
       <p class="sci small">${esc(sp.sci)}</p>
       <dl class="cmp-facts">${size ? `<dt>${size[0]}</dt><dd>${esc(size[1])}</dd>` : ''}<dt>Look in</dt><dd>${sp.habitats.map(h => HABITATS[h]).join(', ')}</dd></dl>
-      ${m ? `<div class="season season--mini">${m.rel.map(v => `<i style="height:${Math.max(3, v * 100)}%"></i>`).join('')}</div><div class="season-labels">${[...'JFMAMJJASOND'].map(c => `<span>${c}</span>`).join('')}</div>` : ''}
-      <p class="small">${esc(sp.notes)}</p>
+      ${m ? `<div class="season season--mini" data-grow aria-hidden="true">${m.rel.map((v, i) => `<i style="height:${Math.max(3, v * 100)}%;--i:${i}"></i>`).join('')}</div><div class="season-labels" aria-hidden="true">${[...'JFMAMJJASOND'].map(c => `<span>${c}</span>`).join('')}</div>` : ''}
+      <p class="small cmp-notes">${esc(sp.notes)}</p>
       ${hasCalls(sp.id) ? `<button class="btn btn--small" data-cplay="${sp.id}" aria-label="Play the call of the ${esc(sp.name)}">${icon.play} Call</button>` : ''}
     </div>`;
   };
   view.innerHTML = `
-    <header class="page-head page-head--back"><a class="iconbtn" href="#/bird/${A.id}" aria-label="Back">${icon.back}</a><h1>Compare</h1></header>
-    <div class="cmp-tellbox" data-tell>${tellHTML()}</div>
-    <div class="cmp">${col(A)}${col(B)}</div>`;
+    <div class="compare">
+      <header class="page-head page-head--back"><a class="iconbtn" href="#/bird/${A.id}" aria-label="Back">${icon.back}</a><h1>Compare</h1></header>
+      <div class="cmp-stage">${card(A)}${card(B)}<div class="cmp-tellbox" data-tell>${tellHTML()}</div></div>
+      <div class="cmp">${col(A)}${col(B)}</div>
+    </div>`;
   if (!tellFor(a, b)) loadLookalikes().then(() => { const box = location.hash === hash && $('[data-tell]', view); if (box) box.innerHTML = tellHTML(); });
+  // The month bars grow once, as they come into view.
+  requestAnimationFrame(() => requestAnimationFrame(() => $$('[data-grow]', view).forEach(el => el.classList.add('is-in'))));
   let audio = null;
   view.onclick = async e => {
     const p = e.target.closest('[data-cplay]');
@@ -1724,7 +1745,7 @@ function whereSection(sp) {
   return `<section class="where" aria-labelledby="where-h">
     <h2 class="h2" id="where-h">When and where</h2>
     <h3 class="h3">When it's reported</h3>
-    <div class="season" role="img" aria-label="Reporting rate by month, highest in ${MONTHS[m.rel.indexOf(1)]}">${m.rel.map((v, i) => `<i class="${i === now ? 'now' : ''}" style="height:${Math.max(3, Math.round(v * 100))}%"></i>`).join('')}</div>
+    <div class="season" data-grow role="img" aria-label="Reporting rate by month, highest in ${MONTHS[m.rel.indexOf(1)]}">${m.rel.map((v, i) => `<i class="${i === now ? 'now' : ''}" style="height:${Math.max(3, Math.round(v * 100))}%;--i:${i}"></i>`).join('')}</div>
     <div class="season-labels" aria-hidden="true">${[...L].map(c => `<span>${c}</span>`).join('')}</div>
     <p class="small muted">How often it's reported in SEQ each month, from ${recordCount(sp.id).toLocaleString('en-AU')} records since 2016 in the Atlas of Living Australia.</p>
     ${spots.length ? `<h3 class="h3">${near ? 'Places near its records' : 'Best places in SEQ'}</h3>
