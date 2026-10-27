@@ -129,6 +129,8 @@ body.has-sheet { overflow: hidden; }
 a { color: var(--azure); text-underline-offset: .15em; }
 img { display: block; max-width: 100%; }
 button, input, select, textarea { font: inherit; color: inherit; }
+/* Placeholders follow the theme (the browser grey fell to about 3.5:1 on dark fields and glass). */
+::placeholder { color: color-mix(in srgb, var(--ink-2) 88%, transparent); opacity: 1; }
 button { -webkit-tap-highlight-color: transparent; }
 :focus-visible { outline: 3px solid var(--azure); outline-offset: 2px; border-radius: 6px; }
 h1, h2, h3 { text-wrap: balance; }
