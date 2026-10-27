@@ -68,7 +68,12 @@
   background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden;
   transition: box-shadow var(--dur-3) var(--ease-out);
 }
-.hit--live { background: var(--surface); box-shadow: 0 0 0 2.5px var(--sun), var(--shadow-card); }
+/* calling now: a sun dot on the photo (the time line under the name says the same in words) */
+.hit--live { background: var(--surface); }
+.hit--live .hit-photo::after {
+  content: ''; position: absolute; z-index: 1; right: 7px; top: 7px; width: 11px; height: 11px; border-radius: 50%;
+  background: var(--sun); box-shadow: 0 0 0 2px rgba(6, 14, 12, .55);
+}
 .hit-photo { align-self: stretch; position: relative; background: var(--surface-2); }
 .hit-photo img, .hit-photo .img-missing { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
 .hit-nophoto { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-2); }
@@ -161,7 +166,6 @@
 @keyframes hit-fade { from { opacity: 0; } }
 :root[data-theme="outdoor"] .listen-stage { box-shadow: 0 0 0 2px var(--ink), var(--shadow-2); }
 :root[data-theme="outdoor"] .hit, :root[data-theme="outdoor"] .frog-row { box-shadow: var(--shadow-1); }
-:root[data-theme="outdoor"] .hit--live { box-shadow: 0 0 0 3px var(--sun-ink); }
 :root[data-theme="outdoor"] .frog-row.is-playing { box-shadow: 0 0 0 3px var(--kc); }
 
 /* ---------- species page ---------- */

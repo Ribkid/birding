@@ -356,7 +356,7 @@ export async function renderScan(ctx) {
     const card = (x, i) => {
       const sp = x.sp, ph = refs(sp.id), isLead = i < lead;
       const credits = ph.filter(p => p.credit).map(p => p.credit);
-      const tile = p => (p ? `<img src="${esc(p.src)}" alt="${esc(sp.name)}, reference photo" loading="lazy" decoding="async" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'scan-tile-missing'}))">` : '<span class="scan-tile-missing"></span>');
+      const tile = p => (p ? `<img src="${esc(p.src)}" alt="${esc(sp.name)}, reference photo" loading="lazy" decoding="async" onload="this.classList.add('in')" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'scan-tile-missing'}))">` : '<span class="scan-tile-missing"></span>');
       return `<article class="scan-card kind--${sp.kind} ${isLead ? 'scan-card--lead' : ''}${rise()}">
         <div class="scan-strip">
           <figure class="scan-yours">${S.yours ? `<img src="${S.yours}" alt="Your photo">` : '<span class="scan-tile-missing"></span>'}<figcaption>Yours</figcaption></figure>

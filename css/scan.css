@@ -257,6 +257,12 @@ body.has-outing .scan-go { bottom: calc(var(--chrome-bottom) + 66px); }
 }
 .scan-card:not(.scan-card--lead) .scan-strip > img, .scan-card:not(.scan-card--lead) .scan-strip > .scan-tile-missing,
 .scan-card:not(.scan-card--lead) .scan-yours img, .scan-card:not(.scan-card--lead) .scan-yours .scan-tile-missing { aspect-ratio: 3 / 2; }
+/* reference photos shimmer until they arrive (they come from the photo sites, so they can be slow) */
+.scan-strip > img:not(.in) {
+  background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, #fff 40%, transparent) 50%, transparent 80%) var(--surface-2);
+  background-size: 220% 100%; animation: shimmer 1.3s linear infinite;
+}
+.scan-strip > img.in { animation: scan-fade var(--dur-3) var(--ease-out); }
 .scan-yours { position: relative; margin: 0; }
 .scan-yours::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 3px var(--bracket); pointer-events: none; }
 .scan-yours figcaption {
@@ -312,7 +318,7 @@ body.has-outing .scan-go { bottom: calc(var(--chrome-bottom) + 66px); }
   .scan-pips i.now { animation: none; opacity: .6; }
   .scan-go[aria-disabled="true"]::after { animation: none; background: rgba(255, 255, 255, .25); background-size: 100% 100%; }
   .scan-rise { animation: scan-fade var(--dur-2) linear both; animation-delay: 0ms; }
-  .scan-rise .scan-ring-fill, .scan-rise .scan-bar i { animation: none; }
+  .scan-rise .scan-ring-fill, .scan-rise .scan-bar i, .scan-strip > img { animation: none; }
 }
 @keyframes scan-fade { from { opacity: 0; } }
 
