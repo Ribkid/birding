@@ -2,6 +2,8 @@
    Tokens only (css/app.css). One bold moment per screen: today's challenge on the hub, the score on results. */
 
 :where(.lq-screen, .lr, .learn, .lt-wrap) .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* .btn, .ld-back and friends set display, which would beat the hidden attribute (and show the deck's answer early). */
+:where(.lq-screen, .lr, .learn) [hidden] { display: none !important; }
 .page-head .lh-title { font: 400 var(--fs-6)/1.1 var(--display); letter-spacing: 0; }
 .learn { padding: 0 var(--sp-4) var(--sp-6); display: grid; gap: var(--sp-5); }
 .learn--loading { min-height: 60vh; }
