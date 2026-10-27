@@ -2288,7 +2288,12 @@ const EMBLEM = {
   habitat: '<path class="e-body" d="M32 4c15 9 23 23 20 37-2.5 10-11 16-20 19-9-3-17.5-9-20-19C9 27 17 13 32 4z"/><path class="e-line" d="M32 13v46M32 27l-9-7M32 27l9-7M32 39l-11-8M32 39l11-8M32 50l-8-6M32 50l8-6"/>',
   group: '<rect class="e-body" x="5" y="17" width="54" height="30" rx="8"/><path class="e-line" d="M11 22.5h42"/>',
 };
-let badgesWaited = false, badgesEarned = 0;
+let badgesWaited = false, badgesEarned = null;
+// Each section's rings fill and its earned medals catch the light once per session, as the section comes into view.
+const shelvesPlayed = new Set();
+let shelfIO = null;
+// The section's emblem as a mask, so the foil sweep stays inside the medal's shape.
+const emblemMask = k => `url('data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${EMBLEM[k]}</svg>`)}')`;
 function renderBadges() {
   const learning = learnStats();
   // Learning progress loads from the kv store at start-up; draw again once it's in.
@@ -2298,23 +2303,45 @@ function renderBadges() {
   const sections = [['milestone', 'Milestones'], ['kind', 'Animals & plants'], ['rarity', 'Rarities'], ['habit', 'Habits'], ['learning', 'Learning'], ['habitat', 'Habitats'], ['group', 'Complete a group']]
     .filter(([k]) => list.some(b => b.kind === k));
   const shown = k => k !== 'rarity' && k !== 'habitat'; // gems and leaves carry no number
-  const badge = (b, k) => `<li class="badge badge--${k} ${b.done ? 'badge--done' : ''}${k === 'kind' ? ` kind--${b.id.split('-')[1]}` : ''}" style="--p:${Math.round(b.have / b.need * 100)}">
+  // The badge she is closest to, to give the shelf a next step.
+  const next = list.filter(b => !b.done).sort((x, y) => y.have / y.need - x.have / x.need || x.need - y.need)[0];
+  const badge = (b, k, i) => `<li class="badge badge--${k} ${b.done ? 'badge--done' : ''}${k === 'kind' ? ` kind--${b.id.split('-')[1]}` : ''}" style="--p:${Math.round(b.have / b.need * 100)};--i:${i}">
       <span class="emb" aria-hidden="true">${b.done ? '' : '<span class="emb-ring"></span>'}<svg viewBox="0 0 64 64">${EMBLEM[k]}</svg>${shown(k) ? `<b class="emb-n">${b.need}</b>` : ''}</span>
       <strong class="badge-name">${esc(b.name)}</strong>
       <span class="badge-desc">${esc(b.desc)}<span class="sr-only">. ${b.done ? 'Earned' : `${b.have} of ${b.need} so far`}.</span></span></li>`;
+  const first = badgesEarned == null;
   view.innerHTML = `
     <header class="page-head"><h1>Badges</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button><a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a></div></header>
-    <div class="quicklinks pad-x"><a class="btn" href="#/learn">${icon.learn} Learn</a><a class="btn" href="#/stats">${icon.chart} Stats</a>${leaderboardLink()}</div>
-    <p class="list-count shelf-count"><b data-earned>${earned}</b> of ${list.length} earned</p>
+    <section class="trophy${first ? ' rings-in' : ''}" aria-label="Badges earned">
+      <div class="trophy-top">
+        <div class="trophy-ring">${ring(earned / Math.max(1, list.length))}<p class="trophy-n"><b data-earned>${earned}</b><span>of ${list.length}</span></p></div>
+        <div class="trophy-txt"><p class="trophy-h">${earned ? `${plural(earned, 'badge', 'badges')} earned` : 'No badges yet'}</p>
+          ${next ? `<p class="trophy-next"><span>Closest:</span> <strong>${esc(next.name)}</strong>. ${esc(next.desc)}${next.have ? ` (${next.have} so far)` : ''}.</p>` : '<p class="trophy-next">Every badge earned. The whole shelf is yours.</p>'}</div>
+      </div>
+      <div class="trophy-links"><a class="btn" href="#/learn">${icon.learn} Learn</a><a class="btn" href="#/stats">${icon.chart} Stats</a>${leaderboardLink()}</div>
+    </section>
     ${sections.map(([k, title]) => {
       const items = list.filter(b => b.kind === k);
       const done = items.filter(b => b.done);
-      return `<section class="block shelf-sec"><h2 class="h2 shelf-h"><span>${title}</span><span class="shelf-n" aria-hidden="true">${done.length}/${items.length}</span></h2>
-        <ul class="shelf">${[...done, ...items.filter(b => !b.done)].map(b => badge(b, k)).join('')}</ul></section>`;
+      const play = !shelvesPlayed.has(k) && motionOK() && 'IntersectionObserver' in window;
+      return `<section class="shelf-sec" style="--emask:${emblemMask(k)}"><h2 class="h2 shelf-h"><span>${title}</span><span class="shelf-n" aria-hidden="true">${done.length}/${items.length}</span></h2>
+        <ul class="shelf${play ? ' shelf--play' : ''}" data-shelf="${k}">${[...done, ...items.filter(b => !b.done)].map((b, i) => badge(b, k, i)).join('')}</ul></section>`;
     }).join('')}`;
   // The earned count stamps up from where it was last time (from nothing on the first visit).
-  countUp($('[data-earned]', view), badgesEarned, earned, { delay: 150 });
+  countUp($('[data-earned]', view), badgesEarned || 0, earned, { delay: 150 });
   badgesEarned = earned;
+  if (first) setTimeout(() => $('.trophy', view)?.classList.remove('rings-in'), 1400);
+  shelfIO?.disconnect();
+  const shelves = $$('.shelf--play', view);
+  if (shelves.length) {
+    shelfIO = new IntersectionObserver(ens => ens.forEach(en => {
+      if (!en.isIntersecting) return;
+      en.target.classList.add('is-in');
+      shelvesPlayed.add(en.target.dataset.shelf);
+      shelfIO.unobserve(en.target);
+    }), { rootMargin: '0px 0px -12% 0px' });
+    shelves.forEach(el => shelfIO.observe(el));
+  }
   view.onclick = e => { if (e.target.closest('[data-search]')) openSearch(); }; view.onchange = null;
 }
 

@@ -20,8 +20,8 @@
 .dex-hero::before {
   content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background:
-    linear-gradient(to bottom, rgba(6, 18, 15, .5) 0, rgba(6, 18, 15, 0) 30%),
-    linear-gradient(to top, color-mix(in srgb, var(--hero-deep) 92%, transparent) 0, color-mix(in srgb, var(--hero-deep) 55%, transparent) 30%, transparent 62%);
+    linear-gradient(to bottom, rgba(6, 18, 15, .55) 0, rgba(6, 18, 15, .2) 18%, rgba(6, 18, 15, 0) 32%),
+    linear-gradient(to top, color-mix(in srgb, var(--hero-deep) 94%, transparent) 0, color-mix(in srgb, var(--hero-deep) 72%, transparent) 36%, color-mix(in srgb, var(--hero-deep) 30%, transparent) 56%, transparent 72%);
 }
 .dex-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
 .dex-hero-pick {
@@ -261,14 +261,35 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 .cmp-id { flex-wrap: wrap; }
 
 /* ---------- badges: a trophy shelf ----------
-   One emblem per section, in that section's colour: milestones a medal, animals and plants a kind-coloured hexagon,
-   rarities a gem, habits a shield, learning a pair of cards, habitats a leaf and groups a leg band. */
-.shelf-count { margin-top: var(--sp-3); }
-.shelf-count b { display: inline-block; }
-.shelf-h { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); }
+   A trophy card on top (a ring of everything earned and the badge she is closest to), then one shelf card per
+   section. One emblem per section, in that section's colour: milestones a medal, animals and plants a kind-coloured
+   hexagon, rarities a gem, habits a shield, learning a pair of cards, habitats a leaf and groups a leg band.
+   As a shelf first comes into view its rings fill and its earned medals catch the light (once per session). */
+.trophy {
+  margin: var(--sp-1) var(--sp-4) var(--sp-5); padding: var(--sp-4); border-radius: var(--r-card);
+  background: color-mix(in srgb, var(--gold) 16%, var(--surface)); box-shadow: var(--shadow-card);
+}
+.trophy-top { display: flex; align-items: center; gap: var(--sp-4); }
+.trophy-ring { --kc: var(--gold-ink); position: relative; flex: none; width: 104px; height: 104px; }
+.trophy-ring .ring { width: 100%; height: 100%; }
+.trophy-ring .ring circle { stroke-width: 3.4; }
+.trophy-n { position: absolute; inset: 0; display: grid; place-content: center; margin: 0; text-align: center; line-height: 1; }
+.trophy-n b { display: inline-block; font: 800 var(--fs-6)/1 var(--stamp); font-variant-numeric: tabular-nums; }
+.trophy-n span { font: 600 var(--fs-2)/1.2 var(--stamp); color: var(--ink-2); letter-spacing: .04em; }
+.trophy-txt { min-width: 0; }
+.trophy-h { margin: 0 0 var(--sp-1); font-size: var(--fs-4); font-weight: 800; line-height: 1.2; letter-spacing: -0.01em; }
+.trophy-next { margin: 0; font-size: var(--fs-2); line-height: 1.4; color: var(--ink-2); }
+.trophy-next strong { color: var(--ink); }
+.trophy-links { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); }
+.trophy-links .btn { min-height: var(--tap); padding: 6px 16px; border-radius: var(--r-pill); background: var(--surface); box-shadow: none; font-size: var(--fs-2); }
+:root[data-theme="outdoor"] .trophy-links .btn { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+
+.shelf-sec { margin: 0 var(--sp-4) var(--sp-4); padding: 0 var(--sp-4) var(--sp-4); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
+.shelf-h { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); margin: 0; padding: var(--sp-4) 0 var(--sp-3); }
 .shelf-n { font: 600 var(--fs-4)/1 var(--stamp); color: var(--ink-2); letter-spacing: .03em; font-variant-numeric: tabular-nums; }
-.shelf { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-3); margin: var(--sp-2) 0 var(--sp-3); padding: 0; list-style: none; }
+.shelf { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-2); margin: 0; padding: 0; list-style: none; }
 @media (min-width: 600px) { .shelf { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); } }
+@media (max-width: 359px) { .shelf-sec { margin-inline: var(--sp-3); padding-inline: var(--sp-3); } .trophy { margin-inline: var(--sp-3); } .trophy-ring { width: 88px; height: 88px; } }
 .badge { display: grid; justify-items: center; align-content: start; gap: 2px; text-align: center; min-width: 0; }
 .badge--milestone { --ef: var(--azure); --eo: var(--on-azure); --ny: 44%; }
 .badge--kind { --ef: var(--kc); --eo: var(--on-kind); --ny: 50%; }
@@ -279,6 +300,7 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 .badge--group { --ef: var(--seen); --eo: var(--on-seen); --ny: 54%; }
 .emb { position: relative; display: grid; place-items: center; width: 76px; height: 76px; margin-bottom: var(--sp-1); }
 .emb svg { width: 66px; height: 66px; overflow: visible; }
+.badge--done .emb svg { filter: drop-shadow(0 6px 8px color-mix(in srgb, var(--ef) 35%, transparent)); }
 .emb .e-body, .emb .e-tail { fill: var(--ef); }
 .emb .e-tail { opacity: .7; }
 .emb .e-line { fill: none; stroke: var(--eo); stroke-width: 1.6; opacity: .55; }
@@ -290,9 +312,11 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 .badge:not(.badge--done) .e-body, .badge:not(.badge--done) .e-tail { fill: var(--surface); stroke: var(--line-strong); stroke-width: 2; opacity: 1; }
 .badge:not(.badge--done) .e-line { stroke: var(--line-strong); opacity: .7; }
 .badge:not(.badge--done) .emb-n { color: var(--ink-2); }
+@property --pf { syntax: '<number>'; inherits: true; initial-value: 0; }
+.badge { --pf: var(--p); }
 .emb-ring {
   position: absolute; inset: 0; border-radius: 50%;
-  background: conic-gradient(var(--sun-ink) calc(var(--p) * 1%), var(--surface-2) 0);
+  background: conic-gradient(var(--sun-ink) calc(var(--pf) * 1%), var(--surface-2) 0);
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), black calc(100% - 3.5px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 4px), black calc(100% - 3.5px));
 }
@@ -300,6 +324,20 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 .badge-name { font-size: var(--fs-2); font-weight: 700; line-height: 1.25; }
 .badge:not(.badge--done) .badge-name { color: var(--ink-2); }
 .badge-desc { font-size: var(--fs-1); color: var(--ink-2); line-height: 1.35; }
+/* First view: rings fill from empty, earned medals get one sweep of foil light inside their own shape. */
+.shelf--play:not(.is-in) .badge { --pf: 0; }
+.shelf--play.is-in .badge { transition: --pf 1.1s var(--ease-out) calc(var(--i, 0) * 50ms + 100ms); }
+.badge--done .emb::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, .8) 50%, transparent 62%) 100% 0 / 300% 100% no-repeat;
+  -webkit-mask: var(--emask) center / 66px 66px no-repeat; mask: var(--emask) center / 66px 66px no-repeat;
+}
+.shelf--play.is-in .badge--done .emb::after { animation: foil 1.3s var(--ease-out) calc(var(--i, 0) * 110ms + 150ms) both; }
+@keyframes foil { 0% { opacity: 1; background-position: 100% 0; } 85% { opacity: 1; } 100% { opacity: 0; background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .shelf--play .badge { --pf: var(--p) !important; transition: none !important; }
+  .badge--done .emb::after { display: none; }
+}
 
 /* ---------- + sheet: every option has an icon, and logging one sighting leads ---------- */
 .plus-opt { grid-template-columns: auto 1fr; column-gap: var(--sp-3); align-items: center; color: var(--ink); }
