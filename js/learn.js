@@ -1,8 +1,9 @@
 // Learn: today's challenge, practice rounds, look-alike duels, rapid fire and a spaced-repetition review deck.
 // Progress lives in the key-value store ('learn', 'dailyQuiz', 'quizStats'), never alongside the sightings.
-import { KINDS, HABITATS, byId, kindsPresent, ofKind } from './species.js';
+import { KINDS, HABITATS, SPECIES, byId, kindsPresent, ofKind } from './species.js';
 import { db } from './db.js';
 import { MONTHS } from './stats.js';
+import { lookAfterDraw } from './look.js';
 import * as Q from './quiz.js';
 
 const ROUND = 10, RAPID_MS = 60000, DAY = 864e5;
@@ -134,7 +135,7 @@ export function learnTeaser(_ctx) {
 }
 
 // ---------- audio ----------
-let audio = null, audioBtn = null, ticker = null;
+let audio = null, audioBtn = null, ticker = null, ringRaf = 0;
 // Cached clips come back from ctx.audioUrl as blob: URLs; let each one go when its player is done with it.
 const dropUrl = u => { if (typeof u === 'string' && u.startsWith('blob:')) URL.revokeObjectURL(u); };
 function setPlay(btn, state) {
@@ -144,8 +145,25 @@ function setPlay(btn, state) {
   const ic = btn.querySelector('[data-ic]');
   if (ic) ic.innerHTML = state === true ? I.pause : I.play;
 }
+// The ring round the big play button shows how far through the recording she is (paused: it holds still).
+const ringOf = btn => btn?.closest('.lq-player')?.querySelector('[data-ring]') || null;
+function trackRing(btn, a) {
+  cancelAnimationFrame(ringRaf);
+  const ring = ringOf(btn);
+  if (!ring) return;
+  const step = () => {
+    if (audio !== a || a.paused) { ringRaf = 0; return; }
+    const d = a.duration;
+    if (d && Number.isFinite(d)) ring.style.strokeDashoffset = String(100 - Math.min(1, a.currentTime / d) * 100);
+    ringRaf = requestAnimationFrame(step);
+  };
+  ringRaf = requestAnimationFrame(step);
+}
 function stopAudio() {
+  cancelAnimationFrame(ringRaf); ringRaf = 0;
   if (audio) { audio.onended = audio.onerror = null; audio.pause(); dropUrl(audio.src); }
+  const ring = ringOf(audioBtn);
+  if (ring) ring.style.strokeDashoffset = '100';
   setPlay(audioBtn, false);
   audio = null; audioBtn = null;
 }
@@ -153,7 +171,8 @@ function cleanup() { stopAudio(); clearInterval(ticker); ticker = null; }
 async function playCall(ctx, call, btn, status, onFail) {
   if (!call) return;
   if (audio && audioBtn === btn) {
-    if (audio.paused) { audio.play().then(() => setPlay(btn, true)).catch(() => {}); } else { audio.pause(); setPlay(btn, false); }
+    const a = audio;
+    if (a.paused) { a.play().then(() => { setPlay(btn, true); trackRing(btn, a); }).catch(() => {}); } else { a.pause(); setPlay(btn, false); }
     return;
   }
   stopAudio();
@@ -175,10 +194,29 @@ async function playCall(ctx, call, btn, status, onFail) {
   if (call.local || !/^https:\/\/images\.ala\.org\.au\//.test(src)) { try { url = await ctx.audioUrl(src); } catch (_) {} }
   if (audioBtn !== btn) { dropUrl(url); return; }
   const a = audio = new Audio(url);
-  a.onended = () => { setPlay(btn, false); if (status) status.textContent = 'Tap to hear it again'; dropUrl(url); audio = null; audioBtn = null; };
+  a.onended = () => {
+    cancelAnimationFrame(ringRaf); ringRaf = 0;
+    const ring = ringOf(btn);
+    if (ring) ring.style.strokeDashoffset = '0';
+    setPlay(btn, false); if (status) status.textContent = 'Tap to hear it again'; dropUrl(url); audio = null; audioBtn = null;
+  };
   a.onerror = fail;
-  a.play().then(() => { if (audio === a) { setPlay(btn, true); if (status) status.textContent = 'Playing'; } }).catch(fail);
+  a.play().then(() => { if (audio === a) { setPlay(btn, true); trackRing(btn, a); if (status) status.textContent = 'Playing'; } }).catch(fail);
 }
+// The big call player: a play button inside a progress ring, over a waveform that moves while it plays.
+// The bars are a drawing, not the sound itself (most recordings come from servers that don't allow reading them).
+function waveHTML(seed) {
+  const rng = Q.seeded(Q.hashStr(String(seed)));
+  return `<span class="lq-wave" aria-hidden="true">${Array.from({ length: 32 }, (_, i) => {
+    const env = Math.sin(Math.PI * (i + 0.5) / 32) ** 0.6;
+    return `<i style="--h:${(0.16 + 0.84 * env * (0.3 + 0.7 * rng())).toFixed(2)};--j:${i % 7}"></i>`;
+  }).join('')}</span>`;
+}
+const callPlayerHTML = (sp, { play = 'answer', call = null, extra = '' } = {}) => `<div class="lq-call kind--${sp.kind}">
+  <span class="lq-player"><svg class="lq-ring" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" pathLength="100"/><circle class="lq-ring-fg" data-ring cx="60" cy="60" r="54" pathLength="100"/></svg>
+  <button class="lq-play" ${play ? `data-play="${play}"` : 'data-play'} aria-label="Play the call"><span data-ic>${I.play}</span></button></span>
+  ${waveHTML(call?.src || sp.id)}
+  <p class="lq-status" data-status aria-live="polite">Tap to listen</p>${call ? `<p class="lq-credit">${esc(credit(call))}</p>` : ''}${extra}</div>`;
 const credit = c => (c ? `Recording: ${String(c.artist || 'Unknown').slice(0, 50)}${c.license ? `, ${c.license}` : ''}` : '');
 
 // ---------- photos with fallbacks ----------
@@ -258,6 +296,84 @@ const DIFF = { easy: ['Easy', 'Wrong answers come from other groups.'], normal: 
 const bestKey = (mode, p) => `${mode}|${p.kind}|${p.scope}|${p.difficulty}`;
 const kindLabel = k => (k === 'animals' ? 'All animals' : KINDS[k].label);
 
+// ---------- photos for the hub and results ----------
+// Photos already on screen once this session go straight in, so cards redrawn by a choice don't flicker.
+const shownSrc = new Set();
+const imgTag = (src, alt = '') => (src ? `<img class="fade${shownSrc.has(src) ? ' in' : ''}" src="${esc(src)}" alt="${esc(alt)}" decoding="async" data-face>` : '');
+function wireFaces(root) {
+  for (const img of root.querySelectorAll('img[data-face]')) {
+    const done = () => { img.classList.add('in'); shownSrc.add(img.getAttribute('src')); };
+    if (img.complete && img.naturalWidth) { done(); continue; }
+    img.addEventListener('load', done, { once: true });
+    // Offline or moved: the card's own colour shows instead of a broken picture.
+    img.addEventListener('error', () => img.classList.add('is-gone'), { once: true });
+  }
+}
+const faceSrc = (id, size = 'small') => Q.photosFor(id, { size, prefer: 'wiki' })[0]?.src || '';
+// One photo per practice card, the same all day for a kind: commoner species, none twice, a look-alike pair for duels.
+let faces = { key: '', v: null };
+function modeFaces(kind) {
+  const key = `${dayStr()}|${kind}`;
+  if (faces.key === key) return faces.v;
+  const all = Q.speciesFor(kind).filter(Q.hasPhoto);
+  if (!all.length) return {}; // the photo index hasn't arrived yet: try again next time
+  const rng = Q.seeded(Q.hashStr(`faces|${key}`));
+  const common = all.filter(s => s.rarity <= 2);
+  const pool = Q.shuffle((common.length >= 12 ? common : all).slice(), rng);
+  const inKind = s => s && Q.hasPhoto(s) && (kind === 'animals' ? s.kind !== 'plant' : s.kind === kind);
+  const pair = Q.shuffle(Q.lookalikePairs().filter(x => inKind(byId.get(x.a)) && inKind(byId.get(x.b))), rng)[0];
+  const used = new Set(pair ? [pair.a, pair.b] : []), v = {};
+  if (pair) v.duel = [pair.a, pair.b];
+  for (const m of Q.MODES) {
+    if (v[m]) continue;
+    const ok = m === 'call' ? s => Q.CALL_KINDS.includes(s.kind) && Q.hasCall(s.id) : () => true;
+    const s = pool.find(x => !used.has(x.id) && ok(x)) || pool.find(x => !used.has(x.id));
+    if (s) { used.add(s.id); v[m] = [s.id]; }
+  }
+  faces = { key, v };
+  return v;
+}
+// The challenge card takes its colour from a species about this month that isn't in today's set (that set is
+// drawn from the commonest, 80% of peak and up), so the picture never gives an answer away.
+function heroFace(month) {
+  const rate = s => Q.relRate(s.id, month) ?? 0;
+  let list = SPECIES.filter(s => rate(s) >= 0.5 && rate(s) < 0.8 && Q.hasPhoto(s));
+  if (!list.length) list = SPECIES.filter(s => s.rarity <= 2 && Q.hasPhoto(s));
+  return list.length ? list[(Q.seeded(Q.hashStr(`hero|${dayStr()}`))() * list.length) | 0] : null;
+}
+
+// Bars, meters and pips fill the first time they are seen; after that they are drawn full.
+let hubOnce = false, pipsSeen = { date: '', n: 0 };
+function growOnView(root) {
+  const els = [...root.querySelectorAll('[data-grow]')];
+  if (!els.length) return;
+  if (typeof IntersectionObserver !== 'function') { els.forEach(el => el.classList.add('is-in')); return; }
+  const io = new IntersectionObserver(ens => {
+    for (const en of ens) if (en.isIntersecting) { en.target.classList.add('is-in'); io.unobserve(en.target); }
+  }, { threshold: 0.4 });
+  els.forEach(el => io.observe(el));
+}
+function heroPips(picks, today) {
+  const from = pipsSeen.date === today ? pipsSeen.n : 0;
+  pipsSeen = { date: today, n: picks.length };
+  const anim = !reduced();
+  return `<span class="lh-pips" aria-hidden="true">${Array.from({ length: 5 }, (_, i) => {
+    const p = picks[i];
+    const cls = p ? `${p.right ? 'is-right' : 'is-wrong'}${anim && i >= from ? ' is-new' : ''}` : '';
+    return `<i class="${cls}" style="--j:${Math.max(0, i - from)}">${p ? (p.right ? I.tick : I.cross) : ''}</i>`;
+  }).join('')}</span>`;
+}
+// A segmented choice; the thumb glides to the pressed button (--idx), which keeps aria-pressed.
+function segHTML(attr, items, cur, label) {
+  const idx = Math.max(0, items.findIndex(([k]) => k === cur));
+  return `<div class="lh-seg" role="group" aria-label="${esc(label)}" style="--n:${items.length};--idx:${idx}"><span class="lh-seg-thumb" aria-hidden="true"></span>${
+    items.map(([k, l]) => `<button type="button" data-${attr}="${k}" aria-pressed="${k === cur}">${esc(l)}</button>`).join('')}</div>`;
+}
+const boxesHTML = (boxes, cls = '') => {
+  const maxBox = Math.max(1, ...boxes);
+  return `<span class="lh-boxes ${cls}" aria-hidden="true">${boxes.map((n, i) => `<span class="lh-box"><b>${n}</b><span class="lh-box-bar"><i style="--h:${(n / maxBox).toFixed(3)};--j:${i}"></i></span><em>${i + 1}</em></span>`).join('')}</span>`;
+};
+
 function renderHub(ctx) {
   const { view } = ctx;
   game = null;
@@ -267,75 +383,115 @@ function renderHub(ctx) {
   const streak = currentStreak();
   const cards = allCards(), due = dueCards().length;
   const boxes = [1, 2, 3, 4, 5].map(b => cards.filter(c => c.box === b).length);
-  const maxBox = Math.max(1, ...boxes);
   const dailyLine = doneToday ? `Done: ${D.history[today]} of 5. A new set comes tomorrow.` : picks.length ? `${picks.length} of 5 answered. Pick up where you left off.` : `Five species around in ${month}. About two minutes.`;
   const kinds = ['animals', ...kindsPresent];
   const scopes = [['all', 'Everything'], ['seen', "Ones I've seen"], ['month', `Around in ${month}`]];
-  const callOk = Q.CALL_KINDS.includes(p.kind) || p.kind === 'animals';
-  const best = m => L.best[bestKey(m, p)];
   const now = new Date();
+  const grow = !hubOnce && !reduced() ? ' data-grow' : '';
+  hubOnce = true;
+  const hero = heroFace(now.getMonth() + 1);
   view.innerHTML = `
     <header class="page-head"><h1 class="lh-title">Learn</h1></header>
     <div class="learn">
       ${navigator.onLine ? '' : '<p class="lh-offline" role="status">No signal. Questions use the photos and calls saved on this phone, plus field notes.</p>'}
-      <a class="lh-daily ${doneToday ? 'is-done' : ''}" href="#/learn/daily">
-        <span class="lh-date" aria-hidden="true"><b>${now.getDate()}</b><span>${esc(month.slice(0, 3))}</span></span>
-        <span class="lh-daily-main"><strong>Today's challenge</strong><span>${esc(dailyLine)}</span>${pipsHTML(picks)}</span>
-        ${streak ? `<span class="lh-streak"><b>${streak}</b><span>${streak === 1 ? 'day' : 'days'} in a row</span></span>`
-          : `<span class="lh-go">${picks.length ? 'Carry on' : 'Start'}</span>`}
+      <a class="lh-daily${doneToday ? ' is-done' : ''}" href="#/learn/daily">
+        ${hero ? `<span class="lh-daily-photo" aria-hidden="true">${imgTag(faceSrc(hero.id, 'large'))}</span>` : ''}
+        <span class="lh-daily-top">
+          <span class="lh-date" aria-hidden="true"><b>${now.getDate()}</b><span>${esc(month)}</span></span>
+          ${streak ? `<span class="lh-streak"><b>${streak}</b><span>${streak === 1 ? 'day' : 'days'} in a row</span></span>` : ''}
+        </span>
+        <span class="lh-daily-main"><strong>Today's challenge</strong><span>${esc(dailyLine)}</span></span>
+        <span class="lh-daily-foot">${heroPips(picks, today)}<span class="lh-go">${doneToday ? 'See how you went' : picks.length ? 'Carry on' : 'Start'}</span></span>
       </a>
 
       <section class="lh-sec" aria-labelledby="lh-deck-h">
         <div class="lh-sec-h"><h2 id="lh-deck-h">Review deck</h2><a href="#/learn/deck">${cards.length ? 'Open' : 'Set up'}</a></div>
-        ${cards.length ? `<a class="lh-deck" href="#/learn/deck" aria-label="${due} ${due === 1 ? 'card' : 'cards'} due. Open the review deck">
-          <span class="lh-boxes" aria-hidden="true">${boxes.map((n, i) => `<span class="lh-box"><b>${n}</b><i style="--h:${Math.round(n / maxBox * 100)}%"></i><em>${i + 1}</em></span>`).join('')}</span>
-          <span class="lh-deck-txt"><strong>${due ? `${due} ${due === 1 ? 'card' : 'cards'} to review` : 'Nothing due right now'}</strong><span class="small muted">Know a card and it moves along a box. Box 4 and 5 count as mastered.</span></span></a>`
+        ${cards.length ? `<a class="lh-deck${due ? ' is-due' : ''}" href="#/learn/deck" aria-label="${due} ${due === 1 ? 'card' : 'cards'} due. Open the review deck"${grow}>
+          ${boxesHTML(boxes)}
+          <span class="lh-deck-txt"><strong>${due ? `<b>${due}</b> ${due === 1 ? 'card' : 'cards'} to review` : 'Nothing due right now'}</strong><span class="small muted">Know a card and it moves along a box. Box 4 and 5 count as mastered.</span></span></a>`
           : '<p class="small muted lh-empty">Species you miss in a round land here, so they come back until you know them. You can also add a set yourself.</p>'}
       </section>
 
       <section class="lh-sec" aria-labelledby="lh-play-h">
         <div class="lh-sec-h"><h2 id="lh-play-h">Practise</h2></div>
-        <div class="chips chips--scroll lh-chips" role="group" aria-label="What to practise">${kinds.map(k => `<button class="chip ${k !== 'animals' ? `chip--kind kind--${k}` : ''} ${p.kind === k ? 'chip--on' : ''}" data-kind="${k}" aria-pressed="${p.kind === k}">${esc(kindLabel(k))}</button>`).join('')}</div>
-        <div class="lh-seg" role="group" aria-label="Which species">${scopes.map(([k, l]) => `<button data-scope="${k}" aria-pressed="${p.scope === k}">${esc(l)}</button>`).join('')}</div>
-        <div class="lh-seg" role="group" aria-label="Difficulty">${Object.entries(DIFF).map(([k, [l]]) => `<button data-diff="${k}" aria-pressed="${p.difficulty === k}">${l}</button>`).join('')}</div>
-        <p class="small muted lh-hint">${esc(DIFF[p.difficulty][1])}</p>
-        <ul class="lh-modes">${Q.MODES.map(m => {
-          const [title, desc] = MODE_INFO[m];
-          const b = best(m), off = m === 'call' && !callOk;
-          return `<li class="${m === 'quick' ? 'lh-mode--wide' : ''}"><a class="lh-mode lh-mode--${m} ${off ? 'is-off' : ''}" href="#/learn/play/${m}" ${off ? 'aria-disabled="true" data-off' : ''}>
-            <span class="lh-mode-ic">${I[m]}</span><strong>${title}</strong><span class="lh-mode-desc">${off ? 'Calls are for birds and frogs. Choose All animals, Birds or Frogs.' : desc}</span>
-            ${b != null ? `<span class="lh-best">${m === 'rapid' ? 'Best streak' : 'Best'} <b>${b}</b>${m === 'rapid' ? '' : `<span>/${ROUND}</span>`}</span>` : ''}</a></li>`;
-        }).join('')}</ul>
+        <div class="lh-kinds" role="group" aria-label="What to practise">${kinds.map(k => `<button type="button" class="lh-kind${k !== 'animals' ? ` kind--${k}` : ''}" data-kind="${k}" aria-pressed="${p.kind === k}"><i aria-hidden="true"></i>${esc(kindLabel(k))}</button>`).join('')}</div>
+        ${segHTML('scope', scopes, p.scope, 'Which species')}
+        ${segHTML('diff', Object.entries(DIFF).map(([k, [l]]) => [k, l]), p.difficulty, 'Difficulty')}
+        <p class="small muted lh-hint" data-hint>${esc(DIFF[p.difficulty][1])}</p>
+        <ul class="lh-modes${p.kind !== 'animals' ? ` kind--${p.kind}` : ''}" data-modes>${modesHTML(p)}</ul>
       </section>
 
       <section class="lh-sec" aria-labelledby="lh-prog-h">
         <div class="lh-sec-h"><h2 id="lh-prog-h">How you're going</h2></div>
-        ${progressHTML()}
+        ${progressHTML(grow)}
       </section>
     </div>`;
+  wireFaces(view);
+  const card = view.querySelector('.lh-daily');
+  if (hero) ctx.applyTint?.(card, faceSrc(hero.id), null);
+  growOnView(view);
+  ctx.stagger?.(view, '.lh-daily, .lh-deck, .lh-modes > li', { key: 'learn-hub' });
+  view.querySelector('.lh-kind[aria-pressed="true"]')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'auto' });
   view.onclick = e => {
     const k = e.target.closest('[data-kind]'), sc = e.target.closest('[data-scope]'), d = e.target.closest('[data-diff]');
     if (k) L.prefs.kind = k.dataset.kind;
     if (sc) L.prefs.scope = sc.dataset.scope;
     if (d) L.prefs.difficulty = d.dataset.diff;
-    if (k || sc || d) { saveL(); renderHub(ctx); return; }
+    if (k || sc || d) { saveL(); syncHub(ctx, k || sc || d); return; }
     if (e.target.closest('[data-off]')) { e.preventDefault(); ctx.toast('Calls are for birds and frogs. Choose All animals, Birds or Frogs.'); }
   };
   view.onchange = null;
 }
 
+// A choice changes the controls and cards in place: focus stays on the button she pressed and the thumb can glide.
+function syncHub(ctx, btn) {
+  const { view } = ctx, p = L.prefs;
+  const press = (attr, val) => { for (const b of view.querySelectorAll(`[data-${attr}]`)) b.setAttribute('aria-pressed', String(b.getAttribute(`data-${attr}`) === val)); };
+  press('kind', p.kind); press('scope', p.scope); press('diff', p.difficulty);
+  for (const seg of view.querySelectorAll('.lh-seg')) seg.style.setProperty('--idx', Math.max(0, [...seg.querySelectorAll('button')].findIndex(b => b.getAttribute('aria-pressed') === 'true')));
+  const hint = view.querySelector('[data-hint]');
+  if (hint) hint.textContent = DIFF[p.difficulty][1];
+  const modes = view.querySelector('[data-modes]');
+  if (modes) {
+    modes.className = `lh-modes${p.kind !== 'animals' ? ` kind--${p.kind}` : ''}`;
+    modes.innerHTML = modesHTML(p);
+    wireFaces(modes);
+  }
+  if (btn?.matches('.lh-kind')) {
+    btn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduced() ? 'auto' : 'smooth' });
+    if (!reduced()) { btn.classList.remove('is-pop'); void btn.offsetWidth; btn.classList.add('is-pop'); }
+  }
+}
+
+function modesHTML(p) {
+  const callOk = Q.CALL_KINDS.includes(p.kind) || p.kind === 'animals';
+  const f = modeFaces(p.kind);
+  return Q.MODES.map(m => {
+    const [title, desc] = MODE_INFO[m];
+    const b = L.best[bestKey(m, p)], off = m === 'call' && !callOk;
+    const ids = f[m] || [];
+    const pics = ids.map(id => imgTag(faceSrc(id, m === 'quick' ? 'large' : 'small'))).join('');
+    return `<li class="${m === 'quick' ? 'lh-mode--wide' : ''}"><a class="lh-mode lh-mode--${m}${off ? ' is-off' : ''}" href="#/learn/play/${m}"${off ? ' aria-disabled="true" data-off' : ''}>
+      <span class="lh-mode-bg${ids.length > 1 ? ' is-split' : ''}" aria-hidden="true">${pics}</span>
+      <span class="lh-mode-top"><span class="lh-mode-ic" aria-hidden="true">${I[m]}</span>
+      ${b != null ? `<span class="lh-best">${m === 'rapid' ? 'Best streak' : 'Best'} <b>${b}</b>${m === 'rapid' ? '' : `<span>/${ROUND}</span>`}</span>` : ''}</span>
+      <span class="lh-mode-txt"><strong>${title}</strong><span class="lh-mode-desc">${off ? 'Calls are for birds and frogs. Choose All animals, Birds or Frogs.' : desc}</span></span></a></li>`;
+  }).join('');
+}
+
 // Mastered (box 4+) and accuracy for each kind she has practised; one line for the rest.
-function progressHTML() {
+function progressHTML(grow = '') {
   const rows = kindsPresent.map(k => ({ k, all: ofKind(k).length, m: ofKind(k).filter(s => isMastered(s.id)).length, acc: accuracy(k) }));
   const active = rows.filter(r => r.acc || r.m), idle = rows.filter(r => !r.acc && !r.m);
   if (!active.length) return '<p class="small muted lh-empty">Answer a few questions and your accuracy, and how many species you have mastered, show here for each kind.</p>';
   const names = idle.map(r => KINDS[r.k].label.toLowerCase());
-  return `<ul class="lh-prog">${active.map(({ k, all, m, acc }) => `<li class="kind--${k}"><span class="lh-dot" aria-hidden="true"></span>
-      <span class="lh-prog-main"><strong>${KINDS[k].label}</strong><span class="meter meter--thin" aria-hidden="true" style="--p:${Math.round(m / all * 100)}%"><span></span></span>
+  return `<ul class="lh-prog"${grow}>${active.map(({ k, all, m, acc }, i) => `<li class="kind--${k}"><span class="lh-dot" aria-hidden="true"></span>
+      <span class="lh-prog-main"><strong>${KINDS[k].label}</strong><span class="lh-meter" aria-hidden="true"><span style="--p:${(m / all).toFixed(3)};--j:${i}"></span></span>
       <span class="small muted">${m} of ${all} mastered</span></span>
       <span class="lh-acc">${acc ? `<b>${acc.pct}%</b><span>right of ${acc.n}</span>` : '<span>No answers yet</span>'}</span></li>`).join('')}</ul>
     ${names.length ? `<p class="small muted lh-empty">Nothing yet for ${esc(names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names[0])}.</p>` : ''}`;
 }
+
 
 // ---------- practice rounds ----------
 function emptyMessage(mode, p, offline) {
