@@ -1127,8 +1127,13 @@ function MapView() {
 
   const pickLayer = (next: Layer) => {
     setLayer(next);
-    settingsRef.current = { ...settingsRef.current, mapLayer: next };
-    void Promise.resolve(db.kvSet('settings', settingsRef.current)).catch(() => {});
+    void (async () => {
+      // Read first: a tap before the initial settings load must not replace the whole object.
+      const current = ((await db.kvGet('settings')) as Settings | null) || {};
+      const merged = { ...current, mapLayer: next };
+      settingsRef.current = merged;
+      await db.kvSet('settings', merged);
+    })().catch(() => {});
   };
 
   // -- render --------------------------------------------------------------
