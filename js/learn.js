@@ -42,7 +42,7 @@ const freshLearn = () => ({ cards: {}, best: {}, duels: { n: 0, won: 0 }, rounds
 const freshDaily = () => ({ streak: 0, best: 0, lastDate: '', done: 0, history: {}, today: null });
 export function learnReady() {
   loading ||= Promise.all([
-    db.kvGet('learn').catch(() => null), db.kvGet('dailyQuiz').catch(() => null), db.kvGet('quizStats').catch(() => null), Q.loadLookalikes(),
+    db.kvGet('learn').catch(() => null), db.kvGet('dailyQuiz').catch(() => null), db.kvGet('quizStats').catch(() => null), Q.loadLookalikes(), Q.loadCallPack().catch(() => null),
   ]).then(([l, d, s]) => {
     L = { ...freshLearn(), ...(l && typeof l === 'object' ? l : {}) };
     L.prefs = { kind: 'animals', scope: 'all', difficulty: 'normal', ...(L.prefs || {}) };

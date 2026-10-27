@@ -237,6 +237,9 @@ export function loadCallPack() {
 const clipUrl = c => new URL(`data/${c.file}${c.v ? `?v=${c.v}` : ''}`, location.href).href;
 // Sync check, true once the pack has loaded.
 export const hasLocalCall = id => !!pack?.[id]?.length;
+// Sync list of local clips, once the pack has loaded (for the quiz, which builds rounds synchronously).
+// `local` holds the same-origin URL so callers can prefer it over the remote original.
+export const localCallsNow = id => (pack?.[id] || []).map(c => ({ src: clipUrl(c), local: clipUrl(c), orig: c.src, seconds: c.seconds, artist: c.artist, license: c.license, page: c.page, from: c.from }));
 export async function localCalls(id) {
   const list = (await loadCallPack())[id] || [];
   return list.map(c => ({

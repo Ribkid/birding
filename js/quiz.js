@@ -1,7 +1,7 @@
 // Question engine for Learn: who to ask about, look-alike-aware wrong answers, question makers and teaching text.
 // Pure data in, plain question objects out; js/learn.js draws them. Works in Node for the birds (tests).
 import { SPECIES, ANIMALS, GROUPS, HABITATS, KINDS, byId, ofKind, kindsPresent } from './species.js';
-import { sized, photoFor } from './media.js';
+import { sized, photoFor, localCallsNow, loadCallPack } from './media.js';
 import { galleryFor } from './gallery.js';
 import { seq, monthRates, recordCount, spotsFor, hotspots } from './seqdata.js';
 import { MONTHS, inSeason } from './stats.js';
@@ -103,8 +103,13 @@ export function pickDistractors(ans, { difficulty = 'normal', n = 3, rng = Math.
 // ---------- who's around, who has what ----------
 export const relRate = (id, month) => { const m = monthRates(id); return m ? m.rel[month - 1] : null; };
 export const aroundNow = (sp, month, min = 0.5) => (relRate(sp.id, month) ?? (inSeason(sp, month) ? 1 : 0)) >= min;
-export const callsOf = id => seq()?.species?.[id]?.calls || [];
+// Our own offline clips first (js/media.js call pack), then the remote recordings they were cut from are skipped.
+export const callsOf = id => {
+  const local = localCallsNow(id), orig = new Set(local.map(c => c.orig));
+  return [...local, ...(seq()?.species?.[id]?.calls || []).filter(c => !orig.has(c.src))];
+};
 export const hasCall = id => callsOf(id).length > 0;
+export { loadCallPack };
 export const hasPhoto = sp => !!photoFor(sp.id) || galleryFor(sp.id).length > 0;
 export const CALL_KINDS = ['bird', 'frog'];
 
