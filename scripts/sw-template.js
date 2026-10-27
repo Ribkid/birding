@@ -16,6 +16,7 @@ const PHOTOS = 'birdydex-photos-v3';
 const CALLS = 'birddex-calls';
 const IMAGES = 'birddex-images';
 const TILES = 'birddex-tiles';
+const MODELS = 'birddex-models';
 const PHOTO_LIMIT = 400;
 const NAV_WAIT = 4000;
 const TILE_LIMIT = 3000;
@@ -80,7 +81,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      const keep = new Set([SHELL, RUNTIME, PHOTOS, CALLS, 'birddex-models']);
+      const keep = new Set([SHELL, RUNTIME, PHOTOS, CALLS, MODELS]);
       const shell = await caches.open(SHELL);
       // A page still running the previous release may lazy-load an old content-hashed
       // chunk. Keep the old shell's assets in the new shell before deleting it.
@@ -97,13 +98,26 @@ self.addEventListener('activate', (event) => {
       for (const name of await caches.keys()) {
         if (!keep.has(name) && name.startsWith('birdydex-')) await caches.delete(name);
       }
-      // These used to be caught by the runtime cache; photoid.js owns the model cache now.
+      // Earlier releases kept the photo model's .bin parts and the ONNX runtime in the runtime cache.
+      // photoid.js keeps the joined model and the .wasm in birddex-models, so the parts are deleted. The
+      // runtime's /vendor/ort/ files move to birddex-models unless it already has them, so Scan still
+      // starts offline after the update.
       const runtime = await caches.open(RUNTIME);
+      const models = await caches.open(MODELS);
       for (const req of await runtime.keys()) {
         const path = new URL(req.url).pathname;
-        if ((path.startsWith('/models/bioclip/') && path.endsWith('.bin')) || path.startsWith('/vendor/ort/')) {
-          await runtime.delete(req);
+        const part = path.startsWith('/models/bioclip/') && path.endsWith('.bin');
+        if (!part && !path.startsWith('/vendor/ort/')) continue;
+        if (!part && !(await models.match(req, MATCH))) {
+          const res = await runtime.match(req, MATCH);
+          if (!res) continue;
+          try {
+            await models.put(req, res);
+          } catch {
+            continue;
+          }
         }
+        await runtime.delete(req);
       }
       await self.clients.claim();
     })(),
@@ -301,7 +315,7 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/models/bioclip/') && url.pathname.endsWith('.bin')) return;
   // Models and vendor bundles (the ORT wasm, BirdNET files): one entry in birddex-models.
   if (url.pathname.startsWith('/models/') || url.pathname.startsWith('/vendor/')) {
-    event.respondWith(cacheFirst(event, 'birddex-models').catch(() => Response.error()));
+    event.respondWith(cacheFirst(event, MODELS).catch(() => Response.error()));
     return;
   }
 

@@ -78,6 +78,12 @@ class FakeCaches {
   urls(name: string) {
     return [...(this.map.get(name)?.entries.keys() ?? [])];
   }
+  // What an earlier release left behind: a stored answer under `url` in cache `name`.
+  seed(name: string, url: string, body: string, type = 'text/javascript') {
+    if (!this.map.has(name)) this.map.set(name, new FakeCache(this.net));
+    const bytes = new TextEncoder().encode(body).buffer as ArrayBuffer;
+    this.map.get(name)!.entries.set(abs(url), { url: abs(url), body: bytes, status: 200, headers: [['content-type', type]] });
+  }
 }
 
 function toReq(url: string, extra: Partial<Req> = {}): Req {
@@ -159,22 +165,31 @@ async function dispatch(listener: Listener, extra: Record<string, unknown> = {})
   return result;
 }
 
-function setup(precache: string[] = ['/index.html', '/assets/index-a.js']) {
+type Files = Record<string, string | { body: string; type: string; status?: number }>;
+
+function setup(precache: string[] = ['/index.html', '/assets/index-a.js'], opts: { files?: Files; before?: (caches: FakeCaches) => void } = {}) {
   const app = { body: '<!doctype html><title>BirdyDex</title><div id="root"></div>', type: 'text/html' };
-  const files = {
+  const files: Files = {
     [abs('/')]: app,
     [abs('/index.html')]: app,
     [abs('/assets/index-a.js')]: 'console.log("a")',
     [abs('/vendor/tfjs/tf.min.js')]: 'tf',
+    [abs('/vendor/ort/ort.wasm.min.mjs')]: 'ort',
     [abs('/fonts/nope.woff2')]: { body: '<!doctype html><div id="root"></div>', type: 'text/html' },
     'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Bird.jpg/320px-Bird.jpg': { body: 'jpeg', type: 'image/jpeg' },
     'https://tile.openstreetmap.org/9/473/296.png': { body: 'png', type: 'image/png' },
   };
+  for (const [url, file] of Object.entries(opts.files ?? {})) files[abs(url)] = file;
   const { net, state } = makeNet(files);
   const caches = new FakeCaches(net);
+  opts.before?.(caches);
   const sw = loadWorker({ precache, caches, net });
   const get = (url: string, extra: Partial<Req> = {}) => dispatch(sw.fetch, { request: toReq(url, extra) });
-  return { sw, caches, state, get };
+  const update = async () => {
+    await dispatch(sw.install, {});
+    await dispatch(sw.activate, {});
+  };
+  return { sw, caches, state, get, update };
 }
 
 describe('service worker runtime caching', () => {
@@ -214,5 +229,43 @@ describe('service worker runtime caching', () => {
     const res = await get('/', { mode: 'navigate', destination: 'document' });
     expect(res.text).toContain('<div id="root">');
     expect(caches.urls(shell)).toContain(abs('/index.html'));
+  });
+});
+
+describe('service worker updates from an earlier release', () => {
+  it('keeps the ONNX runtime modules for offline Scan, dropping only copies birddex-models already has', async () => {
+    const { caches, state, get, update } = setup(undefined, {
+      before: (c) => {
+        // What main left after one online scan: the parts, the wasm and the modules in the runtime cache,
+        // and photoid.js's own joined model and wasm in birddex-models.
+        c.seed('birdydex-runtime-v3', '/models/bioclip/vision-int4.part1.bin', 'part1', 'application/octet-stream');
+        c.seed('birdydex-runtime-v3', '/vendor/ort/ort-wasm-simd-threaded.wasm', 'wasm', 'application/wasm');
+        c.seed('birdydex-runtime-v3', '/vendor/ort/ort.wasm.min.mjs', 'ort-main', 'text/javascript');
+        c.seed('birdydex-runtime-v3', '/vendor/ort/ort-wasm-simd-threaded.mjs', 'ort-threaded', 'text/javascript');
+        c.seed('birdydex-runtime-v3', '/models/birdnet/model.json', '{}', 'application/json');
+        c.seed('birddex-models', '/vendor/ort/ort-wasm-simd-threaded.wasm', 'wasm', 'application/wasm');
+        c.seed('birddex-models', '/models/bioclip/vision-int4.onnx', 'onnx', 'application/octet-stream');
+      },
+    });
+    await update();
+    expect(caches.urls('birdydex-runtime-v3')).toEqual([abs('/models/birdnet/model.json')]);
+    expect(caches.urls('birddex-models').sort()).toEqual([
+      abs('/models/bioclip/vision-int4.onnx'),
+      abs('/vendor/ort/ort-wasm-simd-threaded.mjs'),
+      abs('/vendor/ort/ort-wasm-simd-threaded.wasm'),
+      abs('/vendor/ort/ort.wasm.min.mjs'),
+    ]);
+    state.online = false;
+    expect(await get('/vendor/ort/ort.wasm.min.mjs')).toMatchObject({ status: 200, text: 'ort-main' });
+    expect(await get('/vendor/ort/ort-wasm-simd-threaded.mjs')).toMatchObject({ status: 200, text: 'ort-threaded' });
+    expect(await get('/models/birdnet/model.json')).toMatchObject({ status: 200, text: '{}' });
+  });
+
+  it('keeps the ONNX runtime modules a fresh install fetches', async () => {
+    const { caches, state, get } = setup();
+    expect(await get('/vendor/ort/ort.wasm.min.mjs')).toMatchObject({ status: 200, text: 'ort' });
+    expect(caches.urls('birddex-models')).toEqual([abs('/vendor/ort/ort.wasm.min.mjs')]);
+    state.online = false;
+    expect(await get('/vendor/ort/ort.wasm.min.mjs')).toMatchObject({ status: 200, text: 'ort' });
   });
 });
