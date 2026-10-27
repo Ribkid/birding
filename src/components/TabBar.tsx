@@ -6,6 +6,7 @@ import { onAuth } from '../core/cloud.js';
 import { configured, getMyCloud, getProfile, myName, signedIn, avatarUrl } from '../core/profile.js';
 import { SpeciesImage } from './SpeciesImage';
 import { useViewTransitionNavigate } from './Motion';
+import { PlusSheet } from './PlusSheet';
 
 const TABS = [
   {
@@ -94,6 +95,7 @@ export function TabBar() {
   const location = useLocation();
   const [, force] = useReducer((n: number) => n + 1, 0);
   const [notNow, setNotNow] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -111,36 +113,43 @@ export function TabBar() {
   const dot = configured && !signedIn() && !notNow;
 
   return (
-    <nav className="tabbar" aria-label="Main">
-      {TABS.map((tab) => {
-        const active = !tab.plus && current === tab.key;
-        return (
-          <Link
-            key={tab.to}
-            to={tab.to}
-            id={tab.key === 'me' ? 'me-tab' : undefined}
-            className={tab.plus ? 'tab-plus' : undefined}
-            aria-label={tab.plus ? tab.label : tab.key === 'me' && dot ? 'Me, not signed in' : undefined}
-            aria-current={active ? 'page' : 'false'}
-            onClick={(e) => {
-              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-              e.preventDefault();
-              go(tab.to);
-            }}
-          >
-            {tab.plus ? (
-              <svg viewBox="0 0 24 24" aria-hidden="true">{tab.icon}</svg>
-            ) : tab.key === 'me' ? (
-              <MeTabIcon dot={dot} />
-            ) : (
-              <span className="tab-ico">
+    <>
+      <nav className="tabbar" aria-label="Main">
+        {TABS.map((tab) => {
+          if (tab.plus) {
+            return (
+              <button key={tab.to} type="button" className="tab-plus" aria-label={tab.label} onClick={() => setPlusOpen(true)}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">{tab.icon}</svg>
-              </span>
-            )}
-            {!tab.plus && <span>{tab.label}</span>}
-          </Link>
-        );
-      })}
-    </nav>
+              </button>
+            );
+          }
+          const active = current === tab.key;
+          return (
+            <Link
+              key={tab.to}
+              to={tab.to}
+              id={tab.key === 'me' ? 'me-tab' : undefined}
+              aria-label={tab.key === 'me' && dot ? 'Me, not signed in' : undefined}
+              aria-current={active ? 'page' : 'false'}
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                e.preventDefault();
+                go(tab.to);
+              }}
+            >
+              {tab.key === 'me' ? (
+                <MeTabIcon dot={dot} />
+              ) : (
+                <span className="tab-ico">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">{tab.icon}</svg>
+                </span>
+              )}
+              <span>{tab.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+      <PlusSheet open={plusOpen} onClose={() => setPlusOpen(false)} />
+    </>
   );
 }
