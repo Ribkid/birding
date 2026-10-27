@@ -1746,7 +1746,7 @@ function whereSection(sp) {
     <h2 class="h2" id="where-h">When and where</h2>
     <h3 class="h3">When it's reported</h3>
     <div class="season" data-grow role="img" aria-label="Reporting rate by month, highest in ${MONTHS[m.rel.indexOf(1)]}">${m.rel.map((v, i) => `<i class="${i === now ? 'now' : ''}" style="height:${Math.max(3, Math.round(v * 100))}%;--i:${i}"></i>`).join('')}</div>
-    <div class="season-labels" aria-hidden="true">${[...L].map(c => `<span>${c}</span>`).join('')}</div>
+    <div class="season-labels" aria-hidden="true">${[...L].map((c, i) => `<span${i === now ? ' class="now"' : ''}>${c}</span>`).join('')}</div>
     <p class="small muted">How often it's reported in SEQ each month, from ${recordCount(sp.id).toLocaleString('en-AU')} records since 2016 in the Atlas of Living Australia.</p>
     ${spots.length ? `<h3 class="h3">${near ? 'Places near its records' : 'Best places in SEQ'}</h3>
     <ul class="spots">${spots.map(({ h, c }) => `<li><span>${esc(h.name)}</span><span class="num">${c.toLocaleString('en-AU')}</span></li>`).join('')}</ul>

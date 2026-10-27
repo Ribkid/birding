@@ -58,10 +58,10 @@
   background: rgba(6, 18, 15, .42); color: #fff; font: 600 var(--fs-2)/1 var(--stamp); letter-spacing: .05em;
 }
 .bird .hero-credit {
-  margin: 6px 0 0; padding: 0; min-height: 0; color: rgba(255, 255, 255, .78); font-size: var(--fs-1); line-height: 1.4;
+  margin: -7px 0 -13px; padding: 13px 0; min-height: 0; /* padded so the credit link is a full-height target */ color: rgba(255, 255, 255, .78); font-size: var(--fs-1); line-height: 1.4;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: auto; justify-self: start; max-width: 100%;
 }
-.bird .hero-credit a { color: inherit; }
+.bird .hero-credit a { color: inherit; display: inline-block; padding: 13px 0; margin: -13px 0; }
 .bird .hero-credit:empty { display: none; }
 
 /* Glass controls: back and search circles, and the Photos / 3D model / Card switch between them. */
@@ -98,7 +98,7 @@
 }
 .bird .hero-model canvas { touch-action: pan-y; }
 .bird .model-loading, .bird .model-hint {
-  top: calc(66px + env(safe-area-inset-top)); left: 50%; right: auto; translate: -50% 0; width: max-content; max-width: calc(100% - 32px);
+  top: calc(66px + env(safe-area-inset-top)); left: var(--sp-4); right: auto; width: max-content; max-width: calc(100% - 32px);
   padding: 6px 12px; border-radius: var(--r-pill); background: rgba(6, 18, 15, .45); color: #fff; font-weight: 600;
 }
 
@@ -180,6 +180,7 @@
 /* When and where: the month bars grow up the first time they are seen. */
 .bird .season i, .compare .season i { background: var(--accent, var(--kc)); }
 .bird .season i.now { background: var(--sun); }
+.bird .season-labels .now { color: var(--ink); font-weight: 800; text-decoration: underline 2px var(--sun); text-underline-offset: 3px; }
 .bird .season, .compare .season { --grow-delay: 26ms; }
 .season[data-grow] i { transform-origin: 50% 100%; transition: transform var(--dur-4) var(--ease-out) calc(var(--i, 0) * var(--grow-delay, 26ms)); }
 .season[data-grow]:not(.is-in) i { transform: scaleY(.04); }
