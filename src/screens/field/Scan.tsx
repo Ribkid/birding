@@ -94,6 +94,11 @@ export default function Scan() {
     return () => window.clearTimeout(timer);
   }, [landTick]);
 
+  // A freshly picked photo: the stage takes focus, without scrolling, so the arrow keys move the box (v1 pick()).
+  useEffect(() => {
+    if (landTick) stageRef.current?.focus({ preventScroll: true });
+  }, [landTick]);
+
   useEffect(() => {
     if (!rise) return;
     const start = window.setTimeout(() => { void countUp(ringNRef.current, 0, sure, { delay: 260, duration: 820 }); }, 60);

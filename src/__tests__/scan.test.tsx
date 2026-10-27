@@ -109,6 +109,17 @@ describe('Scan', () => {
     expect(S.result).toBeNull();
   });
 
+  it('focuses the stage without scrolling after a photo is picked (new 8)', async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    mount();
+    expect(document.activeElement).toBe(document.body);
+    await pickPhoto(400, 300);
+    await waitFor(() => expect(document.activeElement?.classList.contains('scan-stage')).toBe(true));
+    expect(focus.mock.contexts.at(-1)).toBe(document.querySelector('.scan-stage'));
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
+    focus.mockRestore();
+  });
+
   it('puts the Change photo icon beside its label, as v1 does (new 5)', () => {
     mount();
     const chip = document.querySelector('.scan-change') as HTMLElement;
