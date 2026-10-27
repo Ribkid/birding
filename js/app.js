@@ -854,20 +854,120 @@ const routes = [
   [/^#\/scan$/, () => renderScan()],
 ];
 let lastRoute = '';
+// Draw the current route. Synchronous: async screens fill in later and are tidied up when they finish.
+// Redrawing the same route (a sync, a save) keeps keyboard focus on the same control.
 function render() {
   const hash = location.hash || '#/dex';
+  return hash === lastRoute ? keepFocus(() => drawRoute(hash), { fallback: '#view h1' }) : drawRoute(hash);
+}
+function drawRoute(hash) {
+  const fresh = hash !== lastRoute;
   if (state.map && !hash.startsWith('#/map')) { state.map.remove(); state.map = null; }
   state.cleanup?.(); state.cleanup = null;
+  let out;
   for (const [re, fn] of routes) {
     const m = hash.match(re);
-    if (m) { fn(m); break; }
+    if (m) { out = fn(m); break; }
   }
   const tab = hash.split('/')[1] || 'dex';
-  const tabFor = { bird: 'dex', dex: 'dex', compare: 'dex', listen: 'dex', scan: 'dex', lists: 'lists', list: 'lists', patch: 'lists', targets: 'lists', outing: 'lists', log: 'lists', stats: 'lists', map: 'map', badges: 'badges', settings: 'badges', quiz: 'badges' }[tab] || 'dex';
+  const tabFor = { bird: 'dex', dex: 'dex', compare: 'dex', listen: 'dex', scan: 'dex', lists: 'lists', list: 'lists', patch: 'lists', targets: 'lists', outing: 'lists', log: 'lists', stats: 'lists', map: 'map', badges: 'badges', settings: 'badges', quiz: 'badges', leaderboard: 'badges' }[tab] || 'dex';
   $$('.tabbar a').forEach(a => a.setAttribute('aria-current', a.dataset.tab === tabFor ? 'page' : 'false'));
   renderOutingBar();
-  if (hash !== lastRoute) { if (!hash.startsWith('#/dex') || !lastRoute.startsWith('#/bird')) window.scrollTo(0, 0); lastRoute = hash; }
+  // A new route starts at the top, except going back, which returns to where she was.
+  if (fresh) { window.scrollTo(0, state.navScroll || 0); state.navScroll = 0; lastRoute = hash; }
+  afterDraw();
+  if (out && typeof out.then === 'function') out.then(() => { if ((location.hash || '#/dex') === hash) afterDraw(); }, () => {});
+  return out;
+}
+// Page title from the screen's heading, the hero photo first in line, cached photos shown at once, her photos lazily.
+function afterDraw() {
+  const h1 = $('h1', view);
+  let t = '';
+  if (h1) { const c = h1.cloneNode(true); c.querySelectorAll('small').forEach(n => n.remove()); t = c.textContent.replace(/\s+/g, ' ').trim(); }
+  document.title = !t || /BirdyDex/.test(t) ? "Sarah's BirdyDex" : `${t} – BirdyDex`;
+  prioritiseHero(view);
+  settleImages(view);
   hydratePhotos(view);
+}
+
+// ---------- navigation motion ----------
+// How deep each screen sits. Deeper is 'forward' (the new page rises), shallower is 'back', level is a tab 'swap'.
+const DEPTH = { dex: 0, lists: 0, map: 0, badges: 0, learn: 0, bird: 1, list: 1, patch: 1, targets: 1, stats: 1, log: 1, listen: 1, scan: 1, settings: 1, quiz: 1, leaderboard: 1, compare: 2, outing: 2 };
+const routeDepth = h => DEPTH[(h || '#/dex').split('/')[1] || 'dex'] ?? 1;
+const navKind = (from, to) => { const a = routeDepth(from), b = routeDepth(to); return b > a ? 'forward' : b < a ? 'back' : 'swap'; };
+const scrollMem = new Map();
+const THUMB = '.tile-img, .row-thumb, .botd-img, .cmp-img';
+let morph = null; // { id, url } of a photo just tapped on its way to a species page
+// The photo itself flies, not its frame: the seen ring and tick stay behind and fade with the page.
+const pic = thumb => $(':scope > img, :scope > .whole', thumb) || thumb;
+const inView = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.bottom > 56 && r.top < innerHeight - 64; };
+
+// Tapping a photo that links to a species names it, so the view transition grows it into that page's hero.
+function nameTappedPhoto(e) {
+  if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || state.suppressClick || !motionOK()) return;
+  const a = e.target.closest?.('a[href^="#/bird/"]');
+  if (!a || a.getAttribute('href') === location.hash) return;
+  const thumb = a.matches(THUMB) ? a : $(THUMB, a);
+  if (!thumb) return;
+  const el = pic(thumb);
+  const m = morph = { id: Number(a.getAttribute('href').split('/')[2]), url: $('img', thumb)?.currentSrc || '' };
+  nameFor(el, 'sp-hero');
+  // If no navigation follows (a long press, a cancelled tap), take the name off again.
+  setTimeout(() => { if (morph === m) { morph = null; if (!document.documentElement.dataset.nav) el.style.viewTransitionName = ''; } }, 700);
+}
+
+function onRouteChange() {
+  const from = lastRoute, to = location.hash || '#/dex';
+  scrollMem.set(from, scrollY);
+  const nav = navKind(from, to);
+  const toId = Number(to.match(/^#\/bird\/(\d+)$/)?.[1]) || null;
+  const fromId = Number(from.match(/^#\/bird\/(\d+)$/)?.[1]) || null;
+  const tapped = morph && morph.id === toId ? morph : null;
+  morph = null;
+  // Going back from a species page: its hero shrinks back into the photo it came from, if that is on screen.
+  let shrinkTo = null;
+  if (!tapped && fromId && nav === 'back' && motionOK()) {
+    const hero = $('[data-hero-frame]', view);
+    if (hero && inView(hero)) { nameFor(hero, 'sp-hero'); shrinkTo = fromId; }
+  }
+  state.navScroll = nav === 'back' ? scrollMem.get(to) || 0 : 0;
+  vt(() => {
+    closeAllLayers('nav');
+    flushClosingSheets();
+    const out = render();
+    const waits = [out];
+    if (tapped) {
+      const frame = $('[data-hero-frame]', view);
+      if (frame) {
+        // The small photo is already decoded, so the hero shows it while the large one loads.
+        const box = $('.whole, .img-missing', frame) || frame;
+        if (tapped.url) Object.assign(box.style, { backgroundImage: `url("${tapped.url.replace(/"/g, '%22')}")`, backgroundSize: 'cover', backgroundPosition: '50% 30%' });
+        nameFor(frame, 'sp-hero');
+      }
+    }
+    if (shrinkTo) {
+      const t = $(`[data-tile="${shrinkTo}"] :is(.tile-img, .row-thumb)`, view) || $(`a[href="#/bird/${shrinkTo}"] :is(${THUMB}), a[href="#/bird/${shrinkTo}"]:is(${THUMB})`, view);
+      if (t) {
+        if (!inView(t) && t.closest('[data-tile]')) t.scrollIntoView({ block: 'center' });
+        if (inView(t)) {
+          nameFor(pic(t), 'sp-hero');
+          const img = $('img', t);
+          if (img?.decode) waits.push(img.decode());
+        }
+      }
+    }
+    return settle(Promise.all(waits), 150);
+  }, { nav }).then(focusPageHeading);
+}
+
+// After a route change, focus the new screen's heading so a screen reader announces where she is.
+// Left alone if she is already typing in the page, or a layer has opened meanwhile.
+function focusPageHeading() {
+  if (topLayer()) return;
+  const a = document.activeElement;
+  if (a && a.isConnected && view.contains(a) && a.matches('input, textarea, select')) return;
+  const h = $('h1', view);
+  if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } else view.focus({ preventScroll: true });
 }
 
 function renderOutingBar() {
@@ -1119,8 +1219,8 @@ function renderBird(id) {
       <div class="bird-hero" data-hero-box>
         <div class="hero-photo">
           <div class="gallery" data-gallery tabindex="0" aria-label="Photos of the ${esc(sp.name)}${photos.length > 1 ? '. Swipe for more.' : ''}">
-            ${photos.length ? photos.map((ph, i) => `<figure class="slide">${wholeImg(ph.src, `${sp.name}${photos.length > 1 ? `, photo ${i + 1} of ${photos.length}` : ''}`, 'bird-photo')}</figure>`).join('')
-              : `<figure class="slide"><span class="bird-photo img-missing" role="img" aria-label="${esc(sp.name)}"></span></figure>`}
+            ${photos.length ? photos.map((ph, i) => `<figure class="slide"${i ? '' : ' data-hero-frame'}>${wholeImg(ph.src, `${sp.name}${photos.length > 1 ? `, photo ${i + 1} of ${photos.length}` : ''}`, 'bird-photo')}</figure>`).join('')
+              : `<figure class="slide" data-hero-frame><span class="bird-photo img-missing" role="img" aria-label="${esc(sp.name)}"></span></figure>`}
           </div>
           ${photos.length > 1 ? `<div class="dots" aria-hidden="true">${photos.map((_, i) => `<i class="${i ? '' : 'on'}"></i>`).join('')}</div>` : ''}
           <p class="credit" data-credit>${photos[0]?.credit ? creditHTML(photos[0]) : ''}</p>
@@ -1610,6 +1710,7 @@ async function renderMap(spId = null, at = null) {
   const hotOn = focus ? f.hotFocus : f.hot;
   if (state.map) { state.map.remove(); state.map = null; }
   view.innerHTML = `
+    <h1 class="sr-only">Map</h1>
     <div class="mapwrap">
       <div id="map" aria-label="Map of your sightings and SEQ birding hotspots"></div>
       <div class="map-top">
@@ -2184,7 +2285,10 @@ async function boot() {
     if (onLayerKey(e)) return;
     if (e.key === '/' && !e.target.closest('input, textarea, select')) { e.preventDefault(); openSearch(); }
   });
-  window.addEventListener('hashchange', () => { closeSheet(); render(); });
+  // Scroll is remembered per screen by the app (back returns to it), not restored by the browser mid-transition.
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  document.addEventListener('click', nameTappedPhoto, true);
+  window.addEventListener('hashchange', onRouteChange);
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); state.installPrompt = e; if ((location.hash || '#/dex').startsWith('#/dex')) renderDex(); });
   render();
   initAccount(ctx).catch(() => {});
