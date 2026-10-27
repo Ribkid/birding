@@ -705,7 +705,12 @@ function render() {
 function renderOutingBar() {
   const bar = $('#outing-bar');
   const o = activeOuting();
-  if (!o || location.hash === `#/outing/${o.id}`) { bar.hidden = true; return; }
+  const show = !!o && location.hash !== `#/outing/${o.id}`;
+  if (document.body.classList.contains('has-outing') !== show) {
+    document.body.classList.toggle('has-outing', show);
+    state.map?.invalidateSize?.();
+  }
+  if (!show) { bar.hidden = true; return; }
   const n = state.sightings.filter(s => s.outingId === o.id).length;
   bar.hidden = false;
   bar.innerHTML = `<a href="#/outing/${o.id}"><span class="pulse" aria-hidden="true"></span><span><strong>Outing in progress</strong> ${esc(o.place || '')}</span><span class="outing-bar-n">${plural(n, 'species', 'species')}</span></a>`;
