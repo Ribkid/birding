@@ -1,7 +1,7 @@
 import { SPECIES, GROUPS, HABITATS, RARITY, byId, KINDS, ANIMAL_KINDS, ANIMALS, BIRDS, ofKind, dexCode, kindsPresent } from './species.js';
 import { loadExtras, galleryFor, infoFor } from './gallery.js';
 import { db } from './db.js';
-import { loadIndex, photoFor, sized, details, calls, audioUrl, downloadAll, onMediaReady, loadCallPack, localCalls, hasLocalCall, callPackStatus, saveCallPack } from './media.js';
+import { loadIndex, cachedIndex, photoFor, sized, details, calls, audioUrl, downloadAll, onMediaReady, loadCallPack, localCalls, hasLocalCall, callPackStatus, saveCallPack } from './media.js';
 import { speciesList, periodFilter, totals, yearTotals, targets, badges, inPatch, haversineKm, MONTHS, inSeason } from './stats.js';
 import { toEbirdCsv } from './ebird.js';
 import { loadSeq, seq, monthRates, likelihood, recordCount, spotsFor, pointsFor, hotspots, nearbyTargets } from './seqdata.js';
@@ -2403,8 +2403,20 @@ async function refreshFromSync({ force = false } = {}) {
   if (force ? !sheetOpen() : !busy) render();
 }
 
+// Screens whose content (not just photos) comes from the big regional files: drawn again once they arrive.
+const EXTRAS_SCREENS = /^#\/(?:dex|bird\/\d+|compare\/\d+\/\d+|lists|targets|map(?:\/.*)?|learn)?$/;
+
 async function boot() {
-  await Promise.all([loadData(), loadSeq(), loadExtras()]);
+  // The first paint needs only her sightings, the species list and the saved photo index. The big regional files
+  // (seq, gallery, info: about 1.4 MB) load alongside and never hold it up.
+  const extras = Promise.all([loadSeq(), loadExtras()]);
+  let extrasIn = false;
+  extras.then(() => { extrasIn = true; });
+  await Promise.all([loadData(), cachedIndex()]);
+  // From the phone's own cache they are usually in within a moment, and one draw beats two.
+  // A practice round is built from them, so Learn's rounds wait for them.
+  if (/^#\/learn\//.test(location.hash)) await extras;
+  else await Promise.race([extras, new Promise(r => setTimeout(r, 150))]);
   applyTheme();
   $('#plus').addEventListener('click', e => { e.preventDefault(); openPlusSheet(); });
   document.addEventListener('keydown', e => {
@@ -2417,6 +2429,12 @@ async function boot() {
   window.addEventListener('hashchange', onRouteChange);
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); state.installPrompt = e; if ((location.hash || '#/dex').startsWith('#/dex')) renderDex(); });
   render();
+  // Arrived after the first paint: photos fill in wherever they show, and a screen built from this data draws once
+  // more, without a transition, unless a sheet is open over it.
+  if (!extrasIn) extras.then(() => {
+    patchSpeciesImages(document);
+    if (!sheetOpen() && EXTRAS_SCREENS.test(location.hash || '#/dex')) render();
+  });
   initAccount(ctx).catch(() => {});
   // Better photos arriving are swapped in where they show; nothing is redrawn mid-use (a call keeps playing, the
   // gallery keeps its slide). A species page is redrawn only if its hero had no photo at all.
