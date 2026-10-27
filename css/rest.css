@@ -44,9 +44,10 @@
 .lh-stat-img img, .lh-stat-img .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
 .lh-stat-img::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7, 11, 16, .05) 20%, rgba(7, 11, 16, .5) 55%, rgba(7, 11, 16, .86)); }
 .lh-stat-new { max-width: 100%; font-size: var(--fs-1); color: rgba(255, 255, 255, .88); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lh-stat-hint { margin-top: 6px; color: var(--ink-2); white-space: normal; line-height: 1.35; }
 .lh-links { display: flex; gap: 10px; padding: 12px 16px 2px; }
 .lh-link {
-  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--tap); padding: 8px 14px;
+  flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--tap); padding: 8px 14px; white-space: nowrap;
   border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--shadow-card); color: var(--ink); font-weight: 700; text-decoration: none;
   transition: scale var(--dur-2) var(--ease-spring);
 }
@@ -183,7 +184,7 @@ body.is-scrolled .tally-search { top: calc(var(--topbar-h) + env(safe-area-inset
 .set-card { margin: 0 16px 14px; padding: 16px 16px 6px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden; }
 .set-card:has(> .set-list:last-child) { padding-bottom: 0; }
 .set-card > p { margin: 0 0 12px; }
-.set-title, .set-card > .h2:first-child { margin: 0 0 6px; font-size: 1.125rem; line-height: 1.25; font-weight: 800; letter-spacing: -0.01em; }
+.set-title, .set-card > .h2:first-child { margin: 0 0 6px; font-size: var(--fs-4); line-height: 1.25; font-weight: 800; letter-spacing: -0.01em; }
 .set-note { margin: 0 0 12px; }
 .set-list { margin: 6px -16px 0; border-top: 1px solid var(--line); }
 .set-row {
@@ -383,6 +384,8 @@ body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
 .celebrate .celebrate-body p { margin: 0 0 8px; }
 .celebrate .celebrate-body .celebrate-total { margin-bottom: 12px; }
 .celebrate-body .row-center { margin-top: 14px; }
+/* Share, See card and Nice stay on one row on a small phone. */
+@media (max-width: 359px) { .celebrate-body .row-center { flex-wrap: nowrap; gap: 6px; } .celebrate-body .row-center .btn { padding-inline: 12px; white-space: nowrap; } }
 @media (prefers-reduced-motion: reduce) {
   .celebrate-card { animation: fade var(--dur-2) both; }
   .celebrate-photo > img { animation: none; }
@@ -409,6 +412,11 @@ body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
 .welcome-ico { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft, var(--azure-soft)); color: var(--accent, var(--azure)); }
 .welcome-ico svg { width: 20px; height: 20px; }
 .welcome-body .row-center .btn--primary { min-width: 12rem; min-height: 52px; }
+.welcome-acct { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); text-align: center; }
+.welcome-acct p { max-width: 34ch; margin: 0 auto; }
+.welcome-acct .me-cta { justify-content: center; margin-top: 10px; }
+/* One primary per card: Start exploring. Signing up is the quieter, tinted second step. */
+.welcome-acct .btn--primary { background: var(--accent-soft, var(--azure-soft)); color: var(--ink); box-shadow: none; }
 @media (prefers-reduced-motion: reduce) {
   .welcome-card { animation: fade var(--dur-2) both; }
   .welcome-hero > img { animation: none; }
@@ -436,7 +444,7 @@ body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
 .lb-msg { padding: 18px 6px; }
 .block[data-groups] { margin: 6px 16px 16px; padding: 4px 16px 16px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
 .block[data-groups]:empty { display: none; }
-.block[data-groups] .h2 { margin-top: 14px; font-size: 1.125rem; font-weight: 800; }
+.block[data-groups] .h2 { margin-top: 14px; font-size: var(--fs-4); font-weight: 800; }
 .block[data-groups] .field input { background: var(--paper); }
 .block[data-groups] .btn:not(.btn--primary):not(.btn--quiet) { background: var(--paper); box-shadow: none; }
 .sync-banner {
