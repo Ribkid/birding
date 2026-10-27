@@ -409,6 +409,11 @@ body.has-outing .map-fab { bottom: calc(var(--chrome-bottom) + 184px); }
 .welcome-ico { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft, var(--azure-soft)); color: var(--accent, var(--azure)); }
 .welcome-ico svg { width: 20px; height: 20px; }
 .welcome-body .row-center .btn--primary { min-width: 12rem; min-height: 52px; }
+.welcome-acct { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); text-align: center; }
+.welcome-acct p { max-width: 34ch; margin: 0 auto; }
+.welcome-acct .me-cta { justify-content: center; margin-top: 10px; }
+/* One primary per card: Start exploring. Signing up is the quieter, tinted second step. */
+.welcome-acct .btn--primary { background: var(--accent-soft, var(--azure-soft)); color: var(--ink); box-shadow: none; }
 @media (prefers-reduced-motion: reduce) {
   .welcome-card { animation: fade var(--dur-2) both; }
   .welcome-hero > img { animation: none; }

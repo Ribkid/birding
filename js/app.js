@@ -14,7 +14,7 @@ import { initLook, lookAfterDraw, applyTint, tintFrom, stagger } from './look.js
 import { describeArea } from './mapinfo.js';
 import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
 import { vt, nameFor, flip, countUp, motionOK, settle, report } from './motion.js';
-import { initMe, renderMe, renderProfile, nudgeAfterSave, profileRow } from './me.js';
+import { initMe, renderMe, renderProfile, nudgeAfterSave, profileRow, accountCta } from './me.js';
 import { openLayer, closeLayer, closeAllLayers, onLayerKey, topLayer, layers, keepFocus } from './layers.js';
 
 const relRate = (id, month) => { const m = monthRates(id); return m ? m.rel[month - 1] : null; };
@@ -1865,7 +1865,7 @@ function renderLists() {
     return { n: sp.length, html: sp.slice(0, 4).map(s => `<span class="ocard-ph">${birdImg(s, 'small', '', { alt: '' })}</span>`).join('') + (sp.length > 4 ? `<span class="ocard-more">+${sp.length - 4}</span>` : '') };
   };
   view.innerHTML = `
-    <header class="page-head"><h1>Lists</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button></div></header>
+    <header class="page-head page-head--back"><a class="iconbtn" href="#/me" aria-label="Back to Me">${icon.back}</a><h1>Lists</h1></header>
     <div class="lh-stats">
       <a class="lh-stat lh-stat--life ${newSp ? 'lh-stat--photo' : ''}" href="#/list/life">
         ${newSp ? `<span class="lh-stat-img">${birdImg(newSp, 'small', '', { alt: '' })}</span>` : ''}
@@ -1874,7 +1874,7 @@ function renderLists() {
       <a class="lh-stat" href="#/list/year"><b data-count-key="year">${t.year}</b><span class="lh-stat-l">${now.getFullYear()} list</span></a>
       <a class="lh-stat" href="#/list/month"><b data-count-key="month">${t.month}</b><span class="lh-stat-l">${MONTHS[now.getMonth()]}</span></a>
     </div>
-    <div class="lh-links"><a class="lh-link" href="#/stats">${icon.chart} Stats</a><a class="lh-link" href="#/learn">${icon.learn} Learn</a></div>
+    <div class="lh-links"><a class="lh-link" href="#/stats">${icon.chart} Stats</a><a class="lh-link" href="#/log">${icon.list} All sightings</a></div>
 
     <section class="block lh-sec">
       <div class="block-h"><h2 class="h2">Targets for ${MONTHS[now.getMonth()]}</h2><a href="#/targets">See all</a></div>
@@ -1914,7 +1914,6 @@ function renderLists() {
   countIn(view);
   stagger(view, '.lh-stat, .tcard, .pcard, .ocard', { key: 'lists', max: 14 });
   view.onclick = e => {
-    if (e.target.closest('[data-search]')) openSearch();
     if (e.target.closest('[data-newpatch]')) state.mapMode = 'patch';
     if (e.target.closest('[data-near]')) { (state.targetF ||= { month: now.getMonth() + 1, habitat: '', scope: 'life' }).scope = 'near'; }
   };
@@ -2113,9 +2112,15 @@ function renderLog() {
       const sp = byId.get(s.speciesId);
       return `<li><button class="row row--sp" data-edit="${s.id}"><span class="row-thumb">${s.photoId ? `<img data-photo="${s.photoId}" alt="">` : birdImg(sp)}</span>
         <span class="row-main"><strong>${esc(sp?.name)}</strong><span class="muted small">${s.time || ''} ${esc(s.place || '')}</span></span><span class="row-n">${s.count ?? 'X'}</span></button></li>`;
-    }, ['sighting', 'sightings']) || '<div class="empty"><p>No sightings yet. Tap + to log your first sighting.</p></div>'}`;
+    }, ['sighting', 'sightings']) || `<div class="empty"><p class="empty-h">No sightings yet</p>
+      <p class="small">Every ${kindsPresent.length < 2 ? 'bird' : kindsPresent.includes('plant') ? 'bird, animal and plant' : 'bird and animal'} you log lands here, newest first. Tap + or press and hold a tile in the dex.</p>
+      <div class="row-center"><button class="btn btn--primary" data-logfirst>Log a sighting</button></div></div>`}`;
   countIn(view);
-  view.onclick = e => { const ed = e.target.closest('[data-edit]'); if (ed) openSightingSheet({ sightingId: Number(ed.dataset.edit) }); };
+  view.onclick = e => {
+    const ed = e.target.closest('[data-edit]');
+    if (ed) openSightingSheet({ sightingId: Number(ed.dataset.edit) });
+    if (e.target.closest('[data-logfirst]')) openSightingSheet();
+  };
   view.onchange = null;
 }
 
@@ -2181,7 +2186,9 @@ async function renderMap(spId = null, at = null) {
   const mode = state.mapMode; state.mapMode = null;
   const f = state.mapF ||= { show: 'all', hot: true, hotFocus: false, need: false };
   const focus = spId ? byId.get(spId) : null;
-  const hotOn = focus ? f.hotFocus : f.hot;
+  // Hotspot records are eBird birding sites: birds only, so a frog or a gum gets no Hotspots chip.
+  const noHot = focus && focus.kind !== 'bird';
+  const hotOn = !noHot && (focus ? f.hotFocus : f.hot);
   if (state.map) { state.map.remove(); state.map = null; }
   view.innerHTML = `
     <h1 class="sr-only">Map</h1>
@@ -2194,7 +2201,7 @@ async function renderMap(spId = null, at = null) {
       </div>
       <div class="map-ctl chips" role="group" aria-label="What the map shows">
         ${focus ? `<a class="chip chip--on" href="#/map" aria-label="Stop showing ${esc(focus.name)}">${esc(focus.name)} ✕</a>` : ''}
-        <button class="chip ${hotOn ? 'chip--on' : ''}" data-hot aria-pressed="${hotOn}">Hotspots</button>
+        ${noHot ? '' : `<button class="chip ${hotOn ? 'chip--on' : ''}" data-hot aria-pressed="${hotOn}">Hotspots</button>`}
         ${!focus ? `<button class="chip ${f.need ? 'chip--on' : ''}" data-need aria-pressed="${f.need}">Birds I need</button>` : ''}
         <button class="chip ${f.show === 'all' ? 'chip--on' : ''}" data-mshow="all" aria-pressed="${f.show === 'all'}">My sightings</button>
         <button class="chip ${f.show === 'photos' ? 'chip--on' : ''}" data-mshow="photos" aria-pressed="${f.show === 'photos'}">With photos</button>
@@ -2413,7 +2420,7 @@ function renderBadges() {
       <span class="badge-desc">${esc(b.desc)}<span class="sr-only">. ${b.done ? 'Earned' : `${b.have} of ${b.need} so far`}.</span></span></li>`;
   const first = badgesEarned == null;
   view.innerHTML = `
-    <header class="page-head"><h1>Badges</h1><div class="head-actions"><button class="iconbtn" data-search aria-label="Search everything">${icon.search}</button><a class="iconbtn" href="#/settings" aria-label="Settings">${icon.gear}</a></div></header>
+    <header class="page-head page-head--back"><a class="iconbtn" href="#/me" aria-label="Back to Me">${icon.back}</a><h1>Badges</h1></header>
     <section class="trophy${first ? ' rings-in' : ''}" aria-label="Badges earned">
       <div class="trophy-top">
         <div class="trophy-ring">${ring(earned / Math.max(1, list.length))}<p class="trophy-n"><b data-earned>${earned}</b><span>of ${list.length}</span></p></div>
@@ -2444,7 +2451,7 @@ function renderBadges() {
     }), { rootMargin: '0px 0px -12% 0px' });
     shelves.forEach(el => shelfIO.observe(el));
   }
-  view.onclick = e => { if (e.target.closest('[data-search]')) openSearch(); }; view.onchange = null;
+  view.onclick = null; view.onchange = null;
 }
 
 // Settings
@@ -3016,6 +3023,7 @@ async function showWelcome() {
         <li><span class="welcome-ico">${icon.learn}</span><span><strong>Learn</strong> has a daily challenge and look-alike games, and <strong>badges</strong> and <strong>targets</strong> show where to go next.</span></li>
       </ul>
       <div class="row-center">${state.installPrompt ? '<button class="btn" data-winstall>Install app</button>' : ''}<button class="btn btn--primary" data-wgo>Start exploring</button></div>
+      ${accountCta() ? `<div class="welcome-acct"><p class="small muted">Back up your dex and join the leaderboard. It's free, and the app works without it.</p>${accountCta()}</div>` : ''}
     </div>
   </div>`;
   document.body.append(ov);
