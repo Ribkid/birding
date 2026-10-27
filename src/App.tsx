@@ -29,7 +29,8 @@ import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
 import { closeAllLayers } from './lib/layers';
 import { initProfile } from './core/profile.js';
-import { initAccount } from './core/account.js';
+import { initAccount, onStatus, syncStatus } from './core/account.js';
+import { useState } from 'react';
 
 /** v1 scrolled to the top on navigation unless you were moving between dex pages. */
 function ScrollReset() {
@@ -52,6 +53,13 @@ function TopBar() {
   return null;
 }
 
+function SyncBanner() {
+  const [state, setState] = useState(syncStatus());
+  useEffect(() => { const off = onStatus((next: typeof state) => setState(next)); return () => { off(); }; }, []);
+  if (state.state !== 'migrating') return null;
+  return <div className="sync-banner" role="status" aria-live="polite">{state.text || 'Backing up…'}</div>;
+}
+
 export default function App() {
   // Regional data is fetched once; this re-renders the tree when it lands so screens
   // that depend on hotspots and reporting rates fill in.
@@ -64,6 +72,7 @@ export default function App() {
     <>
       <ScrollReset />
       <TopBar />
+      <SyncBanner />
       <main id="view" tabIndex={-1}>
         <ErrorBoundary>
         <Routes>

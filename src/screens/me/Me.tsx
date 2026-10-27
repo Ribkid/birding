@@ -10,7 +10,7 @@ import {
   initProfile, getProfile, getMyCloud, fetchCloud, signedIn, myName, memberSince, coverSpecies,
   kindCounts, avatarUrl, dayPick, configured, refreshProfile, myPublicId,
 } from '../../core/profile.js';
-import { syncStatus } from '../../core/account.js';
+import { onStatus, syncStatus } from '../../core/account.js';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { CountUp } from '../../components/Motion';
 import { applyTint } from '../../lib/look';
@@ -62,6 +62,8 @@ export default function Me() {
     return () => { alive = false; off(); };
   }, []);
 
+  useEffect(() => { const off = onStatus((state: typeof sync) => setSync(state)); return () => { off(); }; }, []);
+
   const prof = getProfile();
   const m = getMyCloud();
   const u = signedIn();
@@ -77,7 +79,7 @@ export default function Me() {
   const nPatch = patches.length;
   const nOut = outings.length;
   const lastOut = outings.slice().sort((a, b) => ((b as any).startedAt ?? 0) - ((a as any).startedAt ?? 0))[0];
-  const sync = syncStatus();
+  const [sync, setSync] = useState(syncStatus());
 
   const openProfile = async () => {
     setProfileMsg('');

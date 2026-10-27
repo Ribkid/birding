@@ -4,7 +4,7 @@ import { SPECIES, byId, type Species } from '../../lib/data';
 import { useSeen, useMedia } from '../../lib/hooks';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { Sheet } from '../../components/Sheet';
-import { syncStatus } from '../../core/account.js';
+import { onStatus, syncStatus } from '../../core/account.js';
 import {
   signedIn, configured, getProfile, getMyCloud, initProfile, saveMyProfile, setCloud,
   uploadAvatarPhoto, removeAvatarPhoto, avatarUrl, problem, resizeImage, squareJpeg,
@@ -48,9 +48,11 @@ export default function EditProfile() {
     });
   }, []);
 
+  useEffect(() => { const off = onStatus((state: typeof sync) => setSync(state)); return () => { off(); }; }, []);
+
   const prof = getProfile();
   const m = getMyCloud();
-  const sync = syncStatus();
+  const [sync, setSync] = useState(syncStatus());
   const u = signedIn();
 
   if (!configured) return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link><h1>Edit profile</h1></header><div className="me-msg"><p>Profiles need accounts, which are not set up in this copy of the app.</p></div></div>;
