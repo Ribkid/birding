@@ -10,6 +10,8 @@ import { renderQuiz } from './quiz.js';
 import { renderStats } from './statsview.js';
 import { describeArea } from './mapinfo.js';
 import { initAccount, accountChip, renderAccountSection, renderLeaderboard, leaderboardLink } from './account.js';
+import { vt, nameFor, flip, countUp, motionOK, settle } from './motion.js';
+import { openLayer, closeLayer, closeAllLayers, onLayerKey, topLayer, layers, keepFocus } from './layers.js';
 
 const relRate = (id, month) => { const m = monthRates(id); return m ? m.rel[month - 1] : null; };
 const targetOpts = () => seq()?.hotspots?.length ? { score: likelihood, rel: relRate } : {};
@@ -181,37 +183,134 @@ function toast(msg) {
   toastT = setTimeout(hide, 4500);
 }
 
-// ---------- sheets (modal) ----------
-function openSheet(html, { onOpen, wide } = {}) {
-  closeSheet();
+// ---------- sheets ----------
+// A sheet is a layer (js/layers.js). It slides up, and on a user dismiss (scrim, Cancel, Escape, drag) slides back
+// down before it is removed. Replacing it with another sheet, or a route change, removes it at once.
+// modal: false is for the patch sheet over the map, which leaves the map usable.
+const openSheetLayer = () => layers().reverse().find(l => l.kind === 'sheet') || null;
+const sheetOpen = () => !!$('.sheet-wrap:not([data-closing])');
+function openSheet(html, { onOpen, wide, modal = true, cls = '' } = {}) {
+  const prev = openSheetLayer();
+  const returnTo = prev ? prev.returnTo : document.activeElement;
+  if (prev) closeSheet({ reason: 'replace' });
   const wrap = document.createElement('div');
-  wrap.className = 'sheet-wrap';
+  wrap.className = `sheet-wrap ${cls} ${prev ? 'sheet-wrap--swap' : ''}`;
   wrap.innerHTML = `<div class="sheet-scrim" data-close></div>
-    <div class="sheet ${wide ? 'sheet--wide' : ''}" role="dialog" aria-modal="true">
+    <div class="sheet ${wide ? 'sheet--wide' : ''}" role="dialog">
       <div class="sheet-grip" aria-hidden="true"></div>${html}</div>`;
   document.body.append(wrap);
-  document.body.classList.add('has-sheet');
-  wrap.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeSheet(); });
-  requestAnimationFrame(() => wrap.classList.add('open'));
-  const first = $('input:not([type=hidden]):not([type=file]), select, textarea, button', $('.sheet', wrap));
-  onOpen?.($('.sheet', wrap));
-  if (first && !first.matches('[data-noautofocus]')) setTimeout(() => first.focus({ preventScroll: true }), 50);
-  return $('.sheet', wrap);
+  const sheet = $('.sheet', wrap);
+  const layer = openLayer(wrap, { dialog: sheet, modal, lock: true, returnTo, close: reason => closeSheet({ reason }) });
+  layer.kind = 'sheet';
+  // @starting-style gives the entry slide; older browsers get it from the class arriving a frame later.
+  if (window.CSSStartingStyleRule) wrap.classList.add('open');
+  else requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add('open')));
+  wrap.addEventListener('click', e => {
+    const c = e.target.closest('[data-close]');
+    if (c) closeSheet({ reason: c.matches('.sheet-scrim') ? 'scrim' : 'button' });
+  });
+  wireSheetDrag(wrap, sheet);
+  const first = $('input:not([type=hidden]):not([type=file]), select, textarea, button, a[href]', sheet);
+  onOpen?.(sheet);
+  if (first && !first.matches('[data-noautofocus]')) setTimeout(() => { if (!wrap.hasAttribute('data-closing')) first.focus({ preventScroll: true }); }, 50);
+  return sheet;
 }
-function closeSheet() {
-  const w = $('.sheet-wrap');
-  if (!w) return;
-  w.remove();
-  document.body.classList.remove('has-sheet');
-  state.onSheetClose?.(); state.onSheetClose = null;
+function closeSheet({ reason = 'button' } = {}) {
+  const layer = openSheetLayer();
+  if (!layer) return;
+  const w = layer.el, instant = reason === 'replace' || reason === 'nav';
+  const done = state.onSheetClose; state.onSheetClose = null;
+  w.setAttribute('data-closing', ''); w.inert = true;
+  closeLayer(layer, { restore: !instant });
+  done?.();
+  if (instant) w.remove(); else exitSheet(w, reason);
 }
+function exitSheet(w, reason) {
+  const sheet = $('.sheet', w), scrim = $('.sheet-scrim', w);
+  // Hand over from wherever a drag left the sheet to the CSS exit (under reduced motion it fades where it is).
+  sheet.style.transition = ''; scrim.style.opacity = '';
+  if (motionOK() || reason !== 'drag') sheet.style.transform = '';
+  getComputedStyle(sheet).transform;
+  const anims = w.getAnimations({ subtree: true });
+  Promise.race([Promise.allSettled(anims.map(a => a.finished)), new Promise(r => setTimeout(r, 450))]).then(() => w.remove());
+}
+// Route changes and fresh sheets don't wait for a sheet that is still sliding away.
+const flushClosingSheets = () => $$('.sheet-wrap[data-closing]').forEach(w => w.remove());
+
+// Drag a sheet down to dismiss it: from the grip and the top 56px, or from anywhere once it is scrolled to the top.
+// It follows the finger 1:1, resists upward, and closes past 30% of its height or on a quick flick.
+function wireSheetDrag(wrap, sheet) {
+  const scrim = $('.sheet-scrim', wrap);
+  const rubber = d => 56 * (1 - 1 / (d / 140 + 1));
+  let g = null;
+  // Moves are followed on the window, so a mouse that leaves the sheet (dragging up past its top) still counts.
+  const move = e => {
+    if (!g || e.pointerId !== g.id) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!g.on) {
+      if (Math.hypot(dx, dy) < 8) return;
+      // Sideways is a chip row scrolling; upward in the body is ordinary scrolling.
+      if (Math.abs(dx) > Math.abs(dy) || (!g.handle && (dy < 0 || sheet.scrollTop > 0))) { stop(); return; }
+      g.on = true;
+      sheet.style.transition = 'none';
+      wrap.classList.add('sheet-wrap--drag');
+    }
+    g.dy = dy;
+    sheet.style.transform = `translateY(${dy >= 0 ? dy : -rubber(-dy)}px)`;
+    scrim.style.opacity = String(1 - Math.min(1, Math.max(0, dy) / g.h) * 0.8);
+    g.pts.push([e.timeStamp, e.clientY]);
+    if (g.pts.length > 8) g.pts.shift();
+  };
+  const end = e => {
+    if (!g || e.pointerId !== g.id) return;
+    const s = g;
+    stop();
+    if (!s.on) return;
+    // The tap that ends a drag is not a click on whatever is under the finger.
+    const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); };
+    window.addEventListener('click', swallow, true);
+    setTimeout(() => window.removeEventListener('click', swallow, true), 0);
+    wrap.classList.remove('sheet-wrap--drag');
+    const [t0, y0] = s.pts.find(([t]) => e.timeStamp - t <= 100) || s.pts[0];
+    const v = (e.clientY - y0) / Math.max(1, e.timeStamp - t0);
+    if (e.type === 'pointerup' && (s.dy > s.h * 0.3 || v > 0.5)) { closeSheet({ reason: 'drag' }); return; }
+    sheet.style.transition = motionOK() ? 'transform var(--dur-3) var(--ease-spring)' : 'none';
+    sheet.style.transform = ''; scrim.style.opacity = '';
+    setTimeout(() => { if (!g) sheet.style.transition = ''; }, 400);
+  };
+  const stop = () => {
+    g = null;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+  };
+  sheet.addEventListener('pointerdown', e => {
+    if (g || e.button > 0 || wrap.hasAttribute('data-closing')) return;
+    if (e.target.closest('input, textarea, select, [contenteditable], .leaflet-container')) return;
+    const r = sheet.getBoundingClientRect();
+    const handle = e.clientY - r.top < 56;
+    if (!handle && sheet.scrollTop > 0) return;
+    g = { id: e.pointerId, x: e.clientX, y: e.clientY, h: r.height, handle, on: false, dy: 0, pts: [[e.timeStamp, e.clientY]] };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  });
+  // On touch, once the sheet is being dragged the page must not scroll or pull to refresh underneath.
+  sheet.addEventListener('touchmove', e => { if (g?.on && e.cancelable) e.preventDefault(); }, { passive: false });
+}
+
+// Resolves true for the confirm button, false for Cancel or any other way of closing.
 function confirmSheet(title, body, okLabel, danger = false) {
   return new Promise(resolve => {
     const s = openSheet(`<h2 class="sheet-title">${esc(title)}</h2><p class="muted">${esc(body)}</p>
       <div class="row-end"><button class="btn" data-no>Cancel</button><button class="btn ${danger ? 'btn--danger' : 'btn--primary'}" data-yes>${esc(okLabel)}</button></div>`);
     s.addEventListener('click', e => {
-      if (e.target.closest('[data-yes]')) { closeSheet(); resolve(true); }
-      if (e.target.closest('[data-no]')) { closeSheet(); resolve(false); }
+      const yes = e.target.closest('[data-yes]');
+      if (!yes && !e.target.closest('[data-no]')) return;
+      // Answer first: closing fires onSheetClose, which would otherwise answer false before the true got through.
+      state.onSheetClose = null;
+      resolve(!!yes);
+      closeSheet();
     });
     state.onSheetClose = () => resolve(false);
   });
@@ -297,9 +396,15 @@ function openLocationPicker(init = {}) {
         <div class="row-end"><button type="button" class="btn" data-lclose>Cancel</button><button type="button" class="btn btn--primary" data-luse>Use this place</button></div>
       </div>`;
     document.body.append(ov);
-    const close = val => { map?.remove(); ov.remove(); resolve(val); };
-    let map;
+    let map, closed = false;
+    const close = (val, reason) => {
+      if (closed) return;
+      closed = true; map?.remove(); ov.remove(); closeLayer(layer, { restore: reason !== 'nav' }); resolve(val);
+    };
+    // Escape closes only this picker; the sighting sheet underneath stays as it was.
+    const layer = openLayer(ov, { label: 'Choose a place', close: reason => close(null, reason) });
     try { await loadLeaflet(); } catch (_) { toast('The map needs an internet connection the first time.'); close(null); return; }
+    if (closed) return;
     const L = window.L;
     const start = init.lat != null ? [init.lat, init.lng] : state.lastPos ? [state.lastPos.lat, state.lastPos.lng] : [-27.47, 153.02];
     map = L.map($('[data-lmap]', ov), { zoomControl: false }).setView(start, init.lat != null || state.lastPos ? 15 : 10);
@@ -343,7 +448,8 @@ function openLocationPicker(init = {}) {
         close({ lat: c.lat, lng: c.lng, place });
       }
     });
-    q.focus();
+    // On a phone the main path is dragging the map, so don't pop the keyboard over it.
+    if (matchMedia('(pointer: coarse)').matches) ov.focus({ preventScroll: true }); else q.focus();
   });
 }
 
@@ -1602,8 +1708,7 @@ async function renderMap(spId = null, at = null) {
         <label class="field"><span>Name</span><input name="name" placeholder="e.g. Our yard" required autocomplete="off"></label>
         <label class="field"><span>Radius: <output data-rout>1</output> km</span><input type="range" name="r" min="0.1" max="8" step="0.1" value="1"></label>
         <div class="row-end"><button type="button" class="btn" data-close>Cancel</button><button class="btn btn--primary">Save patch</button></div>
-      </form>`);
-    s.closest('.sheet-wrap').classList.add('sheet-wrap--map');
+      </form>`, { modal: false, cls: 'sheet-wrap--map' });
     const form = $('[data-form]', s);
     form.r.addEventListener('input', () => { circle.setRadius(form.r.value * 1000); $('[data-rout]', s).textContent = form.r.value; });
     state.onSheetClose = () => { map.off('move', move); circle.remove(); $('.map-cross')?.classList.add('hidden'); };
@@ -1661,7 +1766,7 @@ async function renderMap(spId = null, at = null) {
   // Tap anywhere on the map for a short description of that spot.
   map.on('click', async e => {
     if (!mres.classList.contains('hidden')) { mres.classList.add('hidden'); return; }
-    if ($('.sheet-wrap')) return;
+    if (sheetOpen()) return;
     const { lat, lng } = e.latlng;
     const pop = L.popup({ maxWidth: 260 }).setLatLng(e.latlng).setContent('<p class="pop-src">Looking up this spot…</p>').openOn(map);
     const html = await describeArea(lat, lng, { seen }).catch(() => '<p class="pop-desc">Couldn\'t look this spot up. Check the internet connection.</p>');
@@ -1803,15 +1908,16 @@ function download(name, blob) {
 
 // ---------- global search ----------
 function openSearch() {
+  if ($('.search-ov')) return;
   const ov = document.createElement('div');
   ov.className = 'search-ov';
-  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Search');
   ov.innerHTML = `<div class="search-bar">${icon.search}<input type="search" placeholder="Birds, animals, plants, places, hotspots" aria-label="Search everything" autocomplete="off"><button class="iconbtn" data-x aria-label="Close search">${icon.close}</button></div>
     <div class="search-res" aria-live="polite"><p class="muted pad">Try "kingfisher", "Oxley", "lorikeet" or "wetlands".</p></div>`;
   document.body.append(ov);
-  document.body.classList.add('has-sheet');
   const input = $('input', ov), res = $('.search-res', ov);
-  const close = () => { ov.remove(); document.body.classList.remove('has-sheet'); };
+  let layer;
+  const close = reason => { if (closeLayer(layer, { restore: reason !== 'nav' })) ov.remove(); };
+  layer = openLayer(ov, { label: 'Search', lock: true, close });
   const seen = seenSet();
   const run = () => {
     const q = input.value.trim().toLowerCase();
@@ -1832,9 +1938,12 @@ function openSearch() {
       sec('Your sightings', mine.map(s => `<li><a class="row" href="#/bird/${s.speciesId}"><span class="row-main"><strong>${esc(byId.get(s.speciesId)?.name)}</strong><span class="small muted">${fmtDate(s.date)}${s.place ? `, ${esc(s.place)}` : ''}</span></span></a></li>`).join('')),
     ].join('') || '<p class="muted pad">Nothing found. Check the spelling, or try part of a name.</p>';
   };
-  input.addEventListener('input', run);
-  ov.addEventListener('click', e => { if (e.target.closest('[data-x]') || e.target.closest('a')) close(); });
-  ov.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  input.addEventListener('input', () => { run(); settleImages(res); });
+  // A result link closes search through the route change, so its photo can grow into the species page.
+  ov.addEventListener('click', e => {
+    const a = e.target.closest('a');
+    if (e.target.closest('[data-x]') || (a && a.getAttribute('href') === location.hash)) close('button');
+  });
   input.focus();
 }
 
@@ -2022,9 +2131,9 @@ function showUpdateBanner() {
   document.body.append(b);
 }
 async function showWelcome() {
+  if ($('.welcome')) return;
   const ov = document.createElement('div');
   ov.className = 'welcome';
-  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', 'Welcome');
   ov.innerHTML = `<div class="welcome-card">
     <div class="welcome-model" data-wm></div>
     <h1>Hi Sarah</h1>
@@ -2037,12 +2146,19 @@ async function showWelcome() {
     <div class="row-center">${state.installPrompt ? '<button class="btn" data-winstall>Install app</button>' : ''}<button class="btn btn--primary" data-wgo>Start birding</button></div>
   </div>`;
   document.body.append(ov);
-  let dispose = null;
-  try { const { mountBird } = await import('./model3d.js'); dispose = mountBird($('[data-wm]', ov), byId.get(165)); } catch (_) {}
+  let dispose = null, layer;
+  // Escape, Back and Start birding all mean the same thing: she has seen it.
+  const done = reason => {
+    if (!closeLayer(layer, { restore: reason !== 'nav' })) return;
+    dispose?.(); ov.remove(); db.kvSet('welcomed', true);
+  };
+  layer = openLayer(ov, { dialog: $('.welcome-card', ov), close: done });
   ov.addEventListener('click', async e => {
     if (e.target.closest('[data-winstall]')) await promptInstall();
-    if (e.target.closest('[data-wgo]')) { dispose?.(); ov.remove(); db.kvSet('welcomed', true); }
+    if (e.target.closest('[data-wgo]')) done('button');
   });
+  $('[data-wgo]', ov).focus({ preventScroll: true });
+  try { const { mountBird } = await import('./model3d.js'); if (ov.isConnected) dispose = mountBird($('[data-wm]', ov), byId.get(165)); } catch (_) {}
 }
 
 // ---------- boot ----------
@@ -2056,8 +2172,8 @@ const ctx = {
 async function refreshFromSync({ force = false } = {}) {
   await loadData();
   applyTheme();
-  const busy = $('.sheet-wrap') || document.activeElement?.matches('input, textarea') || /^#\/(listen|scan|quiz)/.test(location.hash);
-  if (force ? !$('.sheet-wrap') : !busy) render();
+  const busy = sheetOpen() || document.activeElement?.matches('input, textarea') || /^#\/(listen|scan|quiz)/.test(location.hash);
+  if (force ? !sheetOpen() : !busy) render();
 }
 
 async function boot() {
@@ -2065,7 +2181,7 @@ async function boot() {
   applyTheme();
   $('#plus').addEventListener('click', e => { e.preventDefault(); openPlusSheet(); });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeSheet();
+    if (onLayerKey(e)) return;
     if (e.key === '/' && !e.target.closest('input, textarea, select')) { e.preventDefault(); openSearch(); }
   });
   window.addEventListener('hashchange', () => { closeSheet(); render(); });
