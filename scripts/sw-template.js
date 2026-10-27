@@ -124,13 +124,24 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         try {
           const fresh = await fetch(request);
-          const cache = await caches.open(SHELL);
-          cache.put('/index.html', fresh.clone()).catch(() => {});
+          if (fresh.ok && (fresh.headers.get('content-type') || '').includes('text/html')) {
+            const isApp = url.pathname === '/' || url.pathname === '/index.html';
+            if (!isApp) {
+              // Privacy, terms and error pages belong under their own URL, never as the app shell.
+              event.waitUntil(caches.open(SHELL).then((cache) => cache.put(request, fresh.clone())).catch(() => {}));
+            } else {
+              // A captive portal can answer with HTML; only store a real BirdyDex shell.
+              const body = await fresh.clone().text();
+              if (body.includes('<div id="root">')) {
+                event.waitUntil(caches.open(SHELL).then((cache) => cache.put('/index.html', fresh.clone())).catch(() => {}));
+              }
+            }
+          }
           return fresh;
         } catch {
           return (
-            (await caches.match('/index.html', MATCH)) ||
             (await caches.match(request, MATCH)) ||
+            (await caches.match('/index.html', MATCH)) ||
             new Response('<h1>Offline</h1><p>BirdyDex has not been opened online yet.</p>', {
               status: 503,
               headers: { 'Content-Type': 'text/html; charset=utf-8' },
