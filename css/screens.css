@@ -348,6 +348,7 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 }
 
 .sheet-wrap:is(.sheet-wrap--log, .sheet-wrap--outing) .loc > .chips--scroll { padding-inline: 0; }
+:root[data-theme="outdoor"] .sheet-wrap:is(.sheet-wrap--log, .sheet-wrap--outing) .btn:not(.btn--primary):not(.btn--quiet) { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
 
 /* The species she picked, as a photo card with its name over a scrim. */
 .picker .chosen { position: relative; display: block; height: 176px; padding: 0; overflow: hidden; border-radius: var(--r-card); background: var(--surface-2); box-shadow: var(--shadow-card); color: #fff; }
