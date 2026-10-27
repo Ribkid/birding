@@ -330,7 +330,7 @@ export default function Leaderboard() {
     );
     return (
       <li
-        key={`${row.rank}-${row.display_name}`}
+        key={row.public_id ?? `${row.rank}-${row.display_name}`}
         className={`lb-row ${row.is_me ? 'lb-row--me' : ''}`}
         aria-current={row.is_me ? true : undefined}
       >
