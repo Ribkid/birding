@@ -19,6 +19,7 @@ export default function Bird() {
   const [clips, setClips] = useState<Clip[]>([]);
   const [playing, setPlaying] = useState(-1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const clipTicket = useRef(0);
   const [, forceLearn] = useState(0);
 
   const mine = useMemo(
@@ -36,6 +37,15 @@ export default function Bird() {
   }, [sp?.id]);
 
   useEffect(() => {
+    clipTicket.current += 1;
+    setClips([]);
+    setPlaying(-1);
+    const old = audioRef.current;
+    if (old) {
+      old.pause();
+      if (old.src.startsWith('blob:')) URL.revokeObjectURL(old.src);
+      audioRef.current = null;
+    }
     if (!sp || !['bird', 'frog'].includes(sp.kind)) return;
     let alive = true;
     void (async () => {
@@ -49,21 +59,45 @@ export default function Bird() {
       }
       if (alive) setClips(list.slice(0, 3));
     })();
-    return () => { alive = false; audioRef.current?.pause(); };
+    return () => {
+      alive = false;
+      clipTicket.current += 1;
+      const playingAudio = audioRef.current;
+      if (playingAudio) {
+        playingAudio.pause();
+        if (playingAudio.src.startsWith('blob:')) URL.revokeObjectURL(playingAudio.src);
+        audioRef.current = null;
+      }
+    };
   }, [sp?.id]);
 
   const playClip = async (i: number) => {
     if (i === playing) { audioRef.current?.pause(); setPlaying(-1); return; }
     const c = clips[i];
     if (!c) return;
-    audioRef.current?.pause();
+    const my = ++clipTicket.current;
+    const old = audioRef.current;
+    if (old) {
+      old.pause();
+      if (old.src.startsWith('blob:')) URL.revokeObjectURL(old.src);
+      audioRef.current = null;
+    }
     const src = await audioUrl(c.local || c.src);
+    if (my !== clipTicket.current) {
+      if (src.startsWith('blob:')) URL.revokeObjectURL(src);
+      return;
+    }
     const a = new Audio(src);
     audioRef.current = a;
-    a.onended = () => setPlaying(-1);
-    a.onerror = () => setPlaying(-1);
+    const drop = () => {
+      if (a.src.startsWith('blob:')) URL.revokeObjectURL(a.src);
+      if (audioRef.current === a) audioRef.current = null;
+      setPlaying(-1);
+    };
+    a.onended = drop;
+    a.onerror = drop;
     setPlaying(i);
-    await a.play().catch(() => setPlaying(-1));
+    await a.play().catch(drop);
   };
 
   if (!sp) {
