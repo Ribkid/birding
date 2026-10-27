@@ -12,32 +12,45 @@ import type { Species } from '../lib/data';
 type PhotoProps = { sp: Species; size?: 'small' | 'large'; eager?: boolean };
 // A different species (the pick changing with the kind tab) starts afresh rather than waiting on the old photo.
 export const Photo = (props: PhotoProps) => <SpeciesPhoto key={props.sp.id} {...props} />;
+// Photos fade in the first time they arrive (img.fade, app.css) and shimmer while they load (look.css). Ones already
+// shown this session come back at full strength, so a redraw (a filter, a kind tab) doesn't make the grid blink.
+const shown = new Set<string>();
 function SpeciesPhoto({ sp, size = 'small', eager = false }: PhotoProps) {
   const url = sized(sp.id, size) as string | null;
   const [src, setSrc] = useState(url);
+  const [look, setLook] = useState<'' | 'in' | 'missing'>(() => (url && shown.has(url) ? 'in' : ''));
   const ref = useRef<HTMLImageElement>(null);
   useEffect(() => {
     if (!url || url === src) return;
     const el = ref.current;
-    if (!el || !el.complete || !el.naturalWidth) { setSrc(url); return; }
+    if (!el || !el.complete || !el.naturalWidth) {
+      setSrc(url);
+      setLook((was) => (shown.has(url) ? 'in' : was === 'missing' ? '' : was));
+      return;
+    }
     let alive = true;
     const next = new Image();
     next.src = url;
-    next.decode().then(() => { if (alive) setSrc(url); }, () => {});
+    next.decode().then(() => { if (alive) { shown.add(url); setSrc(url); } }, () => {});
     return () => { alive = false; };
   }, [url, src]);
-  // The same element takes the new address, so the old photo shows until the new one paints.
-  useLayoutEffect(() => { ref.current?.classList.remove('img-missing'); }, [src]);
+  // A photo already in the memory cache shows at once, with no fade (v1 settleImages).
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (src && el?.complete && el.naturalWidth) { shown.add(src); setLook('in'); }
+  }, [src]);
   if (!src) return <span className="img-missing" aria-hidden="true" />;
   return (
     <img
       ref={ref}
+      className={`fade${look === 'in' ? ' in' : look === 'missing' ? ' img-missing' : ''}`}
       src={src}
       alt=""
       loading={eager ? 'eager' : 'lazy'}
       fetchPriority={eager ? 'high' : undefined}
       decoding="async"
-      onError={(e) => e.currentTarget.classList.add('img-missing')}
+      onLoad={() => { shown.add(src); setLook('in'); }}
+      onError={() => setLook('missing')}
     />
   );
 }

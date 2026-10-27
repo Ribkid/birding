@@ -11,9 +11,9 @@ import {
   pluralFor, type Species,
 } from '../lib/data';
 import { useMedia, useSightings, type Sighting } from '../lib/hooks';
-import { keepFocus } from '../lib/layers';
+import { keepFocus, topLayer } from '../lib/layers';
 import { countUp, flip, motionOK } from '../lib/motion';
-import { applyTint, stagger } from '../lib/look';
+import { applyTint, stagger, tintFrom } from '../lib/look';
 import { Band, Pips } from '../components/SpeciesImage';
 import { Icon } from '../components/Icon';
 import { db } from '../core/db.js';
@@ -226,7 +226,10 @@ export default function Dex() {
     return m;
   }, [sightings]);
 
-  const day = loaded ? dayPick(seen, f.kind) : null;
+  // The pick is ranked by the regional reporting rates, so (as v1 drew the dex once they were in) it waits for them as
+  // well as her sightings; otherwise the hero would show one species and then swap to another a moment later. If either
+  // never answers, it goes ahead after the same short wait.
+  const day = (loaded && seqData) || gaveUp ? dayPick(seen, f.kind) : null;
 
   // ---------- effects ----------
   useEffect(() => {
@@ -280,15 +283,37 @@ export default function Dex() {
     }
   }, [f.kind]);
 
-  // The hero takes its colour from the pick's photo where the host allows it to be read.
+  // The hero takes its colour from the pick's photo where the host allows it to be read. A new pick starts plain; a
+  // better photo of the same pick arriving keeps the colour it has until the new photo has been read (in v1 the
+  // swapped-in photo kept the first tint), and a pick that has since changed never takes an older pick's colour.
   const heroSrc = day ? (sized(day.sp.id, 'large') as string | null) || '' : '';
+  const heroId = day ? day.sp.id : null;
+  const tintedFor = useRef<number | null>(null);
   useEffect(() => {
     const hero = heroRef.current;
     if (!hero) return;
-    for (const k of ['--tint', '--tint-deep', '--tint-soft', '--tint-soft-dark', '--tint-ink-dark']) hero.style.removeProperty(k);
-    hero.classList.remove('tinted');
-    if (heroSrc) void applyTint(hero, heroSrc);
-  }, [heroSrc]);
+    if (tintedFor.current !== heroId) {
+      for (const k of ['--tint', '--tint-deep', '--tint-soft', '--tint-soft-dark', '--tint-ink-dark']) hero.style.removeProperty(k);
+      hero.classList.remove('tinted');
+      tintedFor.current = heroId;
+    }
+    if (!heroSrc) return;
+    let alive = true;
+    void tintFrom(heroSrc).then(() => { if (alive) void applyTint(hero, heroSrc); });
+    return () => { alive = false; };
+  }, [heroSrc, heroId]);
+
+  // '/' opens Search everything, as it does from anywhere in v1 (not while she types, or over a sheet).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || topLayer()) return;
+      if ((e.target as Element | null)?.closest?.('input, textarea, select, [contenteditable]')) return;
+      e.preventDefault();
+      setSearch((open) => open ?? '');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   // ---------- actions ----------
   const say = (delay = 0) => {
@@ -339,11 +364,12 @@ export default function Dex() {
   // ---------- pieces ----------
   const isSeen = (s: Species) => seen.has(s.id);
   const hidden = (s: Species) => <span className="sr-only">, {isSeen(s) ? 'seen' : 'not seen'}</span>;
+  // The spaces between the parts are v1's, so the link reads '028 Tawny Frogmouth, not seen' as text too.
   const tile = (s: Species) => (
     <li key={s.id}>
       <Link className={`tile kind--${s.kind} ${isSeen(s) ? 'tile--seen' : ''}`} to={`/bird/${s.id}`} data-tile={s.id}>
-        <span className="tile-img"><Photo sp={s} /></span>
-        <Band sp={s} seen={isSeen(s)} />
+        <span className="tile-img"><Photo sp={s} /></span>{' '}
+        <Band sp={s} seen={isSeen(s)} />{' '}
         <span className="tile-name">{s.name}{hidden(s)}</span>
       </Link>
     </li>
@@ -352,7 +378,7 @@ export default function Dex() {
   const row = (s: Species) => (
     <li key={s.id}>
       <Link className={`row row--sp kind--${s.kind}`} to={`/bird/${s.id}`} data-tile={s.id}>
-        <span className={`row-thumb ${isSeen(s) ? 'row-thumb--seen' : ''}`}><Photo sp={s} /></span>
+        <span className={`row-thumb ${isSeen(s) ? 'row-thumb--seen' : ''}`}><Photo sp={s} /></span>{' '}
         <span className="row-main">
           <strong>{s.name}{hidden(s)}</strong>
           <span className="muted small">{f.sort === 'dex' ? <i>{s.sci}</i> : GROUPS[s.group]}</span>
@@ -457,11 +483,11 @@ export default function Dex() {
         data-kind={k}
         onClick={() => { if (f.kind !== k) redraw({ kind: k, group: '' }); }}
       >
-        <Ring p={g / Math.max(1, of)} cls="kind-ring" />
+        <Ring p={g / Math.max(1, of)} cls="kind-ring" />{' '}
         <span className="kind-tab-txt">
-          <span className="kind-tab-l">{label}</span>
+          <span className="kind-tab-l">{label}</span>{' '}
           <span className="kind-tab-n" aria-hidden="true"><b data-kn={g} data-of={of}>{g}</b>/{of}</span>
-        </span>
+        </span>{' '}
         <span className="sr-only">, {g} of {of} {k === 'plant' ? 'found' : 'seen'}</span>
       </button>
     );
@@ -488,7 +514,7 @@ export default function Dex() {
       <LearnTeaser />
       {day ? (
         <Link className={`today-card today-day kind--${day.sp.kind}`} to={`/bird/${day.sp.id}`}>
-          <span className="botd-img"><Photo sp={day.sp} /></span>
+          <span className="botd-img"><Photo sp={day.sp} /></span>{' '}
           <span className="today-day-txt">
             <span className="today-day-k">{day.why}</span>
             <strong>{day.sp.name}</strong>
@@ -565,7 +591,7 @@ export default function Dex() {
           {body}
         </div>
         <p className="small muted pad dex-tip">Tip: press and hold anything in the dex to log it quickly.</p>
-        <p className="sr-only" role="status" aria-live="polite">{said}</p>
+        <div className="sr-only" role="status" aria-live="polite">{said}</div>
       </div>
       {search != null && <DexSearch initial={search} sightings={sightings} seen={seen} onClose={() => setSearch(null)} />}
     </>
