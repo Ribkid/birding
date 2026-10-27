@@ -408,7 +408,8 @@ export async function renderScan(ctx) {
     if (fresh) {
       status.textContent = '';
       $('#scan-verdict', out)?.focus({ preventScroll: true });
-      $('.scan-verdict-wrap', out)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+      // The result section, not the verdict card: the card is still rising in, so its position is off by the offset.
+      out.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
       ctx.countUp?.($('[data-ringn]', out), 0, sure, { delay: 260, duration: 820 });
     }
   }

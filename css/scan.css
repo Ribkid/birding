@@ -181,12 +181,15 @@
 
 /* ---------- identify ---------- */
 .scan-go {
-  position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+  overflow: hidden; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
   min-height: 56px; padding: 0 var(--sp-5); border: 0; border-radius: var(--r-pill); cursor: pointer;
   background: var(--bracket); color: var(--cam-on-sun); font: 700 1.0625rem/1 var(--font);
-  box-shadow: 0 16px 32px -16px color-mix(in srgb, var(--bracket) 75%, transparent);
+  box-shadow: 0 16px 32px -16px color-mix(in srgb, var(--bracket) 75%, transparent), 0 10px 24px -8px rgba(0, 0, 0, .55);
   transition: transform var(--dur-3) var(--ease-spring);
+  /* A tall photo pushes Identify below the fold: it waits above the tab bar until the viewfinder scrolls away. */
+  position: sticky; bottom: calc(var(--chrome-bottom) + var(--sp-2)); z-index: 3;
 }
+body.has-outing .scan-go { bottom: calc(var(--chrome-bottom) + 66px); }
 .scan-go:active { transform: scale(.96); transition-duration: var(--dur-1); }
 .scan-go-ico svg { display: block; width: 22px; height: 22px; }
 .scan-go[aria-disabled="true"] { cursor: progress; }
@@ -215,7 +218,7 @@
   position: relative; display: grid; gap: var(--sp-4);
   margin-top: -28px; padding-top: var(--sp-5); border-radius: 28px 28px 0 0; background: var(--paper);
 }
-.scan-result { display: grid; gap: var(--sp-4); }
+.scan-result { display: grid; gap: var(--sp-4); scroll-margin-top: var(--sp-3); }
 .scan-result:empty { display: none; }
 
 /* verdict: a confidence ring and the headline */
