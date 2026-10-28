@@ -10,10 +10,11 @@ const learn = vi.hoisted(() => {
   const ready = new Promise<void>((resolve) => { done = resolve; });
   return { ready, stats: () => stats, load(next: Record<string, number>) { stats = next; done(); } };
 });
-const none = vi.hoisted(() => [] as never[]);
 vi.mock('../core/learn.js', () => ({ learnReady: () => learn.ready, learnStats: () => learn.stats() }));
 vi.mock('../core/cloud.js', () => ({ configured: true }));
-vi.mock('../lib/hooks', () => ({ useSightings: () => none, useOutings: () => none }));
+// No sightings or outings: Badges reads them itself, so it knows when they are in before the count stamps up.
+vi.mock('../core/db.js', () => ({ db: { all: async () => [], onChange: () => () => {} } }));
+vi.mock('../lib/hooks', () => ({ normaliseSighting: <T,>(row: T) => row }));
 
 import Badges from '../screens/progress/Badges';
 
@@ -30,6 +31,13 @@ describe('Badges', () => {
       await learn.ready;
     });
     expect(learning()).toBe('Learning6/9');
+  });
+
+  it("writes the earned count into v1's [data-earned] once her sightings are read", async () => {
+    const { container } = render(<MemoryRouter><Badges /></MemoryRouter>);
+    const earned = () => container.querySelector('[data-earned]')?.textContent;
+    await act(async () => { await Promise.resolve(); });
+    expect(earned()).toMatch(/^\d+$/);
   });
 
   it('puts v1 trophy icon on the Leaderboard link', () => {
