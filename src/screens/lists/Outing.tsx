@@ -1,18 +1,22 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../core/db.js';
 import { byId, type Species } from '../../lib/data';
 import { Icon } from '../../components/Icon';
+import { Sheet } from '../../components/Sheet';
+import { LocationPicker, type PickedPlace } from '../../components/LocationPicker';
 import { SpeciesImage } from '../../components/SpeciesImage';
+import { toast } from '../../lib/toast';
+import { CountKey } from './hubParts';
 import {
   ConfirmDialog,
-  Modal,
   deleteSighting,
   fmtDate,
   matchSpecies,
   plural,
   saveSighting,
   timeStr,
+  todayStr,
   useActiveOutingId,
   useOutingRows,
   useSettled,
@@ -35,6 +39,7 @@ const minutesSinceStart = (outing: OutingRow): number | null => {
   return Math.max(0, Math.round((Date.now() - start) / 60000));
 };
 
+/** v1 openFinishOuting (js/app.js:848): the Finish outing / Outing details sheet. */
 function FinishOuting({
   outing,
   sightingCount,
@@ -46,31 +51,37 @@ function FinishOuting({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const defaultMinutes = outing.past ? 60 : (minutesSinceStart(outing) ?? 60);
+  const defaultMinutes = outing.past ? 60 : Math.max(1, minutesSinceStart(outing) ?? 60);
 
   const [place, setPlace] = useState(outing.place ?? '');
+  const [loc, setLoc] = useState<{ lat: number | null; lng: number | null }>({ lat: outing.lat ?? null, lng: outing.lng ?? null });
+  const [picking, setPicking] = useState(false);
   const [date, setDate] = useState(outing.date);
   const [time, setTime] = useState(outing.time);
-  const [minutes, setMinutes] = useState(String(outing.durationMin ?? defaultMinutes));
+  const [minutes, setMinutes] = useState(String(outing.durationMin || defaultMinutes));
   const [km, setKm] = useState(outing.distanceKm != null ? String(outing.distanceKm) : '');
   const [complete, setComplete] = useState(Boolean(outing.complete || !outing.endedAt));
   const [notes, setNotes] = useState(outing.notes ?? '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const picked = (r: PickedPlace | null) => {
+    setPicking(false);
+    if (!r) return;
+    setLoc({ lat: r.lat, lng: r.lng });
+    if (r.place) setPlace(r.place);
+  };
+
   const save = async (event: FormEvent) => {
     event.preventDefault();
+    if (saving) return;
     setError('');
-    if (!date) {
-      setError('Add the date of the outing.');
-      return;
-    }
     const startAt = new Date(`${date}T${time || '00:00'}`);
     setSaving(true);
     try {
       const updated: OutingRow = {
         ...outing,
-        endedAt: outing.endedAt ?? Date.now(),
+        endedAt: outing.endedAt || Date.now(),
         durationMin: parseInt(minutes, 10) || defaultMinutes,
         distanceKm: parseFloat(km) || 0,
         complete,
@@ -79,10 +90,12 @@ function FinishOuting({
         date: date || outing.date,
         time: time || outing.time,
         startedAt: Number.isNaN(startAt.getTime()) ? outing.startedAt : startAt.getTime(),
+        lat: loc.lat,
+        lng: loc.lng,
       };
       await db.put('outings', updated);
 
-      // Keep the outing's birds in step with its place, date and time.
+      // Keep the outing's birds in step with its place and date.
       const all = (await db.all('sightings')) as SightingRow[];
       for (const rec of all.filter((row) => row.outingId === outing.id)) {
         await db.put('sightings', {
@@ -99,6 +112,7 @@ function FinishOuting({
       if (Number(active) === outing.id) await db.kvSet('activeOuting', null);
       onSaved();
       onClose();
+      toast('Outing finished');
     } catch {
       setError('The outing could not be saved. Try again.');
     } finally {
@@ -107,96 +121,115 @@ function FinishOuting({
   };
 
   return (
-    <Modal title={outing.endedAt ? 'Outing details' : 'Finish outing'} onClose={onClose}>
-      <p className="muted">{plural(sightingCount, 'species')} so far.</p>
-      <form className="form" onSubmit={save} noValidate>
-        <label className="field">
-          <span>Place name</span>
-          <input
-            name="place"
-            value={place}
-            autoComplete="off"
-            onChange={(event) => setPlace(event.target.value)}
-          />
-        </label>
-        <div className="grid2">
+    <>
+      <Sheet open onClose={onClose} cls="sheet-wrap--outing" labelledBy="outing-finish-h">
+        <h2 className="sheet-title" id="outing-finish-h">{outing.endedAt ? 'Outing details' : 'Finish outing'}</h2>
+        <p className="muted">{plural(sightingCount, 'species', 'species')} so far.</p>
+        <form className="form" onSubmit={save} noValidate>
           <label className="field">
-            <span>Date</span>
+            <span>Place name</span>
             <input
-              type="date"
-              name="date"
-              value={date}
-              onChange={(event) => setDate(event.target.value)}
+              name="place"
+              value={place}
+              autoComplete="off"
+              onChange={(event) => setPlace(event.target.value)}
             />
           </label>
-          <label className="field">
-            <span>Start time</span>
+          <div className="loc-row">
+            <button type="button" className="btn btn--small" onClick={() => setPicking(true)}>
+              <Icon name="search" /> {loc.lat != null ? 'Move on map' : 'Choose on map'}
+            </button>
+            <span className="small muted">
+              {loc.lat != null && loc.lng != null ? `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}` : 'No location yet'}
+            </span>
+          </div>
+          <div className="grid2">
+            <label className="field">
+              <span>Date</span>
+              <input
+                type="date"
+                name="date"
+                value={date}
+                max={todayStr()}
+                onChange={(event) => setDate(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Start time</span>
+              <input
+                type="time"
+                name="time"
+                value={time}
+                onChange={(event) => setTime(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="grid2">
+            <label className="field">
+              <span>Duration (minutes)</span>
+              <input
+                name="dur"
+                inputMode="numeric"
+                value={minutes}
+                onChange={(event) => setMinutes(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>Distance walked (km)</span>
+              <input
+                name="km"
+                inputMode="decimal"
+                placeholder="0 if you stayed put"
+                value={km}
+                onChange={(event) => setKm(event.target.value)}
+              />
+            </label>
+          </div>
+          <label className="check check--card">
             <input
-              type="time"
-              name="time"
-              value={time}
-              onChange={(event) => setTime(event.target.value)}
+              type="checkbox"
+              name="complete"
+              checked={complete}
+              onChange={(event) => setComplete(event.target.checked)}
+            />
+            <span>
+              I logged every bird I could identify. eBird calls this a complete checklist.
+            </span>
+          </label>
+          <label className="field">
+            <span>Notes</span>
+            <textarea
+              name="notes"
+              rows={2}
+              placeholder="Weather, tide, company…"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
             />
           </label>
-        </div>
-        <div className="grid2">
-          <label className="field">
-            <span>Duration (minutes)</span>
-            <input
-              name="dur"
-              inputMode="numeric"
-              value={minutes}
-              onChange={(event) => setMinutes(event.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>Distance walked (km)</span>
-            <input
-              name="km"
-              inputMode="decimal"
-              placeholder="0 if you stayed put"
-              value={km}
-              onChange={(event) => setKm(event.target.value)}
-            />
-          </label>
-        </div>
-        <label className="check check--card">
-          <input
-            type="checkbox"
-            name="complete"
-            checked={complete}
-            onChange={(event) => setComplete(event.target.checked)}
-          />
-          <span>
-            I logged every bird I could identify. eBird calls this a complete checklist.
-          </span>
-        </label>
-        <label className="field">
-          <span>Notes</span>
-          <textarea
-            name="notes"
-            rows={2}
-            placeholder="Weather, tide, company…"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-          />
-        </label>
-        <p className="form-error" role="alert">
-          {error}
-        </p>
-        <div className="row-end">
-          <button type="button" className="btn" onClick={onClose}>
-            {outing.endedAt ? 'Cancel' : 'Keep going'}
-          </button>
-          <button type="submit" className="btn btn--primary" disabled={saving}>
-            {saving ? 'Saving…' : outing.endedAt ? 'Save details' : 'Finish outing'}
-          </button>
-        </div>
-      </form>
-    </Modal>
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="row-end">
+            <button type="button" className="btn" onClick={onClose}>
+              {outing.endedAt ? 'Cancel' : 'Keep going'}
+            </button>
+            <button type="submit" className="btn btn--primary" aria-disabled={saving || undefined}>
+              {outing.endedAt ? 'Save details' : 'Finish outing'}
+            </button>
+          </div>
+        </form>
+      </Sheet>
+      {picking && <LocationPicker init={{ lat: loc.lat, lng: loc.lng, place }} onDone={picked} />}
+    </>
   );
 }
 
+/** Where focus should land after a + or −, as v1's keepFocus(..., { fallback: '[data-tq], #view h1' }) did. */
+type Refocus = { id: number; attr: 'data-inc' | 'data-dec'; until: number; spare: HTMLElement | null };
+
+/** v1 renderOuting (js/app.js:2046): an outing's tally, live or finished. */
 export default function Outing() {
   const { id } = useParams();
   const outingId = Number(id);
@@ -213,6 +246,9 @@ export default function Outing() {
   const [finishOpen, setFinishOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  // One tally change at a time. The buttons stay enabled (v1's do), so a tap never drops focus to <body>.
+  const working = useRef(false);
+  const refocus = useRef<Refocus | null>(null);
 
   const recs = useMemo(
     () => sightings.filter((row) => row.outingId === outingId),
@@ -248,6 +284,34 @@ export default function Outing() {
     [sightings, outingId],
   );
 
+  // After a + or −, the control she pressed may be redrawn away: the row found by search moves into the tally, or a
+  // count reaches zero. v1's keepFocus found its twin by data-inc / data-dec (a missing − falls back to the row's +),
+  // then the search box, then the heading. The tally lands a moment after the write, so the search box holds focus
+  // until the twin appears.
+  useEffect(() => {
+    const want = refocus.current;
+    if (!want) return;
+    if (Date.now() > want.until) { refocus.current = null; return; }
+    const view = document.getElementById('view');
+    if (!view) return;
+    const a = document.activeElement as HTMLElement | null;
+    const lost = !a || a === document.body || !a.isConnected;
+    if (!lost && a !== want.spare) return;
+    if (want.spare && a === want.spare && (want.spare as HTMLInputElement).value) { refocus.current = null; return; }
+    const twin = view.querySelector<HTMLElement>(`[${want.attr}="${want.id}"]`) || view.querySelector<HTMLElement>(`[data-inc="${want.id}"]`);
+    if (twin) {
+      twin.focus({ preventScroll: true });
+      refocus.current = null;
+      return;
+    }
+    if (!lost) return;
+    const spare = view.querySelector<HTMLElement>('[data-tq]') || view.querySelector<HTMLElement>('h1');
+    if (!spare) return;
+    if (spare.matches('h1')) spare.tabIndex = -1;
+    spare.focus({ preventScroll: true });
+    want.spare = spare;
+  });
+
   if (!outing) {
     return (
       <>
@@ -278,13 +342,17 @@ export default function Outing() {
   const results = query.trim() ? matchSpecies(query, 12) : [];
   const mins = live ? minutesSinceStart(outing) : outing.durationMin;
 
-  const addOne = async (sp: Species) => {
-    setBusy(true);
+  const change = async (sp: Species, delta: 1 | -1) => {
+    if (working.current) return;
+    working.current = true;
+    refocus.current = { id: sp.id, attr: delta > 0 ? 'data-inc' : 'data-dec', until: Date.now() + 1500, spare: null };
     try {
       const current = counts.get(sp.id);
       if (current) {
-        await db.put('sightings', { ...current, count: (current.count ?? 1) + 1 });
-      } else {
+        const next = (current.count ?? 1) + delta;
+        if (next <= 0) await deleteSighting(current);
+        else await db.put('sightings', { ...current, count: next });
+      } else if (delta > 0) {
         await saveSighting({
           speciesId: sp.id,
           count: 1,
@@ -301,23 +369,10 @@ export default function Outing() {
           createdAt: Date.now(),
         });
       }
-      if (live) await db.kvSet('activeOuting', outing.id);
-      setQuery('');
+      if (delta > 0 && live) await db.kvSet('activeOuting', outing.id);
+      if (delta > 0 && query) setQuery('');
     } finally {
-      setBusy(false);
-    }
-  };
-
-  const removeOne = async (sp: Species) => {
-    const current = counts.get(sp.id);
-    if (!current) return;
-    setBusy(true);
-    try {
-      const next = (current.count ?? 1) - 1;
-      if (next <= 0) await deleteSighting(current);
-      else await db.put('sightings', { ...current, count: next });
-    } finally {
-      setBusy(false);
+      working.current = false;
     }
   };
 
@@ -341,23 +396,23 @@ export default function Outing() {
               <>
                 <button
                   type="button"
+                  data-dec={sp.id}
                   aria-label={`One fewer ${sp.name}`}
-                  disabled={busy}
-                  onClick={() => void removeOne(sp)}
+                  onClick={() => void change(sp, -1)}
                 >
                   −
                 </button>
-                <span className="tally-n" aria-live="polite">
+                <span className="tally-n" data-n={sp.id} aria-live="polite">
                   {rec.count ?? 'X'}
                 </span>
               </>
             )}
             <button
               type="button"
+              data-inc={sp.id}
               className="tally-inc"
               aria-label={`Add ${sp.name}`}
-              disabled={busy}
-              onClick={() => void addOne(sp)}
+              onClick={() => void change(sp, 1)}
             >
               +
             </button>
@@ -368,6 +423,8 @@ export default function Outing() {
       </li>
     );
   };
+
+  const ordered = tally.map((rec) => byId.get(rec.speciesId)).filter((sp): sp is Species => !!sp);
 
   return (
     <>
@@ -387,90 +444,63 @@ export default function Outing() {
 
       <div className="tally-sum">
         <p className="list-count">
-          <b>{tally.length}</b> species{!live && outing.distanceKm ? `, ${outing.distanceKm} km` : ''}
+          <CountKey k={`outing/${outing.id}`} value={tally.length} /> species{!live && outing.distanceKm ? `, ${outing.distanceKm} km` : ''}
         </p>
         {live && <span className="ocard-live">In progress</span>}
       </div>
 
       {editing && (
         <>
-          <div className="searchbox searchbox--sticky">
+          <div className="searchbox tally-search">
             <Icon name="search" />
             <input
               type="search"
-              placeholder="Add a bird: type a name"
+              placeholder="Add a species: type a name"
               value={query}
-              aria-label="Find a bird to add"
+              data-tq=""
+              aria-label="Find a species to add"
               onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape') setQuery('');
-              }}
             />
           </div>
           {query.trim() !== '' && (
-            <>
-              <ul className="tally-list">
-                {results.map(tallyRow)}
-                {results.length === 0 && (
-                  <li className="muted pad">No species by that name in the dex.</li>
-                )}
-              </ul>
-              <hr className="rule" />
-            </>
+            <ul className="tally-list rows--card tally-list--found">
+              {results.length ? results.map(tallyRow) : <li className="muted pad">Nothing by that name in the dex.</li>}
+            </ul>
           )}
         </>
       )}
 
-      <ul className="tally-list">
-        {tally.map((rec) => {
-          const sp = byId.get(rec.speciesId);
-          return sp ? tallyRow(sp) : null;
-        })}
-        {tally.length === 0 &&
-          (editing ? (
-            <li className="muted pad">
-              Search above to add the first bird. Tap + again each time you count another.
-            </li>
-          ) : (
-            <li className="muted pad">No species were logged on this outing.</li>
-          ))}
-      </ul>
+      {ordered.length ? (
+        <ul className="tally-list rows--card">{ordered.map(tallyRow)}</ul>
+      ) : editing ? (
+        <p className="empty-inline tally-empty">Search above to add the first species. Tap + again each time you count another.</p>
+      ) : (
+        <p className="empty-inline tally-empty">No species were logged on this outing.</p>
+      )}
 
       {outing.notes && <p className="pad-x">{outing.notes}</p>}
 
-      <div className="row-end pad">
-        {live ? (
-          <>
-            <button
-              type="button"
-              className="btn btn--danger btn--quiet"
-              onClick={() => setConfirmDelete(true)}
-            >
-              Discard
-            </button>
-            <span className="spacer" />
-            <button type="button" className="btn btn--primary" onClick={() => setFinishOpen(true)}>
-              Finish outing
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="btn btn--danger btn--quiet"
-              onClick={() => setConfirmDelete(true)}
-            >
-              Delete outing
-            </button>
-            <span className="spacer" />
-            <button type="button" className="btn" onClick={() => setEditingBirds(!editingBirds)}>
-              {editingBirds ? 'Done editing birds' : 'Edit birds'}
-            </button>
-            <button type="button" className="btn" onClick={() => setFinishOpen(true)}>
-              Edit details
-            </button>
-          </>
+      <div className={`tally-foot ${live ? 'tally-foot--live' : ''}`}>
+        {/* Keyed so the Finish outing button stays the same element as it becomes Edit details: closing the sheet
+            hands focus back to it, as v1's restoreFocus found [data-finish] again. */}
+        <button
+          key="cancel"
+          type="button"
+          className="btn btn--danger btn--quiet"
+          data-cancel=""
+          onClick={() => setConfirmDelete(true)}
+        >
+          {live ? 'Discard' : 'Delete outing'}
+        </button>
+        <span key="spacer" className="spacer" />
+        {!live && (
+          <button key="editbirds" type="button" className="btn" data-editbirds="" onClick={() => { setEditingBirds(!editingBirds); setQuery(''); }}>
+            {editing ? 'Done editing species' : 'Edit species'}
+          </button>
         )}
+        <button key="finish" type="button" className={`btn${live ? ' btn--primary' : ''}`} data-finish="" onClick={() => setFinishOpen(true)}>
+          {live ? 'Finish outing' : 'Edit details'}
+        </button>
       </div>
 
       {finishOpen && (
