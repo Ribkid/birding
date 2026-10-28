@@ -136,3 +136,13 @@ export function countOnTo(el: HTMLElement | null, to: number) {
   onTo(Number(to) || 0);
   return true;
 }
+
+// ---------- a stamped tap ----------
+// A number that has just changed by one (a tap on the outing tally) is already drawn; it pops in with countUp's stamp
+// easing, quick enough that a fast thumb sees every tap. Each tap starts it again. Nothing under reduced motion.
+const stamping = new WeakMap<HTMLElement, Animation>();
+export function stamp(el: HTMLElement | null, { duration = 120, scale = 1.3 }: { duration?: number; scale?: number } = {}) {
+  if (!el || !motionOK() || document.hidden || typeof el.animate !== 'function') return;
+  stamping.get(el)?.cancel();
+  stamping.set(el, el.animate([{ transform: `scale(${scale})` }, { transform: 'none' }], { duration, easing: STAMP }));
+}
