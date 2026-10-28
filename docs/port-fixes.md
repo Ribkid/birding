@@ -815,6 +815,18 @@ Twelve branches, each forked from `fd537c7`, were merged into `port-fixes` with 
 - Shared pieces kept once: `lib/toast.ts` (toast, announce and the one `#announce`), `lib/install.ts` (one install offer for the welcome card, Settings and the Dex), `components/OutingBar.tsx` (one `#outing-bar`, `body.has-outing`), `components/RouteFocus.tsx` (heading focus after navigation), `screens/DexSearch.tsx` (search from the Dex and the species hero), `lib/layers.ts`' single Escape/Tab listener, and `components/Sheet.tsx` (open class, labelledBy, step, focus into the sheet, solid surface). The + tab is v1's `<a href="#/add" id="plus">`.
 - `3207bc1`: the manifest's `theme_color` is the paper colour `#F4F6F9`. `b906aef`: the species page's Group link filters the dex.
 
+### Leftovers: Settings, Dex filter and search (branch `left-settings-dex-search`)
+
+- 16 and 22, checked against v1 with nothing to change. Account deletion refuses while offline before any sheet opens. A failed request closes the sheet and shows v1's `Couldn't delete the account: <message>`, which replaces "Deleting your account…". The Ready ring's fill has `pathLength="100"`. With the service worker running, every row reports what v1 reports, and the App row's total is the build's precache count (39 on this build, all saved).
+- `1118733`: search. `SearchHost` in `DexSearch.tsx` is mounted once in App. `/` opens it on every screen, as in v1. The Dex hero, the Dex's empty state, the species hero and Scan's 'Search the dex' all open it through `openSearch()`.
+- `9da0cfb`: item 76's remainder.
+  - The sign-in page uses the shared `SignInForm`.
+  - Signed-out Edit profile goes to Sign in once the saved sign-in has been checked.
+  - Me's public-profile messages and the group outcomes are toasts, and Leave asks in a confirm sheet.
+  - Letter avatars use her shown name.
+  - Public profile tiles read "You too Australian Brush-turkey".
+- Checked: the Group link (`b906aef`) filters the dex the way v1's does. The species page shows the rarity line once.
+
 ### Partial
 
 - None.
