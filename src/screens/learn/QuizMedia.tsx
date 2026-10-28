@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { PhotoRef } from '../../lib/data';
+import { toast } from '../../lib/toast';
 
 export const QI = {
   close: <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />,
@@ -186,14 +187,17 @@ export function usePlayButtons() {
     audio.current = a;
     setOn({ key, state: 'loading' });
     const done = () => {
-      if (audio.current !== a) return;
+      if (audio.current !== a) return false; // stopped on purpose (Next, another clip): not a failure
       audio.current = null;
       live.delete(halt);
       setOn(null);
+      return true;
     };
+    // v1 playCall's fail(): these buttons have no status line of their own, so the reason goes out as a toast.
+    const fail = () => { if (done()) toast(failText()); };
     a.onended = done;
-    a.onerror = done;
-    a.play().then(() => { if (audio.current === a) setOn({ key, state: 'playing' }); }).catch(done);
+    a.onerror = fail;
+    a.play().then(() => { if (audio.current === a) setOn({ key, state: 'playing' }); }).catch(fail);
   };
   return { on, toggle, stop: halt };
 }

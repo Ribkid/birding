@@ -6,14 +6,17 @@ import {
   type ReactNode,
 } from 'react';
 import { db } from '../../core/db.js';
+import { sized } from '../../core/media.js';
 import { likelihood, loadSeq, monthRates, seq } from '../../core/seqdata.js';
-import { MONTHS, targets } from '../../core/stats.js';
+import { MONTHS, badges, targets } from '../../core/stats.js';
 import { byId, dexCode, SPECIES, type Species } from '../../lib/data';
-import { useOutings, useSeen, useSightings, type Outing, type Sighting } from '../../lib/hooks';
+import { useMedia, useOutings, useSeen, useSightings, type Outing, type Sighting } from '../../lib/hooks';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { nudgeAfterSave } from '../me/nudge';
-import { Band, SpeciesImage } from '../../components/SpeciesImage';
+import { celebrate } from '../../components/Celebrate';
+import { toast } from '../../lib/toast';
+import { Band } from '../../components/SpeciesImage';
 import './lists.css';
 
 export const MONTH_NAMES = MONTHS as string[];
@@ -180,12 +183,28 @@ export function suggestTargets(args: TargetArgs): Species[] {
   return (targets as unknown as (value: TargetArgs) => Species[])(args);
 }
 
+type BadgeRow = { id: string; name: string; done: boolean };
+const doneBadges = (sightings: unknown[], outings: unknown[]) =>
+  (badges(sightings, outings) as BadgeRow[]).filter((b) => b.done);
+
+// Whether the last save added a species new for the dex (v1 state.lastSaveNew): the celebration then stands in for
+// the "saved" toast.
+let lastNew = false;
+export const lastSaveNew = () => lastNew;
+
+/**
+ * v1 saveSighting: write the record, then celebrate a species new for the dex (or toast a badge it earned) and offer
+ * the sign-up nudge.
+ */
 export async function saveSighting(rec: SightingInput): Promise<number> {
   try {
     void navigator.storage?.persist?.();
   } catch {
     /* storage persistence is best effort */
   }
+  const [before, outings] = (await Promise.all([db.all('sightings'), db.all('outings')])) as [SightingRow[], unknown[]];
+  const seenBefore = new Set(before.map((s) => s.speciesId));
+  const badgesBefore = new Set(doneBadges(before, outings).map((b) => b.id));
   let id: number;
   if (rec.id != null) {
     await db.put('sightings', rec);
@@ -195,8 +214,13 @@ export async function saveSighting(rec: SightingInput): Promise<number> {
     id = Number(await db.add('sightings', rec));
     rec.id = id;
   }
-  const total = ((await db.all('sightings')) as unknown[]).length;
-  void nudgeAfterSave(total);
+  const after = (await db.all('sightings')) as SightingRow[];
+  const newBadges = doneBadges(after, outings).filter((b) => !badgesBefore.has(b.id));
+  const sp = byId.get(rec.speciesId);
+  lastNew = !seenBefore.has(rec.speciesId);
+  if (lastNew && sp) celebrate(sp, newBadges, after);
+  else if (newBadges.length) toast(`Badge earned: ${newBadges.map((b) => b.name).join(', ')}`);
+  void nudgeAfterSave(after.length);
   return id;
 }
 
@@ -315,24 +339,52 @@ interface SpeciesPickerProps {
   label?: string;
 }
 
-export function SpeciesPicker({ value, onChange, label = 'Species' }: SpeciesPickerProps) {
+export function SpeciesPicker({ value, onChange, label = 'What did you see?' }: SpeciesPickerProps) {
   const seen = useSeen();
+  useMedia();
   const [query, setQuery] = useState('');
   const resultsRef = useRef<HTMLUListElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const changeRef = useRef<HTMLButtonElement>(null);
   const sp = value != null ? (byId.get(value) ?? null) : null;
+  // Change takes her to the search field, as v1's did. Picking one leaves her on the card's Change button rather
+  // than on the page (v1's focus fell to the page there, as the result she picked is gone).
+  const focusNext = useRef<'search' | 'change' | null>(null);
+  useEffect(() => {
+    if (focusNext.current === 'search' && !sp) inputRef.current?.focus();
+    if (focusNext.current === 'change' && sp) changeRef.current?.focus();
+    focusNext.current = null;
+  }, [sp]);
 
   if (sp) {
+    // The chosen species shows as a photo card, so she can see at a glance she picked the right one (v1
+    // pickerChosen). The name is written on the card, so the photo has no alt of its own.
+    const url = sized(sp.id, 'large') as string | null;
     return (
       <div className="picker">
-        <div className="chosen">
-          <SpeciesImage sp={sp} className="chosen-img" />
-          <div>
-            <strong>{sp.name}</strong>
-            <em>{sp.sci}</em>
+        <div className="picker-chosen">
+          <div className={`chosen kind--${sp.kind}`}>
+            {url ? (
+              <img
+                className="chosen-img"
+                src={url}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                onError={(e) => e.currentTarget.classList.add('img-missing')}
+              />
+            ) : (
+              <span className="chosen-img img-missing" aria-hidden="true" />
+            )}
+            <div className="chosen-txt">
+              <Band sp={sp} seen={seen.has(sp.id)} />
+              <strong>{sp.name}</strong>
+              <em>{sp.sci}</em>
+            </div>
+            <button type="button" className="btn btn--small chosen-change" aria-label="Change species" ref={changeRef} onClick={() => { focusNext.current = 'search'; onChange(null); }}>
+              Change
+            </button>
           </div>
-          <button type="button" className="btn btn--small" onClick={() => onChange(null)}>
-            Change
-          </button>
         </div>
       </div>
     );
@@ -346,6 +398,7 @@ export function SpeciesPicker({ value, onChange, label = 'Species' }: SpeciesPic
         <label className="field">
           <span>{label}</span>
           <input
+            ref={inputRef}
             type="search"
             placeholder="Type a name, e.g. kookaburra"
             autoComplete="off"
@@ -370,6 +423,7 @@ export function SpeciesPicker({ value, onChange, label = 'Species' }: SpeciesPic
                 <button
                   type="button"
                   onClick={() => {
+                    focusNext.current = 'change';
                     onChange(item);
                     setQuery('');
                   }}
@@ -380,7 +434,7 @@ export function SpeciesPicker({ value, onChange, label = 'Species' }: SpeciesPic
               </li>
             ))}
             {results.length === 0 && (
-              <li className="muted pad">No species by that name in the dex.</li>
+              <li className="muted pad">Nothing by that name in the dex.</li>
             )}
           </ul>
         )}

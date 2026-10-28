@@ -9,7 +9,6 @@ import { GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, type Species }
 import { useMedia, useSightings } from '../lib/hooks';
 import { useSeqReady } from '../lib/seq';
 import { lookAfterDraw } from '../lib/look';
-import { db } from '../core/db.js';
 import { galleryFor, infoFor, loadExtras } from '../core/gallery.js';
 import { details, loadCallPack, photoFor, sized } from '../core/media.js';
 import { callWords, loadLookalikes, lookalikesOf, parseSize, peaksOf, sentences, tellFor } from '../core/quiz.js';
@@ -18,6 +17,7 @@ import { MONTHS } from '../core/stats.js';
 import { learnReady, masteryOf } from '../core/learn.js';
 import { topLayer } from '../lib/layers';
 import { Icon } from '../components/Icon';
+import { MinePhoto } from '../components/MinePhoto';
 import { Band, Pips } from '../components/SpeciesImage';
 import { CallsSection, PauseIcon, PlayIcon, hasCalls, useCallPlayer } from './BirdCalls';
 import { CardOverlay, askMotion, shareCard, type CardInfo } from './BirdCard';
@@ -122,32 +122,6 @@ function WholeImg({ src, alt, className = '', eager = false }: { src?: string; a
       <FadeImg key={`fg-${src}`} src={src} alt={alt} className="whole-fg" eager={eager} onMissing={(img) => img.closest('.whole')?.classList.add('img-missing')} />
     </span>
   );
-}
-
-// Her own photo from a sighting, read from the photos store. As in v1 (hydratePhotos), it loads only as it comes
-// within 400px of the screen, so a long strip doesn't decode every full-size photo at once.
-function MinePhoto({ photoId }: { photoId: number }) {
-  const imgRef = useRef<HTMLImageElement>(null);
-  const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined');
-  const [url, setUrl] = useState('');
-  useEffect(() => {
-    const el = imgRef.current;
-    if (near || !el) return;
-    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { setNear(true); io.disconnect(); } }, { rootMargin: '400px 0px' });
-    io.observe(el);
-    return () => io.disconnect();
-  }, [near]);
-  useEffect(() => {
-    if (!near) return;
-    let alive = true, made = '';
-    void Promise.resolve(db.get('photos', photoId)).then((rec: { blob?: Blob } | undefined) => {
-      if (!alive || !rec?.blob) return;
-      made = URL.createObjectURL(rec.blob);
-      setUrl(made);
-    }).catch(() => {});
-    return () => { alive = false; if (made) URL.revokeObjectURL(made); };
-  }, [near, photoId]);
-  return <img ref={imgRef} src={url || undefined} alt="" loading="lazy" decoding="async" />;
 }
 
 export default function Bird() {
@@ -266,7 +240,22 @@ function SpeciesPage({ sp }: { sp: Species }) {
   // Once she has, the list is kept as it is, as v1 keeps the gallery's slide (nothing is redrawn mid-use).
   const touched = useRef(false);
   const kept = useRef<Photo[] | null>(null);
-  const live = heroPhotos(sp, det);
+  const fresh = heroPhotos(sp, det);
+  // A late first photo waits until it has loaded, so the hero never goes blank while it swaps in (v1's
+  // patchSpeciesImages likewise keeps the old picture until the new one is there). If it never loads, the
+  // photos already on screen stay.
+  const shownList = kept.current;
+  const late = !touched.current && shownList?.length && fresh[0] && fresh[0].src !== shownList[0].src && !shown.has(fresh[0].src) ? fresh[0].src : '';
+  const [, setLateLoaded] = useState(0);
+  useEffect(() => {
+    if (!late) return;
+    let alive = true;
+    const img = new Image();
+    img.onload = () => { shown.add(late); if (alive) setLateLoaded((x) => x + 1); };
+    img.src = late;
+    return () => { alive = false; };
+  }, [late]);
+  const live = late && shownList ? shownList.map((k) => fresh.find((l) => l.src === k.src) || k) : fresh;
   const photos = touched.current && kept.current?.length ? kept.current.map((k) => live.find((l) => l.src === k.src) || k) : live;
   kept.current = photos;
   const n = photos.length;

@@ -2,6 +2,7 @@
 // Sighting records match the shape the v1 sighting sheet wrote, and a photo is
 // stored as a blob record first so the sighting can point at it.
 import { db } from '../../core/db.js';
+import { saveSighting } from '../lists/shared';
 
 export interface SightingInput {
   speciesId: number;
@@ -45,9 +46,9 @@ export async function logSighting({ speciesId, notes, photoBlob = null, lat = nu
       outingId: null,
       createdAt: Date.now(),
     };
-    const id = (await db.add('sightings', rec)) as number;
-    if (typeof navigator !== 'undefined') void navigator.storage?.persist?.();
-    return id;
+    // The shared save: a species new to the dex is celebrated, a badge earned is toasted and the nudge is offered,
+    // as after v1's sighting sheet.
+    return await saveSighting(rec);
   } catch (err) {
     // Don't leave an orphaned photo behind if the sighting could not be saved.
     if (photoId !== null) {

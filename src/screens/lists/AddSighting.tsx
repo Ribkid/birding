@@ -4,12 +4,15 @@ import { Icon } from '../../components/Icon';
 import { db } from '../../core/db.js';
 import { resizeImage } from '../../core/profile.js';
 import { takePending } from '../field/scanHandoff';
+import { byId } from '../../lib/data';
+import { toast } from '../../lib/toast';
 import {
   PhotoField,
   SightingFields,
   buildSighting,
   emptyDraft,
   getPosition,
+  lastSaveNew,
   saveSighting,
   useObjectUrl,
   type SightingDraft,
@@ -95,6 +98,8 @@ export default function AddSighting() {
       if (photoBlob) photoId = (await db.add('photos', { blob: photoBlob, at: Date.now() })) as number;
       await saveSighting(photoId != null ? { ...rec, photoId } : rec);
       navigate('/lists');
+      // v1's words; for a species new to the dex the celebration stands in for them.
+      if (!lastSaveNew()) toast(`${byId.get(rec.speciesId as number)?.name ?? 'Sighting'} saved`);
     } catch {
       if (photoId != null) await db.del('photos', photoId).catch(() => {});
       setError('The sighting could not be saved. Try again.');

@@ -184,7 +184,7 @@ export default function Lists() {
             <div className="block-h">
               <h2 className="h2">Patches</h2>
               {/* v1 sets state.mapMode = 'patch': the map opens with the new-patch sheet up. */}
-              <Link to="/map" state={{ mapMode: 'patch' }}>
+              <Link to="/map" state={{ mapMode: 'patch' }} data-newpatch="">
                 New patch
               </Link>
             </div>

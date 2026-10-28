@@ -28,6 +28,7 @@ import { TabBar } from './components/TabBar';
 import { ScreenBoundary } from './components/ErrorBoundary';
 import { Welcome } from './components/Welcome';
 import { OutingBar } from './components/OutingBar';
+import { Celebrations } from './components/Celebrate';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
 import { closeAllLayers } from './lib/layers';
@@ -139,6 +140,7 @@ export default function App() {
       </main>
       <OutingBar />
       <TabBar />
+      <Celebrations />
     </>
   );
 }

@@ -15,7 +15,9 @@ import { db } from '../../core/db.js';
 import { hotspots, loadSeq, pointsFor } from '../../core/seqdata.js';
 import { describeArea } from '../../core/mapinfo.js';
 import { Icon } from '../../components/Icon';
+import { Sheet } from '../../components/Sheet';
 import { SpeciesImage } from '../../components/SpeciesImage';
+import { toast as appToast } from '../../lib/toast';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -979,6 +981,7 @@ function MapView() {
         radiusKm: patchRadius,
       });
       setPatchOpen(false);
+      appToast(`${name} added`);
       const newId = Number(key);
       navigate(Number.isFinite(newId) ? `/patch/${newId}` : '/lists');
     } catch {
@@ -1172,7 +1175,7 @@ function MapView() {
 
   return (
     <div className="map-screen">
-      <h1 className="map-sr">Map</h1>
+      <h1 className="sr-only">Map</h1>
       <p id="map-help" className="map-sr">
         Use the arrow keys to pan the map. Everything shown in map popups is listed as text in the
         Map details section after the map.
@@ -1184,7 +1187,7 @@ function MapView() {
           ref={mapElRef}
           role="region"
           tabIndex={0}
-          aria-label="Map of South East Queensland showing your patches, birding hotspots and sightings"
+          aria-label="Map of your sightings and SEQ birding hotspots"
           aria-describedby="map-help"
         />
 
@@ -1378,76 +1381,62 @@ function MapView() {
         </p>
       </div>
 
-      {patchOpen && (
-        <div className="sheet-wrap sheet-wrap--map open">
-          <div
-            className="sheet"
-            role="dialog"
-            aria-labelledby="new-patch-title"
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                event.stopPropagation();
-                closePatch();
-              }
-            }}
-          >
-            <div className="sheet-grip" aria-hidden="true" />
-            <h2 className="sheet-title" id="new-patch-title">
-              New patch
-            </h2>
-            <p className="muted small">
-              Move the map so the circle covers your patch, then name it.
+      {/* v1 startPatch: openSheet(..., { modal: false, cls: 'sheet-wrap--map' }). It is a layer, so Escape closes it
+          and focus goes back to "New patch here", or to the h1 when it was opened from Lists. */}
+      <Sheet open={patchOpen} onClose={closePatch} cls="sheet-wrap--map" modal={false} labelledBy="new-patch-title">
+        <h2 className="sheet-title" id="new-patch-title">
+          New patch
+        </h2>
+        <p className="muted small">
+          Move the map so the circle covers your patch, then name it.
+        </p>
+        <form
+          className="form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void savePatch();
+          }}
+        >
+          <label className="field">
+            <span>Name</span>
+            <input
+              name="name"
+              placeholder="e.g. Our yard"
+              required
+              autoComplete="off"
+              value={patchName}
+              onChange={(event) => setPatchName(event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>
+              Radius: <output>{patchRadius}</output> km
+            </span>
+            <input
+              type="range"
+              name="r"
+              min="0.1"
+              max="8"
+              step="0.1"
+              value={patchRadius}
+              onChange={(event) => setPatchRadius(Number(event.target.value))}
+            />
+          </label>
+          {patchError && (
+            <p className="form-error" role="alert">
+              {patchError}
             </p>
-            <form
-              className="form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void savePatch();
-              }}
-            >
-              <label className="field">
-                <span>Name</span>
-                <input
-                  name="name"
-                  placeholder="e.g. Our yard"
-                  required
-                  autoComplete="off"
-                  autoFocus
-                  value={patchName}
-                  onChange={(event) => setPatchName(event.target.value)}
-                />
-              </label>
-              <label className="field">
-                <span>
-                  Radius: <output>{patchRadius}</output> km
-                </span>
-                <input
-                  type="range"
-                  name="r"
-                  min="0.1"
-                  max="8"
-                  step="0.1"
-                  value={patchRadius}
-                  onChange={(event) => setPatchRadius(Number(event.target.value))}
-                />
-              </label>
-              {patchError && (
-                <p className="form-error" role="alert">
-                  {patchError}
-                </p>
-              )}
-              <div className="row-end">
-                <button type="button" className="btn" onClick={closePatch}>
-                  Cancel
-                </button>
-                <button className="btn btn--primary" type="submit" disabled={patchSaving}>
-                  Save patch
-                </button>
-              </div>
-            </form>
+          )}
+          <div className="row-end">
+            <button type="button" className="btn" onClick={closePatch}>
+              Cancel
+            </button>
+            <button className="btn btn--primary" type="submit" disabled={patchSaving}>
+              Save patch
+            </button>
           </div>
-        </div>
-      )}
+        </form>
+      </Sheet>
 
       {toast && (
         <div
