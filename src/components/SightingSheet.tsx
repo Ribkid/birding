@@ -65,18 +65,41 @@ function SpeciesPhoto({ sp, size, className = '' }: { sp: Species; size: 'small'
   useMedia();
   const url = sized(sp.id, size) as string | null;
   const ref = useRef<HTMLImageElement>(null);
+  // Drawn for one species: the caller keys it by the species, so a new pick is a new picture at once.
+  const [src, setSrc] = useState(url);
+  // A replacement that has already loaded shows at once, without the fade.
+  const ready = useRef<string | null>(null);
   const [look, setLook] = useState<'' | 'in' | 'missing'>('');
+  // v1 patchSpeciesImages: a better photo that arrives later (the photo index) waits until it has loaded, so the card
+  // never blanks; one going in where no photo has shown yet is swapped straight away.
+  useEffect(() => {
+    if (!url || url === src) return;
+    const el = ref.current;
+    if (!el || !(el.complete && el.naturalWidth)) {
+      setSrc(url);
+      return;
+    }
+    let on = true;
+    const next = new Image();
+    next.src = url;
+    next.decode().then(() => {
+      if (!on) return;
+      ready.current = url;
+      setSrc(url);
+    }, () => {});
+    return () => { on = false; };
+  }, [url, src]);
   useLayoutEffect(() => {
     const el = ref.current;
-    setLook(el?.complete && el.naturalWidth ? 'in' : '');
-  }, [url]);
+    setLook((el?.complete && el.naturalWidth) || (src && ready.current === src) ? 'in' : '');
+  }, [src]);
   // v1's data-sp and data-size mark which species and size the picture is.
-  if (!url) return <span className={`${className} img-missing`.trim()} aria-hidden="true" data-sp={sp.id} data-size={size} />;
+  if (!src) return <span className={`${className} img-missing`.trim()} aria-hidden="true" data-sp={sp.id} data-size={size} />;
   return (
     <img
       ref={ref}
       className={`${className} fade${look === 'in' ? ' in' : look === 'missing' ? ' img-missing' : ''}`.trim()}
-      src={url}
+      src={src}
       alt=""
       loading="lazy"
       decoding="async"
@@ -118,7 +141,7 @@ function Picker({ speciesId, seen, onPick }: { speciesId: number | null; seen: S
       <div className={`picker-chosen${searching || !sp ? ' hidden' : ''}`}>
         {sp && (
           <div className={`chosen kind--${sp.kind}`}>
-            <SpeciesPhoto sp={sp} size="large" className="chosen-img" />
+            <SpeciesPhoto key={sp.id} sp={sp} size="large" className="chosen-img" />
             <div className="chosen-txt">
               <Band sp={sp} seen={seen.has(sp.id)} />
               <strong>{sp.name}</strong>
