@@ -12,7 +12,8 @@ import { lookAfterDraw } from '../lib/look';
 import { heroShown, type Drawn } from './heroShown';
 import { galleryFor, infoFor, loadExtras } from '../core/gallery.js';
 import { details, loadCallPack, photoFor, sized } from '../core/media.js';
-import { callWords, loadLookalikes, lookalikesOf, parseSize, peaksOf, sentences, tellFor } from '../core/quiz.js';
+import { callWords, loadLookalikes, lookalikesOf, peaksOf, sentences, tellFor } from '../core/quiz.js';
+import { cap, sizeFact } from './speciesFacts';
 import { monthRates, recordCount, spotsFor } from '../core/seqdata.js';
 import { MONTHS } from '../core/stats.js';
 import { learnReady, masteryOf } from '../core/learn.js';
@@ -29,7 +30,6 @@ import type { SightingRow } from './lists/shared';
 import './species.css';
 
 // ---------- small pieces, as in v1 ----------
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const fmtDate = (d?: string | null) => {
   if (!d) return '';
@@ -44,15 +44,6 @@ const rarityText = (sp: Species) => (sp.kind === 'bird' ? `${RARITY[sp.rarity].l
 function seasonText(sp: Species) {
   if (sp.kind === 'plant') return sp.season === 's' ? 'Mostly spring to summer' : sp.season === 'w' ? 'Mostly autumn to winter' : 'Year round';
   return sp.season === 's' ? (sp.kind === 'bird' ? 'Mostly September to April' : 'Most active September to April') : sp.season === 'w' ? 'Mostly April to September' : 'All year';
-}
-// The size with the label that fits it: Length, Wingspan (butterflies, flying-foxes), Height (plants), Shell or Body.
-const MEASURE: Record<string, string> = { length: 'Length', wingspan: 'Wingspan', height: 'Height', shell: 'Shell', body: 'Body' };
-function sizeFact(sp: Species): [string, string] | null {
-  const t = String(sp.sizeText || '').trim();
-  if (!t) return null;
-  const p = parseSize(t) as { measure: string } | null;
-  if (!p) return [sp.kind === 'plant' ? 'Grows as' : 'Size', cap(t)];
-  return [MEASURE[sp.kind === 'plant' ? 'height' : p.measure], cap(t.replace(/^wingspan\s+/i, '').replace(/\s+(shell|body)$/i, '').replace(/^to\b/i, 'up to'))];
 }
 // Look-alikes when there's no curated pair: the same kind, nearest in real size, from its own group unless that group
 // has fewer than two others (the Koala is alone in its group), then from the whole kind.

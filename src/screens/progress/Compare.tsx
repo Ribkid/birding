@@ -1,161 +1,137 @@
-import { useEffect, useRef, useState } from 'react';
+// Two species side by side, ported from v1's renderCompare (birding-refresh js/app.js): two tall photo cards with the
+// dex number and name on the photo, the curated "How to tell them apart" line on a glass band across their foot,
+// then a column of facts for each. species.css styles it all under .compare.
+import { useEffect, useReducer, useRef, useState, type CSSProperties } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { GROUPS, HABITATS, RARITY, byId, type Species } from '../../lib/data';
+import { HABITATS, KINDS, byId, type Species } from '../../lib/data';
 import { useSeen } from '../../lib/hooks';
-import { audioUrl, calls } from '../../core/media.js';
-import { loadSeq, monthRates } from '../../core/seqdata.js';
+import { useSeqReady } from '../../lib/seq';
+import { audioUrl, loadCallPack } from '../../core/media.js';
+import { monthRates } from '../../core/seqdata.js';
+import { loadLookalikes, tellFor } from '../../core/quiz.js';
 import { Band, Pips, SpeciesImage } from '../../components/SpeciesImage';
 import { Icon } from '../../components/Icon';
-import './progress.css';
-
-interface CallState {
-  id: number;
-  text: string;
-}
+import { toast } from '../../lib/toast';
+import { PlayIcon, getCalls, hasCalls } from '../BirdCalls';
+import { sizeFact } from '../speciesFacts';
 
 export default function Compare() {
   const { a, b } = useParams<{ a: string; b: string }>();
   const A = byId.get(Number(a));
   const B = byId.get(Number(b));
-  const seen = useSeen();
-  const [, setSeqTick] = useState(0);
-  const [call, setCall] = useState<CallState | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  if (!A || !B) return <Navigate to="/dex" replace />;
+  // A fresh page per pair, so a call playing for one pair stops when another opens.
+  return <ComparePage key={`${A.id}/${B.id}`} A={A} B={B} />;
+}
 
+function ComparePage({ A, B }: { A: Species; B: Species }) {
+  useSeqReady();
+  const seen = useSeen();
+  const [, again] = useReducer((n: number) => n + 1, 0);
+  const [grown, setGrown] = useState(false);
+  const audio = useRef<{ el: HTMLAudioElement; url: string } | null>(null);
+  const ticket = useRef(0);
+
+  // The curated tell lines and our own call clips load at start-up; fill them in if they arrive after the page.
   useEffect(() => {
     let alive = true;
-    loadSeq()
-      .then(() => {
-        if (alive) setSeqTick((tick) => tick + 1);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
+    for (const p of [loadLookalikes(), loadCallPack()]) void Promise.resolve(p).then(() => { if (alive) again(); }, () => {});
+    return () => { alive = false; };
   }, []);
 
-  useEffect(
-    () => () => {
-      audioRef.current?.pause();
-      audioRef.current = null;
-    },
-    [],
-  );
+  const stop = () => {
+    const cur = audio.current;
+    audio.current = null;
+    if (!cur) return;
+    cur.el.pause();
+    cur.el.removeAttribute('src');
+    if (cur.url.startsWith('blob:')) URL.revokeObjectURL(cur.url);
+  };
+  useEffect(() => () => { ticket.current++; stop(); }, []);
 
-  if (!A || !B) return <Navigate to="/dex" replace />;
-
-  const playCall = async (sp: Species) => {
-    audioRef.current?.pause();
-    audioRef.current = null;
-    setCall({ id: sp.id, text: 'Loading the call…' });
-    try {
-      const data = (await loadSeq()) as {
-        species?: Record<number, { calls?: { src?: string }[] }>;
-      } | null;
-      let list: { src?: string }[] = data?.species?.[sp.id]?.calls ?? [];
-      if (!list.length) {
-        try {
-          list = (await calls(sp)) as { src?: string }[];
-        } catch {
-          list = [];
-        }
-      }
-      const src = list.find((entry) => entry.src)?.src;
-      if (!src) {
-        setCall({ id: sp.id, text: 'No recording for this one yet.' });
-        return;
-      }
-      const audio = new Audio(await audioUrl(src));
-      audioRef.current = audio;
-      audio.onended = () => setCall({ id: sp.id, text: 'Tap to hear it again.' });
-      await audio.play();
-      setCall({ id: sp.id, text: 'Playing.' });
-    } catch {
-      setCall({ id: sp.id, text: 'Could not play that recording.' });
-    }
+  // As in v1: the first recording plays; tapping again starts it over, and the other column's call stops it.
+  const play = async (sp: Species) => {
+    const t = ++ticket.current;
+    stop();
+    let list: { src: string }[] = [];
+    try { list = await getCalls(sp); } catch { /* none found */ }
+    if (t !== ticket.current) return;
+    if (!list.length) { toast('No recording for this one yet.'); return; }
+    const url = (await audioUrl(list[0].src)) as string;
+    if (t !== ticket.current) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return; }
+    const el = new Audio(url);
+    audio.current = { el, url };
+    el.play().catch(() => { if (audio.current?.el === el) toast('That recording would not play.'); });
   };
 
-  const column = (sp: Species) => {
-    const season = monthRates(sp.id) as { rel: number[] } | null;
+  const mA = monthRates(A.id) as { rel: number[] } | null;
+  const mB = monthRates(B.id) as { rel: number[] } | null;
+  const hasMonths = !!(mA || mB);
+  // The month bars grow once, as the page is drawn.
+  useEffect(() => {
+    if (!hasMonths || grown) return;
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => { r2 = requestAnimationFrame(() => setGrown(true)); });
+    return () => { cancelAnimationFrame(r1); cancelAnimationFrame(r2); };
+  }, [hasMonths, grown]);
+
+  const tell = tellFor(A.id, B.id) as string | null;
+
+  const card = (sp: Species) => (
+    <Link to={`/bird/${sp.id}`} className={`cmp-card cmp-img kind--${sp.kind}`}>
+      <SpeciesImage sp={sp} size="large" alt="" />
+      <span className="cmp-cap"><Band sp={sp} seen={seen.has(sp.id)} /><h2 className="cmp-name">{sp.name}</h2></span>
+    </Link>
+  );
+
+  const col = (sp: Species, m: { rel: number[] } | null) => {
+    const size = sizeFact(sp);
     return (
-      <div className="cmp-col">
-        <Link to={`/bird/${sp.id}`} className="cmp-img">
-          <SpeciesImage sp={sp} size="large" whole />
-        </Link>
+      <div className={`cmp-col kind--${sp.kind}`}>
         <div className="cmp-id">
-          <Band sp={sp} seen={seen.has(sp.id)} />
+          {sp.kind !== 'bird' && <span className={`kindtag kind--${sp.kind}`}>{KINDS[sp.kind].one}</span>}
           <Pips rarity={sp.rarity} />
         </div>
-        <h2>
-          <Link to={`/bird/${sp.id}`}>{sp.name}</Link>
-        </h2>
         <p className="sci small">{sp.sci}</p>
         <dl className="cmp-facts">
-          <dt>Size</dt>
-          <dd>{sp.sizeText || (sp.size != null ? `${sp.size} cm` : 'Unknown')}</dd>
-          <dt>Look in</dt>
-          <dd>{sp.habitats.map((h) => HABITATS[h]).join(', ') || 'Unknown'}</dd>
-          <dt>Rarity</dt>
-          <dd>
-            <Pips rarity={sp.rarity} /> {RARITY[sp.rarity]?.label ?? 'Unknown'}
-          </dd>
-          <dt>Group</dt>
-          <dd>{GROUPS[sp.group] ?? sp.group}</dd>
+          {size && <><dt>{size[0]}</dt><dd>{size[1]}</dd></>}
+          <dt>Look in</dt><dd>{sp.habitats.map((h) => HABITATS[h]).join(', ')}</dd>
         </dl>
-        {season && (
+        {m && (
           <>
-            <div className="season season--mini" aria-hidden="true">
-              {season.rel.map((value, index) => (
-                <i key={index} style={{ height: `${Math.max(3, value * 100)}%` }} />
-              ))}
+            <div className={`season season--mini${grown ? ' is-in' : ''}`} data-grow="" aria-hidden="true">
+              {m.rel.map((v, i) => <i key={i} style={{ height: `${Math.max(3, v * 100)}%`, '--i': i } as CSSProperties} />)}
             </div>
             <div className="season-labels" aria-hidden="true">
-              {[...'JFMAMJJASOND'].map((letter, index) => (
-                <span key={index}>{letter}</span>
-              ))}
+              {[...'JFMAMJJASOND'].map((c, i) => <span key={i}>{c}</span>)}
             </div>
           </>
         )}
-        {sp.notes && <p className="small">{sp.notes}</p>}
-        <div>
-          <button className="btn btn--small" onClick={() => void playCall(sp)}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M8 5v14l11-7z" fill="currentColor" />
-            </svg>{' '}
-            Call
+        <p className="small cmp-notes">{sp.notes}</p>
+        {hasCalls(sp.id) && (
+          <button type="button" className="btn btn--small" data-cplay={sp.id} aria-label={`Play the call of the ${sp.name}`} onClick={() => void play(sp)}>
+            <PlayIcon /> Call
           </button>
-        </div>
-        {call?.id === sp.id && (
-          <p className="small muted progress-status" role="status">
-            {call.text}
-          </p>
         )}
       </div>
     );
   };
 
   return (
-    <>
+    <div className="compare">
       <header className="page-head page-head--back">
-        <Link className="iconbtn" to={`/bird/${A.id}`} aria-label="Back">
-          <Icon name="back" />
-        </Link>
+        <Link className="iconbtn" to={`/bird/${A.id}`} aria-label="Back"><Icon name="back" /></Link>
         <h1>Compare</h1>
       </header>
+      <div className="cmp-stage">
+        {card(A)}
+        {card(B)}
+        <div className="cmp-tellbox" data-tell="">{tell && <p className="cmp-tell"><strong>How to tell them apart.</strong> {tell}</p>}</div>
+      </div>
       <div className="cmp">
-        {column(A)}
-        {column(B)}
+        {col(A, mA)}
+        {col(B, mB)}
       </div>
-      <div className="compare-links">
-        <div className="row-start">
-          <Link className="btn" to={`/bird/${A.id}`}>
-            Open {A.name}
-          </Link>
-          <Link className="btn" to={`/bird/${B.id}`}>
-            Open {B.name}
-          </Link>
-        </div>
-      </div>
-    </>
+    </div>
   );
 }
