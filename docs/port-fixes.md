@@ -826,6 +826,17 @@ Twelve branches, each forked from `fd537c7`, were merged into `port-fixes` with 
   - Letter avatars use her shown name.
   - Public profile tiles read "You too Australian Brush-turkey".
 - Checked: the Group link (`b906aef`) filters the dex the way v1's does. The species page shows the rarity line once.
+- Second comparison with v1, checked in the browser on both apps:
+  - `18d0740`: Sign up free, Sign in and Edit profile are sheets over the screen that asked for them, as in v1, not pages.
+    - `#/me/signup`, `#/me/signin` and `#/me/edit` land on Me, put the address back to `#/me` and open the sheet once the saved sign-in has been checked. Signed in, `#/me/edit` opens Edit profile and `#/me/signin` is just Me; v1 offered Sign in in both cases.
+    - Me's join card buttons, Edit profile (Me and your own public profile) and Groups are v1's buttons, and "View my public profile" is v1's `#/me` link until the public id is known.
+    - Choosing a species and framing a photo are steps of the Edit profile sheet. Closing the species list or Cancel on the photo come back to Edit profile, as v1 reopened it.
+    - Groups scrolls the leaderboard to its Groups section once the groups have loaded, through v1's one-shot `openGroups` instead of `?groups=1`.
+    - Every sheet slides away (fades under reduced motion) when dismissed, and goes at once on a route change, as v1's closeSheet did.
+    - The tab bar's avatar follows Edit profile.
+  - `68b20a2`: `/` opens search over a sheet, as in v1. Escape closes search first and gives focus back to the sheet. Modal and confirm sheets are named by their heading (`aria-labelledby`), and each Ready row carries v1's `data-field`.
+  - Kept on purpose: Ctrl, Alt and Cmd with `/` stay the browser's and screen readers' (AltGr's `/` still counts), spaced accessible names on Me's medals, `type="button"` on buttons, `row.is_me` for the public profile's back link, and the not-found page (item 71).
+  - Environment, not code: the storage figure under Backup, the species carousel count and credit, Me's fan photos, and the "Photo index failed" warning (v1 logs it too) depend on what Wikipedia and the ALA return.
 
 ### Partial
 
