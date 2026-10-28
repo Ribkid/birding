@@ -49,6 +49,10 @@
   border-radius: var(--r-pill); color: var(--ink); font-size: var(--fs-2); font-weight: 600; line-height: 1.2;
 }
 .dex-cap b { display: inline-block; margin-right: 1px; font: 800 var(--fs-4)/1 var(--stamp); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+/* The static shell (index.html): its capsule is the right size with nothing in it yet, and its empty sheet still
+   covers the foot of the hero, as the real sheet's rails do. */
+.shell-ghost { visibility: hidden; }
+[data-shell] .dex-sheet { min-height: 40vh; }
 .dex-cap-ring { --kc: var(--seen); width: 34px; height: 34px; }
 
 /* Rings: a track and an arc in the kind colour, filled from empty on the first draw of a session. */
