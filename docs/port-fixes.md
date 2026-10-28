@@ -737,7 +737,7 @@ Duplicate keys can happen:
 
 ## Status
 
-Working tree is on `port-fixes`; nothing was pushed or merged. Every listed item was checked against the current code before being changed. `npm run build` and `npm test` pass at HEAD, and a production preview was smoke-tested on `#/dex`, cold `#/learn`, cold `#/learn/daily`, `#/badges`, `#/map`, `#/settings` and `#/scan` with no console errors.
+Working tree is on `port-fixes`; nothing was pushed. Every listed item was checked against the current code before being changed. `npm run build` and `npm test` pass at HEAD (29 test files, 143 tests). The merged build on 4400 was smoke-tested on every route and tab (light and dark, 390 and 320 px, 0 and 25 sightings, with and without reduced motion) with no console errors, and by logging a sighting from a species page, the + sheet, a dex long press, All sightings' empty state, `#/add` and an outing.
 
 ### Fixed
 
@@ -804,54 +804,44 @@ Working tree is on `port-fixes`; nothing was pushed or merged. Every listed item
 
 ### Merged branches (second round)
 
-Twelve branches, each forked from `fd537c7`, were merged into `port-fixes` with `--no-ff`; `npm run build` and `npm test` passed after each one, and the merged build was smoke-tested on every route (light and dark, 390 and 320 px, 0 and 25 sightings) with no console errors.
+Twelve branches, each forked from `fd537c7`, were merged into `port-fixes` with `--no-ff`; `npm run build` and `npm test` passed after each one.
 
 - `05bb1c6` fixes-sw, `de12269` fixes-brand, `55e2be7` fixes-data, `fc4eeb2` fixes-learn, `51a2c86` fixes-scan, `fdb90dd` fixes-map, `a98aafb` fixes-shell: the re-run fixes for items 11–13, 15, 17, 24, 27, 33, 38, 41, 47, 51, 52, 64–67, 72, 73, 75 and 81, and the re-run's new findings.
-- `e7f06d3` pages-stats: item 69 (v1's Stats page).
-- `d4075ba` pages-settings: items 57 and 76 (v1's Settings, sign-in entry points and copy, Me join card).
-- `44c7637` pages-dex: item 56 (v1's Dex home).
-- `85c2935` pages-lists: item 58 (v1's Lists hub, list view and targets).
-- `b8d5529` pages-species: item 55 (v1's species page).
-- Shared pieces kept once: `lib/toast.ts` (toast, announce and the one `#announce`), `lib/install.ts` (one install offer for the welcome card, Settings and the Dex), `components/OutingBar.tsx` (one `#outing-bar`, `body.has-outing`), `components/RouteFocus.tsx` (heading focus after navigation), `screens/DexSearch.tsx` (search from the Dex and the species hero), `lib/layers.ts`' single Escape/Tab listener, and `components/Sheet.tsx` (open class, labelledBy, step, focus into the sheet, solid surface). The + tab is v1's `<a href="#/add" id="plus">`.
+- 55, fixed — `b8d5529` pages-species: v1's species page. Its Log and Edit sheets became the shared sighting sheet in `4bf25ec`, and the hero keeps the photos it was drawn with, as v1 did, in `46841fa`.
+- 56, fixed — `44c7637` pages-dex: v1's Dex home. A long press opens the Log a sighting sheet over the dex (`4bf25ec`), and `/` opens search on every screen (`1118733`).
+- 57, fixed — `d4075ba` pages-settings: v1's Settings, with the Ready for the field card; each Ready row has v1's `data-field` (`68b20a2`).
+- 58, fixed — `85c2935` pages-lists: v1's Lists hub, list view and targets. All sightings (`192c41e`, `4bf25ec`) and the outing page (`e70172e`) followed in the third round.
+- 69, fixed — `e7f06d3` pages-stats: v1's Stats page. Most logged now uses the shared species photo (`2b1961d`).
+- 76, fixed — `d4075ba` pages-settings, then `9da0cfb` (the shared sign-in form, toasts for profile and group outcomes, Leave asks first) and `18d0740` (Sign up, Sign in and Edit profile open as sheets over the screen that asked, as v1's did).
+- Shared pieces kept once: `lib/toast.ts` (toast, announce and the one `#announce`), `lib/install.ts`, `components/OutingBar.tsx`, `components/RouteFocus.tsx`, `lib/layers.ts`' single Escape/Tab listener and `components/Sheet.tsx`. The + tab is v1's `<a href="#/add" id="plus">`.
 - `3207bc1`: the manifest's `theme_color` is the paper colour `#F4F6F9`. `b906aef`: the species page's Group link filters the dex.
 
-### Leftovers: Settings, Dex filter and search (branch `left-settings-dex-search`)
+### Merged branches (third round)
 
-- 16 and 22, checked against v1 with nothing to change. Account deletion refuses while offline before any sheet opens. A failed request closes the sheet and shows v1's `Couldn't delete the account: <message>`, which replaces "Deleting your account…". The Ready ring's fill has `pathLength="100"`. With the service worker running, every row reports what v1 reports, and the App row's total is the build's precache count (39 on this build, all saved).
-- `1118733`: search. `SearchHost` in `DexSearch.tsx` is mounted once in App. `/` opens it on every screen, as in v1. The Dex hero, the Dex's empty state, the species hero and Scan's 'Search the dex' all open it through `openSearch()`.
-- `9da0cfb`: item 76's remainder.
-  - The sign-in page uses the shared `SignInForm`.
-  - Signed-out Edit profile goes to Sign in once the saved sign-in has been checked.
-  - Me's public-profile messages and the group outcomes are toasts, and Leave asks in a confirm sheet.
-  - Letter avatars use her shown name.
-  - Public profile tiles read "You too Australian Brush-turkey".
-- Checked: the Group link (`b906aef`) filters the dex the way v1's does. The species page shows the rarity line once.
-- Second comparison with v1, checked in the browser on both apps:
-  - `18d0740`: Sign up free, Sign in and Edit profile are sheets over the screen that asked for them, as in v1, not pages.
-    - `#/me/signup`, `#/me/signin` and `#/me/edit` land on Me, put the address back to `#/me` and open the sheet once the saved sign-in has been checked. Signed in, `#/me/edit` opens Edit profile and `#/me/signin` is just Me; v1 offered Sign in in both cases.
-    - Me's join card buttons, Edit profile (Me and your own public profile) and Groups are v1's buttons, and "View my public profile" is v1's `#/me` link until the public id is known.
-    - Choosing a species and framing a photo are steps of the Edit profile sheet. Closing the species list or Cancel on the photo come back to Edit profile, as v1 reopened it.
-    - Groups scrolls the leaderboard to its Groups section once the groups have loaded, through v1's one-shot `openGroups` instead of `?groups=1`.
-    - Every sheet slides away (fades under reduced motion) when dismissed, and goes at once on a route change, as v1's closeSheet did.
-    - The tab bar's avatar follows Edit profile.
-  - `68b20a2`: `/` opens search over a sheet, as in v1. Escape closes search first and gives focus back to the sheet. Modal and confirm sheets are named by their heading (`aria-labelledby`), and each Ready row carries v1's `data-field`.
-  - Kept on purpose: Ctrl, Alt and Cmd with `/` stay the browser's and screen readers' (AltGr's `/` still counts), spaced accessible names on Me's medals, `type="button"` on buttons, `row.is_me` for the public profile's back link, and the not-found page (item 71).
-  - Environment, not code: the storage figure under Backup, the species carousel count and credit, Me's fan photos, and the "Photo index failed" warning (v1 logs it too) depend on what Wikipedia and the ALA return.
-- Third comparison with v1, checked in the browser on both apps:
-  - `167ad2c`: the + link carries `aria-current="false"`, as v1's drawRoute marks every tab link.
-  - Kept on purpose, because React does what v1's own code meant to do:
-    - Restore backup clears the file input after each pick, so the same file can be chosen again after a bad pick or a cancelled confirm. In v1 nothing happens until a reload.
-    - Sign up free and Sign in put focus on Continue with Google as they open. v1's openSheet means to do this too, but it picks the first control before the form is drawn, so focus stays on the page.
-    - Closing a search opened with `/` from the page lands on the screen's heading, without scrolling. v1's layers.js has the same fallback, but it removes the overlay after restoring focus, so focus falls to the page.
-    - Clear and Clear search in the dex move focus to the All chip; in v1 it falls to the page.
-    - Browser Back returns to where she was on the page, with no jump (the species page after its Group link, for one). v1 decides by screen depth, so Back to a deeper screen starts at the top.
-  - Not a difference: both apps log the same four "GPU stall due to ReadPixels" WebGL warnings while the 3D model draws. The storage figure under Backup varies from run to run in both.
-  - Left to `left-log-sheet`, which rebuilds them: All sightings' card rows, counts and row text, and the species page's Log a sighting sheet (current outing, Choose on map, recent places, Notes, "Change species", the photo card).
+Four branches, each forked from `ca57a64`, were merged with `--no-ff` in this order; `npm run build` and `npm test` passed after each one.
 
-### Partial
+- `d076e50` left-polish: v1's outing page (`e70172e`, `14d4112`, `8c8cc45`), the map's New patch sheet on the layer stack (73, `ca2bd8e`), Learn's "That recording would not play." toast (36, `8874f41`), v1's chart and list icons (`10e22e5`), heading focus after a screen's loading state (`17d1ac8`, `304a7cc`), the sign-up nudge read out through `#announce` (44, `241016e`), Learn's Stop as a button (`1352590`) and the Map's sr-only heading (67, `5ba6999`).
+- `87fbd48` left-photos: one shared `SpeciesImage` with v1's shimmer, a single fade-in, no fade for a photo already shown, and a better photo swapped in only once it has decoded; photos redraw when the saved photo index and gallery.json arrive (`29fdc6d`, `2b1961d`). Learn's photo picks match v1's (`d15c999`, `25b1f8d`), and Scan's reference photos hold still under reduced motion (`5ad483a`).
+- `c9965b2` left-settings-dex-search: one search overlay for the whole app (`1118733`, `68b20a2`), the account sheets (`18d0740`, `9da0cfb`), sheets that slide away when dismissed, and `aria-current="false"` on the + link (`167ad2c`). Items 16 and 22 were checked against v1 again and needed nothing.
+- `6c7cf5a` left-log-sheet: v1's Log a sighting sheet, one shared sheet for logging and editing (`components/SightingSheet.tsx`, `4bf25ec`). It opens over the current screen from the species page, a dex long press, the + sheet's Log one sighting (52), All sightings and Listen's Log it (`c5b1f2b`). It has Add to current outing, Choose on map starting at her last fix (`2ce2459`), recent places, the photo field and Notes. Delete asks in place and Cancel closes both (73). A first sighting of a species gets v1's new-for-your-dex celebration.
+- Kept once at the merge: one celebration (the sheet's; left-polish's `Celebrate.tsx` and the old `SightingEditSheet.tsx` were removed), the shared `SpeciesImage` for the chosen species and the celebration, `MinePhoto` for her own photos, and one `.chosen-change` rule. For the species hero, `46841fa`'s keep-as-drawn replaced left-polish's `64be3ec`, which it made unnecessary.
 
-- None.
+### Deliberately different
+
+- Species page: the pause label is "Pause recording N"; a failed recording goes back to Play; the visualiser and the 3D bird's bob stay off under reduced motion.
+- Dex: Clear moves focus to the All chip; the day pick waits for the regional data instead of swapping species.
+- Settings and accounts: a failed restore says what failed; the Ready rows have a progress bar role; the Account card waits for the saved sign-in; Ctrl, Alt or Cmd with `/` stay the browser's.
+- Lists: the bento follows rest.css (v1 loads learn.css twice and cuts the October tile off); "Find targets near me" is `#/targets?near=1`; chips keep `aria-pressed` and focus; Near me has Try again; an unknown list, patch or outing gets a page that says so.
+- Sighting sheet: Add photo is a real button and Remove gives focus back to it; focus goes to Change species after a pick; the GPS line is a status region; the click from lifting a long press is dropped; map search offline says it needs a connection.
+- `#/add` stays for deep links and the Scan hand-off (15), so Scan's This one opens the form as a page rather than as a sheet over Scan.
+- After in-app navigation, focus goes to the new screen's heading, and the map's New patch sheet opened from Lists gives focus back to the heading; v1 left it on the page.
+
+### Partial and left
+
+- Compare (`#/compare/a/b`, no numbered item) still has the first port's layout. v1's two tall photo cards with "How to tell them apart", the kind tag and the size line (js/app.js renderCompare) are not ported.
+- progress.css still has unused rules: `.backup-confirm`, `.lb-avatar-letter`, `.account-signed-out` and `.progress-stack`.
+- Not tried for real, because the rules forbid it or the browser can't: anything signed in (avatars, the Me cover, groups, account deletion, the sign-in email), a live BirdNET hit on Listen, a real Scan run, the Share sheet, and a cold offline start through the service worker.
 
 ### Skipped
 
-- None of the numbered items. Items 55–58 and 69 were done on the page branches above, and 76 on pages-settings.
+- None of the numbered items.
