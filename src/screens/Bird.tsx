@@ -336,7 +336,9 @@ function SpeciesPage({ sp }: { sp: Species }) {
             onFocus={n > 1 ? () => wake(1) : undefined}
           >
             {n ? photos.map((ph, i) => (
-              <figure className="slide" key={ph.src} data-hero-frame={i ? undefined : ''}>
+              // The slide on show is the hero's frame: the photo a tile grows into, and the one that shrinks back
+              // into the tile on Back (after the viewer, that can be a later photo).
+              <figure className="slide" key={ph.src} data-hero-frame={i === slide ? '' : undefined}>
                 <SpeciesImage
                   sp={sp}
                   hero={isAwake(i) ? { src: ph.src, small: ph.small } : {}}
