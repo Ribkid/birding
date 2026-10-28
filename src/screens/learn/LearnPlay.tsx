@@ -174,7 +174,7 @@ function Safety({ text }: { text?: string }) {
 function MoreCard({ q, v }: { q: QuizQuestion; v: Verdict }) {
   if (!v.tell && !q.safety && !(q.type === 'fact' && q.source?.title)) return null;
   return (
-    <div className="lq-more" data-flip="more">
+    <div className="lq-more">
       {v.tell && <p className="lq-tell"><strong>How to tell them apart.</strong> {v.tell}</p>}
       <Safety text={q.safety} />
       <Source q={q} />
@@ -344,6 +344,9 @@ function answerUnderPhoto(commit: () => void, q: QuizQuestion, key: string, foot
   f.style.height = '';
   const bar = f.firstElementChild;
   if (bar) animateSafe(bar, [{ opacity: 0, transform: 'translateY(-10px)' }, { opacity: 1, transform: 'none' }], { duration: 320, delay: 60, easing: EASE_OUT, fill: 'backwards' });
+  // The rest of the feedback settles in below once the two answers have slid into place.
+  const more = document.querySelector('.lq .lq-more');
+  if (more) animateSafe(more, [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 300, delay: 200, easing: EASE_OUT, fill: 'backwards' });
   const mark = f.querySelector('.lq-vb-mark');
   if (mark) animateSafe(mark, [{ opacity: 0, transform: 'scale(.3) rotate(-30deg)' }, { opacity: 1, transform: 'none' }], { duration: 560, delay: 120, easing: SPRING, fill: 'backwards' });
   const done = () => { f.style.overflow = ''; screen?.style.removeProperty('--lq-grow'); };
@@ -351,8 +354,10 @@ function answerUnderPhoto(commit: () => void, q: QuizQuestion, key: string, foot
   return grow ? h : 0;
 }
 /**
- * Only when the dock would hide her pick or the right answer (a short screen): scroll just enough to show them above
- * it, never so far that the verdict leaves the screen. On a 390x844 phone nothing moves.
+ * Only when the dock would hide her pick or the right answer (a short screen, or the outing bar showing): scroll to
+ * show them above it. When that leaves the whole photo in view, the photo settles just under the question head,
+ * rather than stopping with the question half under it. Never so far that the verdict leaves the screen. On a
+ * 390x844 phone without an outing, nothing moves.
  */
 function keepInView(layout: AnswerLayout, grow: number) {
   const dock = document.querySelector<HTMLElement>('.lq-dock');
@@ -372,7 +377,11 @@ function keepInView(layout: AnswerLayout, grow: number) {
     bottom = Math.max(...pair.map((r) => r.bottom));
     top = Math.min(...pair.map((r) => r.top));
   }
-  const by = Math.min(bottom + 10 - dockTop, top - headBottom - 8);
+  const need = bottom + 10 - dockTop;
+  if (need <= 1) return;
+  const media = document.querySelector('.lq .lq-card, .lq .lq-duel');
+  const snap = media ? media.getBoundingClientRect().top - headBottom - 10 : 0;
+  const by = Math.min(Math.max(need, snap), top - headBottom - 8);
   if (by > 1) window.scrollBy({ top: by, behavior: motionOK() ? 'smooth' : 'auto' });
 }
 

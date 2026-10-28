@@ -601,7 +601,8 @@ body.has-outing .lq-fb { scroll-margin-bottom: calc(var(--chrome-bottom) + var(-
 .lq-vb-line { grid-column: 2; margin: 0; max-width: 60ch; font-size: var(--fs-2); line-height: 1.4; }
 
 /* the answers that stay under a photo, and the rest of the feedback below them */
-.lq-opt-wrap { display: grid; }
+/* the answers stay above the feedback that settles in below them while they slide */
+.lq-opt-wrap { position: relative; z-index: 1; display: grid; }
 .lq-opt-wrap.is-folded { display: none; }
 .lq-more { display: grid; gap: var(--sp-3); padding: var(--sp-4); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
 :root[data-theme="outdoor"] .lq-more { box-shadow: 0 0 0 1.5px var(--line-strong); }
