@@ -2,11 +2,12 @@ import { useSyncExternalStore } from 'react';
 import { loadSeq } from '../core/seqdata.js';
 
 // seq.json holds the regional reporting rates, hotspots and map points. v1 loaded it
-// before the first render; we load it in the background (from boot, lib/boot.ts) and re-render once it lands so
-// the dex paints immediately on a cold start.
+// before the first render; we start loading it at boot (lib/boot.ts), and React's first draw waits a moment for it
+// there, so the Dex's day pick is on its first frame; screens re-render if it lands later.
 let started = false;
 let ready = false;
 let waited = false;
+let landed: Promise<void> = Promise.resolve();
 // Changes when the data lands, or when the wait for it runs out: what the screens redraw on.
 let version = 0;
 const subscribers = new Set<() => void>();
@@ -32,12 +33,18 @@ export function ensureSeq(): void {
     waited = true;
     if (!ready) notify();
   }, SEQ_WAIT);
-  void Promise.resolve(loadSeq())
+  landed = Promise.resolve(loadSeq())
     .catch(() => {})
     .then(() => {
       ready = true;
       notify();
     });
+}
+
+/** Starts the load if need be; resolves once the regional data is in (or failed to load). */
+export function seqLanded(): Promise<void> {
+  ensureSeq();
+  return landed;
 }
 
 /** True once the regional data is in, or SEQ_WAIT after it was first asked for: anything waiting on it goes ahead. */
