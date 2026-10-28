@@ -156,6 +156,33 @@ describe('other questions use the dock and the trail', () => {
     expect($('.lq-dock .lq-next')).not.toBeNull();
   });
 
+  it("a duel's photos are marked to fit above the dock only once she has answered", async () => {
+    const game = round('duel');
+    const [, b] = birds();
+    mount(game);
+    await ready();
+    expect($('.lq-duel')!.classList.contains('is-answered')).toBe(false);
+    await act(async () => { fireEvent.click($(`.lq-side[data-pick="${b.id}"]`)!); });
+    expect($('.lq-duel')!.classList.contains('is-answered')).toBe(true);
+    // the dock's and the head's heights are kept on <body> for that fit
+    expect(document.body.style.getPropertyValue('--lq-dock-h')).toMatch(/^\d+px$/);
+    expect(document.body.style.getPropertyValue('--lq-head-h')).toMatch(/^\d+px$/);
+  });
+
+  it('Next only moves on from an answered question, so two clicks at once never skip one', async () => {
+    const game = round('photo', 3);
+    const [a] = birds();
+    mount(game);
+    await ready();
+    const nextBtn = $('.lq-dock .lq-next')!;
+    await act(async () => { nextBtn.click(); });
+    expect(game.i).toBe(0);
+    await act(async () => { fireEvent.click($(`.lq-opt[data-pick="${a.id}"]`)!); });
+    await act(async () => { nextBtn.click(); nextBtn.click(); });
+    expect(game.i).toBe(1);
+    expect($('.lq-count')!.textContent).toBe('2/3');
+  });
+
   it("Who am I? keeps its feedback card, focused, with Next in the dock", async () => {
     const game = round('whoami');
     const [a, b] = birds();

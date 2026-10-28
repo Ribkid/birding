@@ -102,8 +102,10 @@ function Options({ q, picked, onPick, rapid, round, still = false, folded }: {
   const calm = disabled && still ? ' no-anim' : '';
   if (q.options[0]?.photos) {
     const n = q.options.length;
+    // Once she has answered, the photos settle to fit between the question head and the dock (learn.css), so the
+    // dock never covers her pick or the right one on a short screen.
     return (
-      <div className={`lq-duel${n > 2 ? ' lq-duel--four' : ''}`}>
+      <div className={`lq-duel${n > 2 ? ' lq-duel--four' : ''}${disabled && !rapid ? ' is-answered' : ''}`}>
         {q.options.map((o, i) => {
           const cls = disabled ? (o.key === q.answer ? ' is-right' : o.key === picked ? ' is-wrong' : ' is-dim') : '';
           const named = q.named || disabled;
@@ -223,7 +225,15 @@ interface DockSnap { q: QuizQuestion; v: Verdict; i: number; n: number; layout: 
 // One glass dock for the whole round, just above the tab bar (and the outing bar when one shows). It rises when she
 // answers and slips away on Next. Next is always in the same place, at its right; to its left, round chips for Hear
 // its call, Hear the one you picked and Compare. Duels and odd one out add their verdict line on top. The page keeps
-// room for it at its foot, and toasts sit above it (--lq-dock-h on <body>).
+// room for it at its foot, and toasts sit above it (--lq-dock-h on <body>). A duel's photos fit between the question
+// head and the dock once she answers (--lq-head-h, learn.css).
+function measureChrome(dock: HTMLElement) {
+  const s = document.body.style;
+  const set = (name: string, px: number) => { const v = `${Math.ceil(px)}px`; if (s.getPropertyValue(name) !== v) s.setProperty(name, v); };
+  set('--lq-dock-h', dock.offsetHeight);
+  const head = dock.parentElement?.querySelector<HTMLElement>('.lq-head');
+  if (head) set('--lq-head-h', head.offsetHeight);
+}
 function Dock({ snap, up, still, onNext, onPlay, playing, vRef }: {
   snap: DockSnap | null; up: boolean; still: boolean; onNext: () => void; onPlay: (which: string) => void;
   playing: PlayButtonState; vRef: RefObject<HTMLElement | null>;
@@ -232,12 +242,16 @@ function Dock({ snap, up, still, onNext, onPlay, playing, vRef }: {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const set = () => document.body.style.setProperty('--lq-dock-h', `${Math.ceil(el.offsetHeight)}px`);
-    set();
+    const set = () => measureChrome(el);
     const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(set) : null;
     ro?.observe(el);
-    return () => { ro?.disconnect(); document.body.style.removeProperty('--lq-dock-h'); };
+    const head = el.parentElement?.querySelector('.lq-head');
+    if (head) ro?.observe(head);
+    return () => { ro?.disconnect(); document.body.style.removeProperty('--lq-dock-h'); document.body.style.removeProperty('--lq-head-h'); };
   }, []);
+  // Also on every draw, before the answer's layout is measured (pick draws with flushSync): the observer only reports
+  // after layout, too late for the first measure of a dock that has just grown a verdict line.
+  useLayoutEffect(() => { if (ref.current) measureChrome(ref.current); });
   const actions = snap ? dockActions(snap.q) : [];
   const withVerdict = !!snap && snap.layout === 'dock';
   return (
@@ -354,16 +368,46 @@ function answerUnderPhoto(commit: () => void, q: QuizQuestion, key: string, foot
   return grow ? h : 0;
 }
 /**
+ * Answer a duel or odd one out: on a short screen the photos settle to fit between the question head and the dock
+ * (.lq-duel.is-answered in learn.css). With motion they ease down to that size rather than jump. Returns the motion,
+ * to start once keepInView has measured the final layout; null when nothing changes size or motion is off.
+ */
+function answerTiles(commit: () => void) {
+  const grid = document.querySelector<HTMLElement>('.lq .lq-duel');
+  const h0 = grid?.getBoundingClientRect().height ?? 0;
+  commit();
+  if (!grid?.isConnected || !canAnimate()) return null;
+  const h1 = grid.getBoundingClientRect().height;
+  if (h0 - h1 < 2) return null;
+  return () => { animateSafe(grid, [{ maxHeight: `${h0}px` }, { maxHeight: `${h1}px` }], { duration: 480, easing: SPRING_SOFT }); };
+}
+/**
+ * Nothing is left peeking out of the slit above the floating question head (a cut-off line of the kicker or the
+ * question): of the stops between lo and hi, take the nearest one to `by` where each line above the photo is wholly
+ * behind or below the head's top edge, or wholly scrolled away. Unchanged when no stop is clean.
+ */
+function tidyStop(by: number, lo: number, hi: number, headTop: number) {
+  const lines = [...document.querySelectorAll('.lq-screen > .lq-kicker, .lq > :is(.lq-prompt, .lq-sub, .lq-safety)')]
+    .map((e) => e.getBoundingClientRect()).filter((r) => r.height > 0);
+  const clean = (s: number) => lines.every((r) => r.bottom - s <= 0.5 || r.top - s >= headTop - 0.5);
+  if (clean(by)) return by;
+  const stops = lines.flatMap((r) => [r.bottom, r.top - headTop]).filter((s) => s >= lo && s <= hi && clean(s));
+  return stops.length ? stops.reduce((a, s) => (Math.abs(s - by) < Math.abs(a - by) ? s : a)) : by;
+}
+/**
  * Only when the dock would hide her pick or the right answer (a short screen, or the outing bar showing): scroll to
  * show them above it. When that leaves the whole photo in view, the photo settles just under the question head,
  * rather than stopping with the question half under it. Never so far that the verdict leaves the screen. On a
- * 390x844 phone without an outing, nothing moves.
+ * 390x844 phone without an outing, nothing moves. If she had scrolled down to answer and her pick or the right one
+ * (or the verdict) is now under the head, the page comes back down far enough to show it, as long as the dock still
+ * clears the answers.
  */
 function keepInView(layout: AnswerLayout, grow: number) {
   const dock = document.querySelector<HTMLElement>('.lq-dock');
   if (!dock) return;
   const dockTop = innerHeight - (parseFloat(getComputedStyle(dock).bottom) || 0) - dock.offsetHeight;
-  const headBottom = document.querySelector('.lq-head')?.getBoundingClientRect().bottom ?? 0;
+  const head = document.querySelector('.lq-head')?.getBoundingClientRect();
+  const headTop = head?.top ?? 0, headBottom = head?.bottom ?? 0;
   let bottom = 0, top = 0;
   if (layout === 'photo') {
     const opts = document.querySelector('.lq .lq-options');
@@ -377,12 +421,24 @@ function keepInView(layout: AnswerLayout, grow: number) {
     bottom = Math.max(...pair.map((r) => r.bottom));
     top = Math.min(...pair.map((r) => r.top));
   }
+  // Scroll by at least `need` (the dock clears her pick and the right one) and at most `cap` (the verdict, or the
+  // answers in a duel, stay under the head).
   const need = bottom + 10 - dockTop;
-  if (need <= 1) return;
-  const media = document.querySelector('.lq .lq-card, .lq .lq-duel');
-  const snap = media ? media.getBoundingClientRect().top - headBottom - 10 : 0;
-  const by = Math.min(Math.max(need, snap), top - headBottom - 8);
-  if (by > 1) window.scrollBy({ top: by, behavior: motionOK() ? 'smooth' : 'auto' });
+  const cap = top - headBottom - 8;
+  const mediaTop = document.querySelector('.lq .lq-card, .lq .lq-duel')?.getBoundingClientRect().top ?? headBottom;
+  let by = 0, hi = cap;
+  if (need > 1) {
+    by = Math.min(Math.max(need, mediaTop - headBottom - 10), cap);
+    // A tidy stop may go a little short of that, keeping the whole photo under the head, or past it only where `by`
+    // already puts the photo under the head (a short screen), and then at most to the head's bottom edge.
+    hi = Math.min(cap + 8, Math.max(by, mediaTop - headBottom));
+  } else if (cap < -1) {
+    by = Math.max(cap, need);
+    hi = by;
+  }
+  if (Math.abs(by) <= 1) return;
+  by = tidyStop(by, Math.min(need, by), hi, headTop);
+  if (Math.abs(by) > 1) window.scrollBy({ top: by, behavior: motionOK() ? 'smooth' : 'auto' });
 }
 
 // v1 scoreHTML/playScore: the score sits inside a ring that fills to the share she got right, in the big stamp
@@ -690,7 +746,9 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
   };
   const next = () => {
-    if (!game) return;
+    // Next stays in the dock for the whole round: only an answered question moves on (two clicks in one go, or a
+    // click while the dock is on its way down, never skip a question).
+    if (!game || game.qs[game.i]?.picked == null) return;
     wantHeadFocus.current = true;
     setResumed(false);
     stopCalls();
@@ -710,13 +768,16 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       flushSync(() => { setResumed(false); force(); });
     };
     let grow = 0;
+    let settle: (() => void) | null = null;
     if (layout === 'photo') grow = answerUnderPhoto(commit, q, key, footRef);
+    else if (layout === 'dock') settle = answerTiles(commit);
     else commit();
     // The verdict takes focus, so it is read out (the feedback card focuses itself, as v1's did).
     if (layout === 'photo' || layout === 'dock') {
       verdictRef.current?.focus({ preventScroll: true });
       keepInView(layout, grow);
     }
+    settle?.();
     navigator.vibrate?.(ok ? 30 : [40, 60, 40]);
     if (game.mode === 'rapid') {
       const g = game;

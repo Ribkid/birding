@@ -612,10 +612,26 @@ body.has-outing .lq-fb { scroll-margin-bottom: calc(var(--chrome-bottom) + var(-
 .lq-ghost { position: absolute; display: grid; margin: 0; }
 /* a duel's or odd one out's card when its verdict line is in the dock */
 .lq-fb--rest { gap: var(--sp-2); }
+/* Once she has answered a duel or odd one out, the photos settle to fit between the question head and the dock, so
+   on a short screen (or with the outing bar showing) the dock never covers her pick or the right one and all the
+   photos stay in view. Where they already fit (a 390x844 phone) nothing changes: the rows keep their own height and
+   only shrink, evenly, when the grid would be taller than the room. The photo gives way; the names keep theirs.
+   svh, not dvh: in a browser tab the photos must not resize while the address bar comes and goes as she scrolls. */
+.lq-duel.is-answered {
+  grid-auto-rows: minmax(0, auto);
+  max-height: max(12rem, calc(100svh - var(--sp-2) - env(safe-area-inset-top) - var(--lq-head-h, 52px) - 8px
+    - var(--lq-dock-b) - var(--lq-dock-h, 56px) - 10px));
+}
+.lq-duel.is-answered .lq-side { grid-template-rows: minmax(0, max-content) auto; }
+.lq-duel.is-answered .lq-side .lq-photo.is-missing { min-height: 0; }
+.lq-duel.is-answered .lq-side .lq-photo .whole { max-height: 100%; }
 
 /* the dock: compact, right-aligned with the tab bar, Next always at its right */
+/* the dock's distance from the foot of the screen: above the tab bar, and above the outing bar when one shows */
+.lq-screen { --lq-dock-b: calc(var(--chrome-bottom) + 6px); }
+body.has-outing .lq-screen { --lq-dock-b: calc(var(--chrome-bottom) + 58px); }
 .lq-dock {
-  position: fixed; z-index: 35; right: max(var(--tabbar-float), calc((100vw - 560px) / 2)); bottom: calc(var(--chrome-bottom) + 6px);
+  position: fixed; z-index: 35; right: max(var(--tabbar-float), calc((100vw - 560px) / 2)); bottom: var(--lq-dock-b);
   display: grid; gap: 4px; max-width: calc(100vw - 2 * var(--tabbar-float)); padding: 6px; border-radius: 28px; color: var(--ink);
   opacity: 0; visibility: hidden; transform: translateY(18px) scale(.97); transform-origin: 100% 100%;
   transition: transform var(--dur-2) var(--ease-in), opacity var(--dur-2) var(--ease-out), visibility 0s linear var(--dur-2);
@@ -625,7 +641,6 @@ body.has-outing .lq-fb { scroll-margin-bottom: calc(var(--chrome-bottom) + var(-
   transition: transform 460ms var(--ease-spring), opacity var(--dur-2) var(--ease-out), visibility 0s;
 }
 .lq-dock.no-anim { transition: none; }
-body.has-outing .lq-dock { bottom: calc(var(--chrome-bottom) + 58px); }
 .lq-dock--verdict { left: max(var(--tabbar-float), calc((100vw - 560px) / 2)); }
 :root[data-theme="outdoor"] .lq-dock { box-shadow: 0 0 0 2px var(--ink), var(--shadow-float); }
 .lq-dock-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
