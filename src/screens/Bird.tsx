@@ -240,7 +240,22 @@ function SpeciesPage({ sp }: { sp: Species }) {
   // Once she has, the list is kept as it is, as v1 keeps the gallery's slide (nothing is redrawn mid-use).
   const touched = useRef(false);
   const kept = useRef<Photo[] | null>(null);
-  const live = heroPhotos(sp, det);
+  const fresh = heroPhotos(sp, det);
+  // A late first photo waits until it has loaded, so the hero never goes blank while it swaps in (v1's
+  // patchSpeciesImages likewise keeps the old picture until the new one is there). If it never loads, the
+  // photos already on screen stay.
+  const shownList = kept.current;
+  const late = !touched.current && shownList?.length && fresh[0] && fresh[0].src !== shownList[0].src && !shown.has(fresh[0].src) ? fresh[0].src : '';
+  const [, setLateLoaded] = useState(0);
+  useEffect(() => {
+    if (!late) return;
+    let alive = true;
+    const img = new Image();
+    img.onload = () => { shown.add(late); if (alive) setLateLoaded((x) => x + 1); };
+    img.src = late;
+    return () => { alive = false; };
+  }, [late]);
+  const live = late && shownList ? shownList.map((k) => fresh.find((l) => l.src === k.src) || k) : fresh;
   const photos = touched.current && kept.current?.length ? kept.current.map((k) => live.find((l) => l.src === k.src) || k) : live;
   kept.current = photos;
   const n = photos.length;
