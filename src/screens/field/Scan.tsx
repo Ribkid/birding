@@ -72,8 +72,16 @@ export default function Scan() {
   const [dragging, setDragging] = useState(false);
   const [stageW, setStageW] = useState(0);
   const picks = useRef(0);
-  const currentFile = useRef<File | null>(null);
+  // The photo a run belongs to. A scan restored from the session (after a species page, a tab switch or
+  // This one → Cancel) brings its file back with it, so Identify works without picking the photo again.
+  const currentFile = useRef<File | null>(S.photo?.file ?? null);
   const identifyRun = useRef(0);
+  // False once the person has left Scan: a run that finishes after that is neither shown nor logged (v1 checks the hash).
+  const onScan = useRef(true);
+  useEffect(() => {
+    onScan.current = true;
+    return () => { onScan.current = false; };
+  }, []);
   useEffect(() => {
     S.at = at; S.photo = photo; S.box = box; S.whole = whole; S.kind = kind;
     S.result = result; S.logAt = logAt; S.yours = yours;
@@ -84,6 +92,11 @@ export default function Scan() {
     setLand(true);
     const timer = window.setTimeout(() => setLand(false), 700);
     return () => window.clearTimeout(timer);
+  }, [landTick]);
+
+  // A freshly picked photo: the stage takes focus, without scrolling, so the arrow keys move the box (v1 pick()).
+  useEffect(() => {
+    if (landTick) stageRef.current?.focus({ preventScroll: true });
   }, [landTick]);
 
   useEffect(() => {
@@ -111,6 +124,7 @@ export default function Scan() {
   useEffect(() => {
     if (S.at && Date.now() - S.at > KEEP_MS) {
       resetScan();
+      currentFile.current = null;
       setPhoto(null); setBox(S.box); setWhole(false); setResult(null); setLogAt(null); setYours(''); setAt(0);
     }
     void photoIdInfo().then((i: any) => setInfo(i));
@@ -148,13 +162,15 @@ export default function Scan() {
       await img.decode();
       if (ticket !== picks.current) { URL.revokeObjectURL(url); return; }
       currentFile.current = file;
+      const next: Chosen = { file, blob, url, W: img.naturalWidth, H: img.naturalHeight };
       setPhoto((previous) => {
         if (previous?.url) URL.revokeObjectURL(previous.url);
-        return { file, blob, url, W: img!.naturalWidth, H: img!.naturalHeight };
+        return next;
       });
       setAt(Date.now());
       setResult(null); setLogAt(null); setError(''); setYours('');
-      setBox({ cx: 0.5, cy: 0.5, s: 0.75 });
+      // Three quarters of the short side, but never under 24 px: v1 clamps the fresh box as well.
+      setBox(clampBox(next, { cx: 0.5, cy: 0.5, s: 0.75 }));
       setLandTick((n) => n + 1);
       setStatus(`Photo ready. Move the box onto ${subject ? `the ${subject}` : 'what you want named'}, then choose Identify.`);
     } catch {
@@ -178,6 +194,8 @@ export default function Scan() {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     requestAnimationFrame(() => workRef.current?.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' }));
     const MB = photoModelMb();
+    // Stop quietly when another photo or run took over, or the person left Scan.
+    const stale = () => !onScan.current || currentFile.current !== file || run !== identifyRun.current;
     try {
       const cached = await modelCached();
       if (!cached) {
@@ -185,7 +203,7 @@ export default function Scan() {
         setStatus(`Getting photo ID ready: a one-time download of about ${MB} MB. Wi-Fi is best.`);
         let said = 0;
         await ensureModel((f: number) => {
-          if (currentFile.current !== file || run !== identifyRun.current) return;
+          if (stale()) return;
           setProgress({ phase: 'model', frac: f });
           const quarter = Math.floor(f * 4) / 4;
           if (quarter > said && f < 1) {
@@ -196,19 +214,19 @@ export default function Scan() {
       } else {
         await ensureModel();
       }
-      if (currentFile.current !== file || run !== identifyRun.current) return;
+      if (stale()) return;
       setProgress(null);
       const month = new Date(file.lastModified || Date.now()).getMonth() + 1;
       const { res } = await identifyScan(file, {
         crop: cropFractions(), kinds: kind ? [kind] : null, month,
         onProgress: (x: any) => {
-          if (currentFile.current !== file || run !== identifyRun.current) return;
+          if (stale()) return;
           if (x.phase === 'view') { setProgress({ phase: 'view', frac: 0, index: x.index, count: x.count }); setStatus(`Looking closely, ${x.index} of ${x.count}`); }
         },
       } as any);
-      if (currentFile.current !== file || run !== identifyRun.current) return;
+      if (stale()) return;
       const logged = await logScan(res);
-      if (currentFile.current !== file || run !== identifyRun.current) return;
+      if (stale()) return;
       setResult({ ...res, whole, kind });
       setLogAt(logged);
       setYours(makeYours(photo, box, whole));
@@ -216,13 +234,18 @@ export default function Scan() {
       setRise(true);
       setStatus('');
     } catch (err: any) {
-      if (currentFile.current !== file || run !== identifyRun.current) return;
+      if (stale()) return;
       const raw = String(err?.message || err);
-      if (/dynamically imported module|Importing a module script failed|module script failed/i.test(raw)) {
+      const importFailed = /dynamically imported module|Importing a module script failed|module script failed/i.test(raw);
+      // Only a new release makes a reload help. A module that is just not saved yet (offline) needs the network,
+      // which is v1's message for a failed fetch.
+      const updated = importFailed && await releaseChanged();
+      if (stale()) return;
+      if (updated) {
         setError('BirdyDex was updated. Reload to use Scan.');
         setNeedsReload(true);
       } else {
-        const msg = /offline-first-run|Failed to fetch|NetworkError|network/i.test(raw)
+        const msg = importFailed || /offline-first-run|Failed to fetch|NetworkError|network/i.test(raw)
           ? `Photo ID needs a one-time download of about ${MB} MB. Connect to the internet (Wi-Fi is best) and try again.`
           : `Photo ID couldn't run: ${raw}`;
         setError(msg);
@@ -236,7 +259,8 @@ export default function Scan() {
     if (photo) setPending({ blob: photo.blob, notes: 'Identified from a photo.', autoGps: true });
     navigate(`/add?species=${id}`, { state: { scan: true } });
   };
-  const none = (why: string) => { void markChosen(logAt, 'none'); setStatus(why); };
+  // None of these: the scan log records that no match was taken (v1 marks it for Tighter, Pick a kind and Search).
+  const none = () => { void markChosen(logAt, 'none'); };
 
   const toImg = (e: ReactPointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -403,7 +427,7 @@ export default function Scan() {
                 <p className="scan-hint">{whole ? 'The whole photo will be identified.' : subject ? `Drag the box onto the ${subject}. Pull a corner to resize.` : 'Drag the box onto what you want named. Pull a corner to resize.'}</p>
                 <div className="scan-tool-row">
                   <button type="button" className="scan-chip scan-chip--whole" data-whole aria-pressed={whole} onClick={() => setWhole((v) => !v)}><i aria-hidden="true" />Whole photo</button>
-                  <label className="scan-chip scan-change"><span><GalleryIcon /> Change photo</span><input type="file" accept="image/*" className="scan-file" disabled={busy} onChange={(e) => void pick(e.target.files?.[0])} /></label>
+                  <label className="scan-chip scan-change"><GalleryIcon /><span>Change photo</span><input type="file" accept="image/*" className="scan-file" disabled={busy} onChange={(e) => void pick(e.target.files?.[0])} /></label>
                 </div>
               </div>
               {multi && (
@@ -447,6 +471,7 @@ export default function Scan() {
                 <h3 id="scan-none-h">None of these?</h3>
                 <div className="scan-none-acts">
                   <button type="button" className="btn" onClick={() => {
+                    none();
                     const wasWhole = whole;
                     if (!wasWhole) setBox((b) => clampBox(photo!, { ...b, s: b.s * 0.75 }));
                     setWhole(false);
@@ -456,12 +481,13 @@ export default function Scan() {
                     stageRef.current?.focus({ preventScroll: true });
                   }}>Try a tighter box</button>
                   {multi && <button type="button" className="btn" onClick={() => {
+                    none();
                     setStatus('Choose what kind it is, then try again.');
                     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
                     kindsRef.current?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
                     (kindsRef.current?.querySelector('[aria-pressed="true"]') as HTMLElement | null)?.focus();
                   }}>Pick a kind</button>}
-                  <Link className="btn" to="/dex">Search the dex</Link>
+                  <Link className="btn" to="/dex" onClick={none}>Search the dex</Link>
                 </div>
               </section>
             </>
@@ -471,6 +497,24 @@ export default function Scan() {
       </div>
     </div>
   );
+}
+
+// True when a newer release is installed or deployed: its index.html loads a different entry chunk from the one
+// this page runs. The service worker answers with the shell it has installed (also offline); without one this is
+// the server's copy. Any doubt counts as no update.
+async function releaseChanged() {
+  const entry = (html: string) => /<script\b[^>]*\btype="module"[^>]*\bsrc="([^"]+)"/.exec(html)?.[1]
+    ?? /<script\b[^>]*\bsrc="([^"]+)"[^>]*\btype="module"/.exec(html)?.[1];
+  const mine = document.querySelector('script[type="module"][src]')?.getAttribute('src');
+  if (!mine) return false;
+  try {
+    const res = await fetch('/index.html', { cache: 'no-store' });
+    if (!res.ok) return false;
+    const live = entry(await res.text());
+    return !!live && live !== mine;
+  } catch {
+    return false;
+  }
 }
 
 function makeYours(photo: Chosen, b: Box, whole: boolean) {
