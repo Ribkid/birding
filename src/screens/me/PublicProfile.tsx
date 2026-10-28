@@ -134,7 +134,7 @@ export default function PublicProfile() {
                 {dex.map((sp) => sp && (
                   <li key={sp.id}>
                     <Link className={`me-tile kind--${sp.kind}`} to={`/bird/${sp.id}`}>
-                      <span className="tile-img"><SpeciesImage sp={sp} />{!isMe && mineSeen.has(sp.id) && <span className="me-both">{tick}<span>You too</span></span>}</span>
+                      <span className="tile-img"><SpeciesImage sp={sp} />{!isMe && mineSeen.has(sp.id) && <span className="me-both">{tick}<span>You too</span></span>}</span>{' '}
                       <span className="me-tile-name">{sp.name}</span>{!isMe && mineSeen.has(sp.id) && <span className="sr-only">Seen by you too</span>}
                     </Link>
                   </li>

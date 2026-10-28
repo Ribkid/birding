@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { SPECIES, byId, type Species } from '../../lib/data';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { SPECIES, type Species } from '../../lib/data';
 import { useSeen, useMedia } from '../../lib/hooks';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { Sheet } from '../../components/Sheet';
-import { onStatus, syncStatus } from '../../core/account.js';
+import { accountStarted, authSettled, onStatus, syncStatus } from '../../core/account.js';
+import { AccountAvatar } from './accountBits';
 import {
   signedIn, configured, getProfile, getMyCloud, myName, initProfile, saveMyProfile, setCloud,
-  uploadAvatarPhoto, removeAvatarPhoto, avatarUrl, problem, resizeImage, squareJpeg,
+  uploadAvatarPhoto, removeAvatarPhoto, problem, resizeImage, squareJpeg,
 } from '../../core/profile.js';
 import './me.css';
 
@@ -63,6 +64,15 @@ export default function EditProfile() {
   const [sync, setSync] = useState(syncStatus());
   useEffect(() => { const off = onStatus((state: typeof sync) => setSync(state)); return () => { off(); }; }, []);
 
+  // Signed out, v1 opened Sign in instead (js/me.js renderMe('edit')). That waits until the saved sign-in has been
+  // checked, so a signed-in cold start on this page is not sent away.
+  const [settled, setSettled] = useState(accountStarted);
+  useEffect(() => {
+    let alive = true;
+    void authSettled.then(() => { if (alive) setSettled(true); });
+    return () => { alive = false; };
+  }, []);
+
   // Every hook sits above the early returns below: signing in or out while this screen is open changes which
   // branch renders, and a hook after a return would then crash the screen (React #300 / #310).
   useEffect(() => () => { if (cropState.current) URL.revokeObjectURL(cropState.current.url); }, []);
@@ -92,7 +102,8 @@ export default function EditProfile() {
   const u = signedIn();
 
   if (!configured) return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link><h1>Edit profile</h1></header><div className="me-msg"><p>Profiles need accounts, which are not set up in this copy of the app.</p></div></div>;
-  if (!u) return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link><h1>Edit profile</h1></header><div className="me-msg"><p>Sign in to edit your profile.</p><Link className="btn btn--primary" to="/me/signin">Sign in</Link></div></div>;
+  if (!u && settled) return <Navigate to="/me/signin" replace />;
+  if (!u) return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link><h1>Edit profile</h1></header><div className="me-msg"><p className="muted" role="status">Checking your account…</p></div></div>;
 
   const zoomTo = (nz: number, cx?: number, cy?: number) => {
     setCrop((cur) => {
@@ -235,9 +246,8 @@ export default function EditProfile() {
       <div className="me me--edit pad-x">
         <div className="me-edit-av">
           <span className="me-edit-pic">
-            <span className={`acct-av me-av-xl${m?.avatarPath ? ' acct-av--photo' : ''}`} aria-hidden="true">
-              {m?.avatarPath ? <img src={avatarUrl(m.avatarPath)} alt="" /> : byId.get(Number(prof.avatarSpeciesId)) ? <SpeciesImage sp={byId.get(Number(prof.avatarSpeciesId))!} size="large" /> : <span className="acct-av-letter">{(name || 'You').slice(0, 1).toUpperCase()}</span>}
-            </span>
+            {/* v1 avatarHtml with her shown name (myName), so a letter avatar is her initial, not the Y of 'You'. */}
+            <AccountAvatar spId={prof.avatarSpeciesId} path={m?.avatarPath} name={name.trim() || myName()} cls="acct-av me-av-xl" size="large" />
           </span>
           <div className="me-edit-picks">
             <button type="button" className="btn btn--small" disabled={busy} onClick={() => { if (!navigator.onLine) { setMsg('Uploading a photo needs signal. Your species picture works offline.'); return; } fileRef.current?.click(); }}><svg viewBox="0 0 24 24">{I.cam}</svg> {m?.avatarPath ? 'New photo' : 'Upload a photo'}</button>

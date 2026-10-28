@@ -13,6 +13,7 @@ import { onStatus, syncStatus } from '../../core/account.js';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { CountUp, useStagger } from '../../components/Motion';
 import { applyTint } from '../../lib/look';
+import { toast } from '../../lib/toast';
 import { AccountAvatar as Avatar, useProfile } from './accountBits';
 import './me.css';
 
@@ -116,7 +117,6 @@ export default function Me() {
   const outings = useOutings();
   const patches = usePatches();
   const navigate = useNavigate();
-  const [profileMsg, setProfileMsg] = useState('');
   useMedia();
   // The hub's sections rise in once per session (v1 renderMe: stagger '.me-sheet > *', key me-hub).
   const root = useStagger<HTMLDivElement>('.me-sheet > *', 'me-hub', 8);
@@ -145,14 +145,14 @@ export default function Me() {
   const [sync, setSync] = useState(syncStatus());
 
   const openProfile = async () => {
-    setProfileMsg('');
-    if (!navigator.onLine) { setProfileMsg('Your public profile needs a connection.'); return; }
+    // v1 openMyProfile: the outcome is a toast, read out through #announce.
+    if (!navigator.onLine) { toast('Your public profile needs a connection.'); return; }
     try {
       const id = await myPublicId();
       if (id) navigate(`/u/${id}`);
-      else setProfileMsg("Your profile hasn't reached the cloud yet. Try again in a minute.");
+      else toast("Your profile hasn't reached the cloud yet. Try again in a minute.");
     } catch {
-      setProfileMsg("Your profile hasn't reached the cloud yet. Try again in a minute.");
+      toast("Your profile hasn't reached the cloud yet. Try again in a minute.");
     }
   };
 
@@ -256,7 +256,6 @@ export default function Me() {
             <Link className="me-act" to="/leaderboard?groups=1"><svg viewBox="0 0 24 24" aria-hidden="true">{I.people}</svg><span>Groups</span></Link>
           </nav>
         )}
-        {profileMsg && <p className="small muted" role="status">{profileMsg}</p>}
 
         <section className="me-sec" aria-labelledby="me-lists-h">
           <div className="me-sec-h"><h2 id="me-lists-h">My lists</h2><Link to="/lists">Open lists</Link></div>
