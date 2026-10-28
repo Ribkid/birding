@@ -1,7 +1,7 @@
 // The dex home (v1 js/app.js renderDex): today's pick full-bleed with the wordmark and her count, then a sheet with
 // the kind rail (the tally), the Today rail, the sticky search tools and the grid.
 import {
-  memo, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState,
+  memo, startTransition, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState,
   type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode,
 } from 'react';
 import { flushSync } from 'react-dom';
@@ -31,6 +31,8 @@ import { openSearch } from './DexSearch';
 import { openSightingSheet } from '../components/SightingSheet';
 import { ICON, Photo, Ring } from './dexParts';
 import { promptInstall, useCanInstall } from '../lib/install';
+import { landingScroll } from '../components/RouteMotion';
+import { drawFirst, groupKey, rememberLeaving, rememberedBox, rememberedContent } from './dexMemory';
 import { announce } from '../lib/toast';
 
 type Show = 'all' | 'seen' | 'unseen';
@@ -91,7 +93,8 @@ function scanSub(scope: string) {
     : `${cap(listWords(pk.map((k) => KINDS[k].label.toLowerCase())))} by photo`;
 }
 
-// Off-screen groups skip rendering until they're near (content-visibility); this is their size until then.
+// Off-screen groups skip rendering until they're near (content-visibility); this is their size until then, unless
+// the dex remembers the height they really had when she left it (dexMemory.ts).
 function groupSize(n: number, layout: Layout) {
   if (layout === 'list') return 52 + n * 69;
   const w = Math.min(innerWidth, 760) - 32, min = innerWidth >= 700 ? 130 : 104;
@@ -372,6 +375,12 @@ export default function Dex() {
   const navigate = useNavigate();
 
   const location = useLocation();
+  const entry = useRef(location.key);
+  entry.current = location.key;
+  // Coming back to where she left this dex (Back from a species page): the groups that were around her are drawn
+  // first, where they were, and the others, each held at its height, a moment later, so her tile is back at once and
+  // the rest of the 291 never hold up the first frame.
+  const [nearOnly, setNearOnly] = useState(() => drawFirst(location.key, landingScroll(location.key)));
   const [f, setF] = useState<DexFilters>(() => {
     const linked = (location.state as { dexFilter?: Partial<DexFilters> } | null)?.dexFilter;
     if (linked && !appliedLinks.has(location.key)) {
@@ -442,6 +451,27 @@ export default function Dex() {
     const view = document.getElementById('view');
     if (ready && view) countKindTabs(view);
   }, [ready, f.kind, seen]);
+
+  // Back to a dex she left: the groups held at their heights are drawn once the first frame is up, without
+  // holding up the page (a transition yields to her taps and to the browser).
+  useEffect(() => {
+    if (!nearOnly) return;
+    let t = 0;
+    const id = requestAnimationFrame(() => { t = window.setTimeout(() => startTransition(() => setNearOnly(null))); });
+    return () => { cancelAnimationFrame(id); clearTimeout(t); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // On the way out, the groups' heights as she leaves them (the drawn ones exact, the others as the browser holds
+  // them), and which of them were on or near the screen.
+  useLayoutEffect(() => () => {
+    const groups = [...document.querySelectorAll<HTMLElement>('#view .dex-group[data-group-key]')].map((el) => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      const padding = ['paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth'].reduce((a, k) => a + (parseFloat(cs[k as 'paddingTop']) || 0), 0);
+      return { key: el.dataset.groupKey!, top: r.top, bottom: r.bottom, height: r.height, padding };
+    });
+    rememberLeaving(entry.current, groups, scrollY, innerHeight);
+  }, []);
 
   // The chosen kind tab is kept in sight.
   useLayoutEffect(() => {
@@ -544,18 +574,31 @@ export default function Dex() {
   } else if (f.sort === 'dex') {
     const byGroup: Record<string, Species[]> = {};
     list.forEach((s) => (byGroup[s.group] ||= []).push(s));
-    body = Object.keys(GROUPS).filter((g) => byGroup[g]).map((g, i) => {
+    const shown = Object.keys(GROUPS).filter((g) => byGroup[g]);
+    const keyOf = (g: string) => groupKey(g, f.layout, byGroup[g].length);
+    // Hold groups back only when the dex is drawn as she left it (some of its groups were near the screen).
+    const holding = !!nearOnly && shown.some((g) => nearOnly.has(keyOf(g)));
+    body = shown.map((g, i) => {
       const k = SPECIES.find((s) => s.group === g)?.kind || 'bird';
       const all = SPECIES.filter((s) => s.group === g);
       const got = all.filter((s) => seen.has(s.id)).length;
-      const later = i ? { containIntrinsicSize: `auto ${Math.round(groupSize(byGroup[g].length, f.layout))}px` } : undefined;
+      const gk = keyOf(g);
+      const known = rememberedContent(gk);
+      const later = i ? { containIntrinsicSize: `auto ${known ?? Math.round(groupSize(byGroup[g].length, f.layout))}px` } : undefined;
+      const held = holding && !nearOnly!.has(gk) ? rememberedBox(gk) : undefined;
       return (
-        <section key={g} className={`dex-group kind--${k}${i ? ' dex-group--later' : ''}`} style={later}>
+        <section
+          key={g}
+          className={`dex-group kind--${k}${i ? ' dex-group--later' : ''}`}
+          style={held ? { ...later, height: held } : later}
+          data-group-key={gk}
+          aria-busy={held ? true : undefined}
+        >
           <h2 className="dex-group-h">
             <span>{GROUPS[g]}</span>
             <span className="dex-group-n"><span aria-hidden="true">{got}/{all.length}</span><span className="sr-only">{got} of {all.length} seen</span></span>
           </h2>
-          {block(byGroup[g])}
+          {held ? null : block(byGroup[g])}
         </section>
       );
     });
