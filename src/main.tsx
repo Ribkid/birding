@@ -21,6 +21,7 @@ import './screens/lists/lists.css';
 import './screens/map/map.css';
 import './screens/progress/progress.css';
 import App from './App';
+import { registerServiceWorker } from './lib/sw';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('#root missing from index.html');
@@ -35,11 +36,7 @@ createRoot(root).render(
 
 // Offline shell. Only in a production build; the dev server has no sw.js.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  const register = () => {
-    void navigator.serviceWorker.register('/sw.js').catch(() => {
-      // Registers on the next visit; the app still works online without it.
-    });
-  };
+  const register = () => registerServiceWorker();
   if (document.readyState === 'complete') register();
   else window.addEventListener('load', register, { once: true });
 }

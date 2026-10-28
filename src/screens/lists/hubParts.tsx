@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { db } from '../../core/db.js';
 import type { Species } from '../../lib/data';
 import { normaliseSighting } from '../../lib/hooks';
 import { SpeciesImage } from '../../components/SpeciesImage';
-import { countUp } from '../../lib/motion';
+import { countOnTo, countUp } from '../../lib/motion';
 
 /**
  * One IndexedDB store, kept fresh as it changes, and null until the first read lands. The shared hooks start
@@ -89,13 +89,21 @@ export function ChanceBar({ p, cls = '', when = ' this month' }: { p: number; cl
 }
 
 // v1 countIn: numbers count up the first time they show and whenever they change; otherwise they simply sit there.
+// v1 starts the count in the same task that draws the number; a layout effect does the same, so the final number is
+// never painted before the count. v1 draws a screen once its data is in; React can draw it again while the number
+// is still counting (Targets: 177, then 180 once the regional data arrives), so the running count goes on to the
+// new number instead of being drawn at it and starting again.
 const counted = new Map<string, number>();
 
 export function CountKey({ k, value }: { k: string; value: number }) {
   const ref = useRef<HTMLElement>(null);
-  useEffect(() => {
+  const lastKey = useRef(k);
+  useLayoutEffect(() => {
     const from = counted.has(k) ? (counted.get(k) as number) : 0;
     counted.set(k, value);
+    const sameKey = lastKey.current === k;
+    lastKey.current = k;
+    if (sameKey && countOnTo(ref.current, value)) return;
     void countUp(ref.current, from, value, { delay: 120 });
   }, [k, value]);
   return <b ref={ref} data-count-key={k}>{value}</b>;
