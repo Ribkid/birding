@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 // No photo index or gallery fetches in a test.
 vi.mock('../lib/hooks', async (orig) => ({ ...(await orig<typeof import('../lib/hooks')>()), useMedia: () => {} }));
 vi.mock('../core/media.js', () => ({ sized: () => null }));
 vi.mock('../screens/me/nudge', () => ({ nudgeAfterSave: async () => {} }));
 
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { SightingForm } from '../components/SightingSheet';
 import { announceSaved, onCelebrate, type LogData, type SightingRow } from '../screens/lists/shared';
+import { setPending } from '../screens/field/scanHandoff';
+import AddSighting from '../screens/lists/AddSighting';
 
 const sighting = (id: number, speciesId: number, place: string, createdAt: number) =>
   ({ id, speciesId, date: '2026-10-20', time: '07:10', lat: -27.4 - id / 100, lng: 153, acc: 15, place, notes: '', createdAt }) as SightingRow;
@@ -71,6 +74,28 @@ describe('the Log a sighting form', () => {
     const { container } = render(<SightingForm data={data(false)} onCancel={noop} onSaved={noop} />);
     fireEvent.submit(container.querySelector('form')!);
     expect(container.querySelector('[data-error]')?.textContent).toBe('Choose what you saw.');
+  });
+});
+
+describe('the #/add page', () => {
+  afterEach(cleanup);
+
+  it('takes the Scan hand-off into the same form: species, photo and notes', async () => {
+    URL.createObjectURL = () => 'blob:scan';
+    URL.revokeObjectURL = () => {};
+    setPending({ blob: new Blob(['x'], { type: 'image/jpeg' }), notes: 'Identified from a photo.', autoGps: false });
+    const { container } = render(
+      <MemoryRouter initialEntries={[{ pathname: '/add', search: '?species=1', state: { scan: true } }]}>
+        <Routes><Route path="/add" element={<AddSighting />} /></Routes>
+      </MemoryRouter>,
+    );
+    // The form waits for her sightings and outings (none here: there is no IndexedDB in the test).
+    await screen.findByRole('button', { name: 'Save sighting' });
+    expect(container.querySelector('h1')?.textContent).toBe('Log a sighting');
+    expect(screen.getByRole('button', { name: 'Back to the scan result' })).toBeTruthy();
+    expect(container.querySelector('.chosen-txt strong')?.textContent).toBe('Australian Brush-turkey');
+    await waitFor(() => expect(container.querySelector('.photo-preview img')?.getAttribute('src')).toBe('blob:scan'));
+    expect(container.querySelector('textarea')?.value).toBe('Identified from a photo.');
   });
 });
 
