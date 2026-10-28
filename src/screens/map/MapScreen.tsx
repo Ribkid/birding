@@ -118,6 +118,16 @@ const POPUP_OPTS = {
   autoPanPaddingBottomRight: L.point(12, 96),
 };
 
+/**
+ * Popup options with v1's width (`want`: 260 for hotspots and spots, Leaflet's 300 for the rest), narrowed on a small
+ * phone. rest.css's roomier close button makes the frame about 62 px wider than the content, so on a 320 px screen a
+ * 260 px popup would run off the edge and hide its close button; this keeps the whole popup inside the padding.
+ */
+const popOpts = (map: L.Map, want = 300) => ({
+  maxWidth: Math.max(160, Math.min(want, map.getSize().x - 24 - 62)),
+  ...POPUP_OPTS,
+});
+
 const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_ATTRIBUTION =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
@@ -499,7 +509,7 @@ function MapView() {
       const clickLat = latlng.lat;
       const clickLng = latlng.lng;
       const key = `spot:${clickLat.toFixed(3)},${clickLng.toFixed(3)}`;
-      const popup = L.popup({ maxWidth: 260, ...POPUP_OPTS })
+      const popup = L.popup(popOpts(map, 260))
         .setLatLng(latlng)
         .setContent('<p class="pop-src">Looking up this spot…</p>');
       // openPopup() closes whatever is already open; openOn() would stack a second popup.
@@ -698,7 +708,7 @@ function MapView() {
         .addTo(overlay)
         .bindPopup(
           `<strong>${esc(p.name)}</strong><br><a href="#/patch/${p.id}">Open patch list</a>`,
-          POPUP_OPTS,
+          popOpts(map),
         );
     }
 
@@ -719,7 +729,7 @@ function MapView() {
             `<strong>${esc(focus.name)}</strong><br>Reported here: ${count.toLocaleString(
               'en-AU',
             )} records in this 1 km square since 2016`,
-            POPUP_OPTS,
+            popOpts(map),
           );
       }
     }
@@ -767,7 +777,7 @@ function MapView() {
                 : ''
             }
             <a href="${directionsUrl(view.h.lat, view.h.lng)}" target="_blank" rel="noopener">Directions</a>`,
-            { maxWidth: 260, ...POPUP_OPTS },
+            popOpts(map, 260),
           );
         marker.on('popupopen', (event) => {
           void describe(view.h.lat, view.h.lng, { hotspot: view.h, seen })
@@ -807,7 +817,7 @@ function MapView() {
             .slice(0, 12)
             .map((sp) => `<a href="#/bird/${sp.id}">${esc(sp.name)}</a>`)
             .join('<br>')}${group.names.length > 12 ? `<br>and ${group.names.length - 12} more` : ''}`,
-          POPUP_OPTS,
+          popOpts(map),
         );
     }
 
@@ -1052,7 +1062,7 @@ function MapView() {
     const popupHtml = `<span class="pop-h">${esc(result.name)}</span>${esc(result.kind)}`;
     const marker = L.marker([result.lat, result.lng], { icon: tempPinIcon() })
       .addTo(map)
-      .bindPopup(popupHtml, POPUP_OPTS);
+      .bindPopup(popupHtml, popOpts(map));
     tempMarkerRef.current = marker;
     addNote(`search:${result.lat},${result.lng}`, popupHtml, result.lat, result.lng);
     window.setTimeout(() => {
