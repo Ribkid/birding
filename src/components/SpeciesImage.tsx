@@ -200,7 +200,8 @@ function SpeciesPhoto({ sp, size = 'small', className, whole = false, alt = sp.n
  *   larger than the frame;
  * - .whole-fg: the large photo, which develops in (opacity and blur) once it has loaded and decoded.
  * A photo already shown this session is drawn at once. If the large one fails, .is-small keeps the small one; with
- * no small one either, the frame is v1's no-photo block (.img-missing), as before.
+ * no small one either (offline, a bird she hasn't seen yet), the frame keeps the plumage wash rather than going to
+ * an empty block. A species with no photo at all is still v1's no-photo block (Bird.tsx).
  */
 function HeroPhoto({ sp, hero, className, alt = sp.name, eager = false }: Props & { hero: HeroPhotoSrc }) {
   const top = usePhotoLoad(hero.src, { develop: true });
@@ -208,12 +209,11 @@ function HeroPhoto({ sp, hero, className, alt = sp.name, eager = false }: Props 
   // A small copy once drawn stays, even if a later photo index no longer offers one for this photo (the hero keeps
   // the photos it was drawn with), so the frame never empties under a large photo still on its way.
   const small = base.src && base.src !== top.src ? base.src : null;
-  const failed = top.look === 'failed';
-  const keepSmall = failed && !!small && base.look !== 'failed';
+  const keepSmall = top.look === 'failed' && !!small && base.look !== 'failed';
   const loading = eager ? 'eager' : 'lazy';
   return (
     <span
-      className={cx('whole', className, keepSmall && 'is-small', failed && !keepSmall && 'img-missing')}
+      className={cx('whole', className, keepSmall && 'is-small')}
       style={{ '--wash': washFor(sp) } as CSSProperties}
     >
       {small ? (
@@ -253,6 +253,10 @@ export function preloadLarge(id: number) {
   if (!url || shown.has(url) || preloads.has(url)) return;
   const img = new Image();
   img.decoding = 'async';
+  // The hero's own <img> (fetchpriority high) takes over this request rather than asking again, and the browser
+  // keeps the priority the request started with, so it starts high too: at the default (low, as an image off screen)
+  // the hero's photo would queue behind the dex thumbnails still loading.
+  img.fetchPriority = 'high';
   img.onload = img.onerror = () => {
     preloads.delete(url);
   };

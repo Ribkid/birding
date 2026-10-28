@@ -35,7 +35,7 @@
 /* Full-bleed, and never an empty block (SpeciesImage's hero mode). Under everything, the bird's plumage wash; over
    it, the small photo the dex tile drew, soft and a touch larger than the frame; over that, the large photo, which
    develops in once it has decoded: it fades up as it comes into focus. If the large one can't load (no signal),
-   the small one stays and sharpens a little so the bird is still plain to see. */
+   the small one stays and sharpens a little so the bird is still plain to see; if neither can, the wash stays. */
 .bird .slide .whole:not(.img-missing) { background-color: var(--deep); background-image: var(--wash, none); }
 .bird .slide .whole-bg {
   inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 38%;

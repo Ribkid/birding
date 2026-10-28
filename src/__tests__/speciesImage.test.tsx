@@ -220,7 +220,7 @@ describe('SpeciesImage hero mode', () => {
     expect(hero(again.container).large.className).toBe('whole-fg fade in');
   });
 
-  it('keeps the small photo, sharper, when the large one cannot load; the no-photo block only when neither can', () => {
+  it('keeps the small photo, sharper, when the large one cannot load, and the plumage wash when neither can', () => {
     const kept = render(<SpeciesImage sp={species(null)} hero={{ src: 'https://x/h3-large.jpg', small: 'https://x/h3-small.jpg' }} />);
     loaded.add('https://x/h3-small.jpg');
     fireEvent.load(hero(kept.container).small!);
@@ -234,11 +234,16 @@ describe('SpeciesImage hero mode', () => {
     fireEvent.error(hero(neither.container).large);
     expect(hero(neither.container).frame.className).toBe('whole is-small'); // the small one may still arrive
     fireEvent.error(hero(neither.container).small!);
-    expect(hero(neither.container).frame.className).toBe('whole img-missing');
+    // Offline with neither photo to hand, the hero is never an empty block: the bird's own colours stay, and the
+    // name is still read out.
+    expect(hero(neither.container).frame.className).toBe('whole');
+    expect(hero(neither.container).frame.style.getPropertyValue('--wash')).toContain('radial-gradient(');
+    expect(hero(neither.container).large.alt).toBe('Emu');
 
     const single = render(<SpeciesImage sp={species(null)} hero={{ src: 'https://x/h5-large.jpg' }} />);
     fireEvent.error(hero(single.container).large);
-    expect(hero(single.container).frame.className).toBe('whole img-missing');
+    expect(hero(single.container).frame.className).toBe('whole');
+    expect(hero(single.container).frame.style.getPropertyValue('--wash')).toContain('radial-gradient(');
   });
 
   it('keeps a small copy once drawn when a later photo index no longer offers one, so the frame never empties', () => {
@@ -317,6 +322,7 @@ describe('plumage wash', () => {
 
 describe('preloadOnPress', () => {
   let made: string[] = [];
+  let priorities: string[] = [];
   let off: () => void = () => {};
   const online = (on: boolean) => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => on });
   const press = (el: Element, pointerType = 'mouse', type = 'pointerdown') => {
@@ -333,7 +339,14 @@ describe('preloadOnPress', () => {
   };
   beforeEach(() => {
     made = [];
-    vi.stubGlobal('Image', class { decoding = ''; onload: unknown = null; onerror: unknown = null; set src(v: string) { made.push(v); } });
+    priorities = [];
+    vi.stubGlobal('Image', class {
+      decoding = '';
+      fetchPriority = 'auto';
+      onload: unknown = null;
+      onerror: unknown = null;
+      set src(v: string) { made.push(v); priorities.push(this.fetchPriority); }
+    });
     online(true);
     off = preloadOnPress();
   });
@@ -350,6 +363,8 @@ describe('preloadOnPress', () => {
     const target = link(sp.id);
     press(target);
     expect(made).toEqual(['https://x/p1-large.jpg']);
+    // At high priority from the start: the hero's own <img> takes this request over and keeps its priority.
+    expect(priorities).toEqual(['high']);
     press(target);
     expect(made).toHaveLength(1);
     // A dex tile names its species with data-tile.
