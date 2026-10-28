@@ -538,10 +538,14 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
             <span style={{ transform: `scaleX(${((picked != null ? game.i + 1 : game.i) / game.qs.length).toFixed(3)})` }} />
           </span>
         )}
-        <span className="lq-count" aria-hidden="true">{game.mode === 'rapid' ? <>{Math.ceil(rapidLeft / 1000)}<span>s</span></> : <>{game.i + 1}<span>/{game.qs.length}</span></>}</span>
+        {game.mode === 'rapid'
+          ? <span className="lq-count" data-secs aria-label="Seconds left">{Math.ceil(rapidLeft / 1000)}<span>s</span></span>
+          : <span className="lq-count" aria-hidden="true">{game.i + 1}<span>/{game.qs.length}</span></span>}
       </header>
-      {game.mode === 'rapid' && <p className="lq-hud" role="status"><span>In a row <b>{game.streak || 0}</b></span><span>Best this round <b>{game.top || 0}</b></span></p>}
-      <p className="lq-kicker">{roundName}{game.testId ? <span>{speciesName(game.testId)} and its look-alikes</span> : game.practice ? <span>The ones you missed</span> : game.pack ? <span>Quiz pack</span> : null}</p>
+      {/* v1 headHTML: rapid fire has its streak line where the other rounds have their kicker. */}
+      {game.mode === 'rapid'
+        ? <p className="lq-hud" role="status"><span>In a row <b>{game.streak || 0}</b></span><span>Best this round <b>{game.top || 0}</b></span></p>
+        : <p className="lq-kicker">{roundName}{game.testId ? <span>{speciesName(game.testId)} and its look-alikes</span> : game.practice ? <span>The ones you missed</span> : game.pack ? <span>Quiz pack</span> : null}</p>}
       <div className={`lq lq--${q.type}`}>
         <h1 ref={promptRef} className="lq-prompt" tabIndex={-1}>{promptFor(q)}</h1>
         {sub && <p className="lq-sub">{sub}</p>}
