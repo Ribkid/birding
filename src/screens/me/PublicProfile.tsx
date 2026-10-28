@@ -31,9 +31,14 @@ export default function PublicProfile() {
   useEffect(() => {
     let alive = true;
     const off = onAuth(() => { if (alive) setAuthTick((n) => n + 1); });
-    authSettled.then(() => { if (alive) { setAuthDone(true); setAuthTick((n) => n + 1); } });
+    authSettled.then(() => { if (alive) setAuthDone(true); });
     return () => { alive = false; off(); };
   }, []);
+
+  // v1 renderProfile asks for the profile once per visit. The fetch below runs again only when this changes (signed
+  // in, signed out, or still restoring the saved sign-in), when the id changes, or when an auth change or a closed
+  // Edit profile bumps authTick. The sign-in check settling while she is already signed in does not ask again.
+  const authKey = signedIn() ? 'in' : authDone ? 'out' : 'wait';
 
   useEffect(() => {
     const cached = getPublicProfileCache(publicId) as PublicProfileRow | null;
@@ -43,14 +48,14 @@ export default function PublicProfile() {
     void initProfile();
     if (!/^[0-9a-f-]{36}$/i.test(publicId)) { setState('error'); setErr("This profile isn't available. It may be private, or the link may be wrong."); return; }
     if (!configured) { setState('error'); setErr('Profiles need accounts, which are not set up in this copy of the app.'); return; }
-    if (!signedIn()) { setState(authDone ? 'signedout' : 'loading'); return; }
+    if (authKey !== 'in') { setState(authKey === 'out' ? 'signedout' : 'loading'); return; }
     if (!navigator.onLine) { setState(row ? 'ready' : 'offline'); return; }
     let alive = true;
     void loadPublicProfile(publicId)
       .then((r: PublicProfileRow) => { if (alive) { setRow(r); setState('ready'); } })
       .catch((x: any) => { if (alive) { setErr(/not found/i.test(x?.message || '') ? "This profile isn't available. It may be private, or the link may be wrong." : problem(x)); setState(row ? 'ready' : 'error'); } });
     return () => { alive = false; };
-  }, [publicId, authDone, authTick]);
+  }, [publicId, authKey, authTick]);
 
   const isMe = !!row?.is_me;
   const backHref = isMe ? '/me' : '/leaderboard';
