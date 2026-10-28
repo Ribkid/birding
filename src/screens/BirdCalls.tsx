@@ -21,7 +21,7 @@ export interface Clip {
 type SeqCalls = { species?: Record<number, { calls?: Omit<Clip, 'title'>[] }> } | null;
 const seqCalls = (id: number) => (seq() as SeqCalls)?.species?.[id]?.calls || [];
 
-async function getCalls(sp: Species): Promise<Clip[]> {
+export async function getCalls(sp: Species): Promise<Clip[]> {
   await Promise.resolve(loadSeq()).catch(() => null);
   const local = (await localCalls(sp.id)) as Clip[];
   const used = new Set(local.map((c) => c.orig));
