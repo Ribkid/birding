@@ -21,6 +21,7 @@ import { openWelcome } from '../../components/Welcome';
 import { Icon } from '../../components/Icon';
 import { stagger } from '../../lib/look';
 import { countUp } from '../../lib/motion';
+import { useMedia } from '../../lib/hooks';
 import { ConfirmDialog, Modal, fmtDate, plural } from '../lists/shared';
 import { AccountAvatar, SignInForm, trophyIcon, useProfile } from '../me/accountBits';
 import { announce, toast } from '../../lib/toast';
@@ -100,15 +101,25 @@ function ReadyCard() {
   const texts = useRef<Partial<Record<FieldKey, HTMLSpanElement | null>>>({});
   const num = useRef<HTMLElement>(null);
   const shown = useRef(0);
+  // Each row shows only its newest check: an older answer that lands late, or one overtaken by a download, is dropped.
+  const seq = useRef<Partial<Record<FieldKey, number>>>({});
+  const turn = (key: FieldKey) => (seq.current[key] = (seq.current[key] || 0) + 1);
+  // v1 looks the photo index up when the app starts, whatever the screen; here the screens that draw photos do, so
+  // Settings does too. The species-photos row then reads the saved index as v1's does on a later visit.
+  useMedia();
 
   const paint = (key: FieldKey, r: FieldResult) => {
     if (alive.current) setField((cur) => ({ ...cur, [key]: { ...r, busy: false } }));
   };
-  const check = (key: FieldKey) => checkField(key, who.current)
-    .catch(() => ({ ok: false, text: "Couldn't check this one. Open Settings again to retry." }))
-    .then((r) => { paint(key, r); return r; });
+  const check = (key: FieldKey) => {
+    const mine = turn(key);
+    return checkField(key, who.current)
+      .catch(() => ({ ok: false, text: "Couldn't check this one. Open Settings again to retry." }))
+      .then((r) => { if (seq.current[key] === mine) paint(key, r); return r; });
+  };
 
   const follow = (key: FieldKey, job: ReturnType<typeof fieldJob>) => {
+    turn(key);
     const on: FieldReport = (f, t) => {
       if (!alive.current) return;
       setField((cur) => {
@@ -153,6 +164,18 @@ function ReadyCard() {
     });
     return () => { alive.current = false; };
     // Checked once when Settings opens; a download keeps going if she leaves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A first visit can reach Settings while the service worker is still installing. v1 checked once, so the app row
+  // kept "Not saved for offline yet" until Settings was opened again; here it is checked again when the worker takes
+  // charge of the page.
+  useEffect(() => {
+    const sw = 'serviceWorker' in navigator ? navigator.serviceWorker : null;
+    if (!sw) return;
+    const again = () => { if (alive.current && !fieldJobs.has('app')) void check('app'); };
+    sw.addEventListener('controllerchange', again);
+    return () => sw.removeEventListener('controllerchange', again);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
