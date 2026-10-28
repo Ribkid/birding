@@ -496,9 +496,9 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   return (
     <div className={`lq-screen lq-screen--${game.mode}${game.kind && game.kind !== 'animals' ? ` kind--${game.kind}` : ''}`} data-own-topbar>
       <header className="lq-head glass">
-        <Link className="iconbtn" to="/learn" replace aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { setActive(null); if (!game.daily) setGame(null); }}>
+        <button type="button" className="iconbtn" aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { setActive(null); if (!game.daily) setGame(null); navigate('/learn', { replace: true }); }}>
           <svg viewBox="0 0 24 24">{game.daily ? QI.back : QI.close}</svg>
-        </Link>
+        </button>
         {game.mode === 'rapid' ? (
           <span className="lq-bar lq-bar--time" aria-hidden="true"><span style={{ transform: `scaleX(${(rapidLeft / RAPID_MS).toFixed(3)})` }} /></span>
         ) : (
