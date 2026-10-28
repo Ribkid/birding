@@ -1,116 +1,81 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../core/db.js';
 import { inPatch, periodFilter, speciesList } from '../../core/stats.js';
 import { GROUPS, KINDS, byId, kindsPresent, type Species } from '../../lib/data';
+import { flip } from '../../lib/motion';
 import { Icon } from '../../components/Icon';
-import { Band, Pips, SpeciesImage } from '../../components/SpeciesImage';
-import {
-  ConfirmDialog,
-  fmtDate,
-  MONTH_NAMES,
-  usePatches,
-  useSettled,
-  useSightingRows,
-  type SightingRow,
-} from './shared';
+import { Band, SpeciesImage } from '../../components/SpeciesImage';
+import { ConfirmDialog, fmtDate, MONTH_NAMES, type Patch, type SightingRow } from './shared';
+import { CountKey, useStoreRows } from './hubParts';
 import './lists.css';
 
 interface SpeciesEntry {
   sp: Species;
   first: SightingRow;
-  last: SightingRow;
   count: number;
-  total: number;
 }
 
 const VALID_KEYS = ['life', 'year', 'month'];
 
+// v1 kept the sort and the kind filter in app state, so they hold for the session (state.listSort, state.listKind).
+const session: { sort: 'dex' | 'date'; kind: string } = { sort: 'dex', kind: 'all' };
+
+// What an empty list says: which kind, which period, and for a patch how it fills (v1 emptyList).
+function emptyList(lk: string, period: string, now: Date, patch?: Patch): string {
+  const what = lk === 'all' ? 'Nothing' : `No ${(KINDS[lk]?.label ?? lk).toLowerCase()}`;
+  const when =
+    period === 'life'
+      ? ''
+      : period === 'year'
+        ? ` in ${now.getFullYear()}`
+        : period === 'month'
+          ? ` in ${MONTH_NAMES[now.getMonth()]}`
+          : ` in ${period}`;
+  return patch
+    ? `${what} logged inside this patch${when} yet. Any sighting within ${patch.radiusKm} km of its centre counts here.`
+    : `${what} logged${when} yet. Tap + to log a sighting.`;
+}
+
+/** A life, year, month or past-year list, or a patch's list: ported from v1 renderList (js/app.js:1950). */
 export default function ListView() {
   const { key: rawKey, id } = useParams();
   const navigate = useNavigate();
-  const sightings = useSightingRows();
-  const patches = usePatches();
-  const settled = useSettled();
+  const sightingRows = useStoreRows<SightingRow>('sightings');
+  const patchRows = useStoreRows<Patch>('patches');
+  const ready = sightingRows != null && patchRows != null;
 
   const patchId = id != null ? Number(id) : null;
-  const patch = patchId != null ? patches.find((p) => p.id === patchId) : undefined;
+  const patch = patchId != null ? patchRows?.find((p) => p.id === patchId) : undefined;
   const period = rawKey ?? 'life';
   const validPeriod = VALID_KEYS.includes(period) || /^\d{4}$/.test(period);
 
-  const [kind, setKind] = useState('all');
-  const [sort, setSort] = useState<'dex' | 'date'>('dex');
+  const [lk, setKindState] = useState(session.kind);
+  const [sort, setSortState] = useState(session.sort);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const now = new Date();
-  const year = String(now.getFullYear());
+  const year = now.getFullYear();
+  const monthName = MONTH_NAMES[now.getMonth()];
+  const back = (
+    <Link className="iconbtn" to="/lists" aria-label="Back to lists">
+      <Icon name="back" />
+    </Link>
+  );
 
-  const source = useMemo(() => {
-    if (!patch) return sightings;
-    return sightings.filter((s) => inPatch(s, patch));
-  }, [sightings, patch]);
-
-  const entries = useMemo(() => {
-    if (!validPeriod) return [];
-    const map = speciesList(source.filter(periodFilter(period, now))) as Map<
-      number,
-      { first: SightingRow; last: SightingRow; count: number; total: number }
-    >;
-    const rows: SpeciesEntry[] = [];
-    for (const [idValue, entry] of map) {
-      const sp = byId.get(idValue);
-      if (!sp) continue;
-      if (kind !== 'all' && sp.kind !== kind) continue;
-      rows.push({ sp, ...entry });
-    }
-    if (sort === 'dex') rows.sort((a, b) => a.sp.id - b.sp.id);
-    else
-      rows.sort((a, b) =>
-        `${b.first.date} ${b.first.time ?? ''}`.localeCompare(`${a.first.date} ${a.first.time ?? ''}`),
-      );
-    return rows;
-  }, [source, period, now, kind, sort, validPeriod]);
-
-  const grouped = useMemo(() => {
-    const present = new Set(entries.map((entry) => entry.sp.group));
-    return Object.keys(GROUPS)
-      .filter((group) => present.has(group))
-      .map((group) => ({
-        group,
-        label: GROUPS[group],
-        items: entries.filter((entry) => entry.sp.group === group),
-      }));
-  }, [entries]);
-
-  const label =
-    period === 'life'
-      ? 'Life list'
-      : period === 'year'
-        ? `${year} list`
-        : period === 'month'
-          ? `${MONTH_NAMES[now.getMonth()]} ${year}`
-          : `${period} list`;
-
-  if (patchId != null && !patch) {
+  if (patchId != null && ready && !patch) {
     return (
       <>
         <header className="page-head page-head--back">
-          <Link className="iconbtn" to="/lists" aria-label="Back to lists">
-            <Icon name="back" />
-          </Link>
+          {back}
           <h1>Patch</h1>
         </header>
         <div className="pad">
-          {settled ? (
-            <>
-              <p>That patch isn&apos;t on this device.</p>
-              <Link className="btn" to="/lists">
-                Back to lists
-              </Link>
-            </>
-          ) : (
-            <p className="muted">Looking for that patch…</p>
-          )}
+          <p>That patch isn&apos;t on this device.</p>
+          <Link className="btn" to="/lists">
+            Back to lists
+          </Link>
         </div>
       </>
     );
@@ -120,9 +85,7 @@ export default function ListView() {
     return (
       <>
         <header className="page-head page-head--back">
-          <Link className="iconbtn" to="/lists" aria-label="Back to lists">
-            <Icon name="back" />
-          </Link>
+          {back}
           <h1>List</h1>
         </header>
         <div className="empty">
@@ -135,16 +98,73 @@ export default function ListView() {
     );
   }
 
-  const base = patch ? `/patch/${patch.id}` : '/list';
+  const label =
+    period === 'life'
+      ? 'Life list'
+      : period === 'year'
+        ? `${year} list`
+        : period === 'month'
+          ? `${monthName} ${year}`
+          : `${period} list`;
+  const base = patchId != null ? `/patch/${patchId}` : '/list';
+  const byDex = sort === 'dex';
+
+  let entries: SpeciesEntry[] = [];
+  if (ready) {
+    const src = patch ? sightingRows.filter((s) => inPatch(s, patch)) : sightingRows;
+    const map = speciesList(src.filter(periodFilter(period, now))) as Map<number, { first: SightingRow; count: number }>;
+    entries = [...map.entries()]
+      .map(([spId, e]) => ({ sp: byId.get(spId) as Species, first: e.first, count: e.count }))
+      .filter((e) => e.sp && (lk === 'all' || e.sp.kind === lk));
+    if (byDex) entries.sort((a, b) => a.sp.id - b.sp.id);
+    else
+      entries.sort((a, b) =>
+        (b.first.date + (b.first.time ?? '')).localeCompare(a.first.date + (a.first.time ?? '')),
+      );
+  }
+
+  // Dex order groups by family (or kind); newest first groups by the month she first saw each one.
+  const groupOf = byDex
+    ? (e: SpeciesEntry) => GROUPS[e.sp.group] || KINDS[e.sp.kind]?.label || ''
+    : (e: SpeciesEntry) => {
+        const [y, m] = e.first.date.split('-').map(Number);
+        return `${MONTH_NAMES[m - 1]} ${y}`;
+      };
+  // Rows under tidy section headers, in the order the groups first appear (v1 rowSections).
+  const groups = new Map<string, SpeciesEntry[]>();
+  for (const e of entries) {
+    const g = groupOf(e);
+    const list = groups.get(g) ?? [];
+    list.push(e);
+    groups.set(g, list);
+  }
+
+  // The rows slide to their new places when the order or the filter changes (v1 flip on '.row--sp').
+  const redraw = (fn: () => void) =>
+    flip(() => flushSync(fn), { selector: '.row--sp', key: (el) => el.getAttribute('href') ?? undefined });
+  const toggleSort = () =>
+    redraw(() => {
+      session.sort = sort === 'dex' ? 'date' : 'dex';
+      setSortState(session.sort);
+    });
+  const pickKind = (k: string) =>
+    redraw(() => {
+      session.kind = k;
+      setKindState(k);
+    });
+
+  // A row of kind chips, shown only once other animals or plants are in the dex (v1 kindChips).
+  const kindOpts: [string, string][] = [
+    ['all', 'Everything'],
+    ...kindsPresent.map((k): [string, string] => [k, KINDS[k]?.label ?? k]),
+  ];
 
   return (
     <>
       <header className="page-head page-head--back">
-        <Link className="iconbtn" to="/lists" aria-label="Back to lists">
-          <Icon name="back" />
-        </Link>
+        {back}
         <div className="lists-head-text">
-          <h1>{patch ? patch.name : label}</h1>
+          <h1>{patch ? patch.name : patchId != null ? 'Patch' : label}</h1>
           {patch && (
             <p className="muted small">
               {label}, within {patch.radiusKm} km
@@ -152,115 +172,99 @@ export default function ListView() {
           )}
         </div>
       </header>
-
-      <div className="chips">
-        {(['life', 'year', 'month'] as const).map((option) => (
-          <Link
-            key={option}
-            className={`chip ${period === option ? 'chip--on' : ''}`}
-            to={`${base}/${option}`}
-            aria-current={period === option ? 'page' : undefined}
-          >
-            {option === 'life' ? 'Life' : option === 'year' ? year : MONTH_NAMES[now.getMonth()]}
-          </Link>
-        ))}
-        <span className="spacer" />
-        <button
-          type="button"
-          className="chip"
-          onClick={() => setSort(sort === 'dex' ? 'date' : 'dex')}
-        >
-          {sort === 'dex' ? 'Dex order' : 'Newest first'}
-        </button>
-      </div>
-
-      {kindsPresent.length > 1 && (
-        <div className="chips chips--scroll" role="group" aria-label="Kind">
-          <button
-            type="button"
-            className={`chip ${kind === 'all' ? 'chip--on' : ''}`}
-            aria-pressed={kind === 'all'}
-            onClick={() => setKind('all')}
-          >
-            Everything
-          </button>
-          {kindsPresent.map((k) => (
-            <button
-              key={k}
-              type="button"
-              className={`chip chip--kind kind--${k} ${kind === k ? 'chip--on' : ''}`}
-              aria-pressed={kind === k}
-              onClick={() => setKind(k)}
-            >
-              {KINDS[k]?.label ?? k}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <p className="list-count">
-        <b>{entries.length}</b> species
-      </p>
-
-      {entries.length === 0 ? (
-        <div className="empty">
-          <p>
-            {sightings.length === 0
-              ? 'Nothing on this list yet. Log your first sighting to start it.'
-              : 'Nothing on this list yet.'}
-          </p>
-          {sightings.length === 0 && (
-            <Link className="btn" to="/add">
-              Log a sighting
-            </Link>
-          )}
-        </div>
-      ) : (
-        grouped.map((section) => (
-          <section
-            className={`dex-group kind--${section.items[0]?.sp.kind ?? 'bird'}`}
-            key={section.group}
-          >
-            <h2 className="dex-group-h">
-              <span>{section.label}</span>
-              <span className="dex-group-n">{section.items.length}</span>
-            </h2>
-            <ul className="rows">
-              {section.items.map((entry) => (
-                <li key={entry.sp.id}>
-                  <Link
-                    className={`row row--sp kind--${entry.sp.kind}`}
-                    to={`/bird/${entry.sp.id}`}
-                  >
-                    <span className="row-thumb row-thumb--seen">
-                      <SpeciesImage sp={entry.sp} />
-                    </span>
-                    <span className="row-main">
-                      <strong>{entry.sp.name}</strong>
-                      <span className="muted small">
-                        First {fmtDate(entry.first.date)}
-                        {entry.count > 1 ? `, seen ${entry.count} times` : ''}
-                      </span>
-                    </span>
-                    <Pips rarity={entry.sp.rarity} /> <Band sp={entry.sp} seen={true} />
-                  </Link>
-                </li>
+      {ready && (
+        <>
+          <div className="lbar">
+            <nav className="lseg" aria-label="Which list">
+              {(['life', 'year', 'month'] as const).map((p) => (
+                <Link
+                  key={p}
+                  className="lseg-btn"
+                  to={`${base}/${p}`}
+                  aria-current={period === p ? 'page' : undefined}
+                >
+                  {p === 'life' ? (
+                    'Life'
+                  ) : p === 'year' ? (
+                    year
+                  ) : (
+                    <>
+                      <span className="lseg-long">{monthName}</span>
+                      <span className="lseg-short">{monthName.slice(0, 3)}</span>
+                    </>
+                  )}
+                </Link>
               ))}
-            </ul>
-          </section>
-        ))
-      )}
-
-      {patch && (
-        <div className="row-end pad">
-          <button
-            type="button"
-            className="btn btn--danger btn--quiet"
-            onClick={() => setConfirmDelete(true)}
-          >
-            Delete patch
-          </button>
-        </div>
+            </nav>
+            <button
+              type="button"
+              className="chip lsort"
+              aria-label={`Sort: ${byDex ? 'dex order' : 'newest first'}. Tap to change`}
+              onClick={toggleSort}
+            >
+              {byDex ? 'Dex order' : 'Newest first'}
+            </button>
+          </div>
+          {kindsPresent.length >= 2 && (
+            <div className="chips chips--scroll" role="group" aria-label="Kind">
+              {kindOpts.map(([k, l]) => (
+                <button
+                  key={k}
+                  type="button"
+                  className={`chip${k !== 'all' ? ` kind--${k} chip--kind` : ''}${lk === k ? ' chip--on' : ''}`}
+                  aria-pressed={lk === k}
+                  onClick={() => pickKind(k)}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="list-count">
+            <CountKey k={`${base}/${period}/${lk}`} value={entries.length} /> species
+          </p>
+          {groups.size ? (
+            [...groups].map(([g, items]) => (
+              <section className="lsec" key={g}>
+                <h2 className="lsec-h">
+                  <span>{g}</span>
+                  <span className="lsec-n">
+                    {items.length}
+                    <span className="sr-only"> species</span>
+                  </span>
+                </h2>
+                <ul className="rows rows--card">
+                  {items.map((e) => (
+                    <li key={e.sp.id}>
+                      <Link className="row row--sp" to={`/bird/${e.sp.id}`}>
+                        <span className="row-thumb row-thumb--seen">
+                          <SpeciesImage sp={e.sp} />
+                        </span>
+                        <span className="row-main">
+                          <strong>{e.sp.name}</strong>
+                          <span className="muted small">
+                            First {fmtDate(e.first.date)}
+                            {e.count > 1 ? `, seen ${e.count} times` : ''}
+                          </span>
+                        </span>
+                        <Band sp={e.sp} seen />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))
+          ) : (
+            <p className="empty-inline lempty">{emptyList(lk, period, now, patch)}</p>
+          )}
+          {patch && (
+            <div className="row-end pad">
+              <button type="button" className="btn btn--danger btn--quiet" onClick={() => setConfirmDelete(true)}>
+                Delete patch
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {patch && confirmDelete && (

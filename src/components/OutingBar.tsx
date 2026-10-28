@@ -6,6 +6,7 @@ import { useViewTransitionNavigate } from './Motion';
 /**
  * v1's renderOutingBar (js/app.js:1054): while an outing runs, a bar above the tab bar on every other screen leads
  * back to it, and body.has-outing keeps page ends and map controls clear of it. An ended outing is not active.
+ * As in v1's index.html, the #outing-bar element is always there and hidden while no outing runs.
  */
 export function OutingBar() {
   const { pathname } = useLocation();
@@ -21,23 +22,24 @@ export function OutingBar() {
   }, [show]);
   useEffect(() => () => { document.body.classList.remove('has-outing'); }, []);
 
-  if (!show || !o) return null;
-  const n = sightings.filter((s) => s.outingId === o.id).length;
-  const to = `/outing/${o.id}`;
+  const n = o ? sightings.filter((s) => s.outingId === o.id).length : 0;
+  const to = o ? `/outing/${o.id}` : '';
   return (
-    <div id="outing-bar" className="outing-bar">
-      <Link
-        to={to}
-        onClick={(e) => {
-          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-          e.preventDefault();
-          go(to);
-        }}
-      >
-        <span className="pulse" aria-hidden="true" />
-        <span><strong>Outing in progress</strong> {o.place || ''}</span>
-        <span className="outing-bar-n">{plural(n, 'species', 'species')}</span>
-      </Link>
+    <div id="outing-bar" className="outing-bar" hidden={!show}>
+      {show && o && (
+        <Link
+          to={to}
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+            e.preventDefault();
+            go(to);
+          }}
+        >
+          <span className="pulse" aria-hidden="true" />
+          <span><strong>Outing in progress</strong> {o.place || ''}</span>
+          <span className="outing-bar-n">{plural(n, 'species', 'species')}</span>
+        </Link>
+      )}
     </div>
   );
 }

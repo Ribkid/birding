@@ -16,6 +16,7 @@ import Outing from './screens/lists/Outing';
 import Log from './screens/lists/Log';
 import AddSighting from './screens/lists/AddSighting';
 import Stats from './screens/lists/Stats';
+import { RouteFocus } from './components/RouteFocus';
 import Learn from './screens/learn/Learn';
 import LearnPlay from './screens/learn/LearnPlay';
 import Me from './screens/me/Me';
@@ -87,6 +88,7 @@ export default function App() {
   return (
     <>
       <ScrollReset />
+      <RouteFocus />
       <TopBar />
       <SyncBanner />
       <Welcome />
