@@ -321,6 +321,9 @@ body.has-outing .scan-go { bottom: calc(var(--chrome-bottom) + 66px); }
   .scan-go[aria-disabled="true"]::after { animation: none; background: rgba(255, 255, 255, .25); background-size: 100% 100%; }
   .scan-rise { animation: scan-fade var(--dur-2) linear both; animation-delay: 0ms; }
   .scan-rise .scan-ring-fill, .scan-rise .scan-bar i, .scan-strip > img { animation: none; }
+  /* A reference photo holds its loading look still and then shows without a fade, as every other photo does. v1's
+     rule above loses to .scan-strip > img:not(.in) and .scan-strip > img.in, so v1 kept the shimmer and the fade. */
+  .scan-strip > img:not(.in), .scan-strip > img.in { animation: none; }
 }
 @keyframes scan-fade { from { opacity: 0; } }
 

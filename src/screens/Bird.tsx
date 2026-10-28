@@ -6,9 +6,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, type Species } from '../lib/data';
-import { useMedia, useSightings } from '../lib/hooks';
+import { mediaSettled, useMedia, useSightings } from '../lib/hooks';
 import { useSeqReady } from '../lib/seq';
 import { lookAfterDraw } from '../lib/look';
+import { heroShown, type Drawn } from './heroShown';
 import { galleryFor, infoFor, loadExtras } from '../core/gallery.js';
 import { details, loadCallPack, photoFor, sized } from '../core/media.js';
 import { callWords, loadLookalikes, lookalikesOf, parseSize, peaksOf, sentences, tellFor } from '../core/quiz.js';
@@ -18,7 +19,7 @@ import { learnReady, masteryOf } from '../core/learn.js';
 import { topLayer } from '../lib/layers';
 import { Icon } from '../components/Icon';
 import { MinePhoto } from '../components/MinePhoto';
-import { Band, Pips } from '../components/SpeciesImage';
+import { Band, Pips, SpeciesImage, shownPhotos } from '../components/SpeciesImage';
 import { CallsSection, PauseIcon, PlayIcon, hasCalls, useCallPlayer } from './BirdCalls';
 import { CardOverlay, askMotion, shareCard, type CardInfo } from './BirdCard';
 import { DexSearch } from './DexSearch';
@@ -88,8 +89,9 @@ const ShareIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12
 const LearnIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 const TickIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 
-// Photos fade in the first time they arrive; ones already shown this session come back at full strength.
-const shown = new Set<string>();
+// Photos fade in the first time they arrive; ones already shown this session (anywhere in the app) come back at
+// full strength.
+const shown = shownPhotos;
 function FadeImg({ src, alt, className = '', eager = false, hidden = false, onMissing }: {
   src?: string; alt: string; className?: string; eager?: boolean; hidden?: boolean; onMissing?: (img: HTMLImageElement) => void;
 }) {
@@ -107,12 +109,6 @@ function FadeImg({ src, alt, className = '', eager = false, hidden = false, onMi
       onError={(e) => onMissing?.(e.currentTarget)}
     />
   );
-}
-// A species photo: alt '' where the name is written next to it (cards, chips), so it isn't read twice.
-function BirdImg({ sp, size = 'small', alt = sp.name }: { sp: Species; size?: 'small' | 'large'; alt?: string }) {
-  const url = sized(sp.id, size) as string | null;
-  if (!url) return <span className="img-missing" {...(alt ? { role: 'img', 'aria-label': alt } : { 'aria-hidden': true })} />;
-  return <FadeImg key={url} src={url} alt={alt} onMissing={(img) => img.classList.add('img-missing')} />;
 }
 // The whole photo (no cropping) over a soft blurred copy. A slide not yet woken has no src.
 function WholeImg({ src, alt, className = '', eager = false }: { src?: string; alt: string; className?: string; eager?: boolean }) {
@@ -235,31 +231,16 @@ function SpeciesPage({ sp }: { sp: Species }) {
     return () => io.disconnect();
   }, [hasMonths, grown]);
 
-  // The Wikipedia photo can arrive after the gallery photos are on screen. Until she has touched the gallery, it
-  // stays on the first photo rather than following the old first one along (scroll snap would keep that in view).
-  // Once she has, the list is kept as it is, as v1 keeps the gallery's slide (nothing is redrawn mid-use).
+  // The photos known when the page is drawn, drawn again when gallery.json arrives (heroShown.ts). Drawn again, the
+  // gallery stays on the first photo rather than following the old first one along (scroll snap would keep that in
+  // view); once she has touched it, it is kept as it is.
   const touched = useRef(false);
-  const kept = useRef<Photo[] | null>(null);
-  const fresh = heroPhotos(sp, det);
-  // A late first photo waits until it has loaded, so the hero never goes blank while it swaps in (v1's
-  // patchSpeciesImages likewise keeps the old picture until the new one is there). If it never loads, the
-  // photos already on screen stay.
-  const shownList = kept.current;
-  const late = !touched.current && shownList?.length && fresh[0] && fresh[0].src !== shownList[0].src && !shown.has(fresh[0].src) ? fresh[0].src : '';
-  const [, setLateLoaded] = useState(0);
-  useEffect(() => {
-    if (!late) return;
-    let alive = true;
-    const img = new Image();
-    img.onload = () => { shown.add(late); if (alive) setLateLoaded((x) => x + 1); };
-    img.src = late;
-    return () => { alive = false; };
-  }, [late]);
-  const live = late && shownList ? shownList.map((k) => fresh.find((l) => l.src === k.src) || k) : fresh;
-  const photos = touched.current && kept.current?.length ? kept.current.map((k) => live.find((l) => l.src === k.src) || k) : live;
-  kept.current = photos;
+  const kept = useRef<Drawn<Photo> | null>(null);
+  kept.current = heroShown(kept.current, heroPhotos(sp, det), touched.current);
+  const photos = kept.current.photos;
   const n = photos.length;
-  // The tint comes from the first photo. If it arrives after the page (the photo index loads late), take it again.
+  // The tint comes from the first photo. If that changes after the page is drawn (gallery.json arriving, or a photo
+  // for a hero that had none), take it again.
   const heroSrc = photos[0]?.src || '';
   const firstSrc = useRef(heroSrc);
   useEffect(() => {
@@ -353,7 +334,11 @@ function SpeciesPage({ sp }: { sp: Species }) {
               <figure className="slide" key={ph.src} data-hero-frame={i ? undefined : ''}>
                 <WholeImg src={isAwake(i) ? ph.src : undefined} alt={`${sp.name}${n > 1 ? `, photo ${i + 1} of ${n}` : ''}`} className="bird-photo" eager={i === 0} />
               </figure>
-            )) : (
+            )) : !mediaSettled() ? (
+              // The saved photo index or gallery.json isn't read yet: the photo is on its way, so the frame waits as
+              // a loading photo does, rather than showing the no-photo block first.
+              <figure className="slide" data-hero-frame=""><WholeImg alt={sp.name} className="bird-photo" eager /></figure>
+            ) : (
               <figure className="slide" data-hero-frame=""><span className="bird-photo img-missing" role="img" aria-label={sp.name} /></figure>
             )}
           </div>
@@ -426,7 +411,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
                 {confuse.map(({ s, tell }) => (
                   <li className={`lk-card kind--${s.kind}`} key={s.id}>
                     <Link className="lk-sp" to={`/bird/${s.id}`}>
-                      <span className="lk-photo cmp-img"><BirdImg sp={s} alt="" /></span>
+                      <span className="lk-photo cmp-img"><SpeciesImage sp={s} alt="" /></span>
                       <strong className="lk-name">{s.name}</strong>
                     </Link>
                     <p className={`lk-tell${tell ? '' : ' muted'}`}>{tell || cap(s.sizeText || '')}</p>
@@ -542,7 +527,7 @@ function PrevNext({ s, dir }: { s: Species; dir: 'prev' | 'next' }) {
   return (
     <Link className={`pn pn--${dir} kind--${s.kind}`} to={`/bird/${s.id}`}>
       <Icon name="back" />
-      <span className="pn-ph"><BirdImg sp={s} alt="" /></span>
+      <span className="pn-ph"><SpeciesImage sp={s} alt="" /></span>
       <span className="pn-txt"><span className="sr-only">{dir === 'prev' ? 'Previous' : 'Next'}: </span><span className="pn-no">{dexNo(s.id)}</span><strong>{s.name}</strong></span>
     </Link>
   );

@@ -14,6 +14,7 @@ import {
   packBy, ROUND, RAPID_MS, kindLabel, emptyMessage, startOfDay, getLearn, getActive, setActive, activeFor,
 } from '../../core/learn.js';
 import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, usePlayButtons, PlayButton, type CallClip, type PlayButtonState } from './QuizMedia';
+import { FadeImage } from '../../components/SpeciesImage';
 import './learn.css';
 
 const SIDES: Record<number, string[]> = {
@@ -230,10 +231,12 @@ function Results({ game, total, onAgain, onAgainMissed, onHub }: {
               const picked = q.options.find((o) => o.key === q.picked)?.label || 'nothing';
               const fact = q.type === 'fact' && q.ttype !== 'Calls';
               const sub = fact ? `${q.prompt} It's ${q.options.find((o) => o.key === q.answer)?.label || ''}. You picked ${picked}.` : `You picked ${picked}`;
+              // v1 faceSrc + imgTag: shimmers, fades in once ('fade in' when already shown), hides if it fails.
+              const face: string = Q.photosFor(sp.id, { size: 'small', prefer: 'wiki' })[0]?.src || '';
               return (
                 <li key={i} className={`lr-card kind--${sp.kind}`}>
                   <Link to={`/bird/${sp.id}`}>
-                    <span className="lr-card-img">{Q.hasPhoto(sp) ? <img src={Q.photosFor(sp.id, { size: 'small', prefer: 'wiki' })[0]?.src} alt="" /> : null}</span>
+                    <span className="lr-card-img">{face ? <FadeImage key={sp.id} src={face} /> : null}</span>
                     <span className="lr-mark"><svg viewBox="0 0 24 24">{QI.cross}</svg><span className="sr-only">Wrong:</span></span>
                     <span className="lr-card-txt"><strong>{sp.name}</strong><span>{sub}</span></span>
                   </Link>

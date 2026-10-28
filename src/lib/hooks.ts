@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { db } from '../core/db.js';
-import { loadIndex, onMediaReady } from '../core/media.js';
+import { cachedIndex, loadIndex, onMediaReady } from '../core/media.js';
 import { loadExtras } from '../core/gallery.js';
 
 export interface Sighting {
@@ -80,30 +80,59 @@ export function useOutings(): Outing[] {
   return rows;
 }
 
+// Photo readiness, shared by every component that draws a species photo. v1 waited for the saved photo index
+// before its first paint and drew again when gallery.json arrived; here each of those, and every later index
+// (looked up or refreshed online), bumps one version number that the photos re-render on.
+let mediaVersion = 0;
+let indexRead = false;
+let extrasRead = false;
 let mediaBooted = false;
-let extrasBooted = false;
+const mediaSubs = new Set<() => void>();
+const bumpMedia = () => {
+  mediaVersion += 1;
+  mediaSubs.forEach((fn) => fn());
+};
+function bootMedia() {
+  if (mediaBooted) return;
+  mediaBooted = true;
+  onMediaReady(bumpMedia);
+  // The saved index straight from IndexedDB, then anything to look up online (loadIndex notifies when it changes).
+  void cachedIndex()
+    .catch(() => null)
+    .then(() => {
+      indexRead = true;
+      bumpMedia();
+    });
+  void loadIndex();
+  void Promise.resolve(loadExtras())
+    .catch(() => {})
+    .then(() => {
+      extrasRead = true;
+      bumpMedia();
+    });
+}
+const subscribeMedia = (fn: () => void) => {
+  bootMedia();
+  mediaSubs.add(fn);
+  return () => {
+    mediaSubs.delete(fn);
+  };
+};
+const mediaSnapshot = () => mediaVersion;
 
 /**
- * Photo/gallery readiness. The Wikipedia index and the gallery JSON are fetched
- * asynchronously, so components that render photos need to re-render when they land.
+ * Photo/gallery readiness. The saved photo index, the gallery JSON and any later index are read asynchronously,
+ * so components that render photos re-render when each lands. Returns a version number that changes each time.
  */
-export function useMedia(): void {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (!mediaBooted) {
-      mediaBooted = true;
-      void loadIndex();
-    }
-    if (!extrasBooted) {
-      extrasBooted = true;
-      void loadExtras();
-    }
-    const off = onMediaReady(() => setTick((t) => t + 1));
-    return () => {
-      off();
-    };
-  }, []);
+export function useMedia(): number {
+  return useSyncExternalStore(subscribeMedia, mediaSnapshot, mediaSnapshot);
 }
+
+/**
+ * True once the saved photo index and gallery.json have both been read. Until then a species with no photo yet
+ * is still loading, not missing (v1 drew nothing before the saved index was in).
+ */
+export const mediaSettled = () => indexRead && extrasRead;
 
 /** Last time a species was seen, as a `YYYY-MM-DD HH:MM` string, for sorting. */
 export function lastSeenKey(sightings: Sighting[], speciesId: number): string {

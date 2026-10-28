@@ -1,14 +1,18 @@
-import { useEffect, useMemo, useReducer, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { byId, KINDS, SPECIES, kindsPresent, type Species } from '../../lib/data';
-import { useMedia, useSightings } from '../../lib/hooks';
-import { useStagger, CountUp } from '../../components/Motion';
+import { KINDS, kindsPresent } from '../../lib/data';
+import { mediaSettled, useMedia, useSightings } from '../../lib/hooks';
+import { useSeqReady } from '../../lib/seq';
+import { stagger } from '../../lib/look';
+import { CountUp } from '../../components/Motion';
 import { useTint } from '../../components/Motion';
+import { FadeImage } from '../../components/SpeciesImage';
+import { faceSrc, heroFace, modeFaces, packCovers, tintable } from './hubPhotos';
 import * as Q from '../../core/quiz.js';
 import {
   learnReady, getLearn, getDaily, learnStats, masteryOf, dueCards, allCards, boxes, currentStreak, setActive,
   dayStr, monthName, accuracyForKinds, packProgress, setPrefs, saveLearn, kindLabel,
-  packs as PACKS, isMastered, bestKey, ROUND,
+  isMastered, bestKey, ROUND,
 } from '../../core/learn.js';
 import './learn.css';
 
@@ -43,14 +47,21 @@ const TICK = <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" 
 const CROSS = <path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />;
 const PACKS_SHOWN = 6;
 
-const faceSrc = (id: number, size = 'small') => Q.photosFor(id, { size, prefer: 'wiki' })[0]?.src || '';
-const tintable = (src: string) => /^https:\/\/(upload|thumb)\.wikimedia\.org\//.test(src) || (!!src && new URL(src, location.href).origin === location.origin);
+// A card's photo before the photos are known: an empty frame that shimmers (learn.css) until the photo is picked.
+const Waiting = () => <img className="fade" alt="" />;
+const HUB_ITEMS = '.lh-stats > li, .lh-daily, .lh-packs > li:not([hidden]), .lh-modes[data-modes] > li';
 
 export default function Learn() {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [ready, setReady] = useState(false);
   const [notice, setNotice] = useState('');
+  const [waited, setWaited] = useState(false);
   useMedia();
+  // As v1 drew the hub: once her learning is read, the saved photo index and, from the phone's own cache within a
+  // moment, gallery.json and the regional rates, but waiting no more than 150 ms for those two. The photos are picked
+  // once, when they are in, so a card's photo never changes in front of her; until then their frames shimmer.
+  const photosIn = mediaSettled();
+  const seqIn = useSeqReady();
   useSightings();
 
   useEffect(() => {
@@ -59,6 +70,12 @@ export default function Learn() {
     void learnReady().then(() => { if (alive) { setReady(true); force(); } }).catch(() => { if (alive) setReady(true); });
     return () => { alive = false; };
   }, []);
+  useEffect(() => {
+    if (!ready) return;
+    const t = setTimeout(() => setWaited(true), 150);
+    return () => clearTimeout(t);
+  }, [ready]);
+  const drawn = ready && ((photosIn && seqIn) || waited);
 
   const L = getLearn();
   const D = getDaily();
@@ -75,69 +92,48 @@ export default function Learn() {
   const kinds = ['animals', ...kindsPresent];
   const scopes: [string, string][] = [['all', 'Everything'], ['seen', "Ones I've seen"], ['month', `Around in ${monthName(date)}`]];
 
+  // Picked once this visit, as v1 picked them when it drew the hub: a photo index arriving later doesn't swap them.
   const hero = useMemo(() => {
-    const day = dayStr();
-    const rng = Q.seeded(Q.hashStr(`hero|${day}`));
-    const month = date.getMonth() + 1;
-    let list: Species[] = SPECIES.filter((s) => (Q.relRate(s.id, month) ?? 0) >= 0.5 && (Q.relRate(s.id, month) ?? 0) < 0.8 && Q.hasPhoto(s));
-    if (!list.length) list = SPECIES.filter((s) => s.rarity <= 2 && Q.hasPhoto(s));
-    const tinted = list.filter((s) => tintable(faceSrc(s.id)));
-    if (tinted.length) list = tinted;
-    return list.length ? list[(rng() * list.length) | 0] : null;
-  }, [date, ready]);
-  const heroSrc = hero ? faceSrc(hero.id, 'large') : '';
-  const tintRef = useTint<HTMLAnchorElement>(heroSrc, null);
+    if (!photosIn || !seqIn) return null;
+    const sp = heroFace(new Date().getMonth() + 1);
+    const tint = sp ? faceSrc(sp.id) : '';
+    return sp ? { sp, src: faceSrc(sp.id, 'large'), tint: tintable(tint) ? tint : null } : null;
+  }, [photosIn, seqIn, today]);
+  // The card is there once the hub is drawn, so the tint waits for that too.
+  const tintRef = useTint<HTMLAnchorElement>(drawn ? hero?.tint ?? null : null, null);
 
   const packs = useMemo(() => (ready ? packProgress().filter((p: { total: number }) => p.total >= 5) : []), [ready, L?.packs]);
   const packN = packs.length;
   const packsDone = packs.filter((p: { plays: number }) => p.plays > 0).length;
   const mastered = ready ? Object.keys(L?.cards || {}).filter((id) => isMastered(Number(id))).length : 0;
 
-  const packCovers = useMemo(() => {
-    const used = new Set<number>();
-    const out: Record<string, string> = {};
-    for (const p of PACKS as { key: string }[]) {
-      const list = Q.packSpecies(p.key).filter((s: Species) => Q.hasPhoto(s));
-      if (!list.length) continue;
-      const common = list.filter((s: Species) => s.rarity <= 3);
-      const pool = Q.shuffle((common.length >= 3 ? common : list).slice(), Q.seeded(Q.hashStr(`pack|${today}|${p.key}`)));
-      const framed = pool.filter((s: Species) => tintable(faceSrc(s.id)));
-      const pick = (framed.length ? framed : pool).find((s: Species) => !used.has(s.id)) || pool[0];
-      if (pick) { used.add(pick.id); out[p.key] = faceSrc(pick.id); }
-    }
-    return out;
-  }, [today, ready]);
+  const covers = useMemo(() => {
+    if (!photosIn) return null;
+    return Object.fromEntries(Object.entries(packCovers()).map(([k, id]) => [k, faceSrc(id)]));
+  }, [photosIn, today]);
+  const faces = useMemo(() => {
+    if (!photosIn) return null;
+    return Object.fromEntries(Object.entries(modeFaces(prefs.kind)).map(([m, ids]) => [m, ids.map((id) => faceSrc(id, m === 'quick' ? 'large' : 'small')).filter(Boolean)]));
+  }, [photosIn, prefs.kind, today]);
 
-  const modeFaces = (kind: string): Record<string, number | number[]> => {
-    const all = Q.speciesFor(kind).filter((s: Species) => Q.hasPhoto(s));
-    if (!all.length) return {};
-    const rng = Q.seeded(Q.hashStr(`faces|${today}|${kind}`));
-    const common = all.filter((s: Species) => s.rarity <= 2);
-    const pool = Q.shuffle((common.length >= 12 ? common : all).slice(), rng);
-    const inKind = new Set<number>(all.map((s: Species) => s.id));
-    const pairs = (Q.lookalikePairs() as { a: number; b: number }[]).filter((p) => {
-      const a = byId.get(p.a), b = byId.get(p.b);
-      return inKind.has(p.a) && inKind.has(p.b) && a && b && Q.hasPhoto(a) && Q.hasPhoto(b);
-    });
-    const pair = pairs.length ? pairs[(rng() * pairs.length) | 0] : null;
-    const used = new Set<number>();
-    const out: Record<string, number | number[]> = {};
-    for (const m of Q.MODES) {
-      if (m === 'duel' && pair) {
-        out[m] = [pair.a, pair.b];
-        used.add(pair.a); used.add(pair.b);
-        continue;
-      }
-      const ok = m === 'call' ? (s: Species) => Q.CALL_KINDS.includes(s.kind) && Q.hasCall(s.id) : () => true;
-      const s = pool.find((x: Species) => !used.has(x.id) && ok(x)) || pool.find((x: Species) => !used.has(x.id));
-      if (s) { used.add(s.id); out[m] = s.id; }
-    }
-    return out;
-  };
-  const faces = useMemo(() => modeFaces(prefs.kind), [prefs.kind, ready]);
-  const hubRef = useStagger<HTMLDivElement>('.lh-daily, .lh-packs > li, .lh-modes[data-modes] > li, .lh-stats > li', 'learn-hub');
+  // The hub's cards rise in one after another the first time it is drawn this session; packs shown later by "Show all"
+  // rise in the same way.
+  const hubRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!drawn) return;
+    const id = requestAnimationFrame(() => stagger(hubRef.current, HUB_ITEMS, { key: 'learn-hub', max: 16 }));
+    return () => cancelAnimationFrame(id);
+  }, [drawn]);
+  const shownAll = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!drawn) return;
+    if (allPacks && shownAll.current === false) stagger(hubRef.current, `.lh-packs > li:nth-child(n+${PACKS_SHOWN + 1})`, { key: `learn-packs-${Date.now()}`, max: 16 });
+    shownAll.current = allPacks;
+  }, [drawn, allPacks]);
 
-  if (!ready) return <div className="learn learn--loading" aria-busy="true" />;
+  // The heading is there from the start, so the route's focus lands on it while the hub waits for its data.
+  const head = <header className="page-head lh-head"><h1 className="lh-title">Learn</h1><p className="lh-lede">Quizzes on the birds, wildlife and plants of South East Queensland.</p></header>;
+  if (!drawn) return <>{head}<div className="learn learn--loading" aria-busy="true" /></>;
 
   const set = (patch: Record<string, unknown>) => { setPrefs(patch); force(); };
   const callOk = Q.CALL_KINDS.includes(prefs.kind) || prefs.kind === 'animals';
@@ -147,7 +143,7 @@ export default function Learn() {
 
   return (
     <>
-      <header className="page-head lh-head"><h1 className="lh-title">Learn</h1><p className="lh-lede">Quizzes on the birds, wildlife and plants of South East Queensland.</p></header>
+      {head}
       <div className="learn" ref={hubRef}>
         {(streak || packsDone || mastered) ? (
           <ul className="lh-stats" aria-label="How you're going at a glance">
@@ -158,8 +154,9 @@ export default function Learn() {
         ) : null}
         {!navigator.onLine && <p className="lh-offline" role="status">No signal. Questions use the photos and calls saved on this phone, plus field notes.</p>}
 
-        <Link ref={tintRef} className={`lh-daily${doneToday ? ' is-done' : ''}${hero ? ` kind--${hero.kind}` : ''}`} to="/learn/daily">
-          {hero && <span className="lh-daily-photo" aria-hidden="true"><img src={heroSrc} alt="" /></span>}
+        <Link ref={tintRef} className={`lh-daily${doneToday ? ' is-done' : ''}${hero ? ` kind--${hero.sp.kind}` : ''}`} to="/learn/daily">
+          {hero ? <span className="lh-daily-photo" aria-hidden="true">{hero.src ? <FadeImage key={hero.sp.id} src={hero.src} /> : null}</span>
+            : !(photosIn && seqIn) ? <span className="lh-daily-photo" aria-hidden="true"><Waiting /></span> : null}
           <span className="lh-daily-top">
             <span className="lh-date" aria-hidden="true"><b>{date.getDate()}</b><span>{monthName(date)}</span></span>
             {streak > 0 && <span className="lh-streak"><b>{streak}</b><span>{streak === 1 ? 'day' : 'days'} in a row</span></span>}
@@ -182,13 +179,14 @@ export default function Learn() {
             <>
               <ul className="lh-modes lh-packs">
                 {packs.map((p: any, i: number) => {
-                  if (!allPacks && i >= PACKS_SHOWN) return null;
-                  const cover = packCovers[p.key] || '';
+                  // Every pack is drawn, as in v1, the ones past the first six hidden until "Show all", so their
+                  // covers are loaded by then.
+                  const cover = covers?.[p.key] || '';
                   const frac = p.total ? p.got / p.total : 0;
                   return (
-                    <li key={p.key}>
+                    <li key={p.key} hidden={!allPacks && i >= PACKS_SHOWN}>
                       <Link className={`lh-mode lh-pack${p.kind ? ` kind--${p.kind}` : ''}`} to={`/learn/play/${p.key}`} aria-label={`${p.name}. ${p.total} species${p.got ? `, ${p.got} got right` : ''}${p.best != null ? `. Best ${p.best} of ${p.of}` : ''}.`}>
-                        <span className="lh-mode-bg" aria-hidden="true">{cover && <img src={cover} alt="" />}</span>
+                        <span className="lh-mode-bg" aria-hidden="true">{!covers ? <Waiting /> : cover ? <FadeImage key={cover} src={cover} /> : null}</span>
                         <span className="lh-mode-top" aria-hidden="true">
                           {p.got ? <span className="lh-ring"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" pathLength="100" /><circle className="lh-ring-fg" cx="20" cy="20" r="16" pathLength="100" style={{ strokeDashoffset: 100 - frac * 100 }} /></svg><b>{Math.max(1, Math.round(frac * 100))}<span>%</span></b></span> : <span />}
                           {p.best != null && <span className="lh-best">Best <b>{p.best}</b><span>/{p.of}</span></span>}
@@ -228,13 +226,12 @@ export default function Learn() {
             {Q.MODES.map((m: string) => {
               const [title, desc] = MODE_INFO[m];
               const off = m === 'call' && !callOk;
-              const id = faces[m];
+              const pics = faces?.[m] || [];
               const b = (L?.best as Record<string, number> | undefined)?.[bestKey(m, prefs)];
-              const split = Array.isArray(id);
               return (
                 <li key={m} className={m === 'quick' ? 'lh-mode--wide' : ''}>
                   <Link className={`lh-mode lh-mode--${m}${off ? ' is-off' : ''}`} to={off ? '#' : `/learn/play/${m}`} aria-disabled={off || undefined} onClick={(e) => { if (off) { e.preventDefault(); setNotice('Calls are for birds and frogs. Choose All animals, Birds or Frogs.'); } }}>
-                    <span className={`lh-mode-bg${split ? ' is-split' : ''}`} aria-hidden="true">{split ? (id as number[]).map((sid) => <img key={sid} src={faceSrc(sid)} alt="" />) : id ? <img src={faceSrc(id as number, m === 'quick' ? 'large' : 'small')} alt="" /> : null}</span>
+                    <span className={`lh-mode-bg${pics.length > 1 ? ' is-split' : ''}`} aria-hidden="true">{!faces ? <Waiting /> : pics.map((src, i) => <FadeImage key={`${i}|${src}`} src={src} />)}</span>
                     <span className="lh-mode-top"><span className="lh-mode-ic" aria-hidden="true"><svg viewBox="0 0 24 24">{MODE_ICONS[m]}</svg></span>{b != null && <span className="lh-best">{m === 'rapid' ? 'Best streak' : 'Best'} <b>{b}</b>{m === 'rapid' ? null : <span>/{ROUND}</span>}</span>}</span>
                     <span className="lh-mode-txt"><strong>{title}</strong><span className="lh-mode-desc">{off ? 'Calls are for birds and frogs. Choose All animals, Birds or Frogs.' : desc}</span></span>
                   </Link>
