@@ -35,7 +35,7 @@ beforeEach(() => {
   maxY = Infinity;
   scrolls.length = 0;
   vi.spyOn(window, 'scrollTo').mockImplementation(((a: number | ScrollToOptions, b?: number) => {
-    scrolls.push(a);
+    scrolls.push(typeof a === 'object' ? a : b);
     y = Math.min(maxY, typeof a === 'object' ? a.top ?? y : b ?? 0);
   }) as typeof window.scrollTo);
   Object.defineProperty(window, 'scrollY', { configurable: true, get: () => y });
@@ -127,7 +127,8 @@ describe('tab memory', () => {
     tab('dex');
     expect(h1()).toBe('Dex');
     expect(entry).toBe(before);
-    expect(scrolls.at(-1)).toEqual({ top: 0, behavior: 'smooth' });
+    // From far down: a step to a screen and a half from the top, then the glide.
+    expect(scrolls.slice(-2)).toEqual([Math.round(innerHeight * 1.5), { top: 0, behavior: 'smooth' }]);
     expect(y).toBe(0);
   });
 

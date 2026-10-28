@@ -95,10 +95,17 @@ export function viaTabBar() {
   tabTap = true;
   setTimeout(() => { tabTap = false; });
 }
-/** The tab she is on, tapped on its own screen: glide to the top (at once with reduced motion) and forget the place. */
+/**
+ * The tab she is on, tapped on its own screen: glide to the top (at once with reduced motion) and forget the place.
+ * From far down the dex it first steps to a screen and a half from the top, so the glide is short and doesn't draw
+ * and fetch every photo on the way up.
+ */
 export function toTop(path: string) {
   byPath.delete(path);
-  window.scrollTo({ top: 0, behavior: motionOK() ? 'smooth' : 'auto' });
+  if (!motionOK()) { window.scrollTo({ top: 0, behavior: 'auto' }); return; }
+  const near = Math.round(innerHeight * 1.5);
+  if (scrollY > near) window.scrollTo(0, near);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // Where the screen being drawn lands: its scroll and tile, the tile to keep in sight on going back from its species
