@@ -488,11 +488,12 @@ body.has-outing .mapwrap { bottom: calc(var(--tabbar-h) + 62px + env(safe-area-i
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); padding: 0 4px env(safe-area-inset-bottom);
   background: var(--surface); box-shadow: 0 -1px 0 var(--line), 0 -8px 24px -18px rgba(15, 23, 35, .4);
 }
-.tabbar a {
+/* The plus is a <button> (it opens the Add sheet rather than going anywhere), so it takes the links' rules too. */
+.tabbar a, .tabbar .tab-plus {
   flex: 1; display: grid; justify-items: center; gap: 3px; min-height: var(--tap); color: var(--ink-2); text-decoration: none;
   font-size: .8rem; font-weight: 600; padding: 6px 0;
 }
-.tabbar a svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tabbar a svg, .tabbar .tab-plus svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tab-ico { position: relative; display: grid; place-items: center; width: 56px; height: 30px; border-radius: var(--r-pill); transition: scale var(--dur-1) var(--ease-out); }
 .tab-ico svg { position: relative; z-index: 1; }
 .tabbar a:active .tab-ico { scale: .9; }
@@ -501,6 +502,7 @@ body.has-outing .mapwrap { bottom: calc(var(--tabbar-h) + 62px + env(safe-area-i
 .tabbar a[aria-current=page] .tab-ico::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--azure-soft); view-transition-name: tab-pill; }
 .tabbar .tab-plus {
   flex: none; width: 58px; height: 58px; border-radius: 20px; background: var(--azure); color: var(--on-azure); place-items: center; margin-top: -20px;
+  border: 0; cursor: pointer;
   box-shadow: 0 10px 22px -8px color-mix(in srgb, var(--azure) 75%, transparent), 0 0 0 4px var(--paper);
   transition: scale var(--dur-2) var(--ease-spring), rotate var(--dur-3) var(--ease-spring);
 }

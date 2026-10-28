@@ -9,7 +9,6 @@ import {
   ConfirmDialog,
   fmtDate,
   MONTH_NAMES,
-  plural,
   usePatches,
   useSettled,
   useSightingRows,
@@ -200,7 +199,7 @@ export default function ListView() {
       )}
 
       <p className="list-count">
-        <b>{entries.length}</b> {plural(entries.length, 'species')}
+        <b>{entries.length}</b> species
       </p>
 
       {entries.length === 0 ? (

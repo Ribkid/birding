@@ -24,11 +24,13 @@ import SignIn from './screens/me/SignIn';
 import PublicProfile from './screens/me/PublicProfile';
 import { Placeholder } from './screens/Placeholder';
 import { TabBar } from './components/TabBar';
-import { ErrorBoundary } from './components/ErrorBoundary';
+import { ScreenBoundary } from './components/ErrorBoundary';
 import { Welcome } from './components/Welcome';
+import { OutingBar } from './components/OutingBar';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
 import { closeAllLayers } from './lib/layers';
+import { syncTitle, watchTitle } from './lib/title';
 import { initProfile } from './core/profile.js';
 import { initAccount, onStatus, syncStatus } from './core/account.js';
 import { useState } from 'react';
@@ -43,16 +45,22 @@ function ScrollReset() {
   return null;
 }
 
-/** The frosted bar takes its title and back control from whatever the screen just drew. */
+/**
+ * The frosted bar takes its title and back control from whatever the screen just drew. The page title follows the
+ * screen's heading, including one that renders after the route change (lib/title.ts).
+ */
 function TopBar() {
   const location = useLocation();
+  useEffect(() => {
+    const view = document.getElementById('view');
+    return view ? watchTitle(view) : undefined;
+  }, []);
   useEffect(() => {
     initLook();
     const view = document.getElementById('view');
     const id = requestAnimationFrame(() => {
       lookAfterDraw(view);
-      const heading = view?.querySelector('h1')?.textContent?.trim();
-      document.title = heading ? `${heading} – BirdyDex` : "Sarah's BirdyDex";
+      if (view) syncTitle(view, { force: true });
     });
     return () => cancelAnimationFrame(id);
   }, [location.pathname, location.search]);
@@ -81,7 +89,7 @@ export default function App() {
       <SyncBanner />
       <Welcome />
       <main id="view" tabIndex={-1}>
-        <ErrorBoundary>
+        <ScreenBoundary>
         <Routes>
           <Route path="/" element={<Navigate to="/dex" replace />} />
           <Route path="/dex" element={<Dex />} />
@@ -123,8 +131,9 @@ export default function App() {
 
           <Route path="*" element={<Placeholder title="Not found" />} />
         </Routes>
-        </ErrorBoundary>
+        </ScreenBoundary>
       </main>
+      <OutingBar />
       <TabBar />
     </>
   );

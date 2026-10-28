@@ -64,6 +64,18 @@ export function keepFocus<T>(fn: () => T, { fallback = '' }: { fallback?: string
 export const focusables = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>(FOCUSABLE)]
   .filter(el => !el.closest('[inert], [hidden]') && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden');
 
+// v1 openSheet: 50 ms after a sheet opens, its first control takes focus (the first input, select, textarea, button
+// or link, in document order), unless that control is marked data-noautofocus. Focus already inside is left alone.
+const FIRST = 'input:not([type=hidden]):not([type=file]), select, textarea, button, a[href]';
+export function focusFirst(dialog: HTMLElement): boolean {
+  const a = document.activeElement;
+  if (a && a !== dialog && dialog.contains(a)) return false;
+  const first = dialog.querySelector<HTMLElement>(FIRST);
+  if (!first || first.matches('[data-noautofocus]')) return false;
+  first.focus({ preventScroll: true });
+  return true;
+}
+
 export const topLayer = (): Layer | null => stack[stack.length - 1] || null;
 export const layers = () => stack.slice();
 const topModal = () => { for (let i = stack.length - 1; i >= 0; i--) if (stack[i].modal) return stack[i]; return null; };
@@ -91,6 +103,7 @@ export function openLayer(el: HTMLElement, { dialog = el, close, label, labelled
   if (labelledBy || h) { dialog.setAttribute('aria-labelledby', labelledBy || (h as HTMLElement).id); dialog.removeAttribute('aria-label'); }
   else if (label) dialog.setAttribute('aria-label', label);
   if (!dialog.hasAttribute('tabindex')) dialog.tabIndex = -1;
+  wireKeys();
   stack.push(layer);
   sync();
   return layer;
@@ -122,6 +135,15 @@ function restoreFocus(layer: Layer) {
 export function closeAllLayers(reason = 'nav') {
   for (const l of stack.slice().reverse()) l.close(reason);
   if (stack.length) { stack.length = 0; sync(); }
+}
+
+// One document listener for every layer, as v1's boot wired it: Escape must close only the top layer once, however
+// many layers (each with its own component) are open.
+let wired = false;
+function wireKeys() {
+  if (wired || typeof document === 'undefined') return;
+  wired = true;
+  document.addEventListener('keydown', (e) => { onLayerKey(e); });
 }
 
 export function onLayerKey(e: KeyboardEvent): boolean {
