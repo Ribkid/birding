@@ -85,6 +85,25 @@ describe('account sheets', () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("keeps v1's hidden code step in the form until the email has gone, then swaps the steps", async () => {
+    render(<MemoryRouter><AccountSheets /></MemoryRouter>);
+    act(() => { openSignIn('signin'); });
+    const d = dialog()!;
+    const emailForm = d.querySelector<HTMLFormElement>('form[data-email-form]')!;
+    const codeForm = d.querySelector<HTMLFormElement>('form[data-code-form]')!;
+    expect(emailForm.className).toBe('form acct-email');
+    expect(codeForm.className).toBe('form acct-code hidden');
+    expect(codeForm.querySelector('input[name="code"]')!.getAttribute('autocomplete')).toBe('one-time-code');
+    expect([...codeForm.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Sign in', 'Use a different email']);
+    expect(d.querySelector('[data-google]')?.textContent).toContain('Continue with Google');
+    expect(d.querySelector('[data-acct-error]')?.getAttribute('role')).toBe('alert');
+    fireEvent.change(emailForm.querySelector('input[name="email"]')!, { target: { value: 'sarah@example.com' } });
+    await act(async () => { fireEvent.submit(emailForm); });
+    await waitFor(() => expect(codeForm.className).toBe('form acct-code'));
+    expect(emailForm.className).toBe('form acct-email hidden');
+    expect(document.activeElement).toBe(codeForm.querySelector('input[name="code"]'));
+  });
+
   it('offers Sign in for Edit profile while signed out', () => {
     render(<MemoryRouter><AccountSheets /></MemoryRouter>);
     act(() => { openEditProfile(); });

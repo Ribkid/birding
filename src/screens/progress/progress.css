@@ -10,11 +10,6 @@
   font-weight: 500;
 }
 
-.progress-stack {
-  display: grid;
-  gap: 10px;
-}
-
 .progress-actions {
   display: flex;
   flex-wrap: wrap;
@@ -23,57 +18,10 @@
   margin-top: 10px;
 }
 
-.quiz-keyhint {
-  margin: 0;
-}
-
-.quiz-quit-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .compare-links {
   padding: 0 16px 20px;
 }
 
 .compare-links .btn {
   max-width: 100%;
-}
-
-.lb-avatar-letter {
-  color: #fff;
-  font: 800 1rem/1 var(--stamp);
-}
-
-.lb-row .lb-avatar-letter {
-  font-size: 1rem;
-}
-
-.lb-group-actions {
-  display: flex;
-  gap: 6px;
-  flex: none;
-}
-
-.backup-confirm {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.account-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.account-signed-out {
-  display: grid;
-  gap: 12px;
-}
-
-.settings-about a {
-  overflow-wrap: anywhere;
 }

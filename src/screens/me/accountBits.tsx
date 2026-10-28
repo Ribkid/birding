@@ -88,6 +88,7 @@ function SignInRound({ onDone, restart }: { onDone?: () => void; restart: () => 
   const [err, setErr] = useState('');
   const codeRef = useRef<HTMLInputElement>(null);
 
+  // The code step is shown in the same commit, so its field can take focus here (v1 focused it once the email had gone).
   useEffect(() => { if (sent) codeRef.current?.focus(); }, [sent]);
 
   const google = async () => {
@@ -117,31 +118,29 @@ function SignInRound({ onDone, restart }: { onDone?: () => void; restart: () => 
     try { await verifySignInCode(email, code); onDone?.(); } catch (x) { setErr(friendly(x)); }
   };
 
+  // v1's markup: both steps are in the form from the start, and sending the email swaps which one is hidden.
   return (
     <>
-      <button type="button" className="btn btn--block acct-google" onClick={() => void google()}>{googleMark} Continue with Google</button>
-      {!sent ? (
-        <form className="form acct-email" onSubmit={send} noValidate>
-          <label className="field">
-            <span>Or sign in with your email</span>
-            <input type="email" name="email" autoComplete="email" inputMode="email" placeholder="you@example.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
-          <button className="btn btn--primary" disabled={sending}>{sending ? 'Sending…' : 'Email me a sign-in link'}</button>
-        </form>
-      ) : (
-        <form className="form acct-code" onSubmit={verify} noValidate>
-          <p className="small">Check your email. Tap the link in it, or type the 6-digit code here.</p>
-          <label className="field">
-            <span>Code from the email</span>
-            <input ref={codeRef} name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={10} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
-          </label>
-          <div className="row-start">
-            <button className="btn btn--primary">Sign in</button>
-            <button type="button" className="btn btn--quiet" onClick={restart}>Use a different email</button>
-          </div>
-        </form>
-      )}
-      <p className="form-error" role="alert">{err}</p>
+      <button type="button" className="btn btn--block acct-google" data-google onClick={() => void google()}>{googleMark} Continue with Google</button>
+      <form className={`form acct-email${sent ? ' hidden' : ''}`} data-email-form onSubmit={send} noValidate>
+        <label className="field">
+          <span>Or sign in with your email</span>
+          <input type="email" name="email" autoComplete="email" inputMode="email" placeholder="you@example.com" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        </label>
+        <button className="btn btn--primary" disabled={sending}>{sending ? 'Sending…' : 'Email me a sign-in link'}</button>
+      </form>
+      <form className={`form acct-code${sent ? '' : ' hidden'}`} data-code-form onSubmit={verify} noValidate>
+        <p className="small">Check your email. Tap the link in it, or type the 6-digit code here.</p>
+        <label className="field">
+          <span>Code from the email</span>
+          <input ref={codeRef} name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={10} placeholder="123456" value={code} onChange={(e) => setCode(e.target.value)} />
+        </label>
+        <div className="row-start">
+          <button className="btn btn--primary">Sign in</button>
+          <button type="button" className="btn btn--quiet" data-restart onClick={restart}>Use a different email</button>
+        </div>
+      </form>
+      <p className="form-error" data-acct-error role="alert">{err}</p>
       <p className="small muted">By signing in you agree to the <a href="terms.html">terms</a>. See <a href="privacy.html">privacy</a> for what is kept.</p>
     </>
   );

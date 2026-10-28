@@ -3,12 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import { KINDS, byId, kindsPresent, ofKind, type PublicProfileRow } from '../../lib/data';
 import { useSeen, useMedia } from '../../lib/hooks';
 import { SpeciesImage } from '../../components/SpeciesImage';
-import { CountUp } from '../../components/Motion';
 import { configured, signedIn, initProfile, loadPublicProfile, memberSince, dayPick, getPublicProfileCache, problem } from '../../core/profile.js';
 import { onAuth } from '../../core/cloud.js';
 import { authSettled } from '../../core/account.js';
 import { applyTint, stagger } from '../../lib/look';
 import { AccountAvatar, AccountCta } from './accountBits';
+import { Count } from './Count';
 import { onAccountSheetClosed, openEditProfile } from './AccountSheets';
 import './me.css';
 
@@ -110,7 +110,7 @@ export default function PublicProfile() {
         </div>
       </section>
       <div className="me-sheet">
-        <section className="me-card me-dex" aria-label="Found so far">
+        <section className="me-card me-dex" data-ckey={`p-${publicId}`} aria-label="Found so far">
           <ul className="me-rings" role="list">
             {kindsPresent.map((k) => {
               const n = counts[k] || 0;
@@ -119,13 +119,13 @@ export default function PublicProfile() {
               return (
                 <li key={k} className={`me-ring-item kind--${k}`}>
                   <span className="sr-only">{n} of {total} {KINDS[k]?.label.toLowerCase()}</span>
-                  <span className="me-ring" style={{ '--p': p.toFixed(4) } as React.CSSProperties} aria-hidden="true"><svg viewBox="0 0 48 48"><circle className="me-ring-track" cx="24" cy="24" r="20" /><circle className="me-ring-fill" cx="24" cy="24" r="20" pathLength="100" /></svg><b className="me-ring-n"><CountUp value={n} /></b></span>
+                  <span className="me-ring" style={{ '--p': p.toFixed(4) } as React.CSSProperties} aria-hidden="true"><svg viewBox="0 0 48 48"><circle className="me-ring-track" cx="24" cy="24" r="20" /><circle className="me-ring-fill" cx="24" cy="24" r="20" pathLength="100" /></svg><Count k={`p-${publicId}:ring-${k}`} n={n} className="me-ring-n" /></span>
                   <span className="me-ring-l" aria-hidden="true">{KINDS[k]?.label}</span><span className="me-ring-of" aria-hidden="true">of {total}</span>
                 </li>
               );
             })}
           </ul>
-          <dl className="me-stats"><div><dt>Species</dt><dd><CountUp value={row.species || 0} /></dd></div><div><dt>Badges</dt><dd><CountUp value={row.badges || 0} /></dd></div><div><dt>Outings</dt><dd><CountUp value={row.outings || 0} /></dd></div></dl>
+          <dl className="me-stats"><div><dt>Species</dt><Count tag="dd" k={`p-${publicId}:species`} n={row.species || 0} /></div><div><dt>Badges</dt><Count tag="dd" k={`p-${publicId}:badges`} n={row.badges || 0} /></div><div><dt>Outings</dt><Count tag="dd" k={`p-${publicId}:outings`} n={row.outings || 0} /></div></dl>
         </section>
         {isMe && <div className="me-acts me-acts--one"><button type="button" className="me-act me-act--primary" data-edit onClick={openEditProfile}>{edit}<span>Edit profile</span></button></div>}
         <section className="me-sec" aria-labelledby="me-found-h">
@@ -136,7 +136,7 @@ export default function PublicProfile() {
               <ul className="me-grid" role="list">
                 {dex.map((sp) => sp && (
                   <li key={sp.id}>
-                    <Link className={`me-tile kind--${sp.kind}`} to={`/bird/${sp.id}`}>
+                    <Link className={`me-tile kind--${sp.kind}`} to={`/bird/${sp.id}`} data-tile={sp.id}>
                       <span className="tile-img"><SpeciesImage sp={sp} />{!isMe && mineSeen.has(sp.id) && <span className="me-both">{tick}<span>You too</span></span>}</span>{' '}
                       <span className="me-tile-name">{sp.name}</span>{!isMe && mineSeen.has(sp.id) && <span className="sr-only">Seen by you too</span>}
                     </Link>

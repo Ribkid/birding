@@ -11,10 +11,11 @@ import {
 } from '../../core/profile.js';
 import { authSettled, onStatus, syncStatus } from '../../core/account.js';
 import { SpeciesImage } from '../../components/SpeciesImage';
-import { CountUp, useStagger } from '../../components/Motion';
+import { useStagger } from '../../components/Motion';
 import { applyTint } from '../../lib/look';
 import { toast } from '../../lib/toast';
 import { AccountAvatar as Avatar, useProfile } from './accountBits';
+import { Count } from './Count';
 import { onAccountSheetClosed, openEditProfile, openSignIn, type AccountSheet } from './AccountSheets';
 import { openGroups } from '../progress/Leaderboard';
 import './me.css';
@@ -171,6 +172,8 @@ export default function Me({ sub }: { sub?: AccountSheet }) {
   const nOut = outings.length;
   const lastOut = outings.slice().sort((a, b) => ((b as any).startedAt ?? 0) - ((a as any).startedAt ?? 0))[0];
   const [sync, setSync] = useState(syncStatus());
+  // v1 animateIn(view, u ? 'in' : 'guest'): signing in counts the numbers up once more.
+  const scope = u ? 'in' : 'guest';
 
   const openProfile = async () => {
     // v1 openMyProfile: the outcome is a toast, read out through #announce.
@@ -220,7 +223,7 @@ export default function Me({ sub }: { sub?: AccountSheet }) {
                   <svg viewBox="0 0 64 64"><circle className="me-ring-track" cx="32" cy="32" r="29" /><circle className="me-ring-fill" cx="32" cy="32" r="29" pathLength="100" /></svg>
                   <span className="me-medal-face">{b.done ? <svg viewBox="0 0 24 24" aria-hidden="true">{I.tick}</svg> : <b>{b.have}<small>/{b.need}</small></b>}</span>
                 </span>
-                <strong>{b.name}</strong>{' '}<span className="sr-only">{b.done ? 'Earned' : `${b.have} of ${b.need}`}. {b.desc}</span>
+                {' '}<strong>{b.name}</strong>{' '}<span className="sr-only">{b.done ? 'Earned' : `${b.have} of ${b.need}`}. {b.desc}</span>
               </Link>
             </li>
           );
@@ -249,7 +252,7 @@ export default function Me({ sub }: { sub?: AccountSheet }) {
       )}
 
       <div className="me-sheet">
-        <section className="me-card me-dex" aria-labelledby="me-dex-h">
+        <section className="me-card me-dex" data-ckey="dex" aria-labelledby="me-dex-h">
           <h2 className="me-card-h" id="me-dex-h">{u ? 'Found so far' : 'Your dex on this phone'}</h2>
           <ul className="me-rings" role="list">
             {kindsPresent.map((k) => {
@@ -259,16 +262,16 @@ export default function Me({ sub }: { sub?: AccountSheet }) {
               return (
                 <li key={k} className={`me-ring-item kind--${k}`}>
                   <span className="sr-only">{n} of {total} {KINDS[k]?.label.toLowerCase()}</span>
-                  <span className="me-ring" style={{ '--p': p.toFixed(4) } as React.CSSProperties} aria-hidden="true"><svg viewBox="0 0 48 48"><circle className="me-ring-track" cx="24" cy="24" r="20" /><circle className="me-ring-fill" cx="24" cy="24" r="20" pathLength="100" /></svg><b className="me-ring-n"><CountUp value={n} /></b></span>
+                  <span className="me-ring" style={{ '--p': p.toFixed(4) } as React.CSSProperties} aria-hidden="true"><svg viewBox="0 0 48 48"><circle className="me-ring-track" cx="24" cy="24" r="20" /><circle className="me-ring-fill" cx="24" cy="24" r="20" pathLength="100" /></svg><Count k={`${scope}:ring-${k}`} n={n} className="me-ring-n" /></span>
                   <span className="me-ring-l" aria-hidden="true">{KINDS[k]?.label}</span><span className="me-ring-of" aria-hidden="true">of {total}</span>
                 </li>
               );
             })}
           </ul>
           <dl className="me-stats">
-            <div><dt>Species</dt><dd><CountUp value={seen.size} /></dd></div>
-            <div><dt>Badges</dt><dd><CountUp value={earned.length} /></dd></div>
-            <div><dt>Outings</dt><dd><CountUp value={nOut} /></dd></div>
+            <div><dt>Species</dt><Count tag="dd" k={`${scope}:species`} n={seen.size} /></div>
+            <div><dt>Badges</dt><Count tag="dd" k={`${scope}:badges`} n={earned.length} /></div>
+            <div><dt>Outings</dt><Count tag="dd" k={`${scope}:outings`} n={nOut} /></div>
           </dl>
         </section>
 
@@ -286,12 +289,12 @@ export default function Me({ sub }: { sub?: AccountSheet }) {
           </nav>
         )}
 
-        <section className="me-sec" aria-labelledby="me-lists-h">
+        <section className="me-sec" data-ckey="lists" aria-labelledby="me-lists-h">
           <div className="me-sec-h"><h2 id="me-lists-h">My lists</h2><Link to="/lists">Open lists</Link></div>
           <div className="me-totals">
-            <Link to="/list/life"><b>{t.life}</b><span>Life list</span></Link>
-            <Link to="/list/year"><b>{t.year}</b><span>{now.getFullYear()} list</span></Link>
-            <Link to="/list/month"><b>{t.month}</b><span>{MONTHS[now.getMonth()]}</span></Link>
+            <Link to="/list/life"><Count k={`${scope}:life`} n={t.life} /><span>Life list</span></Link>
+            <Link to="/list/year"><Count k={`${scope}:year`} n={t.year} /><span>{now.getFullYear()} list</span></Link>
+            <Link to="/list/month"><Count k={`${scope}:month`} n={t.month} /><span>{MONTHS[now.getMonth()]}</span></Link>
           </div>
           <ul className="me-links">
             {link('/targets', I.target, 'Targets', `Likely in ${MONTHS[now.getMonth()]} and not in your dex yet`)}

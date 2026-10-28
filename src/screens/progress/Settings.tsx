@@ -21,6 +21,7 @@ import { openWelcome } from '../../components/Welcome';
 import { Icon } from '../../components/Icon';
 import { stagger } from '../../lib/look';
 import { countUp } from '../../lib/motion';
+import { useMedia } from '../../lib/hooks';
 import { ConfirmDialog, Modal, fmtDate, plural } from '../lists/shared';
 import { AccountAvatar, SignInForm, trophyIcon, useProfile } from '../me/accountBits';
 import { announce, toast } from '../../lib/toast';
@@ -100,15 +101,25 @@ function ReadyCard() {
   const texts = useRef<Partial<Record<FieldKey, HTMLSpanElement | null>>>({});
   const num = useRef<HTMLElement>(null);
   const shown = useRef(0);
+  // Each row shows only its newest check: an older answer that lands late, or one overtaken by a download, is dropped.
+  const seq = useRef<Partial<Record<FieldKey, number>>>({});
+  const turn = (key: FieldKey) => (seq.current[key] = (seq.current[key] || 0) + 1);
+  // v1 looks the photo index up when the app starts, whatever the screen; here the screens that draw photos do, so
+  // Settings does too. The species-photos row then reads the saved index as v1's does on a later visit.
+  useMedia();
 
   const paint = (key: FieldKey, r: FieldResult) => {
     if (alive.current) setField((cur) => ({ ...cur, [key]: { ...r, busy: false } }));
   };
-  const check = (key: FieldKey) => checkField(key, who.current)
-    .catch(() => ({ ok: false, text: "Couldn't check this one. Open Settings again to retry." }))
-    .then((r) => { paint(key, r); return r; });
+  const check = (key: FieldKey) => {
+    const mine = turn(key);
+    return checkField(key, who.current)
+      .catch(() => ({ ok: false, text: "Couldn't check this one. Open Settings again to retry." }))
+      .then((r) => { if (seq.current[key] === mine) paint(key, r); return r; });
+  };
 
   const follow = (key: FieldKey, job: ReturnType<typeof fieldJob>) => {
+    turn(key);
     const on: FieldReport = (f, t) => {
       if (!alive.current) return;
       setField((cur) => {
@@ -156,6 +167,18 @@ function ReadyCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A first visit can reach Settings while the service worker is still installing. v1 checked once, so the app row
+  // kept "Not saved for offline yet" until Settings was opened again; here it is checked again when the worker takes
+  // charge of the page.
+  useEffect(() => {
+    const sw = 'serviceWorker' in navigator ? navigator.serviceWorker : null;
+    if (!sw) return;
+    const again = () => { if (alive.current && !fieldJobs.has('app')) void check('app'); };
+    sw.addEventListener('controllerchange', again);
+    return () => sw.removeEventListener('controllerchange', again);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // The summary and ring wait until every row has an answer (and none is downloading), as v1 summary() does.
   const allIn = FIELD.every(({ key }) => field[key] && !field[key]?.busy);
   useEffect(() => {
@@ -180,36 +203,35 @@ function ReadyCard() {
   return (
     <section className="set-card set-ready" aria-labelledby="field-h">
       <div className="ready-head">
-        <span className={`ready-ring${summary && n === FIELD.length ? ' ready-ring--all' : ''}`} style={{ '--p': summary ? n / FIELD.length : 0 } as CSSProperties} aria-hidden="true">
+        <span className={`ready-ring${summary && n === FIELD.length ? ' ready-ring--all' : ''}`} data-field-ring style={{ '--p': summary ? n / FIELD.length : 0 } as CSSProperties} aria-hidden="true">
           <svg viewBox="0 0 48 48"><circle className="ready-ring-track" cx="24" cy="24" r="20" /><circle className="ready-ring-fill" cx="24" cy="24" r="20" pathLength={100} /></svg>
-          <b ref={num} />
+          <b ref={num} data-field-n />
         </span>
         <div className="ready-head-txt">
           <h2 className="set-title" id="field-h">Ready for the field</h2>
-          <p className="small muted">{summary?.text ?? 'What works on this phone with no signal.'}</p>
+          <p className="small muted" data-field-sum>{summary?.text ?? 'What works on this phone with no signal.'}</p>
         </div>
       </div>
-      <ul className="ready-list">
+      <ul className="ready-list" data-field-list>
         {FIELD.map(({ key, label }) => {
           const r = field[key];
           const cls = r?.busy ? ' ready-row--busy' : r ? (r.ok ? ' ready-row--ok' : ' ready-row--todo') : '';
           return (
             <li key={key} className={`ready-row${cls}`} data-field={key}>
               <strong className="ready-name">{label}</strong>
-              <div className="ready-act">
+              <div className="ready-act" data-field-act>
                 {!r ? <span className="ready-chip ready-chip--wait">Checking</span>
                   : r.busy ? <span className="ready-chip ready-chip--busy">Saving</span>
                     : r.ok ? <span className="ready-chip ready-chip--ok">{tick}Saved</span>
-                      : r.get ? <button type="button" className="ready-chip ready-chip--get" onClick={() => get(key)} aria-label={`Get it now: ${label}`}>Get it now</button>
+                      : r.get ? <button type="button" className="ready-chip ready-chip--get" data-field-get={key} onClick={() => get(key)} aria-label={`Get it now: ${label}`}>Get it now</button>
                         : r.link ? <Link className="ready-chip ready-chip--get" to={r.link.replace(/^#/, '')}>{r.linkText}</Link>
                           : <span className="ready-chip ready-chip--wait">Not yet</span>}
               </div>
               <span className="ready-text small muted" data-field-text tabIndex={-1} ref={(el) => { texts.current[key] = el; }}>{r?.text || 'Checking…'}</span>
-              {r?.busy && (
-                <div className="meter meter--thin" style={{ '--p': `${r.prog || 0}%` } as CSSProperties} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={r.prog || 0} aria-label={`${label}: saving`}>
-                  <span />
-                </div>
-              )}
+              {/* v1 keeps each row's meter in place, hidden until a download runs. */}
+              <div className={`meter meter--thin${r?.busy ? '' : ' hidden'}`} data-field-prog style={{ '--p': `${r?.prog || 0}%` } as CSSProperties} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={r?.prog || 0} aria-label={`${label}: saving`}>
+                <span />
+              </div>
             </li>
           );
         })}
@@ -483,28 +505,28 @@ export default function Settings() {
         <div className="set-list">
           <label className="set-row">
             <span className="set-row-l">Theme</span>
-            <select className="set-select" value={theme} onChange={(e) => void changeTheme(e.target.value as Theme)}>
+            <select className="set-select" data-theme value={theme} onChange={(e) => void changeTheme(e.target.value as Theme)}>
               {THEMES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </label>
           {canInstall ? (
-            <button type="button" className="set-row" onClick={() => void promptInstall()}><span className="set-row-l">Install app on this phone</span>{chev}</button>
+            <button type="button" className="set-row" data-install onClick={() => void promptInstall()}><span className="set-row-l">Install app on this phone</span>{chev}</button>
           ) : (
             <div className="set-row set-row--info"><span className="set-row-l">Install</span><span className="set-row-v">{installed ? 'Installed on this phone' : 'Open the browser menu, then Add to Home screen'}</span></div>
           )}
-          <button type="button" className="set-row" onClick={openWelcome}><span className="set-row-l">Show the welcome screen</span>{chev}</button>
+          <button type="button" className="set-row" data-welcome onClick={openWelcome}><span className="set-row-l">Show the welcome screen</span>{chev}</button>
         </div>
       </Card>
       <Card id="ebird-h" title="Send to eBird">
         <p className="set-note small muted">Download your bird sightings as an eBird Record Format file (eBird only takes birds, so other animals and plants are left out). On a computer, go to ebird.org, then Submit, then Import data, and choose "eBird Record Format (Extended)". eBird may ask you to confirm a few bird names and locations.</p>
-        <div className="set-list"><button type="button" className="set-row" onClick={() => void exportEbird()}><span className="set-row-l">Export for eBird</span>{chev}</button></div>
+        <div className="set-list"><button type="button" className="set-row" data-ebird onClick={() => void exportEbird()}><span className="set-row-l">Export for eBird</span>{chev}</button></div>
       </Card>
       <Card id="backup-h" title="Backup">
         <p className="set-note small muted">{`Your sightings and photos live only on this phone${persisted ? '' : ", and clearing the browser's site data would erase them"}. Save a backup now and then. ${usage}`}</p>
         <div className="set-list">
-          <button type="button" className="set-row" onClick={() => void saveBackup()}><span className="set-row-l">Save backup</span>{chev}</button>
-          <button type="button" className="set-row" onClick={() => fileRef.current?.click()}><span className="set-row-l">Restore backup</span>{chev}</button>
-          <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => void pickRestore(e)} />
+          <button type="button" className="set-row" data-backup onClick={() => void saveBackup()}><span className="set-row-l">Save backup</span>{chev}</button>
+          <button type="button" className="set-row" data-restore-pick onClick={() => fileRef.current?.click()}><span className="set-row-l">Restore backup</span>{chev}</button>
+          <input ref={fileRef} type="file" accept=".json,application/json" data-restore hidden onChange={(e) => void pickRestore(e)} />
         </div>
       </Card>
       <Card id="about-h" title="About">
@@ -513,7 +535,7 @@ export default function Settings() {
         <p className="small muted">Version 3.0</p>
       </Card>
       <Card id="over-h" title="Start over">
-        <div className="set-list"><button type="button" className="set-row set-row--danger" onClick={() => setWipeAsk(true)}><span className="set-row-l">Delete all my sightings</span></button></div>
+        <div className="set-list"><button type="button" className="set-row set-row--danger" data-wipe onClick={() => setWipeAsk(true)}><span className="set-row-l">Delete all my sightings</span></button></div>
       </Card>
       {restore && (
         <ConfirmDialog

@@ -40,3 +40,11 @@ describe('tab bar aria-current', () => {
     expect(marks('/add')).toEqual(['/dex page', '/learn false', '#/add false', '/map false', '/me false']);
   });
 });
+
+// v1 index.html: the four tabs carry data-tab, the + does not.
+describe('tab bar data-tab', () => {
+  it('names each tab as v1 does', () => {
+    const { container } = render(<MemoryRouter initialEntries={['/dex']}><TabBar /></MemoryRouter>);
+    expect([...container.querySelectorAll('.tabbar a')].map((a) => a.getAttribute('data-tab'))).toEqual(['dex', 'learn', null, 'map', 'me']);
+  });
+});
