@@ -10,7 +10,8 @@ import {
   ANIMALS, ANIMAL_KINDS, GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, inSeason, kindsPresent, ofKind,
   pluralFor, type Species,
 } from '../lib/data';
-import { useMedia, useSightings, type Sighting } from '../lib/hooks';
+import { useDexReady, useMedia, useSightings, type Sighting } from '../lib/hooks';
+import { seqSettled } from '../lib/seq';
 import { keepFocus } from '../lib/layers';
 import { countUp, flip, motionOK } from '../lib/motion';
 import { applyTint, stagger, tintFrom } from '../lib/look';
@@ -217,11 +218,9 @@ export default function Dex() {
   const [, force] = useReducer((n: number) => n + 1, 0);
   useMedia();
   const sightings = useSightings();
-  // useSightings starts from one empty array and swaps in the stored rows once they are read (or, if storage
-  // never answers, the page carries on without them).
-  const firstRows = useRef(sightings);
-  const [gaveUp, setGaveUp] = useState(false);
-  const loaded = sightings !== firstRows.current || gaveUp;
+  // Her records come from the shared store, already in when the dex first draws (lib/store.ts); `loaded` is false
+  // only while a cold start is still waiting for them (or gave up after a moment).
+  const loaded = useDexReady();
   const seen = useMemo(() => new Set(sightings.map((s) => s.speciesId)), [sightings]);
 
   const location = useLocation();
@@ -270,9 +269,9 @@ export default function Dex() {
   }, [sightings]);
 
   // The pick is ranked by the regional reporting rates, so (as v1 drew the dex once they were in) it waits for them as
-  // well as her sightings; otherwise the hero would show one species and then swap to another a moment later. If either
-  // never answers, it goes ahead after the same short wait.
-  const day = (loaded && seqData) || gaveUp ? dayPick(seen, f.kind) : null;
+  // well as her sightings; otherwise the hero would show one species and then swap to another a moment later. If the
+  // regional data never answers, it goes ahead once the app has waited for it (lib/seq.ts).
+  const day = loaded && (seqData || seqSettled()) ? dayPick(seen, f.kind) : null;
 
   // ---------- effects ----------
   useEffect(() => {
@@ -290,8 +289,7 @@ export default function Dex() {
     };
     readSettings();
     const offDb = db.onChange((name: string) => { if (name === 'kv:settings') readSettings(); });
-    const wait = setTimeout(() => { if (alive) setGaveUp(true); }, 1500);
-    return () => { alive = false; offDb(); clearTimeout(wait); clearTimeout(sayT.current); clearTimeout(press.current.timer); };
+    return () => { alive = false; offDb(); clearTimeout(sayT.current); clearTimeout(press.current.timer); };
   }, []);
 
   // The search tools stick to the top of the screen; once stuck they turn to frosted glass over the tiles.

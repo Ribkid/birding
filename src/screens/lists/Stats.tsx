@@ -3,12 +3,11 @@
 // Ported from v1's js/statsview.js (renderStats); the styles are v1's, in screens.css.
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
-import { db } from '../../core/db.js';
 import { loadExtras } from '../../core/gallery.js';
 import { cachedIndex } from '../../core/media.js';
 import { MONTHS } from '../../core/stats.js';
 import { GROUPS, KINDS, SPECIES, byId, kindsPresent } from '../../lib/data';
-import { normaliseSighting, type Sighting } from '../../lib/hooks';
+import { useDexReady, useSightings, type Sighting } from '../../lib/hooks';
 import { countUp, motionOK } from '../../lib/motion';
 import { Icon } from '../../components/Icon';
 import { SpeciesImage } from '../../components/SpeciesImage';
@@ -32,29 +31,30 @@ const dayKey = (d: Date) =>
 // The count-up and chart fills play once per session, like v1.
 let played = false;
 
+// The saved photo index has been read (and gallery.json, or 150 ms have passed): later visits draw at once.
+let photosAsked: Promise<unknown> | null = null;
+let photosIn = false;
+
 /**
- * Every sighting, or null until IndexedDB has answered, so the first draw already has the real totals.
- * Like v1's boot, the first draw also waits for the saved photo index, and for the gallery photos when they
- * are in within a moment; gallery photos that arrive later fill in the Most logged thumbnails (SpeciesImage).
+ * Every sighting, from the shared store, or null until her records are in (useDexReady), so the first draw already
+ * has the real totals. Like v1's boot, the first draw also waits for the saved photo index, and for the gallery
+ * photos when they are in within a moment; gallery photos that arrive later fill in the Most logged thumbnails
+ * (SpeciesImage).
  */
-function useLoadedSightings(): StatSighting[] | null {
-  const [rows, setRows] = useState<StatSighting[] | null>(null);
+function useStatSightings(): StatSighting[] | null {
+  const ready = useDexReady();
+  const sightings = useSightings() as unknown as StatSighting[];
+  const [photos, setPhotos] = useState(photosIn);
   useEffect(() => {
+    if (photos) return;
     let alive = true;
-    const load = async () => {
-      const all = ((await db.all('sightings')) as StatSighting[]).map(normaliseSighting);
-      if (alive) setRows(all);
-    };
-    void Promise.all([cachedIndex(), Promise.race([loadExtras(), new Promise((r) => setTimeout(r, 150))])]).then(load);
-    const off = db.onChange((name: string) => {
-      if (name === 'sightings') void load();
-    });
-    return () => {
-      alive = false;
-      off();
-    };
-  }, []);
-  return rows;
+    photosAsked ??= Promise.all([cachedIndex(), Promise.race([loadExtras(), new Promise((r) => setTimeout(r, 150))])])
+      .catch(() => {})
+      .then(() => { photosIn = true; });
+    void photosAsked.then(() => { if (alive) setPhotos(true); });
+    return () => { alive = false; };
+  }, [photos]);
+  return ready && photos ? sightings : null;
 }
 
 /** A total that counts up from zero on the first visit and simply shows its value after that. */
@@ -352,7 +352,7 @@ function StatsBody({ sightings, play }: { sightings: StatSighting[]; play: boole
 }
 
 export default function Stats() {
-  const sightings = useLoadedSightings();
+  const sightings = useStatSightings();
   // Decided once per visit: the first visit in a session plays, unless motion is reduced (then nothing moves).
   const [play] = useState(() => !played && typeof IntersectionObserver !== 'undefined' && motionOK());
   const pageRef = useRef<HTMLDivElement>(null);

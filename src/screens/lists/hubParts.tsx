@@ -1,37 +1,18 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
-import { db } from '../../core/db.js';
+import { useLayoutEffect, useRef, type CSSProperties } from 'react';
 import type { Species } from '../../lib/data';
-import { normaliseSighting } from '../../lib/hooks';
+import { useStore, type StoreState } from '../../lib/store';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { countOnTo, countUp } from '../../lib/motion';
 
 /**
- * One IndexedDB store, kept fresh as it changes, and null until the first read lands. The shared hooks start
- * with an empty list, which would flash the empty-state copy and count the bento up from nothing on every visit;
- * v1 drew the hub only once its state had loaded.
+ * One store's rows from the shared store (lib/store.ts), kept fresh as they change, and null until her records are
+ * in. An empty list drawn first would flash the empty-state copy and count the bento up from nothing; v1 drew the
+ * hub only once its state had loaded, and as v1 held it in memory from boot, every later visit draws at once.
  */
 export function useStoreRows<T>(store: 'sightings' | 'outings' | 'patches'): T[] | null {
-  const [rows, setRows] = useState<T[] | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const all = (await db.all(store)) as T[];
-        if (alive) setRows(store === 'sightings' ? all.map((r) => normaliseSighting(r as { notes?: string })) as T[] : all);
-      } catch {
-        if (alive) setRows((prev) => prev ?? []);
-      }
-    };
-    void load();
-    const off = db.onChange((name: string) => {
-      if (name === store) void load();
-    });
-    return () => {
-      alive = false;
-      off();
-    };
-  }, [store]);
-  return rows;
+  const rows = useStore((s: StoreState) => s[store]);
+  const ready = useStore((s: StoreState) => s.ready);
+  return ready ? (rows as unknown as T[]) : null;
 }
 
 /** v1 icons the shared Icon set does not carry (birding-refresh js/app.js icon.outing, icon.learn). */
