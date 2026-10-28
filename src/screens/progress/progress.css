@@ -1,27 +1,9 @@
 /* Small additions for the progress slice. Everything else reuses the v1 app CSS. */
 
-.progress-status {
-  display: block;
-  margin-top: 8px;
-}
-
-.progress-status--error {
-  color: var(--danger);
-  font-weight: 500;
-}
-
 .progress-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
   margin-top: 10px;
-}
-
-.compare-links {
-  padding: 0 16px 20px;
-}
-
-.compare-links .btn {
-  max-width: 100%;
 }
