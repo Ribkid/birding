@@ -737,7 +737,7 @@ Duplicate keys can happen:
 
 ## Status
 
-Working tree is on `port-fixes`; nothing was pushed. Every listed item was checked against the current code before being changed. `npm run build` and `npm test` pass at HEAD (29 test files, 143 tests). The merged build on 4400 was smoke-tested on every route and tab (light and dark, 390 and 320 px, 0 and 25 sightings, with and without reduced motion) with no console errors, and by logging a sighting from a species page, the + sheet, a dex long press, All sightings' empty state, `#/add` and an outing.
+Working tree is on `port-fixes`; nothing was pushed. Every listed item was checked against the current code before being changed. `npm run build` and `npm test` pass at HEAD (39 test files, 186 tests). After the sweep merge, the build on 4400 was smoke-tested on 42 routes (light and dark, 390 and 320 px, 0 and 25 sightings): no console errors, no error screen, no sideways scroll, one `#outing-bar` and one `#announce`, a paper or dark-paper background, and the title following the h1 on every one. Logging a sighting from a species page, the + sheet and a dex long press saved v1's record shape and showed in All sightings and the Lists hub (light 390, dark 320 and reduced motion); Escape closed only the top layer; and the service worker installed and opened Dex, Lists, Learn, All sightings and a species page offline.
 
 ### Fixed
 
@@ -807,7 +807,7 @@ Working tree is on `port-fixes`; nothing was pushed. Every listed item was check
 Twelve branches, each forked from `fd537c7`, were merged into `port-fixes` with `--no-ff`; `npm run build` and `npm test` passed after each one.
 
 - `05bb1c6` fixes-sw, `de12269` fixes-brand, `55e2be7` fixes-data, `fc4eeb2` fixes-learn, `51a2c86` fixes-scan, `fdb90dd` fixes-map, `a98aafb` fixes-shell: the re-run fixes for items 11–13, 15, 17, 24, 27, 33, 38, 41, 47, 51, 52, 64–67, 72, 73, 75 and 81, and the re-run's new findings.
-- 55, fixed — `b8d5529` pages-species: v1's species page. Its Log and Edit sheets became the shared sighting sheet in `4bf25ec`, and the hero keeps the photos it was drawn with, as v1 did, in `46841fa`.
+- 55, fixed — `b8d5529` pages-species: v1's species page. Its Log and Edit sheets became the shared sighting sheet in `4bf25ec`. The hero keeps the photos it was drawn with (`46841fa`) until a sighting is saved, edited or deleted, when it is drawn again as v1's render() did (`ff43966`, sweep).
 - 56, fixed — `44c7637` pages-dex: v1's Dex home. A long press opens the Log a sighting sheet over the dex (`4bf25ec`), and `/` opens search on every screen (`1118733`).
 - 57, fixed — `d4075ba` pages-settings: v1's Settings, with the Ready for the field card; each Ready row has v1's `data-field` (`68b20a2`).
 - 58, fixed — `85c2935` pages-lists: v1's Lists hub, list view and targets. All sightings (`192c41e`, `4bf25ec`) and the outing page (`e70172e`) followed in the third round.
@@ -824,7 +824,44 @@ Four branches, each forked from `ca57a64`, were merged with `--no-ff` in this or
 - `87fbd48` left-photos: one shared `SpeciesImage` with v1's shimmer, a single fade-in, no fade for a photo already shown, and a better photo swapped in only once it has decoded; photos redraw when the saved photo index and gallery.json arrive (`29fdc6d`, `2b1961d`). Learn's photo picks match v1's (`d15c999`, `25b1f8d`), and Scan's reference photos hold still under reduced motion (`5ad483a`).
 - `c9965b2` left-settings-dex-search: one search overlay for the whole app (`1118733`, `68b20a2`), the account sheets (`18d0740`, `9da0cfb`), sheets that slide away when dismissed, and `aria-current="false"` on the + link (`167ad2c`). Items 16 and 22 were checked against v1 again and needed nothing.
 - `6c7cf5a` left-log-sheet: v1's Log a sighting sheet, one shared sheet for logging and editing (`components/SightingSheet.tsx`, `4bf25ec`). It opens over the current screen from the species page, a dex long press, the + sheet's Log one sighting (52), All sightings and Listen's Log it (`c5b1f2b`). It has Add to current outing, Choose on map starting at her last fix (`2ce2459`), recent places, the photo field and Notes. Delete asks in place and Cancel closes both (73). A first sighting of a species gets v1's new-for-your-dex celebration.
-- Kept once at the merge: one celebration (the sheet's; left-polish's `Celebrate.tsx` and the old `SightingEditSheet.tsx` were removed), the shared `SpeciesImage` for the chosen species and the celebration, `MinePhoto` for her own photos, and one `.chosen-change` rule. For the species hero, `46841fa`'s keep-as-drawn replaced left-polish's `64be3ec`, which it made unnecessary.
+- Kept once at the merge: one celebration (the sheet's; left-polish's `Celebrate.tsx` and the old `SightingEditSheet.tsx` were removed), the shared `SpeciesImage` for the chosen species and the celebration, `MinePhoto` for her own photos, and one `.chosen-change` rule. For the species hero, `46841fa`'s keep-as-drawn replaced left-polish's `64be3ec`, which it made unnecessary; the sweep's `ff43966` adds v1's redraw after a save.
+
+### Sweep (fourth round)
+
+Seven route groups were compared with v1 again and fixed on their own branches, each forked from `8cc03f3`, then merged with `--no-ff` in this order; `npm run build` and `npm test` passed after each one.
+
+Fixed:
+
+- `db06dcd` sweep-shell: every change of address (tab, link, Back, Forward or a typed hash) runs in one view transition by v1's screen depths: tabs cross-fade, deeper screens rise, shallower ones drop back (`d3a9b82`, `components/RouteMotion.tsx`). Going back returns to the remembered scroll (`b923138`), a tapped photo grows into the species hero and shrinks back, and open layers close before the next screen draws. Sheets follow a drag down from the grip and close past 30% or on a flick, enter from `@starting-style`, and a sheet opened as another closes replaces it at once with the scrim held (`709ea40`). A layer opened with nothing focused gives focus back to the heading (`9022888`). Unused scan rules are gone (`19bb19c`).
+- `11360db` sweep-offline: the app checks for a new release at start and every 30 minutes and shows v1's "A new version is ready." bar with Reload when one takes over an open page (`1c93236`, `lib/sw.ts`). A counted number starts in the paint that draws it, and a newer value carries the running count on to it, so the newest value always wins (`465ff3d`, `d263d18`, `lib/motion.ts`). This also covers the other screens that count on a reused element (Dex, Stats, Settings).
+- `647dec0` sweep-dex: Compare is v1's page, with two tall photo cards, the dex number and name on the photo, How to tell them apart on a glass band, the kind tag, v1's size label and Look in, and a Call button that plays the first recording or says by toast that there is none (`750fe5f`). The species page and Compare share the size line (`8561203`, `screens/speciesFacts.ts`).
+- `81fa0ef` sweep-log: the species hero is drawn again after a save, edit or delete (`ff43966`). Lists, Targets, the outing's Finish sheet, the start-outing form and the confirm sheets carry v1's markup hooks, and the start-outing form keeps its error line on the page (`8bb65fe`). A cold Targets waits up to 150 ms for the regional records, as v1's boot did (`8818408`). At the merge, `CountKey` kept sweep-offline's one element whose count carries on to a newer value; sweep-log's new element per value would have restarted the count from the old number.
+- `eacfea2` sweep-learn: a round's heading takes focus only when focus was already in the screen (`a5adb05`). The top bar's back control shows on every round, card, result and deck screen (`674fca9`). Rapid fire has no kicker and its counter is labelled "Seconds left" (`e611439`). A round that can't be made toasts and goes back to the hub, and an offline photo round that falls back to field notes says so (`a294e7d`). The hub's numbers are v1's counting stamp numerals, with rings, bars and pips growing in once a session (`1da4984`). Icons are aria-hidden (`87310fe`). Deck adds and the off Call tile report by toast (`c8e649c`, `a667790`), and the daily card keeps its spaces (`88917e0`, `4cbe1b8`).
+- `7bc5264` sweep-map: #/map/at opens the nearby hotspot's popup, or none. Hotspots say "dex birds". Place search uses the shared v1 search. The No signal note shows when tiles fail offline. Chips and the view are kept for the session, a chip tap closes the open popup, and New patch here is a plain btn (`fc1bcf5`). Popups are v1's size and stay on screen at 320 px (`915a76d`, `b7842a6`). A searched place gets v1's pin, and a report point's popup drops "Reported here:" (`80fdf29`). Place search blames the connection only when offline (`1d0ad48`). Listen is v1's again: the sound picture, the model loading only after Start, v1's status copy, heard cards kept for the session, and the frogs calling this month (`ddfbf5d`). Badges plays each shelf once a session and counts its total up (`c1412a8`). Scan keeps its empty progress box (`c15da24`), says why Identify could not run in its status line (`bf37803`) and keeps focus on Identify (`d659956`).
+- `27fb0f8` sweep-me: the sign-in form keeps the hidden code step and v1's hooks (`ca1035f`). Settings carries v1's hooks and hidden progress meters (`cf3113f`). Ready for the field checks the app row again when the service worker takes charge, shows only each row's newest check, and starts the photo index lookup (`8bf3edb`). The tab bar has `data-tab` (`3d52cf0`). Me and a profile count their numbers once a session (`d8e9a0b`). Medal text has v1's space (`007456d`), and ten unused progress.css rules are gone (`7abf29a`).
+- After the merges: `e65ea6c` removes the `.progress-status` and `.compare-links` rules Compare no longer uses. `1caf79e` makes callers that ask for seq.json while it is loading share one request, instead of one request each. `4da6b2b` makes a public profile ask for its row once per visit; it asked twice when she was already signed in.
+
+Kept on purpose, because v1's behaviour is a side effect or a dead end:
+
+- Focus. The account sheets focus their first control, Continue with Google, as every other v1 sheet does. v1's sheet looks for that control before the form is drawn. On a cold deep link to #/me/signin, Chrome draws a focus ring there; a click open shows none. That ring is the one item the owner may want to rule on. In these cases v1 drops focus to body and React lands on the heading: Escape from a deep-linked sheet, and Escape from search opened with nothing focused. After Finish outing, focus stays on the same button, now Edit details; v1's redraw loses it. On the deck overview, Add 10 and Add the ones I've seen keep focus on the button and move the box bars from their old heights; v1 redraws and drops focus. The deck card's Stop reviewing is a button with `data-quit`.
+- Screens v1 leaves blank or broken. A cold #/leaderboard shows the sign-in prompt, where v1 throws. #/nope shows Not found, and malformed ids get a message. Cold #/patch/1 and #/outing/2 draw every time; v1 sometimes bounces to #/lists before its data loads. The error boundary has a recovery screen. #/me/signup, /signin and /edit are titled "Me – BirdyDex" by v1's own afterDraw rule, which v1 skips after its replaceState.
+- Screen readers. The photo carousel and 3D box have `role=group`. Search thumbnails have `alt=""`, so names are not read twice. The map has its locate announcement, a search-results live region, sr-only Place details and Map details, and landmarks. Listen announces each newly heard bird. A medal keeps a space before its sr-only status. React marks `#topbar` and `#root` inert where v1 marks four regions, with the same coverage.
+- Loading and motion. While gallery.json is pending, the hero and tiles shimmer instead of claiming no photo. A newer number arriving mid-count carries on from the number on screen; v1 starts again from the old final number. Me does not mark a zero as counted while IndexedDB answers. Settings re-checks the app row when the worker takes charge; v1 waits until Settings is reopened. The Dex Learn teaser redraws when Learn's data arrives. Under reduced motion, a dragged sheet fades like every other close.
+- Map and Listen. Popups keep autopan padding below the chip row and narrow at 320 px to stay on screen. The locate marker is replaced, not stacked. Place search failures read as plain language, online and offline. Listen's Clear shows whenever there are heard calls. A Stop during model loading is guarded.
+- Data safety. Start outing reads "Starting…" and is disabled while saving. The Finish sheet reports a failed save. Long patch and outing names wrap. Scan's Change photo stays disabled while Identify runs (37); v1 leaves it enabled.
+- Offline. The precache includes the 3D model, as v1's does. React shows map tiles she has already seen, which v1 misses offline. Unsaved photos show v1's striped placeholder at once.
+
+Left:
+
+- rest.css's `.leaflet-container .leaflet-popup-content` margin no longer applies: map.css sets v1's margins, and no other screen opens a popup. Leaflet's CSS overrides its 44 px close-button size, though the opacity, radius and focus ring still apply. It could be tidied.
+- On Map, Lists and Stats cold starts, the photo index is looked up later than in v1, which looks it up at boot; Settings does its own lookup. Screens other than Targets draw before seq.json arrives and again when it lands.
+- Not tried for real:
+  - dragging Edit profile's species-list step;
+  - the public profile's single fetch while signed in (unit test only);
+  - a BirdNET hit on Listen;
+  - a Scan model run;
+  - frog clip audio;
+  - the update bar from a real new release on 4400 (sweep-offline checked it through a proxy, and `swUpdate.test.ts` covers it).
 
 ### Deliberately different
 
@@ -835,12 +872,12 @@ Four branches, each forked from `ca57a64`, were merged with `--no-ff` in this or
 - Sighting sheet: Add photo is a real button and Remove gives focus back to it; focus goes to Change species after a pick; the GPS line is a status region; the click from lifting a long press is dropped; map search offline says it needs a connection.
 - `#/add` stays for deep links and the Scan hand-off (15), so Scan's This one opens the form as a page rather than as a sheet over Scan.
 - After in-app navigation, focus goes to the new screen's heading, and the map's New patch sheet opened from Lists gives focus back to the heading; v1 left it on the page.
+- The sweep's kept differences (focus, blank-screen routes, screen-reader additions, loading and motion, the map, data safety and offline) are listed under Sweep above.
 
 ### Partial and left
 
-- Compare (`#/compare/a/b`, no numbered item) still has the first port's layout. v1's two tall photo cards with "How to tell them apart", the kind tag and the size line (js/app.js renderCompare) are not ported.
-- progress.css still has unused rules: `.backup-confirm`, `.lb-avatar-letter`, `.account-signed-out` and `.progress-stack`.
-- Not tried for real, because the rules forbid it or the browser can't: anything signed in (avatars, the Me cover, groups, account deletion, the sign-in email), a live BirdNET hit on Listen, a real Scan run, the Share sheet, and a cold offline start through the service worker.
+- Compare and the unused progress.css rules, listed here before, were fixed in the sweep (`750fe5f`, `8561203`, `7abf29a`, `e65ea6c`). What the sweep left is listed under Sweep above.
+- Not tried for real, because the rules forbid it or the browser can't: anything signed in (avatars, the Me cover, groups, account deletion, the sign-in email), a live BirdNET hit on Listen, a real Scan run and the Share sheet. A cold offline start through the service worker now works for Dex, Lists and Learn.
 
 ### Skipped
 
