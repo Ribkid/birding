@@ -70,6 +70,26 @@ describe('the Log a sighting form', () => {
     expect(container.querySelector<HTMLInputElement>('[name=place]')?.value).toBe('Oxley Creek Common');
   });
 
+  it("keeps v1's photo field: Remove stays in the page, hidden, and hands focus back to Add photo", async () => {
+    URL.createObjectURL = () => 'blob:photo';
+    URL.revokeObjectURL = () => {};
+    const { container } = render(
+      <SightingForm data={data(false)} speciesId={1} photoBlob={new Blob(['x'], { type: 'image/jpeg' })} onCancel={noop} onSaved={noop} />,
+    );
+    expect(container.querySelector('form')?.hasAttribute('data-form')).toBe(true);
+    const remove = container.querySelector<HTMLButtonElement>('[data-photo-remove]')!;
+    await waitFor(() => expect(container.querySelector('[data-photo-preview] img')?.getAttribute('src')).toBe('blob:photo'));
+    expect(container.querySelector('[data-photo-label]')?.textContent).toBe('Replace photo');
+    expect(remove.classList.contains('hidden')).toBe(false);
+    fireEvent.click(remove);
+    expect(container.querySelector('[data-photo-remove]')).toBe(remove);
+    expect(remove.classList.contains('hidden')).toBe(true);
+    expect(container.querySelector('[data-photo-preview] img')).toBeNull();
+    expect(container.querySelector('[data-photo-label]')?.textContent).toBe('Add photo');
+    expect(document.activeElement?.textContent?.trim()).toBe('Add photo');
+    expect(container.querySelector('[data-photo-input]')?.getAttribute('type')).toBe('file');
+  });
+
   it("says what is missing in v1's words", () => {
     const { container } = render(<SightingForm data={data(false)} onCancel={noop} onSaved={noop} />);
     fireEvent.submit(container.querySelector('form')!);

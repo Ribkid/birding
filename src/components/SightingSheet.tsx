@@ -70,7 +70,8 @@ function SpeciesPhoto({ sp, size, className = '' }: { sp: Species; size: 'small'
     const el = ref.current;
     setLook(el?.complete && el.naturalWidth ? 'in' : '');
   }, [url]);
-  if (!url) return <span className={`${className} img-missing`.trim()} aria-hidden="true" />;
+  // v1's data-sp and data-size mark which species and size the picture is.
+  if (!url) return <span className={`${className} img-missing`.trim()} aria-hidden="true" data-sp={sp.id} data-size={size} />;
   return (
     <img
       ref={ref}
@@ -79,6 +80,8 @@ function SpeciesPhoto({ sp, size, className = '' }: { sp: Species; size: 'small'
       alt=""
       loading="lazy"
       decoding="async"
+      data-sp={sp.id}
+      data-size={size}
       onLoad={() => setLook('in')}
       onError={() => setLook('missing')}
     />
@@ -341,7 +344,7 @@ export function SightingForm({
 
   return (
     <>
-    <form className={`form ${className}`.trim()} onSubmit={save} noValidate>
+    <form className={`form ${className}`.trim()} data-form="" onSubmit={save} noValidate>
       <Picker
         speciesId={draft.speciesId}
         seen={seen}

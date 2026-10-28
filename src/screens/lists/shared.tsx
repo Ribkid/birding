@@ -563,22 +563,24 @@ interface PhotoFieldProps {
 }
 
 /**
- * v1's photo field: a 72 px thumbnail, Add photo or Replace photo, and Remove. The picker is a real button, so it can
- * be reached with Tab (v1's was a label around a hidden input), and Remove hands focus back to it.
+ * v1's photo field: a 72 px thumbnail, Add photo or Replace photo, and Remove (hidden while there is no photo), with
+ * v1's data-photo-* hooks. The picker is a real button, so it can be reached with Tab (v1's was a label around a
+ * hidden input), and Remove hands focus back to it instead of leaving it on a button that has just been hidden.
  */
 export function PhotoField({ url, onPick, onRemove }: PhotoFieldProps) {
   const input = useRef<HTMLInputElement>(null);
   const add = useRef<HTMLButtonElement>(null);
   return (
     <div className="photo-field">
-      <div className="photo-preview">{url ? <img src={url} alt="Your photo" /> : null}</div>
+      <div className="photo-preview" data-photo-preview="">{url ? <img src={url} alt="Your photo" /> : null}</div>
       <button type="button" className="btn" ref={add} onClick={() => input.current?.click()}>
-        <Icon name="cam" /> <span>{url ? 'Replace photo' : 'Add photo'}</span>
+        <Icon name="cam" /> <span data-photo-label="">{url ? 'Replace photo' : 'Add photo'}</span>
       </button>
       <input
         ref={input}
         type="file"
         accept="image/*"
+        data-photo-input=""
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -586,18 +588,17 @@ export function PhotoField({ url, onPick, onRemove }: PhotoFieldProps) {
           if (file) onPick(file);
         }}
       />
-      {url ? (
-        <button
-          type="button"
-          className="btn btn--quiet"
-          onClick={() => {
-            onRemove();
-            add.current?.focus({ preventScroll: true });
-          }}
-        >
-          Remove
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className={`btn btn--quiet${url ? '' : ' hidden'}`}
+        data-photo-remove=""
+        onClick={() => {
+          onRemove();
+          add.current?.focus({ preventScroll: true });
+        }}
+      >
+        Remove
+      </button>
     </div>
   );
 }

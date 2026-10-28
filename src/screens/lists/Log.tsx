@@ -33,7 +33,7 @@ function OwnPhoto({ photoId }: { photoId: number }) {
     }).catch(() => {});
     return () => { alive = false; if (made) URL.revokeObjectURL(made); };
   }, [near, photoId]);
-  return <img ref={imgRef} src={url || undefined} alt="" loading="lazy" decoding="async" />;
+  return <img ref={imgRef} src={url || undefined} alt="" loading="lazy" decoding="async" data-photo={photoId} />;
 }
 
 const what = () => (kindsPresent.length < 2 ? 'bird' : kindsPresent.includes('plant') ? 'bird, animal and plant' : 'bird and animal');
@@ -107,7 +107,7 @@ export default function Log() {
           <p className="empty-h">No sightings yet</p>
           <p className="small">Every {what()} you log lands here, newest first. Tap + or press and hold a tile in the dex.</p>
           <div className="row-center">
-            <button type="button" className="btn btn--primary" onClick={() => openSightingSheet()}>
+            <button type="button" className="btn btn--primary" data-logfirst="" onClick={() => openSightingSheet()}>
               Log a sighting
             </button>
           </div>
