@@ -29,6 +29,7 @@ import { Welcome } from './components/Welcome';
 import { OutingBar } from './components/OutingBar';
 import { SearchHost } from './screens/DexSearch';
 import { SightingSheetHost } from './components/SightingSheet';
+import { preloadOnPress } from './components/SpeciesImage';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
 import { syncTitle, watchTitle } from './lib/title';
@@ -75,6 +76,7 @@ export default function App() {
     void initAccount();
     void applySavedTheme();
   }, []);
+  useEffect(preloadOnPress, []); // pressing a species starts its large photo (components/SpeciesImage.tsx)
   return (
     <>
       <RouteFocus />

@@ -243,6 +243,58 @@ function HeroPhoto({ sp, hero, className, alt = sp.name, eager = false }: Props 
   );
 }
 
+// Large photos started by a press, held until they settle so a collected Image can't drop its load.
+const preloads = new Map<string, HTMLImageElement>();
+const saveData = () => !!(navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+
+/** Starts loading a species' large photo (the hero's), unless it is already shown or on its way. */
+export function preloadLarge(id: number) {
+  const url = sized(id, 'large') as string | null;
+  if (!url || shown.has(url) || preloads.has(url)) return;
+  const img = new Image();
+  img.decoding = 'async';
+  img.onload = img.onerror = () => {
+    preloads.delete(url);
+  };
+  preloads.set(url, img);
+  img.src = url;
+}
+
+/**
+ * Pressing a species (a link to its page or a dex tile) starts its large photo, so the hero has a head start on
+ * the tap. One delegated pointerdown listener, installed once from App; it returns its own removal. Only with
+ * signal and without Data Saver. A touch waits until it has held still a moment or lifted, and one the browser
+ * takes for a scroll starts nothing, so scrolling the dex doesn't fetch a large photo for every tile touched.
+ */
+export function preloadOnPress(): () => void {
+  const onDown = (e: PointerEvent) => {
+    if (!e.isPrimary || e.button > 0) return;
+    const el = (e.target as Element | null)?.closest?.('a[href^="#/bird/"], [data-tile]');
+    if (!el) return;
+    const id = Number(el.getAttribute('data-tile') || /^#\/bird\/(\d+)/.exec(el.getAttribute('href') || '')?.[1]);
+    if (!id || !navigator.onLine || saveData()) return;
+    if (e.pointerType !== 'touch') {
+      preloadLarge(id);
+      return;
+    }
+    let timer = 0;
+    const off = () => {
+      clearTimeout(timer);
+      document.removeEventListener('pointerup', go, true);
+      document.removeEventListener('pointercancel', off, true);
+    };
+    const go = () => {
+      off();
+      preloadLarge(id);
+    };
+    document.addEventListener('pointerup', go, true);
+    document.addEventListener('pointercancel', off, true);
+    timer = window.setTimeout(go, 90);
+  };
+  document.addEventListener('pointerdown', onDown, { capture: true, passive: true });
+  return () => document.removeEventListener('pointerdown', onDown, { capture: true });
+}
+
 /** The green-ringed dex number badge shown on tiles and rows. */
 export function Band({ sp, seen }: { sp: Species; seen: boolean }) {
   return (

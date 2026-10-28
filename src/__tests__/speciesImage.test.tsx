@@ -21,7 +21,7 @@ vi.mock('../lib/hooks', () => ({
   mediaSettled: () => media.state.settled,
 }));
 
-import { FadeImage, SpeciesImage } from '../components/SpeciesImage';
+import { FadeImage, SpeciesImage, preloadOnPress } from '../components/SpeciesImage';
 import { washFor } from '../lib/wash';
 
 // jsdom loads no images: which addresses count as loaded (in the memory cache) is set by hand.
@@ -170,7 +170,8 @@ describe('FadeImage', () => {
   });
 });
 
-// Item 4, never a blank species photo: the hero's small photo underneath, the develop and the plumage wash.
+// Item 4, never a blank species photo: the hero's small photo underneath, the develop, the plumage wash and the
+// preload on press.
 describe('SpeciesImage hero mode', () => {
   const hero = (c: HTMLElement) => ({
     frame: c.querySelector('.whole') as HTMLElement,
@@ -314,3 +315,88 @@ describe('plumage wash', () => {
   });
 });
 
+describe('preloadOnPress', () => {
+  let made: string[] = [];
+  let off: () => void = () => {};
+  const online = (on: boolean) => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => on });
+  const press = (el: Element, pointerType = 'mouse', type = 'pointerdown') => {
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    Object.assign(e, { isPrimary: true, button: 0, pointerType });
+    el.dispatchEvent(e);
+  };
+  const link = (id: number, attrs: Record<string, string> = { href: `#/bird/${id}` }) => {
+    const a = document.createElement(attrs.href ? 'a' : 'div');
+    for (const [k, v] of Object.entries(attrs)) a.setAttribute(k, v);
+    a.innerHTML = '<span class="tile-img"><img alt=""></span>';
+    document.body.append(a);
+    return a.querySelector('img')!;
+  };
+  beforeEach(() => {
+    made = [];
+    vi.stubGlobal('Image', class { decoding = ''; onload: unknown = null; onerror: unknown = null; set src(v: string) { made.push(v); } });
+    online(true);
+    off = preloadOnPress();
+  });
+  afterEach(() => {
+    off();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    delete (navigator as { connection?: unknown }).connection;
+    document.body.innerHTML = '';
+  });
+
+  it('starts the large photo of a species she presses, once', () => {
+    const sp = species('https://x/p1-large.jpg');
+    const target = link(sp.id);
+    press(target);
+    expect(made).toEqual(['https://x/p1-large.jpg']);
+    press(target);
+    expect(made).toHaveLength(1);
+    // A dex tile names its species with data-tile.
+    const tile = species('https://x/p2-large.jpg');
+    press(link(tile.id, { 'data-tile': String(tile.id) }));
+    expect(made).toEqual(['https://x/p1-large.jpg', 'https://x/p2-large.jpg']);
+  });
+
+  it('does nothing without signal, with Data Saver on, or away from a species', () => {
+    online(false);
+    press(link(species('https://x/p3-large.jpg').id));
+    online(true);
+    Object.defineProperty(navigator, 'connection', { configurable: true, value: { saveData: true } });
+    press(link(species('https://x/p4-large.jpg').id));
+    delete (navigator as { connection?: unknown }).connection;
+    const other = document.createElement('button');
+    document.body.append(other);
+    press(other);
+    expect(made).toEqual([]);
+  });
+
+  it('waits for a touch to be a tap, and starts nothing for a touch that becomes a scroll', () => {
+    vi.useFakeTimers();
+    const scrolled = link(species('https://x/p5-large.jpg').id);
+    press(scrolled, 'touch');
+    expect(made).toEqual([]);
+    press(scrolled, 'touch', 'pointercancel');
+    vi.advanceTimersByTime(200);
+    expect(made).toEqual([]);
+
+    const tapped = link(species('https://x/p6-large.jpg').id);
+    press(tapped, 'touch');
+    press(tapped, 'touch', 'pointerup');
+    expect(made).toEqual(['https://x/p6-large.jpg']);
+
+    const held = link(species('https://x/p7-large.jpg').id);
+    press(held, 'touch');
+    vi.advanceTimersByTime(100);
+    expect(made).toEqual(['https://x/p6-large.jpg', 'https://x/p7-large.jpg']);
+  });
+
+  it('skips a photo already shown this session', () => {
+    const sp = species('https://x/p8-large.jpg');
+    const { container } = render(<SpeciesImage sp={sp} />);
+    loaded.add('https://x/p8-large.jpg');
+    fireEvent.load(img(container));
+    press(link(sp.id));
+    expect(made).toEqual([]);
+  });
+});
