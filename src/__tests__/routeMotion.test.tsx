@@ -151,14 +151,22 @@ describe('Back and Forward', () => {
     expect(y).toBe(300);
   });
 
-  it('starts a hash typed into the address bar at the top, though it has no key of its own', async () => {
+  it('keys an entry the browser made for a plain hash link, and starts it at the top', async () => {
     app();
+    const at = window.history.state.idx as number;
     y = 900;
-    // The address the app opened at and a typed hash share the key 'default': neither may take the other's place.
+    // A species link in a map popup is a plain <a href>: the browser makes the entry, with no key or place in the
+    // count. It gets both before the router reads it, so it isn't taken for the address the app opened at.
     await act(async () => { window.location.hash = '#/bird/2'; });
     await settle();
     expect(h1()).toBe('Bird');
     expect(y).toBe(0);
+    expect(window.history.state).toMatchObject({ idx: at + 1, key: expect.stringMatching(/^\w+$/) });
+    y = 300;
+    click('Dex');
+    await back();
+    expect(h1()).toBe('Bird');
+    expect(y).toBe(300);
     await back();
     expect(h1()).toBe('Lists');
     expect(y).toBe(900);

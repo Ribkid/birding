@@ -180,13 +180,22 @@ function placeHere(): Place {
   return { y: scrollY, anchor: view ? anchorOf(view) : null, focus: focusKey(by) };
 }
 
-// A history entry the app made carries its own key; one made by typing a hash (or the address the app opened at) is
-// 'default', which isn't one entry, so it is remembered by its address only.
+// The browser makes an entry of its own, with no state, for a plain hash link (a species link in a map popup), a hash
+// set by code (the sign-up nudge) or one typed into the address bar. Before the router reads it, it is given a key and
+// its place in the count, as the router's own entries have, so Back and Forward can tell where it sits and what she
+// left it at.
+let atIdx = 0;
+function keyBrowserEntry() {
+  if (window.history.state != null) return;
+  window.history.replaceState({ usr: null, key: Math.random().toString(36).slice(2, 10), idx: atIdx + 1 }, '');
+}
+// The address the app opened at keeps the key 'default' (screens read it as "opened from outside the app"), so it is
+// remembered by its address only.
 const entryKey = (key: string) => (key === 'default' ? null : key);
 
 /**
- * `delta` is how far a popstate moved through history: -1 for Back, 1 for Forward, 0 for Back from a typed hash
- * (which has no place in the count), and null for the typed hash itself, a new entry like a tap's.
+ * `delta` is how far a popstate moved through history: -1 for Back, 1 for Forward, and null if the entry has no place
+ * in the count (only if keyBrowserEntry couldn't run first), which is taken as a new entry like a tap's.
  */
 function onRouteChange(prev: Location, next: Location, action: Action, delta: number | null, apply: () => void) {
   const from = prev.pathname + prev.search, to = next.pathname + next.search;
@@ -336,7 +345,11 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
     document.addEventListener('click', onPress, true);
     document.addEventListener('pointerdown', onPointer, true);
     document.addEventListener('keydown', onKey, true);
+    // Before the router's own popstate listener (added by listen below), so it reads the key given here.
+    window.addEventListener('popstate', keyBrowserEntry, true);
+    atIdx = window.history.state?.idx ?? 0;
     const off = history.listen(({ action, location: next, delta }) => {
+      atIdx = window.history.state?.idx ?? atIdx;
       const prev = shown.current;
       shown.current = next;
       latest.current = { action, location: next };
@@ -344,6 +357,7 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
     });
     return () => {
       off();
+      window.removeEventListener('popstate', keyBrowserEntry, true);
       document.removeEventListener('click', onPress, true);
       document.removeEventListener('pointerdown', onPointer, true);
       document.removeEventListener('keydown', onKey, true);
