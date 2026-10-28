@@ -7,6 +7,7 @@ import { stagger } from '../../lib/look';
 import { countUp, motionOK } from '../../lib/motion';
 import { useTint } from '../../components/Motion';
 import { FadeImage } from '../../components/SpeciesImage';
+import { toast } from '../../lib/toast';
 import { faceSrc, heroFace, modeFaces, packCovers, tintable } from './hubPhotos';
 import * as Q from '../../core/quiz.js';
 import {
@@ -70,7 +71,6 @@ function Stat({ n, count }: { n: number; count: boolean }) {
 export default function Learn() {
   const [, force] = useReducer((x: number) => x + 1, 0);
   const [ready, setReady] = useState(false);
-  const [notice, setNotice] = useState('');
   const [waited, setWaited] = useState(false);
   useMedia();
   // As v1 drew the hub: once her learning is read, the saved photo index and, from the phone's own cache within a
@@ -279,7 +279,9 @@ export default function Learn() {
               const b = (L?.best as Record<string, number> | undefined)?.[bestKey(m, prefs)];
               return (
                 <li key={m} className={m === 'quick' ? 'lh-mode--wide' : ''}>
-                  <Link className={`lh-mode lh-mode--${m}${off ? ' is-off' : ''}`} to={off ? '#' : `/learn/play/${m}`} aria-disabled={off || undefined} onClick={(e) => { if (off) { e.preventDefault(); setNotice('Calls are for birds and frogs. Choose All animals, Birds or Frogs.'); } }}>
+                  {/* v1 modesHTML/wireHub: the off Call tile keeps its address and data-off; pressing it says why in a toast
+                      (read out through #announce) and stays put, focus left on the tile. */}
+                  <Link className={`lh-mode lh-mode--${m}${off ? ' is-off' : ''}`} to={`/learn/play/${m}`} aria-disabled={off || undefined} data-off={off ? '' : undefined} onClick={(e) => { if (off) { e.preventDefault(); toast('Calls are for birds and frogs. Choose All animals, Birds or Frogs.'); } }}>
                     <span className={`lh-mode-bg${pics.length > 1 ? ' is-split' : ''}`} aria-hidden="true">{!faces ? <Waiting /> : pics.map((src, i) => <FadeImage key={`${i}|${src}`} src={src} />)}</span>
                     <span className="lh-mode-top"><span className="lh-mode-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true">{MODE_ICONS[m]}</svg></span>{b != null && <span className="lh-best">{m === 'rapid' ? 'Best streak' : 'Best'} <b>{b}</b>{m === 'rapid' ? null : <span>/{ROUND}</span>}</span>}</span>
                     <span className="lh-mode-txt"><strong>{title}</strong><span className="lh-mode-desc">{off ? 'Calls are for birds and frogs. Choose All animals, Birds or Frogs.' : desc}</span></span>
@@ -288,7 +290,6 @@ export default function Learn() {
               );
             })}
           </ul>
-          {notice && <p className="small muted" role="status">{notice}</p>}
         </section>
 
         <section className="lh-sec" aria-labelledby="lh-deck-h">
