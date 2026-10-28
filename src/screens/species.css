@@ -193,6 +193,7 @@
 }
 .bird .lk-sp { display: block; color: var(--ink); text-decoration: none; }
 .bird .lk-photo { position: relative; display: block; aspect-ratio: 4 / 3; border-radius: 0; background: var(--surface-2); overflow: hidden; }
+.bird .lk-photo { background-image: var(--wash, none); } /* the plumage wash while the photo loads (look.css) */
 .bird .lk-photo img, .bird .lk-photo .img-missing { display: block; width: 100%; height: 100%; object-fit: cover; transition: scale var(--dur-3) var(--ease-out); }
 .bird .lk-card:not(.kind--bird) .lk-photo::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--kc); }
 .bird .lk-sp:active .lk-photo img { scale: 1.04; }
@@ -250,6 +251,7 @@
 .bird .pn--next { flex-direction: row-reverse; padding: 8px 6px 8px 10px; text-align: right; }
 .bird .pn--next > svg { transform: scaleX(-1); }
 .bird .pn-ph { flex: none; width: 46px; height: 46px; border-radius: 50%; overflow: hidden; background: var(--surface-2); }
+.bird .pn-ph { background-image: var(--wash, none); }
 .bird .pn-ph img, .bird .pn-ph .img-missing { display: block; width: 100%; height: 100%; object-fit: cover; }
 .bird .pn:not(.kind--bird) .pn-ph { box-shadow: 0 0 0 2px var(--kc); }
 .bird .pn-txt { display: grid; min-width: 0; line-height: 1.2; }

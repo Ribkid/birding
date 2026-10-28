@@ -267,6 +267,8 @@ describe('SpeciesImage hero mode', () => {
 });
 
 describe('plumage wash', () => {
+  const frameOf = (c: HTMLElement) => c.querySelector('.tile-img') as HTMLElement;
+
   it("takes a bird's head, back and belly colours from its palette, and other kinds' from their kind colour", () => {
     const kook = washFor({ name: 'Laughing Kookaburra', kind: 'bird' });
     const at = (c: string) => kook.indexOf(c);
@@ -279,4 +281,36 @@ describe('plumage wash', () => {
     expect(washFor({ name: 'Not a real bird', kind: 'bird' })).toContain('var(--k-bird)');
     expect(washFor({ name: 'x', kind: 'bad kind;' })).toContain('var(--k-bird)');
   });
+
+  it('paints a tile frame while its photo is on its way, and leaves the striped block alone when it fails', () => {
+    const sp = species('https://x/w1.jpg', 'Laughing Kookaburra');
+    const { container } = render(<span className="tile-img"><SpeciesImage sp={sp} alt="" /></span>);
+    expect(frameOf(container).style.getPropertyValue('--wash')).toContain('#6a4e34');
+    loaded.add('https://x/w1.jpg');
+    fireEvent.load(img(container));
+    // Kept under the photo while it fades in (opacity only).
+    expect(frameOf(container).style.getPropertyValue('--wash')).toContain('#6a4e34');
+
+    const bad = render(<span className="tile-img"><SpeciesImage sp={species('https://x/w2.jpg', 'Laughing Kookaburra')} alt="" /></span>);
+    fireEvent.error(img(bad.container));
+    expect(frameOf(bad.container).style.getPropertyValue('--wash')).toBe('');
+    expect(bad.container.querySelector('.img-missing')).not.toBeNull();
+  });
+
+  it('paints the frame while the photo index is still being read, and not once a species turns out to have no photo', () => {
+    media.state.settled = false;
+    const { container } = render(<span className="tile-img"><SpeciesImage sp={species(null, 'Laughing Kookaburra')} alt="" /></span>);
+    expect(frameOf(container).style.getPropertyValue('--wash')).toContain('radial-gradient(');
+    media.state.settled = true;
+    act(() => media.bump());
+    expect(frameOf(container).style.getPropertyValue('--wash')).toBe('');
+  });
+
+  it("never paints Learn's photo frames, so a slow photo can't give the answer away", () => {
+    const { container } = render(<span className="lr-card-img"><FadeImage src="https://x/w3.jpg" /></span>);
+    const frame = container.querySelector('.lr-card-img') as HTMLElement;
+    expect(frame.style.getPropertyValue('--wash')).toBe('');
+    expect(frame.getAttribute('style')).toBeNull();
+  });
 });
+

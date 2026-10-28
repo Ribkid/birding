@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { sized } from '../core/media.js';
 import { dexCode, RARITY, type Species } from '../lib/data';
 import { mediaSettled, useMedia } from '../lib/hooks';
@@ -99,6 +99,22 @@ function usePhotoLoad(url: string | null | undefined, { develop = false } = {}) 
 }
 
 /**
+ * Paints the plumage wash (lib/wash.ts) on the frame around a photo while it is on its way. The frames that show it
+ * (look.css) are the dex tiles and the other small species photos; a frame whose photo won't load keeps its
+ * striped no-photo block instead.
+ */
+function useFrameWash(ref: RefObject<HTMLElement | null>, wash: string | null) {
+  useLayoutEffect(() => {
+    const frame = ref.current?.parentElement;
+    if (!frame || !wash) return;
+    frame.style.setProperty('--wash', wash);
+    return () => {
+      frame.style.removeProperty('--wash');
+    };
+  }, [ref, wash]);
+}
+
+/**
  * A photo by its address with v1's loading look (js/learn.js imgTag and wireFaces): it shimmers in its frame,
  * fades in once, and if it can't load it hides (.is-gone) so the card's own colour shows instead. Learn uses it, so
  * it never draws a wash or any other photo: the neutral frame can't give an answer away.
@@ -145,8 +161,8 @@ interface Props {
 }
 
 /**
- * The dex photo for a species: v1's birdImg, with its fallbacks and its loading look (shimmer, a single fade-in,
- * no fade for a photo already shown, a better photo swapped in without blanking).
+ * The dex photo for a species: v1's birdImg, with its fallbacks and its loading look (shimmer over the plumage
+ * wash, a single fade-in, no fade for a photo already shown, a better photo swapped in without blanking).
  */
 export function SpeciesImage(props: Props) {
   // A different species starts afresh rather than keeping the old one's photo until the new one has decoded.
@@ -157,9 +173,11 @@ export function SpeciesImage(props: Props) {
 function SpeciesPhoto({ sp, size = 'small', className, whole = false, alt = sp.name, eager = false }: Props) {
   useMedia();
   const p = usePhotoLoad(sized(sp.id, size) as string | null);
+  const missing = p.look === 'failed' || (!p.src && mediaSettled());
+  useFrameWash(p.ref, missing ? null : washFor(sp));
   if (!p.src || p.look === 'failed') {
     // The saved photo index or gallery.json isn't read yet: the photo is on its way, so it shimmers in its frame.
-    if (!p.src && !mediaSettled()) return <img className={cx(className, 'fade')} alt="" aria-hidden="true" />;
+    if (!missing) return <img ref={p.ref} className={cx(className, 'fade')} alt="" aria-hidden="true" />;
     // No photo, or it wouldn't load: v1's striped no-photo block rather than a broken image.
     return <span className={cx(className, 'img-missing')} {...(alt ? { role: 'img', 'aria-label': alt } : { 'aria-hidden': true })} />;
   }
