@@ -282,6 +282,15 @@ a.lb-link:active { background: var(--surface-2); }
 .me-nudge-acts { grid-column: 2; display: flex; flex-wrap: wrap; gap: 8px; }
 .me-nudge-acts .btn { min-height: var(--tap); }
 .me-nudge--out { opacity: 0; translate: 0 16px; }
+/* While the nudge is up (nudge.ts sets --nudge-h to its height): the end of a page can scroll clear of it, a toast
+   and an outing's Finish row sit above it, and the map's Map/Satellite switch, New patch here, locate and zoom step up
+   over it instead of hiding under it. */
+body.has-nudge, body.has-outing.has-nudge { padding-bottom: calc(var(--chrome-bottom) + var(--nudge-h, 0px) + 20px); }
+body.has-nudge .toast { bottom: calc(var(--chrome-bottom) + var(--nudge-h, 0px) + 16px); }
+body.has-nudge .tally-foot--live { bottom: calc(var(--chrome-bottom) + var(--nudge-h, 0px) + 16px); }
+body.has-nudge .mapwrap {
+  --chrome-bottom: calc(var(--tabbar-h) + var(--tabbar-float) + 18px + env(safe-area-inset-bottom) + var(--nudge-h, 0px));
+}
 @media (prefers-reduced-motion: no-preference) {
   .me-nudge { animation: me-rise var(--dur-4) var(--ease-spring) both; }
   @keyframes me-rise { from { opacity: 0; translate: 0 40px; } }

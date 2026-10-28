@@ -1,6 +1,8 @@
 // The one-time sign-up nudge after the third saved sighting (v1 js/me.js:648-675).
 import { db } from '../../core/db.js';
 import { configured, user } from '../../core/cloud.js';
+import { isOutingLive, whenOutingEnds } from '../../lib/liveOuting';
+import { storeState } from '../../lib/store';
 import { announce } from '../../lib/toast';
 
 let nudging = false;
@@ -9,6 +11,16 @@ export async function nudgeAfterSave(n: number) {
   if (!configured || user() || n < 3 || nudging) return;
   if (await db.kvGet('me:nudged')) return;
   nudging = true;
+
+  // On a running outing the banner would sit over the tally and its Discard and Finish row, so it waits until the
+  // outing is over. A discarded outing can take the sightings with it, so the count is looked at again.
+  if (isOutingLive()) {
+    await whenOutingEnds();
+    if (storeState().sightings.length < 3 || (await db.kvGet('me:nudged'))) {
+      nudging = false;
+      return;
+    }
+  }
 
   // Wait for a celebration or sheet to finish first; if it stays busy, try after a later save.
   const started = Date.now();
@@ -27,12 +39,26 @@ export async function nudgeAfterSave(n: number) {
     <p class="me-nudge-txt"><strong>Back up your sightings: sign up free</strong><span>So they're safe if something happens to this phone.</span></p>
     <div class="me-nudge-acts"><button type="button" class="btn btn--small btn--primary" data-nsign>Sign up</button><button type="button" class="btn btn--small btn--quiet" data-nno>Not now</button></div>`;
   document.body.append(banner);
+  // While it is up, the page can scroll clear of it and the map's controls step up above it (me.css has-nudge).
+  const body = document.body;
+  const fit = () => body.style.setProperty('--nudge-h', `${Math.ceil(banner.getBoundingClientRect().height)}px`);
+  fit();
+  body.classList.add('has-nudge');
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(fit) : null;
+  ro?.observe(banner);
+  const gone = () => {
+    ro?.disconnect();
+    if (document.querySelector('.me-nudge:not(.me-nudge--out)')) return;
+    body.classList.remove('has-nudge');
+    body.style.removeProperty('--nudge-h');
+  };
   // Said through the live region that is always in the page, as v1 did: one made together with its text is often
   // missed.
   announce('Back up your sightings: sign up free. Sign up or Not now, above the tab bar.');
 
   const close = () => {
     banner.classList.add('me-nudge--out');
+    gone();
     setTimeout(() => banner.remove(), 300);
   };
   const timer = setTimeout(close, 20000);
@@ -41,6 +67,7 @@ export async function nudgeAfterSave(n: number) {
     if (target.closest('[data-nsign]')) {
       clearTimeout(timer);
       banner.remove();
+      gone();
       location.hash = '#/me/signup';
     }
     if (target.closest('[data-nno]')) {
