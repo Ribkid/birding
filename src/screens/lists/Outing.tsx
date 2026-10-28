@@ -10,7 +10,7 @@ import { announce, toast } from '../../lib/toast';
 import { countOnTo, countUp, stamp } from '../../lib/motion';
 import { CountKey } from './hubParts';
 import { FlockChooser, useHold } from './FlockChooser';
-import { buzz, useTally } from './useTally';
+import { buzz, forgetTally, useTally } from './useTally';
 import {
   ConfirmDialog,
   deleteSighting,
@@ -440,8 +440,8 @@ export default function Outing() {
               className="tally-inc"
               aria-label={`Add ${sp.name}`}
               {...hold.bind(sp)}
-              onClick={() => {
-                if (!hold.swallowClick()) change(sp, 1);
+              onClick={(e) => {
+                if (!hold.swallowClick(e)) change(sp, 1);
               }}
             >
               +
@@ -567,6 +567,7 @@ export default function Outing() {
               const onIt = (await db.byIndex('sightings', 'outingId', outing.id)) as SightingRow[];
               for (const rec of onIt) await deleteSighting(rec);
               await db.del('outings', outing.id);
+              forgetTally(outing.id);
               if (activeOutingId === outing.id) await db.kvSet('activeOuting', null);
               setConfirmDelete(false);
               navigate('/lists');

@@ -28,7 +28,8 @@
 /* The number pops from its middle as it stamps in (motion.ts stamp). */
 .tally-ctl .tally-n { transform-origin: 50% 55%; }
 
-/* Hold + for a flock: a ring fills round the button over the hold, starting a moment in so a plain tap never shows it. */
+/* Hold + for a flock: a ring fills round the button over the hold. It starts 180 ms in, past the length of an
+   ordinary tap (a slower tap of 100 to 150 ms used to flash it), and is full as the chooser opens at 450 ms. */
 @property --tally-hold { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
 .tally-ctl .tally-inc { position: relative; }
 .tally-ctl .tally-inc::after {
@@ -37,7 +38,7 @@
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
 }
-.tally-ctl .tally-inc.is-holding::after { animation: tally-hold 360ms linear 90ms both; }
+.tally-ctl .tally-inc.is-holding::after { animation: tally-hold 270ms linear 180ms both; }
 @keyframes tally-hold {
   from { --tally-hold: 0deg; opacity: 0; }
   20% { opacity: 1; }

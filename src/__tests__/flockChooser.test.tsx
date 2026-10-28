@@ -16,7 +16,7 @@ function Row({ onOpen, onAdd }: { onOpen: (sp: Species) => void; onAdd: () => vo
     type: 'button',
     'data-inc': SP.id,
     ...hold.bind(SP),
-    onClick: () => { if (!hold.swallowClick()) onAdd(); },
+    onClick: (e: { detail: number }) => { if (!hold.swallowClick(e)) onAdd(); },
   }, '+');
 }
 
@@ -37,12 +37,12 @@ describe('useHold', () => {
     expect(onOpen).toHaveBeenCalledWith(SP);
     expect(btn.classList.contains('is-holding')).toBe(false);
     fireEvent.pointerUp(btn);
-    fireEvent.click(btn);
+    fireEvent.click(btn, { detail: 1 }); // a click from a finger or a mouse counts its clicks; one from a key is 0
     expect(onAdd).not.toHaveBeenCalled();
     // The next tap is an ordinary one.
     fireEvent.pointerDown(btn, { button: 0, isPrimary: true });
     fireEvent.pointerUp(btn);
-    fireEvent.click(btn);
+    fireEvent.click(btn, { detail: 1 });
     expect(onAdd).toHaveBeenCalledTimes(1);
   });
 
@@ -60,6 +60,41 @@ describe('useHold', () => {
     fireEvent.pointerMove(btn, { clientX: 10, clientY: 40 });
     act(() => { vi.advanceTimersByTime(1000); });
     expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it('a thumb kept down long after the chooser opens adds nothing when it lifts', () => {
+    const onOpen = vi.fn();
+    const onAdd = vi.fn();
+    const { getByText } = render(createElement(Row, { onOpen, onAdd }));
+    const btn = getByText('+');
+    fireEvent.pointerDown(btn, { button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(HOLD_MS + 2500); }); // she keeps it there while she decides
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    fireEvent.pointerUp(btn);
+    act(() => { vi.advanceTimersByTime(30); });
+    expect(fireEvent.mouseDown(btn)).toBe(false); // the lift's mousedown would take focus off the chooser
+    fireEvent.click(btn, { detail: 1 });
+    expect(onAdd).not.toHaveBeenCalled();
+    // Enter on the + (a click from the keyboard) still counts.
+    fireEvent.click(btn, { detail: 0 });
+    expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it('a long press\'s own context menu during the press is the hold (Android sends it at about 400 ms)', () => {
+    const onOpen = vi.fn();
+    const onAdd = vi.fn();
+    const { getByText } = render(createElement(Row, { onOpen, onAdd }));
+    const btn = getByText('+');
+    fireEvent.pointerDown(btn, { button: 0, isPrimary: true });
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(fireEvent.contextMenu(btn)).toBe(false);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(btn.classList.contains('is-holding')).toBe(false);
+    act(() => { vi.advanceTimersByTime(HOLD_MS); }); // the hold timer doesn't open it a second time
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    fireEvent.pointerUp(btn);
+    fireEvent.click(btn, { detail: 1 });
+    expect(onAdd).not.toHaveBeenCalled();
   });
 
   it('a right click or the context menu key opens it at once', () => {
@@ -95,6 +130,26 @@ describe('FlockChooser', () => {
     expect(onPick).toHaveBeenCalledWith(10);
     expect(document.activeElement).toBe(screen.getByText('+'));
     expect(screen.queryByRole('group')).toBeNull();
+  });
+
+  it('stays with the + while the page scrolls, and closes once the + has left the screen, focus back on the +', () => {
+    render(createElement(Harness, { onPick: () => {} }));
+    const plus = document.querySelector<HTMLButtonElement>('[data-inc="52"]')!;
+    let top = 400;
+    plus.getBoundingClientRect = () => ({ top, bottom: top + 44, left: 300, right: 344, width: 44, height: 44, x: 300, y: top, toJSON() {} }) as DOMRect;
+    const group = screen.getByRole('group');
+    expect(document.activeElement).toBe(group.querySelector('button'));
+    top = 396; // a flick still settling
+    act(() => { window.dispatchEvent(new Event('scroll')); vi.advanceTimersByTime(50); });
+    expect(screen.queryByRole('group')).toBe(group);
+    const at = parseFloat(group.style.top);
+    top = 300;
+    act(() => { window.dispatchEvent(new Event('scroll')); vi.advanceTimersByTime(50); });
+    expect(parseFloat(group.style.top)).toBe(at - 96);
+    top = -80; // scrolled away
+    act(() => { window.dispatchEvent(new Event('scroll')); vi.advanceTimersByTime(50); });
+    expect(screen.queryByRole('group')).toBeNull();
+    expect(document.activeElement).toBe(plus);
   });
 
   it('Escape closes it and hands focus back to the +; a tap elsewhere closes it', () => {

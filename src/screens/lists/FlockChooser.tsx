@@ -22,37 +22,58 @@ export const HOLD_MS = 450;
 /** A press that moves further than this is a scroll, not a hold. */
 const SLOP = 10;
 
+/** How long after the held finger lifts its mousedown and click can still arrive. */
+const RELEASE_TAIL = 800;
+
 /**
  * After a hold has opened the chooser, lifting the finger still sends the + a mousedown (which would pull focus out
- * of the chooser) and often a click (one more bird). Both are dropped while they land on that +, until she next
- * presses anything or a second has passed. Taps on the chooser go through. (Dex's long press does the same.)
+ * of the chooser) and often a click (one more bird), however long she kept it down. Both are dropped while they land
+ * on that +, from the hold until a moment after the finger lifts, or until she next presses anything. Taps on the
+ * chooser, and a click from the keyboard, go through. (Dex's long press does the same.) `until` hears when the drops
+ * end: Infinity while the finger is down, a moment after it lifts, then 0.
  */
-function dropRelease(anchor: HTMLElement) {
+function dropRelease(anchor: HTMLElement, until: (at: number) => void) {
   const opts = { capture: true } as const;
-  const onAnchor = (e: Event) => e.target instanceof Node && anchor.contains(e.target);
+  let tail = 0;
+  let cap = 0;
   const drop = (e: Event) => {
-    if (!onAnchor(e)) return;
+    if (!(e.target instanceof Node && anchor.contains(e.target))) return;
+    if (e.type === 'click' && (e as MouseEvent).detail === 0) return; // Enter or Space on the +
     e.preventDefault();
     e.stopPropagation();
   };
   const off = () => {
-    clearTimeout(stop);
+    clearTimeout(tail);
+    clearTimeout(cap);
     document.removeEventListener('mousedown', drop, opts);
     document.removeEventListener('click', drop, opts);
     document.removeEventListener('pointerdown', off, opts);
+    document.removeEventListener('pointerup', lifted, opts);
+    document.removeEventListener('pointercancel', lifted, opts);
+    until(0);
   };
+  function lifted() {
+    document.removeEventListener('pointerup', lifted, opts);
+    document.removeEventListener('pointercancel', lifted, opts);
+    until(Date.now() + RELEASE_TAIL);
+    tail = window.setTimeout(off, RELEASE_TAIL);
+  }
+  until(Infinity);
   document.addEventListener('mousedown', drop, opts);
   document.addEventListener('click', drop, opts);
   document.addEventListener('pointerdown', off, opts);
-  const stop = window.setTimeout(off, 1000);
+  document.addEventListener('pointerup', lifted, opts);
+  document.addEventListener('pointercancel', lifted, opts);
+  // A press whose end never comes through still lets go in the end.
+  cap = window.setTimeout(off, 15000);
 }
 
 /**
  * The press-and-hold on a + button. `bind(sp)` gives the button its pointer and context-menu handlers;
- * `swallowClick()` is true for a click that lifting the held finger makes, should one get past dropRelease.
+ * `swallowClick(e)` is true for a click that lifting the held finger makes, should one get past dropRelease.
  */
 export function useHold(open: (anchor: HTMLButtonElement, sp: Species) => void) {
-  const s = useRef({ timer: 0, x: 0, y: 0, el: null as HTMLButtonElement | null, heldAt: 0 });
+  const s = useRef({ timer: 0, x: 0, y: 0, el: null as HTMLButtonElement | null, dropUntil: 0 });
   const openRef = useRef(open);
   openRef.current = open;
 
@@ -65,11 +86,20 @@ export function useHold(open: (anchor: HTMLButtonElement, sp: Species) => void) 
   };
   useEffect(() => cancel, []);
 
+  // The hold: the press has lasted HOLD_MS, or the browser has called it a long press first (Chrome on Android sends
+  // a long press's context menu at about 400 ms, with the finger still down).
+  const fire = (el: HTMLButtonElement, sp: Species) => {
+    cancel();
+    dropRelease(el, (at) => { s.current.dropUntil = at; });
+    buzz(15);
+    openRef.current(el, sp);
+  };
+
   return {
     bind: (sp: Species) => ({
       onPointerDown: (e: ReactPointerEvent<HTMLButtonElement>) => {
         const st = s.current;
-        st.heldAt = 0;
+        st.dropUntil = 0;
         if (e.button !== 0 || !e.isPrimary) return;
         cancel();
         const el = e.currentTarget;
@@ -77,15 +107,7 @@ export function useHold(open: (anchor: HTMLButtonElement, sp: Species) => void) 
         st.x = e.clientX;
         st.y = e.clientY;
         el.classList.add('is-holding');
-        st.timer = window.setTimeout(() => {
-          st.timer = 0;
-          el.classList.remove('is-holding');
-          st.el = null;
-          st.heldAt = Date.now();
-          dropRelease(el);
-          buzz(15);
-          openRef.current(el, sp);
-        }, HOLD_MS);
+        st.timer = window.setTimeout(() => fire(el, sp), HOLD_MS);
       },
       onPointerMove: (e: ReactPointerEvent<HTMLButtonElement>) => {
         const st = s.current;
@@ -94,19 +116,24 @@ export function useHold(open: (anchor: HTMLButtonElement, sp: Species) => void) 
       onPointerUp: cancel,
       onPointerCancel: cancel,
       onPointerLeave: cancel,
-      // A right click or the context menu key opens it at once; a long press's own context menu (Android sends one
-      // after the hold has opened it) changes nothing.
+      // A right click or the context menu key opens it at once. A long press's own context menu is the hold: during
+      // the press it opens the chooser as the hold would; once the hold has opened it, it changes nothing.
       onContextMenu: (e: ReactMouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
-        if (Date.now() - s.current.heldAt < 1500) return;
+        const st = s.current;
+        if (Date.now() < st.dropUntil) return;
+        if (st.timer && st.el === e.currentTarget) {
+          fire(e.currentTarget, sp);
+          return;
+        }
         cancel();
         openRef.current(e.currentTarget, sp);
       },
     }),
-    swallowClick: () => {
+    swallowClick: (e?: { detail: number }) => {
       const st = s.current;
-      if (Date.now() - st.heldAt > 1000) return false;
-      st.heldAt = 0;
+      if (e?.detail === 0 || Date.now() >= st.dropUntil) return false;
+      st.dropUntil = 0;
       return true;
     },
   };
@@ -123,12 +150,45 @@ interface ChooserProps {
 /**
  * The chooser itself: a glass capsule in the top layer (popover="manual", so lifting the finger that opened it
  * doesn't light-dismiss it), above the + or below it when there's no room. Focus goes to +5. A pick, Escape or Tab
- * closes it and focus goes back to the +; a tap anywhere else, a scroll or a resize closes it and leaves focus be.
+ * closes it and focus goes back to the +; a tap anywhere else closes it and leaves focus be. While the page scrolls
+ * (a flick still settling, the address bar sliding away) it stays with the +, and once the + has left the screen it
+ * closes, handing focus back to the + if it held it.
  */
 export function FlockChooser({ sp, anchor, onPick, onClose }: ChooserProps) {
   const ref = useRef<HTMLDivElement>(null);
   const closing = useRef(false);
   const closeRef = useRef<(back: boolean) => void>(() => {});
+  const side = useRef<'above' | 'below' | null>(null);
+
+  // Against the +: above it, or below it when there's no room, keeping the side it opened on while that still fits.
+  // When following a scroll, false once the + is gone or off the screen.
+  const place = (follow: boolean) => {
+    const el = ref.current;
+    if (!el || !anchor.isConnected) return false;
+    const r = anchor.getBoundingClientRect();
+    const vh = window.innerHeight;
+    if (follow && (r.bottom <= 0 || r.top >= vh)) return false;
+    const vw = document.documentElement.clientWidth;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const edge = 8;
+    const gap = 10;
+    const left = Math.round(Math.min(Math.max(edge, r.right + 6 - w), vw - edge - w));
+    const up = Math.round(r.top - gap - h);
+    const down = Math.round(r.bottom + gap);
+    const roomAbove = up >= edge + 40;
+    const above = side.current === 'below' ? down + h > vh - edge && roomAbove : roomAbove;
+    const top = above ? up : down;
+    side.current = above ? 'above' : 'below';
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+    el.style.setProperty('--ox', `${Math.round(r.left + r.width / 2 - left)}px`);
+    el.style.setProperty('--oy', `${Math.round(r.top + r.height / 2 - top)}px`);
+    el.dataset.side = side.current;
+    return true;
+  };
+  const placeRef = useRef(place);
+  placeRef.current = place;
 
   const close = (back: boolean) => {
     if (closing.current) return;
@@ -154,21 +214,7 @@ export function FlockChooser({ sp, anchor, onPick, onClose }: ChooserProps) {
     if (POPOVER) {
       try { el.showPopover(); } catch { /* shown as a fixed layer instead */ }
     }
-    const r = anchor.getBoundingClientRect();
-    const vw = document.documentElement.clientWidth;
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    const edge = 8;
-    const gap = 10;
-    const left = Math.round(Math.min(Math.max(edge, r.right + 6 - w), vw - edge - w));
-    let top = Math.round(r.top - gap - h);
-    const above = top >= edge + 40;
-    if (!above) top = Math.round(r.bottom + gap);
-    el.style.left = `${left}px`;
-    el.style.top = `${top}px`;
-    el.style.setProperty('--ox', `${Math.round(r.left + r.width / 2 - left)}px`);
-    el.style.setProperty('--oy', `${Math.round(r.top + r.height / 2 - top)}px`);
-    el.dataset.side = above ? 'above' : 'below';
+    placeRef.current(false);
     el.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
   }, [anchor]);
 
@@ -178,11 +224,21 @@ export function FlockChooser({ sp, anchor, onPick, onClose }: ChooserProps) {
     const away = (e: Event) => {
       if (!el.contains(e.target as Node)) closeRef.current(false);
     };
-    const moved = () => closeRef.current(false);
+    // Once a frame at most while the page moves.
+    let frame = 0;
+    const moved = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (closing.current || placeRef.current(true)) return;
+        closeRef.current(el.contains(document.activeElement));
+      });
+    };
     document.addEventListener('pointerdown', away, true);
     window.addEventListener('scroll', moved, { capture: true, passive: true });
     window.addEventListener('resize', moved);
     return () => {
+      cancelAnimationFrame(frame);
       document.removeEventListener('pointerdown', away, true);
       window.removeEventListener('scroll', moved, { capture: true });
       window.removeEventListener('resize', moved);

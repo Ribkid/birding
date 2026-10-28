@@ -254,6 +254,58 @@ describe('TallyQueue', () => {
     expect([...f.rows.values()][0].count).toBe(21);
   });
 
+  it('forgets a write once the store holds it, even with the outing off screen, so a sighting deleted elsewhere stays deleted', async () => {
+    const f = fakeDb();
+    const q = new TallyQueue(OUTING, f.io);
+    const old = { id: 1, speciesId: 4, date: '2026-10-29', time: '06:50', count: 2, outingId: 7, uid: 'u1', updatedAt: 500 };
+    f.rows.set(1, { ...old } as never);
+    q.setStored(f.stored());
+    q.tap(4, 1);
+    await settle(q); // stored as 3 after she has left the outing: nothing hands the queue the store's rows any more
+    expect(q.waiting()).toBe(true);
+    const byId = () => new Map([...f.rows.values()].map((r) => [r.id, { ...r }]));
+    const read = byId();
+    q.catchUp((id) => read.get(id)); // the store reads the 3 back
+    expect(q.waiting()).toBe(false);
+    f.rows.delete(1); // then the sighting is deleted on the species page
+    q.setStored(f.stored()); // and she comes back to the outing
+    expect(q.view()).toEqual([]);
+    q.tap(4, 1);
+    await settle(q);
+    expect(f.log.at(-1)).toBe('create 4=1'); // a new sighting, not the deleted one written back
+    expect(f.rows.has(1)).toBe(false);
+  });
+
+  it('keeps a write the store has not read back, and a store that is behind changes nothing', async () => {
+    const f = fakeDb();
+    const q = new TallyQueue(OUTING, f.io);
+    const old = { id: 1, speciesId: 4, date: '2026-10-29', time: '06:50', count: 2, outingId: 7, uid: 'u1', updatedAt: 500 };
+    f.rows.set(1, { ...old } as never);
+    q.setStored(f.stored());
+    q.tap(4, 1);
+    await settle(q);
+    q.catchUp((id) => (id === 1 ? ({ ...old } as never) : undefined)); // a read from before the write
+    expect(q.waiting()).toBe(true);
+    expect(shown(q, 4)).toBe(3);
+  });
+
+  it('a species counted down to 0 stays off the tally, even if the store reads its first save late', async () => {
+    const f = fakeDb();
+    const q = new TallyQueue(OUTING, f.io);
+    q.tap(52, 1);
+    await vi.advanceTimersByTimeAsync(10); // the first save is being written
+    q.tap(52, -1);
+    await settle(q);
+    expect(f.log).toEqual(['create 52=1', 'delete 52']);
+    q.setStored(new Map()); // a read from before the save
+    q.catchUp(() => undefined);
+    // A read that has the save but not yet the delete must not bring the row back.
+    q.setStored(new Map([[52, { id: 100, speciesId: 52, date: '2026-10-29', time: '07:12', count: 1, outingId: 7, uid: 'u100', updatedAt: 1001 } as never]]));
+    expect(q.view()).toEqual([]);
+    q.tap(52, -1);
+    expect(q.busy()).toBe(false); // nothing to take a bird off
+  });
+
   it('orders the rows newest first, a species not stored yet at the top', () => {
     const f = fakeDb();
     const q = new TallyQueue(OUTING, f.io);
@@ -413,6 +465,7 @@ describe('useTally', () => {
       deleteSighting: vi.fn(async () => {}),
     }));
     vi.doMock('../lib/toast', () => ({ toast: vi.fn() }));
+    vi.doMock('../lib/store', () => ({ onStoreChange: vi.fn(() => () => {}), storeState: () => ({ sightings: [] }) }));
     const { useTally } = await import('../screens/lists/useTally');
     const stored = new Map<number, SightingRow>([[4, { id: 1, speciesId: 4, date: '', time: '', count: 2, outingId: 8, updatedAt: 1 } as SightingRow]]);
     const outing = { ...OUTING, id: 8 };
@@ -433,5 +486,31 @@ describe('useTally', () => {
     vi.doUnmock('../core/db.js');
     vi.doUnmock('../screens/lists/shared');
     vi.doUnmock('../lib/toast');
+    vi.doUnmock('../lib/store');
+  });
+
+  it('notes taps in localStorage without writing over another tab\'s notes', async () => {
+    vi.resetModules();
+    vi.doMock('../core/db.js', () => ({ db: { put: vi.fn(), kvSet: vi.fn() } }));
+    vi.doMock('../screens/lists/shared', () => ({ saveSighting: vi.fn(), deleteSighting: vi.fn() }));
+    vi.doMock('../lib/toast', () => ({ toast: vi.fn() }));
+    vi.doMock('../lib/store', () => ({ onStoreChange: vi.fn(() => () => {}), storeState: () => ({ sightings: [] }) }));
+    const { localJournal, JOURNAL_KEY } = await import('../screens/lists/useTally');
+    localStorage.removeItem(JOURNAL_KEY);
+    const e = (count: number): JournalEntry => ({ id: 1, createdAt: 1, count, safe: [1], at: 1 });
+    localJournal.write(7, 4, e(3));
+    // Another tab of the app notes its own taps meanwhile.
+    const other = JSON.parse(localStorage.getItem(JOURNAL_KEY)!);
+    other['9'] = { 12: e(5) };
+    localStorage.setItem(JOURNAL_KEY, JSON.stringify(other));
+    localJournal.write(7, 4, e(4));
+    expect(JSON.parse(localStorage.getItem(JOURNAL_KEY)!)).toEqual({ 7: { 4: e(4) }, 9: { 12: e(5) } });
+    localJournal.write(7, 4, null);
+    localJournal.write(9, 12, null);
+    expect(localStorage.getItem(JOURNAL_KEY)).toBeNull();
+    vi.doUnmock('../core/db.js');
+    vi.doUnmock('../screens/lists/shared');
+    vi.doUnmock('../lib/toast');
+    vi.doUnmock('../lib/store');
   });
 });

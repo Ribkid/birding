@@ -133,15 +133,42 @@ export class TallyQueue {
     }
   }
 
-  /** The store's sightings per species. Forgets what it wrote once the store holds that write (or a newer one). */
+  // What it wrote is forgotten once the store holds that write or a newer one: the store's reads run one after another,
+  // so once it has the write it never goes back to an older copy. A delete is never forgotten. A store without the
+  // record may not have read it yet (a first save and its delete close together), and base() already takes any other
+  // record of the species over it.
+
+  /** True while it holds a write the store hasn't read back yet. */
+  waiting() {
+    for (const k of this.known.values()) if ('rec' in k) return true;
+    return false;
+  }
+
+  /**
+   * The store's sightings by record id, after every change to the store, whether or not the outing is on screen.
+   * Without it, a write that landed after she left the outing stayed "last known" until she came back, so a sighting
+   * deleted elsewhere meanwhile showed again on the outing, and the next + there wrote it back.
+   */
+  catchUp(find: (recId: number) => SightingRow | undefined) {
+    let changed = false;
+    for (const [id, k] of this.known) {
+      if (!('rec' in k)) continue;
+      const s = find(k.rec.id);
+      if (s && writtenAt(s) >= writtenAt(k.rec)) {
+        this.known.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) this.bump();
+  }
+
+  /** The store's sightings per species, as the rows draw them (Outing.tsx's tally). */
   setStored(stored: Map<number, SightingRow>) {
     this.stored = stored;
     for (const [id, k] of this.known) {
+      if (!('rec' in k)) continue;
       const s = stored.get(id);
-      const caughtUp = 'gone' in k
-        ? !s || s.id !== k.gone
-        : !!s && s.id === k.rec.id && writtenAt(s) >= writtenAt(k.rec);
-      if (caughtUp) this.known.delete(id);
+      if (s && s.id === k.rec.id && writtenAt(s) >= writtenAt(k.rec)) this.known.delete(id);
     }
   }
 

@@ -4,6 +4,7 @@
 // browser as they happen, and a page closed mid-write has them stored on the next start (recoverTallies).
 import { useEffect, useLayoutEffect, useMemo, useSyncExternalStore } from 'react';
 import { db } from '../../core/db.js';
+import { onStoreChange, storeState } from '../../lib/store';
 import { toast } from '../../lib/toast';
 import { deleteSighting, saveSighting, writeSighting, type OutingRow, type SightingRow } from './shared';
 import { TallyQueue, recoverTallies, type JournalData, type TallyCount, type TallyIO, type TallyJournal } from './tallyQueue';
@@ -20,21 +21,19 @@ export const buzz = (pattern: number | number[]) => {
   } catch { /* no vibration here */ }
 };
 
-// The journal of taps not stored yet: one small JSON entry in localStorage, read once. It is a note of what the
-// rows showed, never a copy of her sightings; it is empty again once the writer catches up.
+// The journal of taps not stored yet: one small JSON entry in localStorage. It is a note of what the rows showed,
+// never a copy of her sightings; it is empty again once the writer catches up. It is read afresh for each note, so a
+// second tab of the app noting its own taps meanwhile keeps them (a copy read once would write over them).
 export const JOURNAL_KEY = 'birdydex:tally-unsaved';
-let journalCache: JournalData | null = null;
+let journalMemory: JournalData = {};
 export const localJournal: TallyJournal = {
   read() {
-    if (!journalCache) {
-      try {
-        const v = JSON.parse(localStorage.getItem(JOURNAL_KEY) || '{}');
-        journalCache = v && typeof v === 'object' ? (v as JournalData) : {};
-      } catch {
-        journalCache = {};
-      }
+    try {
+      const v: unknown = JSON.parse(localStorage.getItem(JOURNAL_KEY) || '{}');
+      return v && typeof v === 'object' && !Array.isArray(v) ? (v as JournalData) : {};
+    } catch {
+      return journalMemory; // no storage here: the page still counts, it just can't note anything for next time
     }
-    return journalCache;
   },
   write(outingId, speciesId, entry) {
     const all = localJournal.read();
@@ -45,6 +44,7 @@ export const localJournal: TallyJournal = {
       delete all[o][sp];
       if (!Object.keys(all[o]).length) delete all[o];
     }
+    journalMemory = all;
     try {
       if (Object.keys(all).length) localStorage.setItem(JOURNAL_KEY, JSON.stringify(all));
       else localStorage.removeItem(JOURNAL_KEY);
@@ -86,10 +86,33 @@ export function tallyQueueFor(outing: OutingRow, io: TallyIO = appIO): TallyQueu
   if (!q) {
     q = new TallyQueue(outing, io);
     queues.set(outing.id, q);
+    if (io === appIO) watchStore();
   }
   // Its place, date and time follow the record (the Finish sheet can change them).
   q.outing = outing;
   return q;
+}
+
+/** Forgets an outing's queue once the outing is deleted (Discard, Delete outing): nothing of it is drawn again. */
+export function forgetTally(outingId: number) {
+  queues.delete(outingId);
+}
+
+// Every read of the shared store reaches each queue still holding a write the store hadn't read back, whether or not
+// its outing is on screen, so the queue goes back to the store as soon as the store has the write.
+let watching = false;
+function watchStore() {
+  if (watching) return;
+  watching = true;
+  onStoreChange(() => {
+    let byId: Map<number, SightingRow> | null = null;
+    for (const q of queues.values()) {
+      if (!q.waiting()) continue;
+      byId ??= new Map((storeState().sightings as unknown as SightingRow[]).map((r) => [r.id, r]));
+      const all = byId;
+      q.catchUp((id) => all.get(id));
+    }
+  });
 }
 
 const noSub = () => () => {};

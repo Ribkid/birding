@@ -227,6 +227,9 @@ const subscribe = (fn: () => void) => {
 /** The whole state, for code outside React. */
 export const storeState = () => state;
 
+/** Calls `fn` after every change to the state, for code outside React (the outing tally's queue). */
+export const onStoreChange = (fn: () => void): (() => void) => subscribe(fn);
+
 /** One part of the store, kept fresh; a part that did not change keeps its identity, so nothing redraws for it. */
 export function useStore<T>(pick: (s: StoreState) => T): T {
   const get = () => pick(state);
