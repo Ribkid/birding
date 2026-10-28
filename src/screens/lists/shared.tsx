@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -8,7 +9,8 @@ import { db } from '../../core/db.js';
 import { likelihood, loadSeq, monthRates, seq } from '../../core/seqdata.js';
 import { badges, MONTHS, targets } from '../../core/stats.js';
 import { byId, dexCode, SPECIES, type Species } from '../../lib/data';
-import { normaliseSighting, useOutings, useSightings, type Outing, type Sighting } from '../../lib/hooks';
+import { useOutings, useSightings, type Outing, type Sighting } from '../../lib/hooks';
+import { useStore, type StoreState } from '../../lib/store';
 import { toast } from '../../lib/toast';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
@@ -78,47 +80,18 @@ export function useOutingRows(): OutingRow[] {
   return useOutings() as OutingRow[];
 }
 
-/** Patches are stored in their own IndexedDB store; this keeps the list fresh. */
+const pickPatches = (s: StoreState) => s.patches as unknown as Patch[];
+const pickActive = (s: StoreState) => s.activeOuting;
+const pickReady = (s: StoreState) => s.ready;
+
+/** Her patches, from the shared store (lib/store.ts), kept fresh as they change. */
 export function usePatches(): Patch[] {
-  const [rows, setRows] = useState<Patch[]>([]);
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      const all = (await db.all('patches')) as Patch[];
-      if (alive) setRows(all);
-    };
-    void load();
-    const off = db.onChange((name: string) => {
-      if (name === 'patches') void load();
-    });
-    return () => {
-      alive = false;
-      off();
-    };
-  }, []);
-  return rows;
+  return useStore(pickPatches);
 }
 
-/** The id in the `activeOuting` kv entry, or null. */
+/** The id in the `activeOuting` kv entry, or null, from the shared store. */
 export function useActiveOutingId(): number | null {
-  const [id, setId] = useState<number | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      const value = await db.kvGet('activeOuting');
-      if (!alive) return;
-      setId(value == null ? null : Number(value));
-    };
-    void load();
-    const off = db.onChange((name: string) => {
-      if (name === 'kv:activeOuting') void load();
-    });
-    return () => {
-      alive = false;
-      off();
-    };
-  }, []);
-  return id;
+  return useStore(pickActive);
 }
 
 /**
@@ -190,38 +163,19 @@ export interface LogData {
 
 /**
  * Sightings, outings, patches and the active outing, kept fresh as the database changes, and null until the first
- * read lands. v1 held these in memory from boot, so its sheet knew at once whether an outing was running.
+ * read lands. They come from the shared store (lib/store.ts), read at boot as v1 held them in memory, so the sheet
+ * knows at once whether an outing is running.
  */
 export function useLogData(): LogData | null {
-  const [data, setData] = useState<LogData | null>(null);
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const [sightings, outings, patches, active] = await Promise.all([
-          db.all('sightings'), db.all('outings'), db.all('patches'), db.kvGet('activeOuting'),
-        ]);
-        if (!alive) return;
-        setData({
-          sightings: (sightings as SightingRow[]).map(normaliseSighting),
-          outings: outings as OutingRow[],
-          patches: patches as Patch[],
-          activeId: active == null ? null : Number(active),
-        });
-      } catch {
-        if (alive) setData((prev) => prev ?? { sightings: [], outings: [], patches: [], activeId: null });
-      }
-    };
-    void load();
-    const off = db.onChange((name: string) => {
-      if (name === 'sightings' || name === 'outings' || name === 'patches' || name === 'kv:activeOuting') void load();
-    });
-    return () => {
-      alive = false;
-      off();
-    };
-  }, []);
-  return data;
+  const sightings = useSightingRows();
+  const outings = useOutingRows();
+  const patches = usePatches();
+  const activeId = useActiveOutingId();
+  const ready = useStore(pickReady);
+  return useMemo(
+    () => (ready ? { sightings, outings, patches, activeId } : null),
+    [ready, sightings, outings, patches, activeId],
+  );
 }
 
 /** v1 activeOuting(): the outing in the activeOuting kv entry, unless it has ended. */
@@ -251,6 +205,8 @@ const doneBadges = (sightings: SightingRow[], outings: OutingRow[]) =>
  * closes its sheet first and then calls announceSaved, as v1 closed the sheet before saving.
  */
 export async function writeSighting(rec: SightingInput): Promise<SaveOutcome> {
+  // Read from the database itself, not the shared store: a save straight after another (quick taps on an outing) must
+  // see the one before it to tell whether this species is new for her dex.
   const [stored, outings] = await Promise.all([db.all('sightings'), db.all('outings')]);
   const before = stored as SightingRow[];
   const seenBefore = new Set(before.map((s) => s.speciesId));

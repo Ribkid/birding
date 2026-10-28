@@ -1,3 +1,5 @@
+// Her records and the regional data start loading first, while the rest of the app is still being set up (lib/boot.ts).
+import { booted } from './lib/boot';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 // Every change of address runs in a view transition, as v1's hashchange handler did (components/RouteMotion.tsx).
@@ -26,13 +28,18 @@ import { registerServiceWorker } from './lib/sw';
 const root = document.getElementById('root');
 if (!root) throw new Error('#root missing from index.html');
 
-createRoot(root).render(
+// index.html paints a static shell (the hero, the sheet's edge and the tab bar) the moment the page loads. React
+// draws over it once her sightings, outings and patches (lib/store.ts) and the regional data (lib/seq.ts) are in, at
+// most BOOT_WAIT, so every screen's first frame has her real numbers and the Dex draws once, with the day's pick,
+// instead of drawing empty and again.
+const draw = () => createRoot(root).render(
   <StrictMode>
     <MotionHashRouter>
       <App />
     </MotionHashRouter>
   </StrictMode>,
 );
+void booted.then(draw, draw);
 
 // Offline shell. Only in a production build; the dev server has no sw.js.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

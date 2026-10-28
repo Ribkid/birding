@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { db } from '../core/db.js';
+import { useSyncExternalStore } from 'react';
 import { cachedIndex, loadIndex, onMediaReady } from '../core/media.js';
 import { loadExtras } from '../core/gallery.js';
+import { useStore, type StoreState } from './store';
+
+export { normaliseSighting, useDexReady } from './store';
 
 export interface Sighting {
   id: number;
@@ -24,60 +26,38 @@ export interface Outing {
   durationMin?: number | null;
 }
 
-/** v1 stores the note as `notes`; older React records also wrote a duplicate `note`. */
-export function normaliseSighting<T extends { notes?: string; note?: string }>(row: T): T {
-  if (row.note != null) {
-    if (row.notes == null) row.notes = row.note;
-    delete row.note;
-  }
-  return row;
-}
+// Her records come from the one shared store (lib/store.ts), read once at boot and kept fresh as the database
+// changes, so a screen draws her real numbers on its first frame. Each hook returns the same object until that part
+// of the store changes. Treat what they return as read-only: every screen shares it.
+const pickSightings = (s: StoreState) => s.sightings as unknown as Sighting[];
+const pickOutings = (s: StoreState) => s.outings as unknown as Outing[];
+const pickSeen = (s: StoreState) => s.seen;
+const pickKindCounts = (s: StoreState) => s.kindCounts;
+const pickLastSeen = (s: StoreState) => s.lastSeen;
 
 /** All sightings, kept fresh as the database changes. */
 export function useSightings(): Sighting[] {
-  const [rows, setRows] = useState<Sighting[]>([]);
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      const all = ((await db.all('sightings')) as Sighting[]).map(normaliseSighting);
-      if (alive) setRows(all);
-    };
-    void load();
-    const off = db.onChange((name: string) => {
-      if (name === 'sightings') void load();
-    });
-    return () => {
-      alive = false;
-      off();
-    };
-  }, []);
-  return rows;
+  return useStore(pickSightings);
 }
 
 /** The set of species ids Sarah has logged at least once. */
 export function useSeen(): Set<number> {
-  const sightings = useSightings();
-  return useMemo(() => new Set(sightings.map((s) => s.speciesId)), [sightings]);
+  return useStore(pickSeen);
 }
 
+/** All outings, kept fresh as the database changes. */
 export function useOutings(): Outing[] {
-  const [rows, setRows] = useState<Outing[]>([]);
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      const all = (await db.all('outings')) as Outing[];
-      if (alive) setRows(all);
-    };
-    void load();
-    const off = db.onChange((name: string) => {
-      if (name === 'outings') void load();
-    });
-    return () => {
-      alive = false;
-      off();
-    };
-  }, []);
-  return rows;
+  return useStore(pickOutings);
+}
+
+/** How many species of each kind she has seen. */
+export function useKindCounts(): Map<string, number> {
+  return useStore(pickKindCounts);
+}
+
+/** Her latest sighting of each species, as 'YYYY-MM-DD HH:MM', for sorting by recently seen. */
+export function useLastSeen(): Map<number, string> {
+  return useStore(pickLastSeen);
 }
 
 // Photo readiness, shared by every component that draws a species photo. v1 waited for the saved photo index

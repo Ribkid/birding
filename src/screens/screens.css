@@ -49,6 +49,12 @@
   border-radius: var(--r-pill); color: var(--ink); font-size: var(--fs-2); font-weight: 600; line-height: 1.2;
 }
 .dex-cap b { display: inline-block; margin-right: 1px; font: 800 var(--fs-4)/1 var(--stamp); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+/* A number that counts up keeps the width of the number it ends on (--digits), so the words after it hold still. */
+.dex-cap b { min-width: calc(var(--digits, 1) * (1ch + .02em)); text-align: end; }
+/* The static shell (index.html): its capsule is the right size with nothing in it yet, and its empty sheet still
+   covers the foot of the hero, as the real sheet's rails do. */
+.shell-ghost { visibility: hidden; }
+[data-shell] .dex-sheet { min-height: 40vh; }
 .dex-cap-ring { --kc: var(--seen); width: 34px; height: 34px; }
 
 /* Rings: a track and an arc in the kind colour, filled from empty on the first draw of a session. */
@@ -99,7 +105,7 @@
 .kind-tab-txt { display: grid; gap: 2px; }
 .kind-tab-l { font-size: var(--fs-2); font-weight: 700; line-height: 1.1; white-space: nowrap; }
 .kind-tab-n { font: 600 var(--fs-2)/1 var(--stamp); color: var(--ink-2); letter-spacing: .03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.kind-tab-n b { display: inline-block; font-weight: 800; font-size: var(--fs-3); color: var(--ink); }
+.kind-tab-n b { display: inline-block; min-width: calc(var(--digits, 1) * (1ch + .03em)); text-align: end; font-weight: 800; font-size: var(--fs-3); color: var(--ink); }
 .kind-tab[aria-selected="true"] { background: var(--kc); color: var(--on-kind); }
 .kind-tab[aria-selected="true"] :is(.kind-tab-n, .kind-tab-n b) { color: inherit; }
 .kind-tab[aria-selected="true"] .ring-track { stroke: color-mix(in srgb, currentColor 30%, transparent); }

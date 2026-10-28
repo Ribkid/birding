@@ -10,11 +10,16 @@ export const THEMES: [Theme, string][] = [
   ['outdoor', 'Outdoor (high contrast for bright sun)'],
 ];
 
+/** A copy of the theme kept in this browser, which index.html reads before the first paint (the setting itself is
+ *  in IndexedDB, which answers too late for that), so a chosen theme never opens in the phone's scheme first. */
+export const THEME_KEY = 'birddex-theme';
+
 export function applyTheme(theme?: string | null) {
   const root = document.documentElement;
   const t = theme || 'auto';
   if (t === 'auto') delete root.dataset.theme;
   else root.dataset.theme = t;
+  try { localStorage.setItem(THEME_KEY, t); } catch { /* private mode: the first frame follows the phone */ }
 }
 
 export async function storedSettings(): Promise<Record<string, unknown>> {

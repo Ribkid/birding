@@ -29,6 +29,9 @@ export function navKind(from: string, to: string): Nav {
 const scrollMem = new Map<string, number>();
 // Where the screen being drawn scrolls to, and the tile to keep in sight on going back from its species page.
 let pending: { key: string; y: number; tile: number | null } | null = null;
+/** While the screen for history entry `key` is being drawn: the scroll it will land on. The Dex draws the groups
+ *  around that place first when it is where she left it (screens/Dex.tsx). */
+export const landingScroll = (key: string) => (pending && pending.key === key ? pending.y : null);
 
 const THUMB = '.tile-img, .row-thumb, .botd-img, .cmp-img';
 // A photo just tapped on its way to a species page, and which kind of photo opened each species page (a tile, Bird of
