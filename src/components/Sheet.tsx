@@ -199,8 +199,9 @@ export function Sheet({ open, onClose, children, label, labelledBy, wide = false
     };
   }, [open, label, labelledBy, modal, lock]);
 
-  // Closing (open turns false, or the owner drops the sheet) plays the exit unless a route change did it: v1 removed
-  // a sheet at once for 'nav', and the hash has already moved when the screen that held it unmounts.
+  // Closing (open turns false, or the owner drops the sheet) plays the exit unless a route change did it or another
+  // sheet took its place: v1 removed a sheet at once for 'nav' and 'replace', and the hash has already moved when the
+  // screen that held it unmounts.
   useLayoutEffect(() => {
     if (!open) return;
     const wrap = wrapRef.current;

@@ -27,9 +27,8 @@ export function navKind(from: string, to: string): Nav {
 
 // Where she was on each address, for going back to it.
 const scrollMem = new Map<string, number>();
-// What the next draw scrolls to, and the tile to keep in sight on going back from its species page.
-let pendingScroll: number | null = null;
-let pendingTile: number | null = null;
+// Where the screen being drawn scrolls to, and the tile to keep in sight on going back from its species page.
+let pending: { key: string; y: number; tile: number | null } | null = null;
 
 const THUMB = '.tile-img, .row-thumb, .botd-img, .cmp-img';
 // A photo just tapped on its way to a species page, and which kind of photo opened each species page (a tile, Bird of
@@ -72,8 +71,7 @@ function onRouteChange(prev: Location, next: Location, apply: () => void) {
   const hero = !tapped && fromId && nav === 'back' && motionOK() ? viewEl()?.querySelector<HTMLElement>('[data-hero-frame]') : null;
   if (hero && inView(hero)) { nameFor(hero, 'sp-hero'); shrinkTo = fromId; }
   // A new screen starts at the top, except going back, which returns to where she was.
-  pendingScroll = nav === 'back' ? scrollMem.get(to) || 0 : 0;
-  pendingTile = fromId && nav === 'back' && !shrinkTo ? fromId : null;
+  pending = { key: next.key, y: nav === 'back' ? scrollMem.get(to) || 0 : 0, tile: fromId && nav === 'back' && !shrinkTo ? fromId : null };
   const draw = () => { closeAllLayers('nav'); flushClosingSheets(); apply(); };
   // vt() would draw at once here. The change may come from a screen's effect (a redirect), where React can't draw
   // synchronously, so it is handed to React as it is.
@@ -134,9 +132,9 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
   }, [history]);
 
   useLayoutEffect(() => {
-    if (pendingScroll == null) return;
-    const y = pendingScroll, tile = pendingTile;
-    pendingScroll = pendingTile = null;
+    if (!pending || pending.key !== state.location.key) return;
+    const { y, tile } = pending;
+    pending = null;
     window.scrollTo(0, y);
     // The remembered scroll can land a little off if the page drew differently: make sure the tile she opened is in
     // sight.
