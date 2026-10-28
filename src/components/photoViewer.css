@@ -29,6 +29,15 @@
 }
 .pv-img.is-wait { opacity: 0; }
 .pv-img--soft { filter: blur(6px); }
+/* A photo still on its way: a quiet ring in the middle, shown only if it takes a moment (a small copy, once in,
+   draws over it). */
+.pv-loading {
+  position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .22); border-top-color: rgba(255, 255, 255, .85);
+  opacity: 0; animation: pv-in var(--dur-2) linear 300ms forwards, pv-spin .9s linear infinite;
+}
+@keyframes pv-in { to { opacity: 1; } }
+@keyframes pv-spin { to { rotate: 1turn; } }
 .pv-missing {
   position: absolute; left: 50%; top: 50%; translate: -50% -50%;
   width: min(100% - 32px, 560px); aspect-ratio: 4 / 3; border-radius: var(--r-card);
@@ -61,13 +70,15 @@
   font: 600 var(--fs-2)/1 var(--stamp); letter-spacing: .05em; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .pv-count b { font-weight: 800; }
+/* The credit always shows in full: a long one wraps to a second line rather than being cut off. */
 .pv-credit {
   position: absolute; z-index: 2; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); translate: -50% 0;
-  max-width: calc(100% - 24px); margin: 0; padding: 10px 16px; border-radius: var(--r-pill);
-  font-size: var(--fs-1); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  width: max-content; max-width: calc(100% - 24px); margin: 0; padding: 10px 16px; border-radius: 18px;
+  font-size: var(--fs-1); line-height: 1.4; text-align: center; text-wrap: balance; overflow-wrap: anywhere;
   opacity: var(--pv-ui, 1);
 }
-.pv-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; display: inline-block; padding: 13px 0; margin: -13px 0; }
+/* Padded so the link is a full-height target; inline, so it wraps with the rest of the line. */
+.pv-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; padding: 12px 0; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .pv-close, .pv-count, .pv-credit { background: var(--glass-strong); }
 }
@@ -75,6 +86,7 @@
   .pv-close, .pv-count, .pv-credit { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .pv-loading { animation: pv-in var(--dur-2) linear 300ms forwards; }
   .pv-img, .pv-close { transition: none; }
   .pv-close:active { scale: none; }
 }

@@ -143,6 +143,7 @@ function ViewerImage({ ph, alt }: { ph: ViewerPhoto; alt: string }) {
   const small = ph.small && ph.small !== ph.src ? ph.small : null;
   return (
     <>
+      {look === 'wait' ? <span className="pv-loading" aria-hidden="true" /> : null}
       {small && look === 'wait' ? <img className="pv-img pv-img--soft" src={small} alt="" aria-hidden="true" decoding="async" draggable={false} /> : null}
       <img
         ref={ref}
@@ -200,12 +201,30 @@ function morphEasing(el: Element) {
   try { el.animate([{ opacity: 1 }, { opacity: 1 }], { duration: 1, easing: v }).cancel(); return v; } catch { return EASE_OUT; }
 }
 
-/** The part of an element that is on screen: clipped by every ancestor that clips (the hero, the gallery). */
+const opaque = (s: CSSStyleDeclaration) => {
+  const a = /rgba?\([^)]*?,\s*([\d.]+)\)/.exec(s.backgroundColor);
+  return s.backgroundColor !== 'transparent' && (!a || parseFloat(a[1]) >= 0.9);
+};
+/**
+ * The part of an element that is on screen: clipped by every ancestor that clips (the hero, the gallery), and above
+ * any solid block drawn over its foot later in the page (the species page's sheet slides up over the hero), so the
+ * flying photo never covers it.
+ */
 function visibleRect(el: Element): Rect | null {
   let clip = intersect(rectOf(el), viewport());
   for (let p = el.parentElement; p && clip && p !== document.body; p = p.parentElement) {
     const s = getComputedStyle(p);
     if (s.overflowX !== 'visible' || s.overflowY !== 'visible') clip = intersect(clip, rectOf(p));
+  }
+  for (let a: Element | null = el; a && clip && a !== document.body && a.id !== 'root'; a = a.parentElement) {
+    for (let s = a.nextElementSibling; s && clip; s = s.nextElementSibling) {
+      const r = rectOf(s);
+      const c: Rect = clip;
+      if (r.x > c.x + 1 || r.x + r.w < c.x + c.w - 1 || r.y <= c.y + 1 || r.y >= c.y + c.h) continue;
+      const cs = getComputedStyle(s);
+      if (cs.visibility === 'hidden' || parseFloat(cs.opacity) < 0.9 || !opaque(cs)) continue;
+      clip = { ...c, h: r.y - c.y };
+    }
   }
   return clip;
 }
@@ -314,10 +333,11 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     tween(300, (e) => setTrack(from + (to - from) * e));
   };
 
+  // Animations are kept until they are cancelled: one that has finished still holds its last frame (fill), which
+  // would otherwise win over the opacity a drag sets.
   const run = (el: Element, frames: Keyframe[], opts: KeyframeAnimationOptions) => {
     const a = el.animate(frames, opts);
     anims.add(a);
-    void a.finished.then(() => anims.delete(a), () => anims.delete(a));
     return a;
   };
   const stopAnims = () => { for (const a of anims) a.cancel(); anims.clear(); };
@@ -344,9 +364,9 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     const k = shown;
     setTrack(restX(k));
     root.querySelector<HTMLElement>('.pv-close')?.focus({ preventScroll: true });
-    const done = () => {
+    const done = (stop = true) => {
       if (phase !== 'opening') return;
-      stopAnims();
+      if (stop) stopAnims();
       clearFly();
       setBack(null);
       chrome().forEach((el) => { el.style.opacity = ''; });
@@ -358,7 +378,7 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     if (!from?.d || !from.d.src) {
       // Reduced motion, or nothing on the page to grow from: the viewer fades in where it is.
       run(root, [{ opacity: 0 }, { opacity: 1 }], { duration: motionOK() ? 200 : 120, easing: motionOK() ? EASE_OUT : 'linear' });
-      done();
+      done(false);
       return;
     }
     const { W, H } = size();
@@ -385,6 +405,8 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
   function finish() {
     if (phase === 'gone') return;
     phase = 'gone';
+    // Off the screen before its animations let go of their last frames, so nothing flashes before React removes it.
+    root.style.visibility = 'hidden';
     stopAnims();
     finishTween();
     clearFly();
