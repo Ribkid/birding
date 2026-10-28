@@ -1,5 +1,6 @@
 // Search everything (v1 js/app.js openSearch): species, hotspots, her patches and her sightings, in a full-screen
-// layer over the dex. A result link closes it through the route change.
+// layer. The one search overlay, opened from the dex (its search button and '/') and the species page's hero. A result
+// link closes it through the route change.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
@@ -87,7 +88,7 @@ export function DexSearch({ initial, sightings, seen, onClose }: {
         <p className="small muted">Try one of these, or type any name, place or habitat.</p>
         <div className="chips">
           {IDEAS.map((t) => (
-            <button key={t} type="button" className="chip" onClick={() => { setQ(t); inputRef.current?.focus(); }}>{t}</button>
+            <button key={t} type="button" className="chip" data-try={t} onClick={() => { setQ(t); inputRef.current?.focus(); }}>{t}</button>
           ))}
         </div>
       </div>
@@ -160,7 +161,7 @@ export function DexSearch({ initial, sightings, seen, onClose }: {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <button type="button" className="iconbtn" aria-label="Close search" onClick={onClose}>{ICON.close}</button>
+        <button type="button" className="iconbtn" data-x="" aria-label="Close search" onClick={onClose}>{ICON.close}</button>
       </div>
       <div className="search-res" aria-live="polite">{body}</div>
     </div>,
