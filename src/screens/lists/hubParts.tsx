@@ -111,5 +111,5 @@ export function CountKey({ k, value }: { k: string; value: number }) {
     counted.set(k, value);
     void countUp(ref.current, from, value, { delay: 120 });
   }, [k, value]);
-  return <b ref={ref}>{value}</b>;
+  return <b ref={ref} data-count-key={k}>{value}</b>;
 }

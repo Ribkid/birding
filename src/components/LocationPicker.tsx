@@ -182,7 +182,7 @@ export function LocationPicker({ init, onDone }: { init: { lat?: number | null; 
         <ul className={`rows locpick-res${open ? '' : ' hidden'}`} data-lres="">
           {found.map((p, i) => (
             <li key={`${p.name}-${i}`}>
-              <button type="button" className="row" onClick={() => choose(p)}>
+              <button type="button" className="row" data-placeidx={i} onClick={() => choose(p)}>
                 <span className="row-main"><strong>{p.name}</strong><span className="small muted">{p.kind}</span></span>
               </button>
             </li>

@@ -75,7 +75,7 @@ export function Sheet({ open, onClose, children, label, labelledBy, wide = false
   if (!open) return null;
   return createPortal(
     <div ref={wrapRef} className={`sheet-wrap ${cls}${shown ? ' open' : ''}`} data-closing={undefined}>
-      <div className="sheet-scrim" onClick={onClose} />
+      <div className="sheet-scrim" data-close="" onClick={onClose} />
       <div ref={cardRef} className={`sheet ${wide ? 'sheet--wide' : ''}`.trim()}>
         <div className="sheet-grip" aria-hidden="true" />
         {children}
