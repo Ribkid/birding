@@ -1175,7 +1175,7 @@ function MapView() {
 
   return (
     <div className="map-screen">
-      <h1 className="map-sr">Map</h1>
+      <h1 className="sr-only">Map</h1>
       <p id="map-help" className="map-sr">
         Use the arrow keys to pan the map. Everything shown in map popups is listed as text in the
         Map details section after the map.
@@ -1187,7 +1187,7 @@ function MapView() {
           ref={mapElRef}
           role="region"
           tabIndex={0}
-          aria-label="Map of South East Queensland showing your patches, birding hotspots and sightings"
+          aria-label="Map of your sightings and SEQ birding hotspots"
           aria-describedby="map-help"
         />
 
