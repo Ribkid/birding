@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useReducer, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { byId, KINDS, SPECIES, kindsPresent, type Species } from '../../lib/data';
-import { useMedia, useSightings } from '../../lib/hooks';
+import { mediaSettled, useMedia, useSightings } from '../../lib/hooks';
 import { useStagger, CountUp } from '../../components/Motion';
 import { useTint } from '../../components/Motion';
+import { FadeImage } from '../../components/SpeciesImage';
 import * as Q from '../../core/quiz.js';
 import {
   learnReady, getLearn, getDaily, learnStats, masteryOf, dueCards, allCards, boxes, currentStreak, setActive,
@@ -51,6 +52,9 @@ export default function Learn() {
   const [ready, setReady] = useState(false);
   const [notice, setNotice] = useState('');
   useMedia();
+  // The day's covers and faces are picked once gallery.json and the saved photo index are in (v1 drew the hub again
+  // when they arrived), so a cold start doesn't leave the cards without photos.
+  const settled = mediaSettled();
   useSightings();
 
   useEffect(() => {
@@ -106,7 +110,7 @@ export default function Learn() {
       if (pick) { used.add(pick.id); out[p.key] = faceSrc(pick.id); }
     }
     return out;
-  }, [today, ready]);
+  }, [today, ready, settled]);
 
   const modeFaces = (kind: string): Record<string, number | number[]> => {
     const all = Q.speciesFor(kind).filter((s: Species) => Q.hasPhoto(s));
@@ -134,7 +138,7 @@ export default function Learn() {
     }
     return out;
   };
-  const faces = useMemo(() => modeFaces(prefs.kind), [prefs.kind, ready]);
+  const faces = useMemo(() => modeFaces(prefs.kind), [prefs.kind, ready, settled]);
   const hubRef = useStagger<HTMLDivElement>('.lh-daily, .lh-packs > li, .lh-modes[data-modes] > li, .lh-stats > li', 'learn-hub');
 
   if (!ready) return <div className="learn learn--loading" aria-busy="true" />;
@@ -159,7 +163,7 @@ export default function Learn() {
         {!navigator.onLine && <p className="lh-offline" role="status">No signal. Questions use the photos and calls saved on this phone, plus field notes.</p>}
 
         <Link ref={tintRef} className={`lh-daily${doneToday ? ' is-done' : ''}${hero ? ` kind--${hero.kind}` : ''}`} to="/learn/daily">
-          {hero && <span className="lh-daily-photo" aria-hidden="true"><img src={heroSrc} alt="" /></span>}
+          {hero && <span className="lh-daily-photo" aria-hidden="true">{heroSrc ? <FadeImage key={hero.id} src={heroSrc} /> : null}</span>}
           <span className="lh-daily-top">
             <span className="lh-date" aria-hidden="true"><b>{date.getDate()}</b><span>{monthName(date)}</span></span>
             {streak > 0 && <span className="lh-streak"><b>{streak}</b><span>{streak === 1 ? 'day' : 'days'} in a row</span></span>}
@@ -188,7 +192,7 @@ export default function Learn() {
                   return (
                     <li key={p.key}>
                       <Link className={`lh-mode lh-pack${p.kind ? ` kind--${p.kind}` : ''}`} to={`/learn/play/${p.key}`} aria-label={`${p.name}. ${p.total} species${p.got ? `, ${p.got} got right` : ''}${p.best != null ? `. Best ${p.best} of ${p.of}` : ''}.`}>
-                        <span className="lh-mode-bg" aria-hidden="true">{cover && <img src={cover} alt="" />}</span>
+                        <span className="lh-mode-bg" aria-hidden="true">{cover && <FadeImage src={cover} />}</span>
                         <span className="lh-mode-top" aria-hidden="true">
                           {p.got ? <span className="lh-ring"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" pathLength="100" /><circle className="lh-ring-fg" cx="20" cy="20" r="16" pathLength="100" style={{ strokeDashoffset: 100 - frac * 100 }} /></svg><b>{Math.max(1, Math.round(frac * 100))}<span>%</span></b></span> : <span />}
                           {p.best != null && <span className="lh-best">Best <b>{p.best}</b><span>/{p.of}</span></span>}
@@ -231,10 +235,11 @@ export default function Learn() {
               const id = faces[m];
               const b = (L?.best as Record<string, number> | undefined)?.[bestKey(m, prefs)];
               const split = Array.isArray(id);
+              const face = !split && id ? faceSrc(id as number, m === 'quick' ? 'large' : 'small') : '';
               return (
                 <li key={m} className={m === 'quick' ? 'lh-mode--wide' : ''}>
                   <Link className={`lh-mode lh-mode--${m}${off ? ' is-off' : ''}`} to={off ? '#' : `/learn/play/${m}`} aria-disabled={off || undefined} onClick={(e) => { if (off) { e.preventDefault(); setNotice('Calls are for birds and frogs. Choose All animals, Birds or Frogs.'); } }}>
-                    <span className={`lh-mode-bg${split ? ' is-split' : ''}`} aria-hidden="true">{split ? (id as number[]).map((sid) => <img key={sid} src={faceSrc(sid)} alt="" />) : id ? <img src={faceSrc(id as number, m === 'quick' ? 'large' : 'small')} alt="" /> : null}</span>
+                    <span className={`lh-mode-bg${split ? ' is-split' : ''}`} aria-hidden="true">{split ? (id as number[]).map((sid) => (faceSrc(sid) ? <FadeImage key={sid} src={faceSrc(sid)} /> : null)) : face ? <FadeImage key={id as number} src={face} /> : null}</span>
                     <span className="lh-mode-top"><span className="lh-mode-ic" aria-hidden="true"><svg viewBox="0 0 24 24">{MODE_ICONS[m]}</svg></span>{b != null && <span className="lh-best">{m === 'rapid' ? 'Best streak' : 'Best'} <b>{b}</b>{m === 'rapid' ? null : <span>/{ROUND}</span>}</span>}</span>
                     <span className="lh-mode-txt"><strong>{title}</strong><span className="lh-mode-desc">{off ? 'Calls are for birds and frogs. Choose All animals, Birds or Frogs.' : desc}</span></span>
                   </Link>

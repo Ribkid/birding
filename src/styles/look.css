@@ -119,6 +119,8 @@ body.has-sheet .topbar { pointer-events: none; }
 .row-thumb, .botd-img { position: relative; }
 @keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
 @media (prefers-reduced-motion: reduce) { .tile-img::after, .row-thumb::after, .botd-img::after { animation: none !important; } }
+/* Learn's photo cards shimmer too (learn.css); under reduced motion they hold still like the rest. */
+@media (prefers-reduced-motion: reduce) { .lh-daily-photo::after, .lh-mode-bg::after, .lr-card-img::after { animation: none !important; } }
 
 /* One-time entrance for grids and lists (js/look.js stagger): items rise in, one after another. */
 .enter { animation: rise-in var(--dur-3) var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 16) * 32ms); }
