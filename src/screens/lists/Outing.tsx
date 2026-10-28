@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../core/db.js';
 import { byId, type Species } from '../../lib/data';
@@ -7,16 +7,15 @@ import { Sheet } from '../../components/Sheet';
 import { LocationPicker, type PickedPlace } from '../../components/LocationPicker';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { toast } from '../../lib/toast';
-import { countUp } from '../../lib/motion';
+import { countOnTo, countUp, stamp } from '../../lib/motion';
 import { CountKey } from './hubParts';
+import { buzz, useTally } from './useTally';
 import {
   ConfirmDialog,
   deleteSighting,
   fmtDate,
   matchSpecies,
   plural,
-  saveSighting,
-  timeStr,
   todayStr,
   useActiveOutingId,
   useOutingRows,
@@ -44,11 +43,14 @@ const minutesSinceStart = (outing: OutingRow): number | null => {
 function FinishOuting({
   outing,
   sightingCount,
+  flush,
   onClose,
   onSaved,
 }: {
   outing: OutingRow;
   sightingCount: number;
+  /** Stores the tally's last taps first, so the outing's birds below are all of them. */
+  flush: () => Promise<void>;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -80,6 +82,7 @@ function FinishOuting({
     const startAt = new Date(`${date}T${time || '00:00'}`);
     setSaving(true);
     try {
+      await flush();
       const updated: OutingRow = {
         ...outing,
         endedAt: outing.endedAt || Date.now(),
@@ -247,11 +250,12 @@ export default function Outing() {
   const [finishOpen, setFinishOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
-  // One tally change at a time. The buttons stay enabled (v1's do), so a tap never drops focus to <body>.
-  const working = useRef(false);
+  // The buttons stay enabled (v1's do), so a tap never drops focus to <body>; every tap counts (useTally).
   const refocus = useRef<Refocus | null>(null);
-  // The row count that changed, and what it was: v1 stamps the new number in (countUp, 60 ms).
-  const stamp = useRef<{ id: number; before: number; until: number } | null>(null);
+  // The rows a tap changed, and what they showed before it: the new number stamps in (v1's renderOuting).
+  const stamps = useRef<{ id: number; from: number | null }[]>([]);
+  // What each row showed at the last draw, so a running count-up follows a change it didn't start (a rollback).
+  const drawn = useRef(new Map<number, number | null>());
 
   const recs = useMemo(
     () => sightings.filter((row) => row.outingId === outingId),
@@ -275,7 +279,9 @@ export default function Outing() {
     );
   }, [recs]);
 
+  // The stored sighting per species; useTally adds the taps not stored yet, so the rows draw from it.
   const counts = useMemo(() => new Map(tally.map((rec) => [rec.speciesId, rec])), [tally]);
+  const tallied = useTally(outing, counts);
 
   const seenOutside = useMemo(
     () =>
@@ -315,16 +321,32 @@ export default function Outing() {
     want.spare = spare;
   });
 
-  // v1: "The count stamps as it changes." Once the new count is drawn, it counts in from the old one.
-  useEffect(() => {
-    const s = stamp.current;
-    if (!s) return;
-    if (Date.now() > s.until) { stamp.current = null; return; }
-    const after = counts.get(s.id)?.count;
-    if (typeof after !== 'number' || after === s.before) return;
-    stamp.current = null;
-    const n = document.querySelector<HTMLElement>(`#view [data-n="${s.id}"]`);
-    if (n) void countUp(n, s.before, after, { duration: 60 });
+  // v1: "The count stamps as it changes." The new number is drawn with the tap and stamps in before it is painted:
+  // a step of one pops (STAMP easing, 120 ms), a flock counts up to it. A row a tap didn't change, but whose number
+  // moved (a write taken back), carries a count-up that is still running on to it. Reduced motion: no stamp.
+  useLayoutEffect(() => {
+    const asked = stamps.current;
+    stamps.current = [];
+    const view = document.getElementById('view');
+    const now = new Map(tallied.rows.map((r) => [r.speciesId, r.count]));
+    const els = (id: number) => (view ? [...view.querySelectorAll<HTMLElement>(`[data-n="${id}"]`)] : []);
+    const done = new Set<number>();
+    for (const { id, from } of asked) {
+      if (done.has(id)) continue;
+      done.add(id);
+      const to = now.get(id);
+      if (typeof to !== 'number') continue;
+      for (const el of els(id)) {
+        if (countOnTo(el, to)) continue;
+        if (from != null && Math.abs(to - from) > 1) void countUp(el, from, to);
+        else stamp(el);
+      }
+    }
+    for (const [id, to] of now) {
+      if (done.has(id) || typeof to !== 'number' || drawn.current.get(id) === to) continue;
+      for (const el of els(id)) countOnTo(el, to);
+    }
+    drawn.current = now;
   });
 
   if (!outing) {
@@ -357,46 +379,23 @@ export default function Outing() {
   const results = query.trim() ? matchSpecies(query, 12) : [];
   const mins = live ? minutesSinceStart(outing) : outing.durationMin;
 
-  const change = async (sp: Species, delta: 1 | -1) => {
-    if (working.current) return;
-    working.current = true;
+  // A tap counts at once and is never dropped: the row shows it straight away and useTally's writer stores the
+  // taps in turn (one write per species for however many came in meanwhile). The stamp, a short buzz and focus
+  // staying on the button she pressed answer each one.
+  const change = (sp: Species, delta: number) => {
     refocus.current = { id: sp.id, attr: delta > 0 ? 'data-inc' : 'data-dec', until: Date.now() + 1500, spare: null };
-    stamp.current = { id: sp.id, before: counts.get(sp.id)?.count ?? 0, until: Date.now() + 1500 };
-    try {
-      const current = counts.get(sp.id);
-      if (current) {
-        const next = (current.count ?? 1) + delta;
-        if (next <= 0) await deleteSighting(current);
-        else await db.put('sightings', { ...current, count: next });
-      } else if (delta > 0) {
-        await saveSighting({
-          speciesId: sp.id,
-          count: 1,
-          heard: false,
-          date: outing.date,
-          time: outing.past || outing.endedAt ? outing.time : timeStr(),
-          lat: outing.lat ?? null,
-          lng: outing.lng ?? null,
-          acc: null,
-          place: outing.place ?? '',
-          notes: '',
-          photoId: null,
-          outingId: outing.id,
-          createdAt: Date.now(),
-        });
-      }
-      if (delta > 0 && live) await db.kvSet('activeOuting', outing.id);
-      if (delta > 0 && query) setQuery('');
-    } finally {
-      working.current = false;
-    }
+    const cur = tallied.get(sp.id);
+    stamps.current.push({ id: sp.id, from: cur ? cur.count : 0 });
+    tallied.tap(sp.id, delta);
+    buzz(8);
+    if (delta > 0 && query) setQuery('');
   };
 
   const tallyRow = (sp: Species) => {
-    const rec = counts.get(sp.id);
+    const row = tallied.get(sp.id);
     const firstEver = !seenOutside.has(sp.id);
     return (
-      <li className={`tally-row ${rec ? 'tally-row--on' : ''}`} key={sp.id}>
+      <li className={`tally-row ${row ? 'tally-row--on' : ''}`} key={sp.id}>
         <Link className="tally-sp" to={`/bird/${sp.id}`}>
           <span className="row-thumb">
             <SpeciesImage sp={sp} />
@@ -408,18 +407,18 @@ export default function Outing() {
         </Link>
         {editing ? (
           <div className="tally-ctl">
-            {rec && (
+            {row && (
               <>
                 <button
                   type="button"
                   data-dec={sp.id}
                   aria-label={`One fewer ${sp.name}`}
-                  onClick={() => void change(sp, -1)}
+                  onClick={() => change(sp, -1)}
                 >
                   −
                 </button>
                 <span className="tally-n" data-n={sp.id}>
-                  {rec.count ?? 'X'}
+                  {row.count ?? 'X'}
                 </span>
               </>
             )}
@@ -428,19 +427,22 @@ export default function Outing() {
               data-inc={sp.id}
               className="tally-inc"
               aria-label={`Add ${sp.name}`}
-              onClick={() => void change(sp, 1)}
+              onClick={() => change(sp, 1)}
             >
               +
             </button>
           </div>
         ) : (
-          <span className="tally-n">{rec?.count ?? 'X'}</span>
+          <span className="tally-n">{row?.count ?? 'X'}</span>
         )}
       </li>
     );
   };
 
-  const ordered = tally.map((rec) => byId.get(rec.speciesId)).filter((sp): sp is Species => !!sp);
+  const ordered = tallied.rows.map((row) => byId.get(row.speciesId)).filter((sp): sp is Species => !!sp);
+  // The sightings Discard removes: the stored ones, less those counted down to 0, plus species not stored yet.
+  const sightingTotal =
+    recs.length - [...counts.keys()].filter((id) => !tallied.get(id)).length + tallied.rows.filter((row) => !counts.has(row.speciesId)).length;
 
   return (
     <>
@@ -460,7 +462,7 @@ export default function Outing() {
 
       <div className="tally-sum">
         <p className="list-count">
-          <CountKey k={`outing/${outing.id}`} value={tally.length} /> species{!live && outing.distanceKm ? `, ${outing.distanceKm} km` : ''}
+          <CountKey k={`outing/${outing.id}`} value={tallied.rows.length} /> species{!live && outing.distanceKm ? `, ${outing.distanceKm} km` : ''}
         </p>
         {live && <span className="ocard-live">In progress</span>}
       </div>
@@ -523,7 +525,8 @@ export default function Outing() {
       {finishOpen && (
         <FinishOuting
           outing={outing}
-          sightingCount={tally.length}
+          sightingCount={tallied.rows.length}
+          flush={tallied.flush}
           onClose={() => setFinishOpen(false)}
           onSaved={() => setEditingBirds(false)}
         />
@@ -533,7 +536,7 @@ export default function Outing() {
         <ConfirmDialog
           title={live ? 'Discard this outing?' : 'Delete this outing?'}
           body={`This removes the outing and its ${plural(
-            recs.length,
+            sightingTotal,
             'sighting',
           )}. This cannot be undone.`}
           confirmLabel={live ? 'Discard' : 'Delete'}
@@ -543,7 +546,11 @@ export default function Outing() {
             if (busy) return;
             setBusy(true);
             try {
-              for (const rec of recs) await deleteSighting(rec);
+              // Taps not written yet go; one being written lands first, so it is deleted with the rest. The
+              // database, not the store, says which sightings are on the outing now.
+              await tallied.drop();
+              const onIt = (await db.byIndex('sightings', 'outingId', outing.id)) as SightingRow[];
+              for (const rec of onIt) await deleteSighting(rec);
               await db.del('outings', outing.id);
               if (activeOutingId === outing.id) await db.kvSet('activeOuting', null);
               setConfirmDelete(false);
