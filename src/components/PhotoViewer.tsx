@@ -274,7 +274,9 @@ function drawnIn(frame: Element, nat: { w: number; h: number } | null) {
   const { px, py } = objectPosition(cs?.objectPosition);
   const at = drawnRect(size.w, size.h, box, cs?.objectFit || 'cover', px, py);
   const radius = parseFloat(getComputedStyle(frame).borderTopLeftRadius) || 0;
-  return { src: shownImg ? shownImg.currentSrc || shownImg.src : '', nat: size, at, clip: intersect(clip, box) || clip, radius };
+  // A soft copy (the small one while the large one loads) flies as softly as the frame draws it.
+  const filter = shownImg ? getComputedStyle(shownImg).filter : 'none';
+  return { src: shownImg ? shownImg.currentSrc || shownImg.src : '', nat: size, at, clip: intersect(clip, box) || clip, radius, filter };
 }
 
 function controller(root: HTMLDivElement, live: { current: Live }): Controller {
@@ -397,7 +399,7 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     return a;
   };
   const stopAnims = () => { for (const a of anims) a.cancel(); anims.clear(); };
-  const makeFly = (src: string, base: Rect, start: { transform: string; clipPath: string }) => {
+  const makeFly = (src: string, base: Rect, start: { transform: string; clipPath: string }, filter = 'none') => {
     fly?.remove();
     const im = document.createElement('img');
     im.className = 'pv-fly';
@@ -409,6 +411,7 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     im.style.height = `${base.h}px`;
     im.style.transform = start.transform;
     im.style.clipPath = start.clipPath;
+    if (filter && filter !== 'none') im.style.filter = filter;
     root.append(im);
     fly = im;
     return im;
@@ -449,7 +452,7 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     setBack(0);
     chrome().forEach((el) => { el.style.opacity = '0'; });
     root.classList.add('pv--flying');
-    const im = makeFly(from.d.src, base, start);
+    const im = makeFly(from.d.src, base, start, from.d.filter);
     // The same photo the page already drew, so this is quick; it keeps the first frame from being empty.
     await settle(im.decode?.() ?? Promise.resolve(), 120);
     if (phase !== 'opening' || fly !== im) return;
@@ -512,7 +515,7 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     const start = flyFrame(base, now, intersect(now, { x: 0, y: 0, w: W, h: H }), 0);
     const end = flyFrame(base, to.at, to.clip, to.radius);
     hideOrigin(o);
-    makeFly(im.currentSrc || im.src, base, start);
+    makeFly(im.currentSrc || im.src, base, start, getComputedStyle(im).filter);
     root.classList.add('pv--flying');
     const easing = morphEasing(root);
     const flight = run(fly!, [start, end], { duration: DUR, easing, fill: 'forwards' });
