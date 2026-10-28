@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { periodFilter } from '../../core/stats.js';
-import { nearbyTargets } from '../../core/seqdata.js';
+import { nearbyTargets, seq } from '../../core/seqdata.js';
 import { HABITATS, KINDS, RARITY, byId, kindsPresent, type Species } from '../../lib/data';
 import { getLastPos, setLastPos, type Fix } from '../../lib/lastPos';
 import { Icon } from '../../components/Icon';
@@ -47,6 +47,18 @@ const freshPos = () => {
   return p && Date.now() - p.at <= POS_MS ? p : null;
 };
 
+// v1's boot gave the SEQ records up to 150 ms before its first draw (js/app.js boot), so a cold Targets drew its list
+// once, from them. Without the wait the list is drawn without them and again a moment later, with other rows.
+const SEQ_GRACE_MS = 150;
+function useSeqGrace(seqVersion: number): boolean {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLate(true), SEQ_GRACE_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return late || seqVersion > 0 || seq() != null;
+}
+
 /** One target row (v1 rowSpecies): the thumb, the name and its line, then the rarity pips. */
 function TargetRow({ sp, seen, sub, extra }: { sp: Species; seen: boolean; sub: string; extra?: ReactNode }) {
   return (
@@ -71,6 +83,7 @@ export default function Targets() {
   const sightingRows = useStoreRows<SightingRow>('sightings');
   const [params] = useSearchParams();
   const seqVersion = useSeqVersion();
+  const seqIn = useSeqGrace(seqVersion);
   const wantNear = params.get('near') === '1';
 
   const now = new Date();
@@ -165,7 +178,7 @@ export default function Targets() {
         </Link>
         <h1>Targets</h1>
       </header>
-      {sightingRows != null && (
+      {sightingRows != null && seqIn && (
         <>
           <div className="chips">
             {f.kind === 'bird' && (

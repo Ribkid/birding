@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { db } from '../../core/db.js';
 import type { Species } from '../../lib/data';
 import { normaliseSighting } from '../../lib/hooks';
@@ -93,10 +93,15 @@ const counted = new Map<string, number>();
 
 export function CountKey({ k, value }: { k: string; value: number }) {
   const ref = useRef<HTMLElement>(null);
-  useEffect(() => {
+  // Before paint, as v1's countIn ran straight after the draw: the number starts where it counts from, with no flash
+  // of the final one first.
+  useLayoutEffect(() => {
     const from = counted.has(k) ? (counted.get(k) as number) : 0;
     counted.set(k, value);
     void countUp(ref.current, from, value, { delay: 120 });
   }, [k, value]);
-  return <b ref={ref} data-count-key={k}>{value}</b>;
+  // A new number gets a new element, as v1's redraw gave it one. A count still running (Targets' first draw, before
+  // the SEQ records arrive) then stops with the element it writes to, instead of finishing after the newer one and
+  // leaving the old number showing.
+  return <b key={`${k}|${value}`} ref={ref} data-count-key={k}>{value}</b>;
 }

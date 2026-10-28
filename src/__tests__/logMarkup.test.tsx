@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, render } from '@testing-library/react';
 import { CountKey } from '../screens/lists/hubParts';
 import { ConfirmDialog } from '../screens/lists/shared';
 import { Sheet } from '../components/Sheet';
@@ -12,6 +12,29 @@ describe("v1's hooks in the markup", () => {
   it('marks a counted number with its data-count-key, as v1 countIn did', () => {
     const { container } = render(<p className="list-count"><CountKey k="log" value={3} /> sightings</p>);
     expect(container.querySelector('b')?.getAttribute('data-count-key')).toBe('log');
+  });
+
+  it('ends on the newest number when it changes while still counting up (Targets before the SEQ records)', () => {
+    const frames: FrameRequestCallback[] = [];
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => frames.push(cb));
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    let now = 0;
+    const tick = (ms: number) => {
+      for (const end = now + ms; now < end; ) {
+        now += 16;
+        act(() => frames.splice(0).forEach((cb) => cb(now)));
+      }
+    };
+    try {
+      const { container, rerender } = render(<p className="list-count"><CountKey k="targets/test" value={160} /> to find</p>);
+      tick(50);
+      rerender(<p className="list-count"><CountKey k="targets/test" value={163} /> to find</p>);
+      tick(2000);
+      expect(container.querySelector('[data-count-key]')?.textContent).toBe('163');
+    } finally {
+      raf.mockRestore();
+      hidden.mockRestore();
+    }
   });
 
   it("gives a sheet's scrim v1's data-close", () => {
