@@ -25,22 +25,39 @@ import { TabBar } from '../components/TabBar';
 import { MotionHashRouter, forgetPlaces } from '../components/RouteMotion';
 
 let y = 0;
+// How far the page can scroll: a screen still drawing its loading state is too short to reach a remembered place.
+let maxY = Infinity;
 const scrolls: unknown[] = [];
 beforeEach(() => {
   forgetPlaces();
   window.location.hash = '#/dex';
   y = 0;
+  maxY = Infinity;
   scrolls.length = 0;
   vi.spyOn(window, 'scrollTo').mockImplementation(((a: number | ScrollToOptions, b?: number) => {
     scrolls.push(a);
-    y = typeof a === 'object' ? a.top ?? y : b ?? 0;
+    y = Math.min(maxY, typeof a === 'object' ? a.top ?? y : b ?? 0);
   }) as typeof window.scrollTo);
   Object.defineProperty(window, 'scrollY', { configurable: true, get: () => y });
 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
+
+// A stand-in ResizeObserver: the test says when the screen has grown.
+const watching: (() => void)[] = [];
+function fakeResizeObserver() {
+  watching.length = 0;
+  vi.stubGlobal('ResizeObserver', class {
+    cb: () => void;
+    constructor(cb: () => void) { this.cb = cb; }
+    observe() { watching.push(this.cb); }
+    disconnect() { const i = watching.indexOf(this.cb); if (i >= 0) watching.splice(i, 1); }
+  });
+}
+const grown = () => act(() => { for (const cb of watching.slice()) cb(); });
 
 let entry = '';
 function Where() {
@@ -111,6 +128,40 @@ describe('tab memory', () => {
     expect(h1()).toBe('Dex');
     expect(entry).toBe(before);
     expect(scrolls.at(-1)).toEqual({ top: 0, behavior: 'smooth' });
+    expect(y).toBe(0);
+  });
+
+  it('lands on the place once a screen that draws its content late is tall enough', () => {
+    fakeResizeObserver();
+    app();
+    tab('learn');
+    y = 500;
+    tab('dex');
+    // Learn draws its loading state first: too short to scroll at all.
+    maxY = 0;
+    tab('learn');
+    expect(h1()).toBe('Learn');
+    expect(y).toBe(0);
+    expect(watching).toHaveLength(1);
+    // Then its hub.
+    maxY = 3000;
+    grown();
+    expect(y).toBe(500);
+    expect(watching).toHaveLength(0);
+  });
+
+  it('leaves the screen alone once she scrolls or taps before it is tall enough', () => {
+    fakeResizeObserver();
+    app();
+    tab('learn');
+    y = 500;
+    tab('dex');
+    maxY = 0;
+    tab('learn');
+    act(() => { window.dispatchEvent(new Event('touchstart')); });
+    expect(watching).toHaveLength(0);
+    maxY = 3000;
+    grown();
     expect(y).toBe(0);
   });
 

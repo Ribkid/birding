@@ -243,6 +243,7 @@ function onRouteChange(prev: Location, next: Location, action: Action, delta: nu
     flushSync(draw);
     const view = viewEl();
     const waits: unknown[] = [];
+    if (landing) waits.push(landing.done);
     if (view && tapped) {
       const frame = view.querySelector<HTMLElement>('[data-hero-frame]');
       if (frame) {
@@ -275,6 +276,46 @@ function onRouteChange(prev: Location, next: Location, action: Action, delta: nu
     }
     return settle(Promise.all(waits), 150);
   }, { nav }).then(unreveal);
+}
+
+/**
+ * Scroll to `y`, held to the anchor tile that was at the top of the screen, in case the screen above it drew a little
+ * differently. True when the page could go that far.
+ */
+function land(view: HTMLElement | null, y: number, anchor: Anchor | null) {
+  window.scrollTo(0, y);
+  let want = y;
+  const a = anchor && view?.querySelector(`[data-tile="${anchor.tile}"]`);
+  if (a) {
+    const off = a.getBoundingClientRect().top - anchor!.top;
+    if (Math.abs(off) >= 1) { want = scrollY + off; window.scrollTo(0, want); }
+  }
+  return Math.abs(scrollY - want) < 2;
+}
+
+// A screen that draws its content a moment later (Learn reads her progress first, then draws the hub) isn't tall
+// enough yet for the place she left it at: land there as soon as it is, within a second, unless she scrolls or taps
+// first. The transition waits for it a moment (vt's update), so the swap shows the screen where she left it.
+let landing: { stop: () => void; done: Promise<void> } | null = null;
+const stopLanding = () => landing?.stop();
+function landLate(view: HTMLElement | null, y: number, anchor: Anchor | null) {
+  if (!view || typeof ResizeObserver !== 'function') return;
+  let finish = () => {};
+  const done = new Promise<void>((r) => { finish = r; });
+  const ro = new ResizeObserver(() => { if (land(view, y, anchor)) stop(); });
+  const hers = ['wheel', 'touchstart', 'pointerdown', 'keydown'];
+  const timer = setTimeout(() => stop(), 1000);
+  const me = { stop, done };
+  function stop() {
+    ro.disconnect();
+    clearTimeout(timer);
+    for (const t of hers) removeEventListener(t, stop, true);
+    if (landing === me) landing = null;
+    finish();
+  }
+  for (const t of hers) addEventListener(t, stop, { capture: true, passive: true });
+  ro.observe(view);
+  landing = me;
 }
 
 /**
@@ -314,14 +355,9 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
     if (!pending || pending.key !== state.location.key) return;
     const { y, anchor, tile, focus } = pending;
     pending = null;
-    window.scrollTo(0, y);
+    stopLanding();
     const view = viewEl();
-    // Held to the tile that was at the top of the screen, in case the screen above it drew a little differently.
-    const a = anchor && view?.querySelector(`[data-tile="${anchor.tile}"]`);
-    if (a) {
-      const off = a.getBoundingClientRect().top - anchor!.top;
-      if (Math.abs(off) >= 1) window.scrollTo(0, scrollY + off);
-    }
+    if (!land(view, y, anchor)) landLate(view, y, anchor);
     // Make sure the tile she opened is in sight.
     const t = tile ? view?.querySelector(`[data-tile="${tile}"]`) : null;
     if (t && !inView(t)) t.scrollIntoView({ block: 'center' });
@@ -345,4 +381,5 @@ export function forgetPlaces() {
   pressed = null;
   drawnKey = null;
   tabTap = false;
+  stopLanding();
 }
