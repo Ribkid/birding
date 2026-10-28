@@ -106,5 +106,6 @@ export function CountKey({ k, value }: { k: string; value: number }) {
     if (sameKey && countOnTo(ref.current, value)) return;
     void countUp(ref.current, from, value, { delay: 120 });
   }, [k, value]);
+  // One element per count, so a newer number can carry the running count on (countOnTo) instead of starting again.
   return <b ref={ref} data-count-key={k}>{value}</b>;
 }

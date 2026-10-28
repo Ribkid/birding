@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { periodFilter } from '../../core/stats.js';
-import { nearbyTargets } from '../../core/seqdata.js';
+import { nearbyTargets, seq } from '../../core/seqdata.js';
 import { HABITATS, KINDS, RARITY, byId, kindsPresent, type Species } from '../../lib/data';
 import { getLastPos, setLastPos, type Fix } from '../../lib/lastPos';
 import { Icon } from '../../components/Icon';
@@ -47,6 +47,18 @@ const freshPos = () => {
   return p && Date.now() - p.at <= POS_MS ? p : null;
 };
 
+// v1's boot gave the SEQ records up to 150 ms before its first draw (js/app.js boot), so a cold Targets drew its list
+// once, from them. Without the wait the list is drawn without them and again a moment later, with other rows.
+const SEQ_GRACE_MS = 150;
+function useSeqGrace(seqVersion: number): boolean {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLate(true), SEQ_GRACE_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return late || seqVersion > 0 || seq() != null;
+}
+
 /** One target row (v1 rowSpecies): the thumb, the name and its line, then the rarity pips. */
 function TargetRow({ sp, seen, sub, extra }: { sp: Species; seen: boolean; sub: string; extra?: ReactNode }) {
   return (
@@ -71,6 +83,7 @@ export default function Targets() {
   const sightingRows = useStoreRows<SightingRow>('sightings');
   const [params] = useSearchParams();
   const seqVersion = useSeqVersion();
+  const seqIn = useSeqGrace(seqVersion);
   const wantNear = params.get('near') === '1';
 
   const now = new Date();
@@ -165,13 +178,14 @@ export default function Targets() {
         </Link>
         <h1>Targets</h1>
       </header>
-      {sightingRows != null && (
+      {sightingRows != null && seqIn && (
         <>
           <div className="chips">
             {f.kind === 'bird' && (
               <button
                 type="button"
                 className={`chip${f.scope === 'near' ? ' chip--on' : ''}`}
+                data-scope="near"
                 aria-pressed={f.scope === 'near'}
                 onClick={() => {
                   if (f.scope === 'near' && posError) setAttempt((n) => n + 1);
@@ -184,6 +198,7 @@ export default function Targets() {
             <button
               type="button"
               className={`chip${f.scope === 'life' ? ' chip--on' : ''}`}
+              data-scope="life"
               aria-pressed={f.scope === 'life'}
               onClick={() => update({ scope: 'life' })}
             >
@@ -192,6 +207,7 @@ export default function Targets() {
             <button
               type="button"
               className={`chip${f.scope === 'year' ? ' chip--on' : ''}`}
+              data-scope="year"
               aria-pressed={f.scope === 'year'}
               onClick={() => update({ scope: 'year' })}
             >
@@ -200,6 +216,7 @@ export default function Targets() {
             {f.scope !== 'near' && (
               <select
                 className="chip chip--select"
+                data-month=""
                 aria-label="Month"
                 value={f.month}
                 onChange={(e) => update({ month: Number(e.target.value) })}
@@ -213,6 +230,7 @@ export default function Targets() {
             )}
             <select
               className={`chip chip--select${f.habitat ? ' chip--on' : ''}`}
+              data-habitat=""
               aria-label="Habitat"
               value={f.habitat}
               onChange={(e) => update({ habitat: e.target.value })}
@@ -232,6 +250,7 @@ export default function Targets() {
                   key={k}
                   type="button"
                   className={`chip kind--${k} chip--kind${f.kind === k ? ' chip--on' : ''}`}
+                  data-tk={k}
                   aria-pressed={f.kind === k}
                   onClick={() => update({ kind: k })}
                 >
@@ -243,7 +262,7 @@ export default function Targets() {
 
           {f.scope === 'near' ? (
             <>
-              <p className="muted small pad-x" role="status">
+              <p className="muted small pad-x" data-near-status="" role="status">
                 {nearStatus}
               </p>
               <div className="pad-x">
@@ -252,7 +271,7 @@ export default function Targets() {
                     <Icon name="pin" /> Try again
                   </button>
                 )}
-                <ul className={`rows rows--card${nearRows.length ? '' : ' hidden'}`}>
+                <ul className={`rows rows--card${nearRows.length ? '' : ' hidden'}`} data-near-list="">
                   {nearRows.map(({ x, sp }) => (
                     <TargetRow
                       key={sp.id}

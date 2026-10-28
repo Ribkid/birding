@@ -223,6 +223,14 @@ function SpeciesPage({ sp }: { sp: Species }) {
   // view); once she has touched it, it is kept as it is.
   const touched = useRef(false);
   const kept = useRef<Drawn<Photo> | null>(null);
+  // Saving, editing or deleting a sighting drew the whole page again in v1 (render() after the sheet closed), so the
+  // hero takes the photos known now and its gallery starts again from the first one.
+  const drawnRows = useRef(sightings);
+  if (drawnRows.current !== sightings) {
+    drawnRows.current = sightings;
+    kept.current = null;
+    touched.current = false;
+  }
   kept.current = heroShown(kept.current, heroPhotos(sp, det), touched.current);
   const photos = kept.current.photos;
   const n = photos.length;
@@ -251,7 +259,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
     if (!g || touched.current) return;
     if (g.scrollLeft) g.scrollLeft = 0;
     setSlide(0);
-  }, [listKey]);
+  }, [listKey, sightings]);
   const onGalleryScroll = () => {
     const g = galRef.current;
     if (!g) return;

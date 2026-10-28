@@ -199,6 +199,7 @@ export default function ListView() {
             <button
               type="button"
               className="chip lsort"
+              data-sort=""
               aria-label={`Sort: ${byDex ? 'dex order' : 'newest first'}. Tap to change`}
               onClick={toggleSort}
             >
@@ -212,6 +213,7 @@ export default function ListView() {
                   key={k}
                   type="button"
                   className={`chip${k !== 'all' ? ` kind--${k} chip--kind` : ''}${lk === k ? ' chip--on' : ''}`}
+                  data-lk={k}
                   aria-pressed={lk === k}
                   onClick={() => pickKind(k)}
                 >
@@ -259,7 +261,7 @@ export default function ListView() {
           )}
           {patch && (
             <div className="row-end pad">
-              <button type="button" className="btn btn--danger btn--quiet" onClick={() => setConfirmDelete(true)}>
+              <button type="button" className="btn btn--danger btn--quiet" data-delpatch="" onClick={() => setConfirmDelete(true)}>
                 Delete patch
               </button>
             </div>

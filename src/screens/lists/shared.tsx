@@ -404,12 +404,13 @@ export function ConfirmDialog({
     <Modal title={title} onClose={onCancel}>
       <p className="muted">{body}</p>
       <div className="row-end">
-        <button type="button" className="btn" onClick={onCancel}>
+        <button type="button" className="btn" data-no="" onClick={onCancel}>
           Cancel
         </button>
         <button
           type="button"
           className={`btn ${danger ? 'btn--danger' : 'btn--primary'}`}
+          data-yes=""
           onClick={onConfirm}
         >
           {confirmLabel}
