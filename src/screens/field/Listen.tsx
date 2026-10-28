@@ -5,6 +5,7 @@ import { useSeen } from '../../lib/hooks';
 import { Icon } from '../../components/Icon';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { loadListenModel, setLocation, startListening, stopListening } from '../../core/listen.js';
+import { setLastPos } from '../../lib/lastPos';
 import { errorText, logSighting } from './sighting';
 import './field.css';
 import './calls.css';
@@ -286,6 +287,7 @@ export default function Listen() {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         locRef.current = { lat, lng };
+        setLastPos({ lat, lng, acc: Math.round(pos.coords.accuracy) });
         if (listening) setLocation(lat, lng);
         setLocPhase('set');
         setLocText(
