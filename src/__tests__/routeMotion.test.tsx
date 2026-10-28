@@ -2,9 +2,11 @@
 // v1 onRouteChange: every change of address is one navigation, its motion picked by how deep the screens sit; open
 // layers close before the new screen draws, and going back to a shallower screen returns to where she was. Back and
 // Forward return to the place she left that history entry at, held to a tile, and give focus back to what she opened.
+// Redirects and moves within the map draw without a transition, and a quick second tap draws only the newest address.
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Link, Route, Routes } from 'react-router-dom';
+import { useLayoutEffect, type ReactNode } from 'react';
+import { HashRouter, Link, Navigate, Route, Routes, useLocation, useNavigate, useNavigationType, type NavigateFunction } from 'react-router-dom';
 import { MotionHashRouter, anchorOf, forgetPlaces, navKind } from '../components/RouteMotion';
 import { RouteFocus } from '../components/RouteFocus';
 import { closeAllLayers, closeLayer, layers, openLayer } from '../lib/layers';
@@ -188,5 +190,139 @@ describe('Back and Forward', () => {
     click('Dex');
     expect(h1()).toBe('Dex');
     expect(y).toBe(2450);
+  });
+});
+
+describe('the router itself', () => {
+  // jsdom tells of a hash set here a moment later (popstate): let that pass before the router listens.
+  const home = async (hash: string) => { window.location.hash = hash; await new Promise((r) => setTimeout(r, 30)); };
+  beforeEach(async () => {
+    forgetPlaces();
+    await home('#/dex');
+    vi.spyOn(window, 'scrollTo').mockImplementation((() => {}) as typeof window.scrollTo);
+  });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    delete (document as { startViewTransition?: unknown }).startViewTransition;
+  });
+
+  let go: NavigateFunction = () => {};
+  const trace: string[] = [];
+  function Record() {
+    const loc = useLocation();
+    const type = useNavigationType();
+    go = useNavigate();
+    useLayoutEffect(() => { trace.push(`${type} ${loc.pathname} ${loc.key}`); }, [loc, type]);
+    return null;
+  }
+  const wait = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)));
+  const back = async () => { await act(async () => { window.history.back(); }); await wait(40); };
+  const forward = async () => { await act(async () => { window.history.forward(); }); await wait(40); };
+  // Keys are random: number them by first appearance, so two traces compare.
+  const numbered = (t: string[]) => {
+    const ids = new Map<string, number>();
+    return t.map((l) => l.replace(/\S+$/, (k) => { if (!ids.has(k)) ids.set(k, ids.size); return `#${ids.get(k)}`; }));
+  };
+
+  async function walk(Router: (p: { children: ReactNode }) => ReactNode) {
+    trace.length = 0;
+    await home('#/dex');
+    const r = render(<Router><Record /></Router>);
+    act(() => { void go('/bird/3'); });
+    act(() => { void go('/compare/3/4'); });
+    act(() => { void go('/compare/3/5', { replace: true }); });
+    await back();
+    await back();
+    await forward();
+    r.unmount();
+    return numbered(trace);
+  }
+
+  it('gives the same location, key and navigation type as HashRouter on push, replace and pop', async () => {
+    const theirs = await walk(({ children }) => <HashRouter>{children}</HashRouter>);
+    const ours = await walk(({ children }) => <MotionHashRouter>{children}</MotionHashRouter>);
+    expect(ours).toEqual(theirs);
+    expect(ours.map((l) => l.split(' ').slice(0, 2).join(' '))).toEqual([
+      'POP /dex', 'PUSH /bird/3', 'PUSH /compare/3/4', 'REPLACE /compare/3/5', 'POP /bird/3', 'POP /dex', 'POP /bird/3',
+    ]);
+    // Back and Forward return to the very entries they left.
+    expect(ours[4].split(' ')[2]).toBe(ours[1].split(' ')[2]);
+    expect(ours[5].split(' ')[2]).toBe(ours[0].split(' ')[2]);
+  });
+
+  // A stand-in for the browser's view transitions: the update runs a moment after it is asked for, as it does once
+  // the old screen has been captured, and a skipped transition still runs its update.
+  function fakeTransitions() {
+    const started: string[] = [];
+    (document as { startViewTransition?: unknown }).startViewTransition = (update: () => unknown) => {
+      started.push(window.location.hash);
+      let ran: Promise<unknown> | null = null;
+      const run = () => (ran ??= Promise.resolve().then(update));
+      const updateCallbackDone = new Promise((res, rej) => { setTimeout(() => { run().then(res, rej); }, 5); });
+      const finished = updateCallbackDone.then(() => new Promise((r) => setTimeout(r, 5)));
+      return { ready: updateCallbackDone, updateCallbackDone, finished, skipTransition: () => { void run(); } };
+    };
+    return started;
+  }
+  const shell = () => render(
+    <MotionHashRouter>
+      <Record />
+      <main id="view">
+        <Routes>
+          <Route path="/dex" element={<><h1>Dex</h1><Link to="/learn">Learn</Link></>} />
+          <Route path="/learn" element={<><h1>Learn</h1><button type="button" onClick={() => void go('/dex', { replace: true })}>Stop</button></>} />
+          <Route path="/learn/test/:id" element={<Navigate to="/learn" replace />} />
+          <Route path="/bird/:id" element={<h1>Bird</h1>} />
+          <Route path="/map/*" element={<h1>Map</h1>} />
+        </Routes>
+      </main>
+    </MotionHashRouter>,
+  );
+  const press = (text: string) => act(() => { [...document.querySelectorAll<HTMLElement>('a, button')].find((a) => a.textContent === text)!.click(); });
+  const h1 = () => document.querySelector('h1')?.textContent;
+
+  it('animates her moves, and draws a redirect a screen makes as it draws without a transition of its own', async () => {
+    const started = fakeTransitions();
+    shell();
+    press('Learn');
+    await wait(60);
+    expect(h1()).toBe('Learn');
+    expect(started).toEqual(['#/learn']);
+    // A test round for a species that doesn't exist sends her back to Learn by replacing its address: drawn plainly.
+    act(() => { void go('/learn/test/99999'); });
+    await wait(60);
+    expect(h1()).toBe('Learn');
+    expect(window.location.hash).toBe('#/learn');
+    expect(started).toEqual(['#/learn', '#/learn/test/99999']);
+    // Her own tap on a button that replaces the address still animates, as v1's location.replace did.
+    press('Stop');
+    await wait(60);
+    expect(h1()).toBe('Dex');
+    expect(started).toEqual(['#/learn', '#/learn/test/99999', '#/dex']);
+  });
+
+  it('moves within the map without a transition', async () => {
+    const started = fakeTransitions();
+    await home('#/map');
+    shell();
+    act(() => { void go('/map/at/-27.5,153'); });
+    act(() => { void go('/map/sp/7'); });
+    await wait(60);
+    expect(h1()).toBe('Map');
+    expect(window.location.hash).toBe('#/map/sp/7');
+    expect(started).toEqual([]);
+  });
+
+  it('draws only the newest address after a quick second tap', async () => {
+    fakeTransitions();
+    shell();
+    trace.length = 0;
+    press('Learn');
+    act(() => { void go('/bird/3'); });
+    await wait(60);
+    expect(h1()).toBe('Bird');
+    // Learn was never drawn: the first transition's update drew the newest address.
+    expect(trace.map((l) => l.split(' ').slice(0, 2).join(' '))).toEqual(['PUSH /bird/3']);
   });
 });

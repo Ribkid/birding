@@ -10,6 +10,10 @@
 // through the tab bar. The place is the scroll, held to the photo tile that was at the top of the screen, and the
 // control she left by, which takes focus again (RouteFocus). Tapping the tab she is on, on its own screen, glides to
 // the top.
+//
+// Drawn plainly, without a transition: a redirect (a replace that isn't her own tap: the empty address to the Dex,
+// Me's account addresses, a round that can't be made going back to Learn), a move within the map, and a Back the
+// phone has already animated with its own edge swipe.
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { Router, UNSAFE_createHashHistory as createHashHistory, type Location } from 'react-router-dom';
@@ -34,6 +38,19 @@ export function navKind(from: string, to: string): Nav {
 
 /** The four tabs' own screens. */
 export const TAB_ROOTS = ['/dex', '/learn', '/map', '/me'];
+// The map is one screen whatever it is centred on (/map, /map/sp/:id, /map/at/:lat,:lng): moving within it redraws
+// the same map in place, so there is nothing to cross-fade.
+const screenOf = (path: string) => (path === '/map' || path.startsWith('/map/') ? '/map' : path);
+
+// The event being handled while the address changes: her tap or key on the page, or the popstate of a Back the phone
+// has already animated with its own edge swipe (Chrome and Safari say so on the event). A change made by a screen
+// while it draws (a redirect) has neither.
+const event = () => (window as Window & { event?: Event }).event;
+const herMove = () => { const e = event(); return !!e && (e.type === 'click' || e.type === 'keydown' || e.type === 'keyup'); };
+const phoneAnimated = () => {
+  const e = event() as (Event & { hasUAVisualTransition?: boolean }) | undefined;
+  return e?.type === 'popstate' && !!e.hasUAVisualTransition;
+};
 
 // ---------- where she was ----------
 type FocusKey = NonNullable<ReturnType<typeof focusKey>>;
@@ -181,10 +198,12 @@ function onRouteChange(prev: Location, next: Location, action: Action, apply: ()
   const tapped = morph && morph.id === toId ? morph : null;
   morph = null;
   if (tapped) cameFrom.set(to, tapped.kind);
+  const plain = typeof (document as any).startViewTransition !== 'function' || document.hidden || !motionOK()
+    || phoneAnimated() || screenOf(prev.pathname) === screenOf(next.pathname) || (action === 'REPLACE' && !herMove());
   // Going back from a species page, up to a shallower screen or with Back to a list beside it (not to another species
   // page): its hero shrinks back into the photo it came from, if that is on screen.
   let shrinkTo: number | null = null;
-  const hero = !tapped && fromId && !toId && goingBack && motionOK() ? viewEl()?.querySelector<HTMLElement>('[data-hero-frame]') : null;
+  const hero = !plain && !tapped && fromId && !toId && goingBack ? viewEl()?.querySelector<HTMLElement>('[data-hero-frame]') : null;
   if (hero && inView(hero)) { nameFor(hero, 'sp-hero'); shrinkTo = fromId; }
   // Where the new screen lands. Back and Forward: where she left that history entry (or, for an entry from before
   // this session, going back up as below). Going back up to a shallower screen, or to a tab's own screen through the
@@ -199,11 +218,12 @@ function onRouteChange(prev: Location, next: Location, action: Action, apply: ()
     focus: back?.focus ?? null,
   };
   const draw = () => { closeAllLayers('nav'); flushClosingSheets(); apply(); };
-  // vt() would draw at once here. The change may come from a screen's effect (a redirect), where React can't draw
-  // synchronously, so it is handed to React as it is.
-  if (!transitioning() && (typeof (document as any).startViewTransition !== 'function' || document.hidden || !motionOK())) {
+  // Drawn plainly, handed to React as it is: the change may come from a screen's effect (a redirect), where React
+  // can't draw synchronously. A transition already running (the one that drew the screen now redirecting) carries on,
+  // and clears its names when it ends.
+  if (plain) {
     draw();
-    clearNames();
+    if (!transitioning()) clearNames();
     return;
   }
   void vt(() => {
@@ -246,7 +266,8 @@ function onRouteChange(prev: Location, next: Location, action: Action, apply: ()
 
 /**
  * The app's router: react-router's HashRouter, with every change of address drawn through onRouteChange. Scroll is
- * remembered by the app (going back returns to it), not restored by the browser mid-transition.
+ * remembered by the app (going back returns to it), not restored by the browser mid-transition. A quick second tap
+ * before the first screen is drawn draws only the newest address.
  */
 export function MotionHashRouter({ children }: { children: ReactNode }) {
   const historyRef = useRef<History | null>(null);
@@ -254,6 +275,7 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
   const history = historyRef.current;
   const [state, setState] = useState(() => ({ action: history.action, location: history.location }));
   const shown = useRef(state.location);
+  const latest = useRef(state);
 
   useLayoutEffect(() => {
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
@@ -263,7 +285,8 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
     const off = history.listen(({ action, location: next }) => {
       const prev = shown.current;
       shown.current = next;
-      onRouteChange(prev, next, action, () => setState({ action, location: next }));
+      latest.current = { action, location: next };
+      onRouteChange(prev, next, action, () => setState(latest.current));
     });
     return () => {
       off();
