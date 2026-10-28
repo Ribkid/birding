@@ -5,7 +5,7 @@ import {
   type MouseEvent, type PointerEvent, type ReactNode,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ANIMALS, ANIMAL_KINDS, GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, inSeason, kindsPresent, ofKind,
   pluralFor, type Species,
@@ -42,6 +42,9 @@ interface DayPick { sp: Species; label: string; why: string; where: string }
 
 // Filters, sort, kind and layout hold for the session, as v1's state.dex did.
 const saved: DexFilters = { kind: 'animals', q: '', show: 'all', sort: 'dex', layout: 'grid', rarity: '', habitat: '', group: '', season: false };
+// The species page's Group link passes { dexFilter } as router state (v1 set state.dex on that tap). It is applied
+// once per history entry, so coming Back to that entry later keeps whatever she has changed since.
+const appliedLinks = new Set<string>();
 
 const inScope = (s: Species, scope: string) => (scope === 'all' ? true : scope === 'animals' ? s.kind !== 'plant' : s.kind === scope);
 const scopeNoun = (scope: string, n: number) => (scope === 'all' ? 'species' : pluralFor(scope, n));
@@ -188,7 +191,15 @@ export default function Dex() {
   const loaded = sightings !== firstRows.current || gaveUp;
   const seen = useMemo(() => new Set(sightings.map((s) => s.speciesId)), [sightings]);
 
-  const [f, setF] = useState<DexFilters>(() => ({ ...saved }));
+  const location = useLocation();
+  const [f, setF] = useState<DexFilters>(() => {
+    const linked = (location.state as { dexFilter?: Partial<DexFilters> } | null)?.dexFilter;
+    if (linked && !appliedLinks.has(location.key)) {
+      appliedLinks.add(location.key);
+      Object.assign(saved, linked);
+    }
+    return { ...saved };
+  });
   const [colourUnseen, setColourUnseen] = useState(false);
   const install = useCanInstall();
   const [search, setSearch] = useState<string | null>(null);
