@@ -17,7 +17,8 @@ import { describeArea } from '../../core/mapinfo.js';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { SpeciesImage } from '../../components/SpeciesImage';
-import { toast as appToast } from '../../lib/toast';
+import { announce, toast as appToast } from '../../lib/toast';
+import { localPlaceMatches, myPlaces, searchAddress } from '../../lib/places';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,6 +28,19 @@ type Show = 'all' | 'photos' | 'none';
 type Layer = 'map' | 'sat';
 type MapSighting = Sighting & { place?: string; photoId?: number | null };
 type MapOuting = Outing & { lat?: number | null; lng?: number | null };
+
+// v1 keeps these on `state` for the session, so leaving the map and coming back finds it as she left it:
+// the chips (state.mapF), where the map was (state.mapView), and whether tiles failed with no signal
+// (state.tilesOffline) or she hid that note (state.mapNoteHidden).
+const mapF: { show: Show; hot: boolean; hotFocus: boolean; need: boolean } = {
+  show: 'all',
+  hot: true,
+  hotFocus: false,
+  need: false,
+};
+let mapView: { c: L.LatLng; z: number } | null = null;
+let tilesOffline = false;
+let mapNoteHidden = false;
 
 interface Patch {
   id: number;
@@ -88,25 +102,13 @@ interface Settings {
   [key: string]: unknown;
 }
 
-interface NominatimRow {
-  name?: string;
-  display_name?: string;
-  lat: string;
-  lon: string;
-}
-
 // ---------------------------------------------------------------------------
 // Constants and small helpers
 // ---------------------------------------------------------------------------
 
-// The SEQ viewbox v1 used for address searches and for the map's home view.
-const SEQ_WEST = 151.6;
-const SEQ_NORTH = -25.6;
-const SEQ_EAST = 153.7;
-const SEQ_SOUTH = -28.5;
+// The map's home view (v1 renderMap).
 const SEQ_CENTER: [number, number] = [-27.47, 153.02];
 const SEQ_ZOOM = 9;
-const SEQ_VIEWBOX = `${SEQ_WEST},${SEQ_NORTH},${SEQ_EAST},${SEQ_SOUTH}`;
 
 // Popups must not open underneath the fixed search bar and filter chips — that hides the close
 // button, so the popup cannot be dismissed. Leaflet pans to keep the popup inside this padded
@@ -171,99 +173,6 @@ function matchSpecies(q: string, limit = 5): Species[] {
     .map((hit) => hit.sp);
 }
 
-/** Places Sarah has already saved on sightings or outings. */
-function namedPlaces(sightings: MapSighting[], outings: MapOuting[]): PlaceResult[] {
-  const found = new Map<string, PlaceResult>();
-  for (const s of sightings) {
-    if (s.lat != null && s.lng != null && s.place && !found.has(s.place)) {
-      found.set(s.place, { name: s.place, lat: s.lat, lng: s.lng, kind: 'Your place' });
-    }
-  }
-  for (const o of outings) {
-    if (o.lat != null && o.lng != null && o.place && !found.has(o.place)) {
-      found.set(o.place, { name: o.place, lat: o.lat, lng: o.lng, kind: 'Your place' });
-    }
-  }
-  return [...found.values()];
-}
-
-function localPlaceMatches(
-  text: string,
-  patches: Patch[],
-  places: PlaceResult[],
-  hotspotRows: Hotspot[],
-  limit = 8,
-): PlaceResult[] {
-  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
-  if (!words.length) return [];
-  const hit = (name: string) => words.every((w) => name.toLowerCase().includes(w));
-  return [
-    ...patches
-      .filter((p) => hit(p.name))
-      .map((p) => ({ name: p.name, lat: p.lat, lng: p.lng, kind: 'Your patch' })),
-    ...places.filter((p) => hit(p.name)),
-    ...hotspotRows
-      .filter((h) => hit(h.name))
-      .map((h) => ({ name: h.name, lat: h.lat, lng: h.lng, kind: `Hotspot, ${h.rich} species` })),
-  ].slice(0, limit);
-}
-
-function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException('Aborted', 'AbortError'));
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      window.clearTimeout(timer);
-      reject(new DOMException('Aborted', 'AbortError'));
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-}
-
-// Nominatim asks for at most one request a second. The timestamp is shared across
-// mounts so a quick route change cannot hammer it.
-let lastGeocodeAt = 0;
-
-async function searchAddress(q: string, signal: AbortSignal): Promise<PlaceResult[]> {
-  const wait = 1100 - (Date.now() - lastGeocodeAt);
-  if (wait > 0) await abortableSleep(wait, signal);
-  lastGeocodeAt = Date.now();
-  if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-
-  const url = new URL('https://nominatim.openstreetmap.org/search');
-  url.searchParams.set('format', 'jsonv2');
-  url.searchParams.set('limit', '6');
-  url.searchParams.set('countrycodes', 'au');
-  url.searchParams.set('viewbox', SEQ_VIEWBOX);
-  url.searchParams.set('bounded', '1');
-  url.searchParams.set('q', q);
-
-  const response = await fetch(url.toString(), {
-    headers: { 'Accept-Language': 'en-AU' },
-    signal,
-  });
-  if (!response.ok) throw new Error('Place search is busy. Try again in a moment.');
-
-  const rows = (await response.json()) as NominatimRow[];
-  return rows
-    .map((row) => {
-      const parts = (row.display_name ?? '').split(',');
-      return {
-        name: row.name || parts[0] || q,
-        lat: Number(row.lat),
-        lng: Number(row.lon),
-        kind: parts.slice(1, 3).join(',').trim() || 'Place',
-      };
-    })
-    .filter((row) => Number.isFinite(row.lat) && Number.isFinite(row.lng));
-}
-
 /** Patches, kept fresh when the database changes. There is no shared hook for these. */
 function usePatches(): Patch[] {
   const [rows, setRows] = useState<Patch[]>([]);
@@ -284,6 +193,13 @@ function usePatches(): Patch[] {
   }, []);
   return rows;
 }
+
+// v1 icon.close.
+const closeIcon = (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+  </svg>
+);
 
 const tempPinIcon = () =>
   L.divIcon({
@@ -373,11 +289,17 @@ function MapView() {
   const seen = useSeen();
   const patches = usePatches();
 
-  // Filter state, mirroring v1's `state.mapF`.
-  const [show, setShow] = useState<Show>('all');
-  const [hot, setHot] = useState(true);
-  const [hotFocus, setHotFocus] = useState(false);
-  const [need, setNeed] = useState(false);
+  // Filter state, v1's `state.mapF`: read from the session object, and written back with every change.
+  const [show, setShowState] = useState<Show>(mapF.show);
+  const [hot, setHotState] = useState(mapF.hot);
+  const [hotFocus, setHotFocusState] = useState(mapF.hotFocus);
+  const [need, setNeedState] = useState(mapF.need);
+  // A chip redraws v1's map, which closes any open popup; a redraw for new data keeps the open hotspot (below).
+  const chipTapped = () => mapRef.current?.closePopup();
+  const setShow = (value: Show) => { chipTapped(); mapF.show = value; setShowState(value); };
+  const toggleHot = () => { chipTapped(); mapF.hot = !mapF.hot; setHotState(mapF.hot); };
+  const toggleHotFocus = () => { chipTapped(); mapF.hotFocus = !mapF.hotFocus; setHotFocusState(mapF.hotFocus); };
+  const toggleNeed = () => { chipTapped(); mapF.need = !mapF.need; setNeedState(mapF.need); };
   const [layer, setLayer] = useState<Layer>('map');
   const [seqTick, setSeqTick] = useState(0);
 
@@ -399,8 +321,9 @@ function MapView() {
   const [notes, setNotes] = useState<Note[]>([]);
   // Locate feedback, as v1: the fab dims while it waits, an error shows as a toast.
   const [locating, setLocating] = useState(false);
-  const [locationNote, setLocationNote] = useState('');
-  const [toast, setToast] = useState<{ msg: string; out: boolean } | null>(null);
+  // v1's "No signal" note (mapNote('tiles')): tiles failed with no connection and she has not hidden it.
+  const [noSignal, setNoSignal] = useState(false);
+  const noSignalRef = useRef(false);
 
   const mapElRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -409,6 +332,7 @@ function MapView() {
   const osmRef = useRef<L.TileLayer | null>(null);
   const satRef = useRef<L.LayerGroup | null>(null);
   const hotspotMarkersRef = useRef<{ h: Hotspot; mk: L.CircleMarker }[]>([]);
+  const groupMarkersRef = useRef<{ key: string; mk: L.CircleMarker }[]>([]);
   const tempMarkerRef = useRef<L.Marker | null>(null);
   const previewRef = useRef<L.Circle | null>(null);
   // Set once Sarah taps Map or Satellite. Her choice then wins over the stored layer, even
@@ -417,6 +341,10 @@ function MapView() {
 
   const focusFittedRef = useRef(false);
   const sightingsFittedRef = useRef(false);
+  // v1 frames the sightings (or the species' records) only when the map has no remembered view this session.
+  const viewRestoredRef = useRef(mapView != null);
+  // /map/at: the nearby hotspot's popup is still to open.
+  const atPendingRef = useRef(atLat != null && atLng != null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const seqRef = useRef(0);
@@ -486,7 +414,7 @@ function MapView() {
     return pts.slice().sort((a, b) => b[2] - a[2]);
   }, [focus, seqTick]);
 
-  const places = useMemo(() => namedPlaces(sightings, outings), [sightings, outings]);
+  const places = useMemo(() => myPlaces(sightings, outings), [sightings, outings]);
 
   const localResults = useCallback(
     (text: string): SearchResult[] => {
@@ -520,7 +448,7 @@ function MapView() {
         name: sp.name,
         kind: `${cap(KINDS[sp.kind]?.one ?? 'species')}: show where it's reported`,
       }));
-      return [...birds, ...localPlaceMatches(trimmed, patches, places, hotspotRows)];
+      return [...birds, ...localPlaceMatches(trimmed, patches, places)];
     },
     [patches, places, seen, seqTick],
   );
@@ -548,15 +476,66 @@ function MapView() {
     });
   }, []);
 
+  // v1 mapNote('tiles'): say once why parts of the map are blank, unless she hid the note this session.
+  const showNoSignal = useCallback(() => {
+    if (mapNoteHidden || noSignalRef.current) return;
+    noSignalRef.current = true;
+    setNoSignal(true);
+    announce("No signal. Areas you haven't opened before stay blank.");
+  }, []);
+
+  // v1: Hide puts focus in the search box, just above where the note was.
+  const hideNote = () => {
+    mapNoteHidden = true;
+    noSignalRef.current = false;
+    setNoSignal(false);
+    inputRef.current?.focus();
+  };
+
+  // A tapped spot's description (v1's map click handler). It belongs to the map instance rather than to the
+  // overlays, so a data refresh while the lookup runs cannot leave the popup on "Looking up this spot…".
+  const describeSpot = useCallback(
+    (map: L.Map, latlng: L.LatLng) => {
+      const clickLat = latlng.lat;
+      const clickLng = latlng.lng;
+      const key = `spot:${clickLat.toFixed(3)},${clickLng.toFixed(3)}`;
+      const popup = L.popup({ maxWidth: 260, ...POPUP_OPTS })
+        .setLatLng(latlng)
+        .setContent('<p class="pop-src">Looking up this spot…</p>');
+      // openPopup() closes whatever is already open; openOn() would stack a second popup.
+      map.openPopup(popup);
+      void describe(clickLat, clickLng, { seen: seenRef.current })
+        .then((html) => {
+          if (mapRef.current !== map) return;
+          const text = String(html);
+          addNote(key, text, clickLat, clickLng);
+          if (map.hasLayer(popup)) {
+            popup.setContent(
+              `${text}<a href="${directionsUrl(clickLat, clickLng)}" target="_blank" rel="noopener">Directions</a>`,
+            );
+          }
+        })
+        .catch(() => {
+          if (mapRef.current !== map) return;
+          const text =
+            '<p class="pop-desc">Couldn’t look this spot up. Check the internet connection.</p>';
+          addNote(key, text, clickLat, clickLng);
+          if (map.hasLayer(popup)) popup.setContent(text);
+        });
+    },
+    [addNote],
+  );
+
   // -- the Leaflet instance ------------------------------------------------
 
   useEffect(() => {
     const el = mapElRef.current;
     if (!el) return;
 
+    // v1: back where she left the map this session, or the SEQ home view.
     const map = L.map(el, { zoomControl: false, attributionControl: true }).setView(
-      SEQ_CENTER,
-      SEQ_ZOOM,
+      mapView?.c ?? SEQ_CENTER,
+      mapView?.z ?? SEQ_ZOOM,
     );
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -576,6 +555,17 @@ function MapView() {
       L.tileLayer(SAT_REF_URL, { maxZoom: 19, crossOrigin: true, opacity: 0.9 }),
     ]);
     osm.addTo(map);
+    // Offline, a map square not opened before fails to load: say why the map has gaps (again on the next visit).
+    const onTileError = () => {
+      if (navigator.onLine) return;
+      tilesOffline = true;
+      showNoSignal();
+    };
+    for (const tiles of [osm, ...(sat.getLayers() as L.TileLayer[])]) tiles.on('tileerror', onTileError);
+    if (!navigator.onLine && tilesOffline) showNoSignal();
+    map.on('moveend', () => {
+      mapView = { c: map.getCenter(), z: map.getZoom() };
+    });
 
     const overlay = L.layerGroup().addTo(map);
     const me = L.layerGroup().addTo(map);
@@ -618,12 +608,26 @@ function MapView() {
     };
     el.addEventListener('keydown', onKeyDown);
 
+    // Tap anywhere on the map for a short description of that spot (v1).
+    map.on('click', (event: L.LeafletMouseEvent) => {
+      if (searchOpenRef.current) {
+        setSearchOpen(false);
+        return;
+      }
+      if (patchOpenRef.current) return;
+      describeSpot(map, event.latlng);
+    });
+
+    // /map/at/:lat,:lng (v1): centre there; the hotspot's popup opens once the hotspots are drawn.
+    if (atLat != null && atLng != null) map.setView([atLat, atLng], 15);
+
     return () => {
       alive = false;
       el.removeEventListener('keydown', onKeyDown);
       window.clearTimeout(timer);
       observer?.disconnect();
       hotspotMarkersRef.current = [];
+      groupMarkersRef.current = [];
       tempMarkerRef.current = null;
       previewRef.current = null;
       mapRef.current = null;
@@ -670,8 +674,12 @@ function MapView() {
     if (!map || !overlay) return;
 
     let alive = true;
+    // A redraw for new data (her sightings, the regional data) must not close the popup she has open.
+    const reopenHotspot = hotspotMarkersRef.current.find(({ mk }) => mk.isPopupOpen())?.h.name;
+    const reopenGroup = groupMarkersRef.current.find(({ mk }) => mk.isPopupOpen())?.key;
     overlay.clearLayers();
     hotspotMarkersRef.current = [];
+    groupMarkersRef.current = [];
 
     const accent = cssVar('--azure');
     const ink = cssVar('--lori');
@@ -750,7 +758,7 @@ function MapView() {
           .bindPopup(
             `<div data-desc><span class="pop-h">${esc(view.h.name)}</span>${
               view.h.rich
-            } dex species recorded here. You have seen ${view.got}.<p class="pop-src">Looking up this place…</p></div>
+            } dex birds recorded here. You have seen ${view.got}.<p class="pop-src">Looking up this place…</p></div>
             ${
               view.need.length
                 ? `Still to find (${view.needAll.length}):<ul class="pop-need">${view.need
@@ -783,14 +791,16 @@ function MapView() {
       const kinds = [...new Set(group.names.map((sp) => sp.kind))];
       const dot =
         kinds.length === 1 ? cssVar(`--k-${kinds[0]}`) || accent : accent;
-      L.circleMarker([group.lat, group.lng], {
+      const groupMarker = L.circleMarker([group.lat, group.lng], {
         radius: Math.min(14, 6 + group.names.length),
         color: '#fff',
         weight: 2,
         fillColor: dot,
         fillOpacity: 0.95,
         bubblingMouseEvents: false,
-      })
+      });
+      groupMarkersRef.current.push({ key: group.key, mk: groupMarker });
+      groupMarker
         .addTo(overlay)
         .bindPopup(
           `<strong>${esc(group.items[0].place || 'Sighting')}</strong><br>${group.names
@@ -801,54 +811,36 @@ function MapView() {
         );
     }
 
-    // Tapping the map describes that spot (v1 map click handler).
-    const onMapClick = (event: L.LeafletMouseEvent) => {
-      if (searchOpenRef.current) {
-        setSearchOpen(false);
-        return;
+    if (reopenHotspot) hotspotMarkersRef.current.find(({ h }) => h.name === reopenHotspot)?.mk.openPopup();
+    else if (reopenGroup) groupMarkersRef.current.find(({ key }) => key === reopenGroup)?.mk.openPopup();
+
+    // /map/at/:lat,:lng (v1): once the hotspots are drawn, open the one within about 200 m of the spot.
+    if (atPendingRef.current && hotspots().length) {
+      atPendingRef.current = false;
+      const near =
+        atLat != null && atLng != null
+          ? hotspotMarkersRef.current.find(
+              ({ h }) => Math.abs(h.lat - atLat) < 0.002 && Math.abs(h.lng - atLng) < 0.002,
+            )
+          : undefined;
+      if (near) {
+        window.setTimeout(() => {
+          if (mapRef.current !== map) return;
+          hotspotMarkersRef.current.find(({ h }) => h.name === near.h.name)?.mk.openPopup();
+        }, 300);
       }
-      if (patchOpenRef.current) return;
-      const clickLat = event.latlng.lat;
-      const clickLng = event.latlng.lng;
-      const key = `spot:${clickLat.toFixed(3)},${clickLng.toFixed(3)}`;
-      const popup = L.popup({ maxWidth: 260, ...POPUP_OPTS })
-        .setLatLng(event.latlng)
-        .setContent('<p class="pop-src">Looking up this spot…</p>');
-      // openPopup() closes whatever is already open; openOn() would stack a second popup.
-      map.openPopup(popup);
-      void describe(clickLat, clickLng, { seen: seenRef.current })
-        .then((html) => {
-          if (!alive) return;
-          const text = String(html);
-          addNote(key, text, clickLat, clickLng);
-          if (map.hasLayer(popup)) {
-            popup.setContent(
-              `${text}<a href="${directionsUrl(
-                clickLat,
-                clickLng,
-              )}" target="_blank" rel="noopener">Directions</a>`,
-            );
-          }
-        })
-        .catch(() => {
-          if (!alive) return;
-          const text =
-            '<p class="pop-desc">Couldn\u2019t look this spot up. Check the internet connection.</p>';
-          addNote(key, text, clickLat, clickLng);
-          if (map.hasLayer(popup)) popup.setContent(text);
-        });
-    };
-    map.on('click', onMapClick);
+    }
 
     return () => {
       alive = false;
-      map.off('click', onMapClick);
     };
+    // atLat/atLng are fixed for this view (MapScreen keys it on the route).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seqTick, patches, groups, hotspotView, focus, focusPoints, hotOn, need, addNote]);
 
   // Initial view for each route, fitted to the data once.
   useEffect(() => {
-    if (!focus || focusFittedRef.current || !focusPoints.length) return;
+    if (!focus || focusFittedRef.current || viewRestoredRef.current || !focusPoints.length) return;
     const map = mapRef.current;
     if (!map) return;
     map.fitBounds(
@@ -859,7 +851,7 @@ function MapView() {
   }, [focus, focusPoints]);
 
   useEffect(() => {
-    if (focus || hasAt || sightingsFittedRef.current) return;
+    if (focus || hasAt || sightingsFittedRef.current || viewRestoredRef.current) return;
     const map = mapRef.current;
     if (!map || !groups.length) return;
     map.fitBounds(
@@ -868,41 +860,6 @@ function MapView() {
     );
     sightingsFittedRef.current = true;
   }, [groups, focus, hasAt]);
-
-  // /map/at/:lat,:lng — centre and describe the coordinate.
-  useEffect(() => {
-    if (atLat == null || atLng == null) return;
-    const map = mapRef.current;
-    if (!map) return;
-    map.setView([atLat, atLng], 15);
-    let alive = true;
-    const key = `at:${atLat},${atLng}`;
-    const popup = L.popup({ maxWidth: 280, ...POPUP_OPTS })
-      .setLatLng([atLat, atLng])
-      .setContent('<p class="pop-src">Looking up this spot…</p>');
-    map.openPopup(popup);
-    void describe(atLat, atLng, { seen })
-      .then((html) => {
-        if (!alive) return;
-        const text = String(html);
-        addNote(key, text, atLat, atLng);
-        if (map.hasLayer(popup)) {
-          popup.setContent(
-            `${text}<a href="${directionsUrl(atLat, atLng)}" target="_blank" rel="noopener">Directions</a>`,
-          );
-        }
-      })
-      .catch(() => {
-        if (!alive) return;
-        const text =
-          '<p class="pop-desc">Couldn\u2019t look this spot up. Check the internet connection.</p>';
-        addNote(key, text, atLat, atLng);
-        if (map.hasLayer(popup)) popup.setContent(text);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [atLat, atLng, seqTick, seen, addNote]);
 
   // -- patch sheet ---------------------------------------------------------
 
@@ -997,7 +954,9 @@ function MapView() {
     setSearchStatus('searching');
     setSearchMsg('');
     try {
-      const remote = await searchAddress(text, controller.signal);
+      // The shared place search (lib/places, v1 searchAddress): one request a second across the app, and offline
+      // it says that searching places needs a connection, as the location picker does.
+      const remote = await searchAddress(text);
       if (controller.signal.aborted || seq !== seqRef.current) return;
       const local = localResultsRef.current(text);
       setResults([...local, ...remote.map((row) => ({ ...row, zoom: 14 }))]);
@@ -1103,25 +1062,10 @@ function MapView() {
 
   // -- locate --------------------------------------------------------------
 
-  // v1 toast(): shown for 4.5 s (or until tapped), then fades out.
-  useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(
-      () => setToast(toast.out ? null : { ...toast, out: true }),
-      toast.out ? 260 : 4500,
-    );
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-
-  const showToast = (msg: string) => {
-    setLocationNote(msg);
-    setToast({ msg, out: false });
-  };
-
   // v1 getPosition() and the map's [data-locate] handler, with v1's copy.
   const locate = () => {
     if (!navigator.geolocation) {
-      showToast('This browser cannot share location');
+      appToast('This browser cannot share location');
       return;
     }
     setLocating(true);
@@ -1131,8 +1075,10 @@ function MapView() {
         const map = mapRef.current;
         const me = meRef.current;
         if (!map || !me) return;
-        setLocationNote('Showing where you are.');
+        // v1 is silent here; a screen reader cannot see the map move, so say so.
+        announce('Showing where you are.');
         map.setView([position.coords.latitude, position.coords.longitude], 15);
+        // One marker for where she is, not one more on every tap (v1 stacked them).
         me.clearLayers();
         L.circleMarker([position.coords.latitude, position.coords.longitude], {
           radius: 7,
@@ -1144,7 +1090,7 @@ function MapView() {
       },
       (error) => {
         setLocating(false);
-        showToast(
+        appToast(
           error.code === 1
             ? 'Location permission was denied. Allow it in your browser settings.'
             : 'Could not get your location. Try again outside or near a window.',
@@ -1221,7 +1167,7 @@ function MapView() {
             />
             {q && (
               <button type="button" className="iconbtn" aria-label="Clear search" onClick={clearSearch}>
-                <span aria-hidden="true">✕</span>
+                {closeIcon}
               </button>
             )}
           </form>
@@ -1296,8 +1242,8 @@ function MapView() {
               data-hot=""
               aria-pressed={hotOn}
               onClick={() => {
-                if (focus) setHotFocus((value) => !value);
-                else setHot((value) => !value);
+                if (focus) toggleHotFocus();
+                else toggleHot();
               }}
             >
               Hotspots
@@ -1309,7 +1255,7 @@ function MapView() {
               className={`chip ${need ? 'chip--on' : ''}`}
               data-need=""
               aria-pressed={need}
-              onClick={() => setNeed((value) => !value)}
+              onClick={toggleNeed}
             >
               Birds I need
             </button>
@@ -1334,7 +1280,7 @@ function MapView() {
           ))}
         </div>
 
-        <button type="button" className="btn btn--primary map-patch" onClick={openPatch}>
+        <button type="button" className="btn map-patch" onClick={openPatch}>
           <span className="map-patch-ring" aria-hidden="true" />New patch here
         </button>
 
@@ -1357,6 +1303,8 @@ function MapView() {
           </svg>
         </button>
 
+        <div className={`map-cross ${patchOpen ? '' : 'hidden'}`} aria-hidden="true" />
+
         <div className="layer-toggle" role="group" aria-label="Map style">
           <button
             type="button"
@@ -1374,11 +1322,17 @@ function MapView() {
           </button>
         </div>
 
-        <div className={`map-cross ${patchOpen ? '' : 'hidden'}`} aria-hidden="true" />
-
-        <p className="map-sr" role="status" aria-live="polite">
-          {locationNote}
-        </p>
+        {noSignal && (
+          <div className="map-note map-note--tiles">
+            <p>
+              <strong>No signal.</strong> Areas you haven&apos;t opened before stay blank. Hotspots and your
+              sightings still show.
+            </p>
+            <button type="button" className="iconbtn" aria-label="Hide this message" onClick={hideNote}>
+              {closeIcon}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* v1 startPatch: openSheet(..., { modal: false, cls: 'sheet-wrap--map' }). It is a layer, so Escape closes it
@@ -1437,16 +1391,6 @@ function MapView() {
           </div>
         </form>
       </Sheet>
-
-      {toast && (
-        <div
-          className={`toast${toast.out ? ' toast--out' : ''}`}
-          aria-hidden="true"
-          onClick={() => setToast({ ...toast, out: true })}
-        >
-          {toast.msg}
-        </div>
-      )}
 
       <MapSummary
         focus={focus}
@@ -1593,7 +1537,7 @@ export function MapSummary({
           <ul>
             {hotspotView.map((view) => (
               <li key={view.h.name}>
-                {view.h.name}: {view.h.rich} dex species recorded here. You have seen {view.got}.
+                {view.h.name}: {view.h.rich} dex birds recorded here. You have seen {view.got}.
                 {view.needAll.length > 0 &&
                   ` Still to find (${view.needAll.length}): ${nameList(view.need)}.`}
               </li>
