@@ -21,7 +21,7 @@ import { Icon } from '../components/Icon';
 import { Band, Pips } from '../components/SpeciesImage';
 import { CallsSection, PauseIcon, PlayIcon, hasCalls, useCallPlayer } from './BirdCalls';
 import { CardOverlay, askMotion, shareCard, type CardInfo } from './BirdCard';
-import { DexSearch } from './DexSearch';
+import { openSearch } from './DexSearch';
 import { SightingEditSheet } from './SightingEditSheet';
 import { toast } from '../lib/toast';
 import type { SightingRow } from './lists/shared';
@@ -166,7 +166,6 @@ function SpeciesPage({ sp }: { sp: Species }) {
   const [det, setDet] = useState<Details | null>(null);
   const [editing, setEditing] = useState<SightingRow | null>(null);
   const [logging, setLogging] = useState(false);
-  const [searching, setSearching] = useState(false);
   const [carding, setCarding] = useState(false);
   const [hero, setHero] = useState<'photo' | 'model'>('photo');
   const [modelMsg, setModelMsg] = useState<{ cls: string; text: string } | null>(null);
@@ -190,7 +189,6 @@ function SpeciesPage({ sp }: { sp: Species }) {
   const first = hist[hist.length - 1];
   const seen = hist.length > 0;
   const isBird = sp.kind === 'bird';
-  const seenIds = useMemo(() => new Set(sightings.map((s) => s.speciesId)), [sightings]);
   const cardInfo: CardInfo = { seen, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
 
   // Deleting a sighting takes its row (or photo) away after the sheet has given focus back to it. As v1's redraw does,
@@ -384,7 +382,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
           <p className={`hero-credit${hero === 'photo' ? '' : ' hidden'}`} data-credit="">{photos[slide]?.credit ? <Credit ph={photos[slide]} /> : null}</p>
         </div>
         <Link className="iconbtn iconbtn--float" to="/dex" aria-label="Back to the dex"><Icon name="back" /></Link>
-        <button type="button" className="iconbtn iconbtn--float iconbtn--right" data-search="" aria-label="Search everything" onClick={() => setSearching(true)}><Icon name="search" /></button>
+        <button type="button" className="iconbtn iconbtn--float iconbtn--right" data-search="" aria-label="Search everything" onClick={() => openSearch()}><Icon name="search" /></button>
         <div className="hero-tabs" role="tablist" aria-label="View">
           <button type="button" role="tab" aria-selected={hero === 'photo'} data-hero="photo" onClick={() => setHero('photo')}>{n > 1 ? 'Photos' : 'Photo'}</button>
           {isBird && <button type="button" role="tab" aria-selected={hero === 'model'} data-hero="model" onClick={() => setHero('model')}>3D model</button>}
@@ -543,7 +541,6 @@ function SpeciesPage({ sp }: { sp: Species }) {
       {logging && <SightingEditSheet speciesId={sp.id} onClose={() => setLogging(false)} />}
       {editing && <SightingEditSheet sighting={editing} onClose={() => setEditing(null)} />}
       {carding && <CardOverlay sp={sp} info={cardInfo} onClose={() => setCarding(false)} />}
-      {searching && <DexSearch initial="" sightings={sightings} seen={seenIds} onClose={() => setSearching(false)} />}
     </article>
   );
 }

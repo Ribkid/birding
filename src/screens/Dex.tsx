@@ -11,7 +11,7 @@ import {
   pluralFor, type Species,
 } from '../lib/data';
 import { useMedia, useSightings, type Sighting } from '../lib/hooks';
-import { keepFocus, topLayer } from '../lib/layers';
+import { keepFocus } from '../lib/layers';
 import { countUp, flip, motionOK } from '../lib/motion';
 import { applyTint, stagger, tintFrom } from '../lib/look';
 import { Band, Pips } from '../components/SpeciesImage';
@@ -26,7 +26,7 @@ import { onAuth } from '../core/cloud.js';
 import { onStatus, syncStatus } from '../core/account.js';
 import { avatarUrl, getMyCloud, getProfile, myName, signedIn } from '../core/profile.js';
 import { currentStreak, dayStr, dueCards, getDaily, getLearn, learnReady, monthName } from '../core/learn.js';
-import { DexSearch } from './DexSearch';
+import { openSearch } from './DexSearch';
 import { ICON, Photo, Ring } from './dexParts';
 import { promptInstall, useCanInstall } from '../lib/install';
 import { announce } from '../lib/toast';
@@ -202,7 +202,6 @@ export default function Dex() {
   });
   const [colourUnseen, setColourUnseen] = useState(false);
   const install = useCanInstall();
-  const [search, setSearch] = useState<string | null>(null);
   const sayT = useRef(0);
   const countRef = useRef({ n: 0, kind: 'animals' });
   const suppressClick = useRef(false);
@@ -313,18 +312,6 @@ export default function Dex() {
     return () => { alive = false; };
   }, [heroSrc, heroId]);
 
-  // '/' opens Search everything, as it does from anywhere in v1 (not while she types, or over a sheet).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || topLayer()) return;
-      if ((e.target as Element | null)?.closest?.('input, textarea, select, [contenteditable]')) return;
-      e.preventDefault();
-      setSearch((open) => open ?? '');
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
-
   // ---------- actions ----------
   // v1 sayDexCount: the count goes out through the shared #announce region (lib/toast.ts).
   const say = (delay = 0) => {
@@ -345,7 +332,6 @@ export default function Dex() {
     say();
   };
   const reset = () => redraw({ q: '', show: 'all', group: '', habitat: '', rarity: '', season: false });
-  const openSearch = (initial = '') => setSearch(initial);
 
   // Press and hold a tile to log it fast.
   const cancelPress = () => { clearTimeout(press.current.timer); press.current.timer = 0; };
@@ -600,7 +586,6 @@ export default function Dex() {
         </div>
         <p className="small muted pad dex-tip">Tip: press and hold anything in the dex to log it quickly.</p>
       </div>
-      {search != null && <DexSearch initial={search} sightings={sightings} seen={seen} onClose={() => setSearch(null)} />}
     </>
   );
 }

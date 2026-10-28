@@ -11,6 +11,7 @@ import {
   scanRefs, logScan, markChosen,
 } from '../../core/scan.js';
 import { setPending } from './scanHandoff';
+import { openSearch } from '../DexSearch';
 import { KEEP_MS, S, resetScan, type ScanBox, type ScanPhoto } from './scanSession';
 import './scan.css';
 
@@ -487,7 +488,7 @@ export default function Scan() {
                     kindsRef.current?.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
                     (kindsRef.current?.querySelector('[aria-pressed="true"]') as HTMLElement | null)?.focus();
                   }}>Pick a kind</button>}
-                  <Link className="btn" to="/dex" onClick={none}>Search the dex</Link>
+                  <button type="button" className="btn" data-search="" onClick={() => { none(); openSearch(); }}>Search the dex</button>
                 </div>
               </section>
             </>
