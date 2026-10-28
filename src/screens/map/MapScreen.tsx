@@ -113,23 +113,27 @@ interface Settings {
 const SEQ_CENTER: [number, number] = [-27.47, 153.02];
 const SEQ_ZOOM = 9;
 
-// Popups must not open underneath the fixed search bar and filter chips — that hides the close
-// button, so the popup cannot be dismissed. Leaflet pans to keep the popup inside this padded
-// area (top leaves room for the search bar + chips, bottom for the attribution and tab bar).
-const POPUP_OPTS = {
-  autoPanPaddingTopLeft: L.point(12, 152),
-  autoPanPaddingBottomRight: L.point(12, 96),
-};
-
 /**
  * Popup options with v1's width (`want`: 260 for hotspots and spots, Leaflet's 300 for the rest), narrowed on a small
- * phone. rest.css's roomier close button makes the frame about 62 px wider than the content, so on a 320 px screen a
- * 260 px popup would run off the edge and hide its close button; this keeps the whole popup inside the padding.
+ * phone. The frame is 47 px wider than maxWidth (Leaflet's 1 px, its 1 px padding each side and v1's 20 + 24 px
+ * content margins, map.css), so on a 320 px screen a 260 px popup would run off the edge and hide its close button;
+ * this keeps the whole popup inside the 12 px side padding.
+ *
+ * Popups must not open underneath the fixed search bar and filter chips either: that hides the close button, so the
+ * popup cannot be dismissed. Leaflet pans to keep the popup below the chip row (measured, so a notch's safe area
+ * counts) and clear of the attribution and tab bar. A popup that already fits, such as #/map/at's, stays where v1
+ * puts it.
  */
-const popOpts = (map: L.Map, want = 300) => ({
-  maxWidth: Math.max(160, Math.min(want, map.getSize().x - 24 - 62)),
-  ...POPUP_OPTS,
-});
+const popOpts = (map: L.Map, want = 300) => {
+  const el = map.getContainer();
+  const chips = el.parentElement?.querySelector('.map-ctl');
+  const top = chips ? Math.round(chips.getBoundingClientRect().bottom - el.getBoundingClientRect().top) : 0;
+  return {
+    maxWidth: Math.max(160, Math.min(want, map.getSize().x - 24 - 47)),
+    autoPanPaddingTopLeft: L.point(12, top > 0 ? top : 152),
+    autoPanPaddingBottomRight: L.point(12, 96),
+  };
+};
 
 const OSM_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const OSM_ATTRIBUTION =

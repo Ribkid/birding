@@ -24,6 +24,16 @@
 }
 
 /*
+ * v1's popup content margins (Leaflet's own). rest.css widens the right margin to 44 px for a
+ * 44 px close button, but Leaflet's stylesheet comes later and keeps the button 24 px, in v1 as
+ * here, so that margin only made every popup 16 px wider than v1's. The 24 px right margin keeps
+ * the text clear of the 24 px button. MapScreen's popOpts counts these 44 px.
+ */
+.mapwrap.mapwrap--page .leaflet-popup-content {
+  margin: 13px 24px 13px 20px;
+}
+
+/*
  * The same information as the popups, for screen readers only (v1 has no visible list).
  * It holds text only, so nothing in it can take keyboard focus.
  */
