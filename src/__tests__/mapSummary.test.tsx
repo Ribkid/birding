@@ -50,7 +50,7 @@ describe('map screen-reader summary', () => {
     const text = container.textContent ?? '';
     expect(text).toContain('Home patch, 2 km radius');
     expect(text).toContain(`Home: ${b.name}, ${c.name}`);
-    expect(text).toContain(`Oxley Creek Common: 180 dex species recorded here. You have seen 0. Still to find (1): ${a.name}.`);
+    expect(text).toContain(`Oxley Creek Common: 180 dex birds recorded here. You have seen 0. Still to find (1): ${a.name}.`);
     expect(text).toContain('SpotBird');
   });
 });

@@ -61,8 +61,13 @@ export async function searchAddress(q: string): Promise<PlaceHit[]> {
   if (wait > 0) await new Promise(r => setTimeout(r, wait));
   lastGeocode = Date.now();
   const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=au&viewbox=151.6,-25.6,153.7,-28.5&q=${encodeURIComponent(q)}`;
-  // v1 showed the browser's own error here ('Failed to fetch'); say what it means instead.
-  const r = await fetch(url, { headers: { 'Accept-Language': 'en-AU' } }).catch(() => { throw new Error('Searching places needs a connection. Move the map instead.'); });
+  // v1 showed the browser's own error here ('Failed to fetch'); say what it means instead. Only an offline phone is
+  // told it needs a connection: online, the search itself failed (blocked, down or a dead Wi-Fi), so say just that.
+  const r = await fetch(url, { headers: { 'Accept-Language': 'en-AU' } }).catch(() => {
+    throw new Error(typeof navigator !== 'undefined' && navigator.onLine === false
+      ? 'Searching places needs a connection. Move the map instead.'
+      : "Place search couldn't be reached. Try again, or move the map instead.");
+  });
   if (!r.ok) throw new Error('Place search is busy. Try again in a moment.');
   return ((await r.json()) as { name?: string; display_name: string; lat: string; lon: string }[]).map(x => ({
     name: x.name || x.display_name.split(',')[0],

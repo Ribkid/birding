@@ -245,13 +245,13 @@ export default function Scan() {
       if (updated) {
         setError('BirdyDex was updated. Reload to use Scan.');
         setNeedsReload(true);
+        setStatus('');
       } else {
-        const msg = importFailed || /offline-first-run|Failed to fetch|NetworkError|network/i.test(raw)
+        // v1 says why in the status line under Identify, where she is looking.
+        setStatus(importFailed || /offline-first-run|Failed to fetch|NetworkError|network/i.test(raw)
           ? `Photo ID needs a one-time download of about ${MB} MB. Connect to the internet (Wi-Fi is best) and try again.`
-          : `Photo ID couldn't run: ${raw}`;
-        setError(msg);
+          : `Photo ID couldn't run: ${raw}`);
       }
-      setStatus('');
     } finally { if (run === identifyRun.current) { setBusy(false); setProgress(null); } }
   };
 
@@ -437,12 +437,14 @@ export default function Scan() {
                   {covered.map((k) => <button key={k} type="button" className={`scan-chip kind--${k}`} aria-pressed={kind === k} onClick={() => setKind(k)}><i aria-hidden="true" />{KINDS[k].label}</button>)}
                 </div>
               )}
-              <button type="button" className="scan-go" disabled={busy} onClick={() => void identify()} aria-disabled={busy}><span className="scan-go-ico"><Icon name="scan" /></span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
+              {/* Busy is aria-disabled only, as in v1: a disabled button would drop focus to the page. identify() ignores taps while busy. */}
+              <button type="button" className="scan-go" onClick={() => void identify()} aria-disabled={busy || undefined}><span className="scan-go-ico"><Icon name="scan" /></span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
             </>
           )}
           <div ref={workRef} className="scan-work">
             <p className="scan-status" role="status" aria-live="polite">{status}</p>
-            {progress?.phase === 'model' && <div className="scan-progress"><div className="meter"><span style={{ width: `${Math.round(progress.frac * 100)}%` }} /></div><p className="scan-mb">{Math.round(progress.frac * photoModelMb())} of {photoModelMb()} MB</p></div>}
+            {/* Always present, as in v1: scan.css collapses .scan-work only when both the status and this are empty. */}
+            <div className="scan-progress" aria-hidden="true">{progress?.phase === 'model' && <><div className="meter"><span style={{ width: `${Math.round(progress.frac * 100)}%` }} /></div><p className="scan-mb">{Math.round(progress.frac * photoModelMb())} of {photoModelMb()} MB</p></>}</div>
           </div>
         </div>
       </section>

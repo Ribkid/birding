@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 const opened: unknown[] = [];
 vi.mock('../components/SightingSheet', () => ({ openSightingSheet: (req: unknown) => { opened.push(req); } }));
 vi.mock('../lib/hooks', async (orig) => ({ ...(await orig<typeof import('../lib/hooks')>()), useMedia: () => {}, useSeen: () => new Set<number>() }));
-vi.mock('../core/media.js', () => ({ sized: () => null }));
+vi.mock('../core/media.js', () => ({ sized: () => null, loadCallPack: async () => ({}), callPackStatus: async () => ({ saved: 0, total: 0 }), localCalls: async () => [] }));
 let detect: ((d: unknown[]) => void) | null = null;
 vi.mock('../core/listen.js', () => ({
   loadListenModel: async () => {},

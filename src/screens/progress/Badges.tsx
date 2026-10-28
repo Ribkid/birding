@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useReducer, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { badges } from '../../core/stats.js';
 import { learnReady, learnStats } from '../../core/learn.js';
 import { configured } from '../../core/cloud.js';
-import { useOutings, useSightings } from '../../lib/hooks';
+import { db } from '../../core/db.js';
+import { normaliseSighting, type Outing, type Sighting } from '../../lib/hooks';
+import { countUp, motionOK } from '../../lib/motion';
 import { Icon } from '../../components/Icon';
 import './progress.css';
 
@@ -62,36 +64,95 @@ const Ring = ({ p }: { p: number }) => (
   </svg>
 );
 
+// v1 renderBadges keeps these for the session: the earned count from the last visit (the number stamps up from it,
+// from nothing on the first visit) and the shelves whose medals have already played.
+let badgesEarned: number | null = null;
+const shelvesPlayed = new Set<string>();
+
+/** Her sightings and outings, or null until both have been read (v1 had them in memory before drawing). */
+function useRows() {
+  const [rows, setRows] = useState<{ sightings: Sighting[]; outings: Outing[] } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      const [s, o] = await Promise.all([db.all('sightings'), db.all('outings')]);
+      if (alive) setRows({ sightings: (s as Sighting[]).map(normaliseSighting), outings: o as Outing[] });
+    };
+    void load();
+    const off = db.onChange((name: string) => {
+      if (name === 'sightings' || name === 'outings') void load();
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
+  return rows;
+}
+
 export default function Badges() {
-  const sightings = useSightings();
-  const outings = useOutings();
+  const rows = useRows();
   // Bumped when learning progress has loaded, so the memo below recomputes (v1 redraws).
   const [learnTick, learnLoaded] = useReducer((n: number) => n + 1, 0);
-  const [shelfIn, setShelfIn] = useState(false);
-  const [ringsIn, setRingsIn] = useState(true);
+  // v1: the trophy ring fills in only on the first visit of the session.
+  const [ringsIn, setRingsIn] = useState(() => badgesEarned == null);
+  // Shelves that animate as they come into view: not played yet this session, motion allowed (v1 renderBadges).
+  const [play] = useState(() => (motionOK() && typeof IntersectionObserver !== 'undefined' ? new Set(SECTIONS.map(([k]) => k).filter((k) => !shelvesPlayed.has(k))) : new Set<string>()));
+  const [shelvesIn, setShelvesIn] = useState<ReadonlySet<string>>(() => new Set());
+  const earnedRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     let alive = true;
     learnReady().then(() => { if (alive) learnLoaded(); }).catch(() => {});
-    const shelf = window.setTimeout(() => setShelfIn(true), 80);
-    const rings = window.setTimeout(() => setRingsIn(false), 1400);
+    const rings = ringsIn ? window.setTimeout(() => setRingsIn(false), 1400) : 0;
     return () => {
       alive = false;
-      window.clearTimeout(shelf);
       window.clearTimeout(rings);
     };
+    // Once per visit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const list = useMemo(() => {
     let learning: Record<string, number> = {};
     try { learning = (learnStats() || {}) as Record<string, number>; } catch { /* not loaded yet */ }
-    return badges(sightings, outings, learning) as Badge[];
-  }, [sightings, outings, learnTick]);
+    return badges(rows?.sightings ?? [], rows?.outings ?? [], learning) as Badge[];
+  }, [rows, learnTick]);
 
   const earned = list.filter((b) => b.done).length;
+  const loaded = rows != null;
+
+  // v1: the earned count stamps up from where it was last time, 150 ms in. The number is written here only, so
+  // React never holds a text node that countUp replaces; a new count gets a new element (keyed below), so an older
+  // count still running cannot write over it.
+  useLayoutEffect(() => {
+    const el = earnedRef.current;
+    if (!el) return;
+    if (!loaded) { el.textContent = ''; return; }
+    void countUp(el, badgesEarned || 0, earned, { delay: 150 });
+    badgesEarned = earned;
+  }, [loaded, earned]);
   const next = list.filter((b) => !b.done).sort((x, y) => y.have / y.need - x.have / x.need || x.need - y.need)[0];
   const sections = SECTIONS.filter(([k]) => list.some((b) => b.kind === k));
   const shown = (kind: string) => kind !== 'rarity' && kind !== 'habitat';
+  const sectionKeys = sections.map(([k]) => k).join(' ');
+
+  // v1: each shelf's rings fill and its earned medals catch the light as that shelf comes into view, once a session.
+  useEffect(() => {
+    if (!loaded || !play.size) return;
+    const io = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (!en.isIntersecting) continue;
+        const k = (en.target as HTMLElement).dataset.shelf;
+        if (!k) continue;
+        shelvesPlayed.add(k);
+        io.unobserve(en.target);
+        setShelvesIn((prev) => new Set(prev).add(k));
+      }
+    }, { rootMargin: '0px 0px -12% 0px' });
+    document.querySelectorAll<HTMLElement>('.shelf--play[data-shelf]:not(.is-in)').forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [loaded, sectionKeys, play]);
 
   return (
     <>
@@ -104,7 +165,7 @@ export default function Badges() {
         <div className="trophy-top">
           <div className="trophy-ring">
             <Ring p={earned / Math.max(1, list.length)} />
-            <p className="trophy-n"><b>{earned}</b><span>of {list.length}</span></p>
+            <p className="trophy-n"><b data-earned="" key={loaded ? earned : -1} ref={earnedRef} /><span>of {list.length}</span></p>
           </div>
           <div className="trophy-txt">
             <p className="trophy-h">
@@ -130,7 +191,7 @@ export default function Badges() {
         return (
           <section className="shelf-sec" key={kind} style={{ '--emask': emblemMask(kind) } as CSSProperties}>
             <h2 className="h2 shelf-h"><span>{title}</span><span className="shelf-n" aria-hidden="true">{done.length}/{items.length}</span></h2>
-            <ul className={`shelf shelf--play${shelfIn ? ' is-in' : ''}`}>
+            <ul className={`shelf${play.has(kind) ? ' shelf--play' : ''}${shelvesIn.has(kind) ? ' is-in' : ''}`} data-shelf={kind}>
               {[...done, ...items.filter((b) => !b.done)].map((b, i) => (
                 <li
                   key={b.id}
