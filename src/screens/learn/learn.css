@@ -341,8 +341,10 @@
 .lq-fb:empty { display: none; }
 .lq-fb {
   display: grid; gap: var(--sp-3); padding: var(--sp-4); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card);
-  outline: none; scroll-margin-bottom: calc(var(--chrome-bottom) + var(--sp-3));
+  outline: none; scroll-margin-bottom: calc(var(--chrome-bottom) + var(--lq-dock-h, 56px) + var(--sp-4));
 }
+/* brought into view clear of the answer dock, and of the outing bar when one shows */
+body.has-outing .lq-fb { scroll-margin-bottom: calc(var(--chrome-bottom) + var(--lq-dock-h, 56px) + 68px); }
 .lq-fb.is-right { background: color-mix(in srgb, var(--seen) 10%, var(--surface)); }
 .lq-fb.is-wrong { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
 :root[data-theme="outdoor"] .lq-fb { box-shadow: 0 0 0 1.5px var(--line-strong); }
@@ -546,3 +548,145 @@
 }
 .lq-safety svg { flex: none; width: 20px; height: 20px; margin-top: 1px; color: var(--gold-ink); }
 :root[data-theme="outdoor"] .lq-safety { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+
+/* ---------- the answer dock: the bird stays in view when she answers ----------
+   Photo questions answer under the photo: a glass footer grows out of the photo's bottom edge, in the same card,
+   with a green or red edge where it meets the photo; the other answers fold away so her pick and the right one sit
+   together. Next and the answer's extra actions ride in one compact glass dock above the tab bar. */
+.lq-screen:has(> .lq-dock) { padding-bottom: calc(var(--lq-dock-h, 56px) + var(--sp-5) + var(--lq-grow, 0px)); }
+
+/* the trail: one segment per question, green for right and red (striped) for wrong; the one she is on stands taller */
+.lq-trail { display: grid; grid-template-columns: repeat(var(--n, 10), minmax(0, 1fr)); gap: 4px; align-items: center; height: 14px; }
+.lq-trail i {
+  position: relative; height: 8px; border-radius: var(--r-pill); overflow: hidden; background: color-mix(in srgb, var(--ink) 12%, transparent);
+  transition: height var(--dur-3) var(--ease-spring), background-color var(--dur-2) var(--ease-out);
+}
+.lq-trail i.is-now { height: 14px; background: color-mix(in srgb, var(--ink) 8%, transparent); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ink) 62%, transparent); }
+.lq-trail i::after { content: ''; position: absolute; inset: 0; border-radius: inherit; transform-origin: left center; transform: scaleX(0); }
+.lq-trail i.is-right::after { background: var(--seen); transform: none; }
+.lq-trail i.is-wrong::after {
+  background: repeating-linear-gradient(-45deg, var(--danger) 0 3px, color-mix(in srgb, var(--danger) 60%, transparent) 3px 5px); transform: none;
+}
+.lq-trail i.is-new::after { animation: lq-seg var(--dur-4) var(--ease-spring) both; }
+@keyframes lq-seg { from { transform: scaleX(0); } }
+:root[data-theme="outdoor"] .lq-trail i:not(.is-right):not(.is-wrong) { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+:root[data-theme="outdoor"] .lq-trail i.is-now { box-shadow: inset 0 0 0 2px var(--ink); }
+
+/* the mystery photo and its verdict, one card */
+.lq-card { position: relative; display: grid; border-radius: var(--r-card); overflow: hidden; background: var(--surface); box-shadow: var(--shadow-card); }
+.lq-card > .lq-photo { border-radius: 0; box-shadow: none; }
+:root[data-theme="outdoor"] .lq-card.is-answered { box-shadow: 0 0 0 1.5px var(--line-strong); }
+.lq-foot { position: relative; }
+.lq-verdictbar {
+  position: relative; isolation: isolate; overflow: hidden; outline: none;
+  display: grid; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 3px; align-items: start;
+  padding: 13px 16px 14px 12px; background: var(--surface); color: var(--ink);
+}
+/* glass: a soft blur of the photo above, under a frosted surface; solid outdoors and with reduced transparency */
+.lq-glow {
+  position: absolute; left: -10%; top: -50%; z-index: -1; width: 120%; height: 170%; max-width: none;
+  object-fit: cover; object-position: 50% 92%; filter: blur(24px) saturate(1.6); pointer-events: none;
+}
+.lq-verdictbar::after { content: ''; position: absolute; inset: 0; z-index: -1; background: var(--glass-strong); }
+.lq-verdictbar::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--seen); }
+.lq-verdictbar.is-wrong::before { background: var(--danger); }
+:root[data-theme="outdoor"] .lq-glow { display: none; }
+@media (prefers-reduced-transparency: reduce) { .lq-glow { display: none; } }
+.lq-vb-mark { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--r-pill); background: var(--seen); color: var(--on-seen); }
+.lq-verdictbar.is-wrong .lq-vb-mark { background: var(--danger); color: var(--on-danger); }
+.lq-vb-mark svg { width: 16px; height: 16px; }
+.lq-vb-text { align-self: center; margin: 0; font: 600 var(--fs-3)/1.3 var(--font); letter-spacing: -.005em; }
+.lq-vb-text strong { font-weight: 800; }
+.lq-vb-text a { color: inherit; font-weight: 800; text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.lq-vb-line { grid-column: 2; margin: 0; max-width: 60ch; font-size: var(--fs-2); line-height: 1.4; }
+
+/* the answers that stay under a photo, and the rest of the feedback below them */
+/* the answers stay above the feedback that settles in below them while they slide */
+.lq-opt-wrap { position: relative; z-index: 1; display: grid; }
+.lq-opt-wrap.is-folded { display: none; }
+.lq-more { display: grid; gap: var(--sp-3); padding: var(--sp-4); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
+:root[data-theme="outdoor"] .lq-more { box-shadow: 0 0 0 1.5px var(--line-strong); }
+/* the answers that fold away leave as fading copies beneath the page, so the answers that stay and the growing
+   verdict pass over them */
+.lq-ghosts { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+.lq-ghost { position: absolute; display: grid; margin: 0; }
+/* a duel's or odd one out's card when its verdict line is in the dock */
+.lq-fb--rest { gap: var(--sp-2); }
+/* Once she has answered a duel or odd one out, the photos settle to fit between the question head and the dock, so
+   on a short screen (or with the outing bar showing) the dock never covers her pick or the right one and all the
+   photos stay in view. Where they already fit (a 390x844 phone) nothing changes: the rows keep their own height and
+   only shrink, evenly, when the grid would be taller than the room. The photo gives way; the names keep theirs.
+   svh, not dvh: in a browser tab the photos must not resize while the address bar comes and goes as she scrolls. */
+.lq-duel.is-answered {
+  grid-auto-rows: minmax(0, auto);
+  max-height: max(12rem, calc(100svh - var(--sp-2) - env(safe-area-inset-top) - var(--lq-head-h, 52px) - 8px
+    - var(--lq-dock-b) - var(--lq-dock-h, 56px) - 10px));
+}
+.lq-duel.is-answered .lq-side { grid-template-rows: minmax(0, max-content) auto; }
+.lq-duel.is-answered .lq-side .lq-photo.is-missing { min-height: 0; }
+.lq-duel.is-answered .lq-side .lq-photo .whole { max-height: 100%; }
+
+/* the dock: compact, right-aligned with the tab bar, Next always at its right */
+/* the dock's distance from the foot of the screen: above the tab bar, and above the outing bar when one shows */
+.lq-screen { --lq-dock-b: calc(var(--chrome-bottom) + 6px); }
+body.has-outing .lq-screen { --lq-dock-b: calc(var(--chrome-bottom) + 58px); }
+.lq-dock {
+  position: fixed; z-index: 35; right: max(var(--tabbar-float), calc((100vw - 560px) / 2)); bottom: var(--lq-dock-b);
+  display: grid; gap: 4px; max-width: calc(100vw - 2 * var(--tabbar-float)); padding: 6px; border-radius: 28px; color: var(--ink);
+  opacity: 0; visibility: hidden; transform: translateY(18px) scale(.97); transform-origin: 100% 100%;
+  transition: transform var(--dur-2) var(--ease-in), opacity var(--dur-2) var(--ease-out), visibility 0s linear var(--dur-2);
+}
+.lq-dock.is-up {
+  opacity: 1; visibility: visible; transform: none;
+  transition: transform 460ms var(--ease-spring), opacity var(--dur-2) var(--ease-out), visibility 0s;
+}
+.lq-dock.no-anim { transition: none; }
+.lq-dock--verdict { left: max(var(--tabbar-float), calc((100vw - 560px) / 2)); }
+:root[data-theme="outdoor"] .lq-dock { box-shadow: 0 0 0 2px var(--ink), var(--shadow-float); }
+.lq-dock-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.lq-dock--verdict .lq-chips { margin-right: auto; }
+.lq-chips { display: flex; gap: 6px; }
+.lq-chip {
+  position: relative; flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); cursor: pointer; text-decoration: none;
+  transition: transform var(--dur-1) var(--ease-out), background-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out);
+}
+.lq-chip:active { transform: scale(.9); }
+.lq-chip:focus-visible { border-radius: 50%; }
+/* the verdict takes focus when she answers; from the keyboard it shows a ring inside its edge */
+:is(.lq-verdictbar, .lq-dock-verdict):focus-visible { outline: none; box-shadow: inset 0 0 0 3px var(--azure); border-radius: inherit; }
+.lq-dock-verdict:focus-visible { border-radius: 22px; }
+.lq-chip > svg { width: 20px; height: 20px; }
+.lq-chip.is-playing { background: var(--azure-soft); color: var(--azure); }
+.lq-chip.is-loading { opacity: .6; }
+.lq-chip-tag {
+  position: absolute; right: -2px; bottom: -2px; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.lq-chip-tag svg { width: 11px; height: 11px; }
+.lq-chip--right .lq-chip-tag { background: var(--seen); color: var(--on-seen); }
+.lq-chip--wrong .lq-chip-tag { background: var(--danger); color: var(--on-danger); }
+:root[data-theme="outdoor"] .lq-chip { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.lq-dock.is-up:not(.no-anim) .lq-chip { animation: lq-chip-in 420ms var(--ease-spring) both; animation-delay: calc(var(--j, 0) * 45ms + 80ms); }
+@keyframes lq-chip-in { from { transform: scale(.4); opacity: 0; } }
+.lq-dock .lq-next {
+  flex: none; min-width: clamp(7.5rem, 38vw, 10rem); min-height: 44px; padding: 8px 12px; border-radius: var(--r-pill);
+  font-size: var(--fs-3); font-weight: 700; white-space: nowrap;
+}
+.lq-dock-verdict { display: flex; align-items: flex-start; gap: 10px; margin: 0; padding: 6px 10px 4px 6px; font: 700 var(--fs-3)/1.3 var(--font); outline: none; }
+.lq-dock-verdict svg { flex: none; width: 26px; height: 26px; padding: 5px; border-radius: var(--r-pill); background: var(--seen); color: var(--on-seen); }
+.lq-dock-verdict.is-wrong svg { background: var(--danger); color: var(--on-danger); }
+.lq-dock-verdict span { padding-top: 2px; }
+/* toasts (a call that would not play) sit above the dock */
+body:has(.lq-dock.is-up) .toast { bottom: calc(var(--chrome-bottom) + var(--lq-dock-h, 56px) + 16px); }
+body.has-outing:has(.lq-dock.is-up) .toast { bottom: calc(var(--chrome-bottom) + var(--lq-dock-h, 56px) + 68px); }
+
+@media (prefers-reduced-motion: reduce) {
+  /* no grow, fold or spring: the dock and the trail show their final state, the dock with a short fade */
+  .lq-dock, .lq-dock.is-up { transform: none; }
+  .lq-dock { transition: opacity var(--dur-1) linear, visibility 0s linear var(--dur-1); }
+  .lq-dock.is-up { transition: opacity var(--dur-1) linear, visibility 0s; }
+  .lq-dock.no-anim { transition: none; }
+  .lq-dock .lq-chip, .lq-trail i::after { animation: none !important; }
+  .lq-trail i, .lq-chip { transition: none; }
+}
