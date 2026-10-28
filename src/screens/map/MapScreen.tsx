@@ -7,6 +7,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import './map.css';
 
 import { KINDS, SPECIES, byId, dexCode, type Species } from '../../lib/data';
@@ -211,13 +214,18 @@ const closeIcon = (
   </svg>
 );
 
-const tempPinIcon = () =>
-  L.divIcon({
-    className: 'map-temp-pin',
-    html: '<span></span>',
-    iconSize: [18, 18],
-    iconAnchor: [9, 9],
-    popupAnchor: [0, -10],
+// v1 marks a place picked from search with Leaflet's default pin. Bundled, Leaflet cannot work out where its own
+// images are, so they are given here (small enough that Vite inlines them, so the pin works offline).
+const searchPinIcon = () =>
+  L.icon({
+    iconUrl: markerIcon,
+    iconRetinaUrl: markerIcon2x,
+    shadowUrl: markerShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
+    popupAnchor: [1, -34],
+    tooltipAnchor: [16, -28],
+    shadowSize: [41, 41],
   });
 
 // ---------------------------------------------------------------------------
@@ -726,7 +734,7 @@ function MapView() {
         })
           .addTo(overlay)
           .bindPopup(
-            `<strong>${esc(focus.name)}</strong><br>Reported here: ${count.toLocaleString(
+            `<strong>${esc(focus.name)}</strong><br>${count.toLocaleString(
               'en-AU',
             )} records in this 1 km square since 2016`,
             popOpts(map),
@@ -1060,7 +1068,7 @@ function MapView() {
 
     tempMarkerRef.current?.remove();
     const popupHtml = `<span class="pop-h">${esc(result.name)}</span>${esc(result.kind)}`;
-    const marker = L.marker([result.lat, result.lng], { icon: tempPinIcon() })
+    const marker = L.marker([result.lat, result.lng], { icon: searchPinIcon() })
       .addTo(map)
       .bindPopup(popupHtml, popOpts(map));
     tempMarkerRef.current = marker;
