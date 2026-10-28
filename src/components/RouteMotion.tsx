@@ -5,9 +5,11 @@
 // the hero into the photo it came from. Open layers close and sheets still sliding away go before the new screen
 // draws. Reduced motion, a hidden tab or a browser without view transitions get the plain change (lib/motion.ts vt()).
 //
-// Going back puts her where she was. Back and Forward return to the place she left that history entry at, and going
-// back up to a shallower screen returns to where she was on it (as v1 did). The place is the scroll, held to the
-// photo tile that was at the top of the screen, and the control she left by, which takes focus again (RouteFocus).
+// Going back puts her where she was. Back and Forward return to the place she left that history entry at, going back
+// up to a shallower screen returns to where she was on it (as v1 did), and so does going back to a tab's own screen
+// through the tab bar. The place is the scroll, held to the photo tile that was at the top of the screen, and the
+// control she left by, which takes focus again (RouteFocus). Tapping the tab she is on, on its own screen, glides to
+// the top.
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { Router, UNSAFE_createHashHistory as createHashHistory, type Location } from 'react-router-dom';
@@ -30,13 +32,17 @@ export function navKind(from: string, to: string): Nav {
   return b > a ? 'forward' : b < a ? 'back' : 'swap';
 }
 
+/** The four tabs' own screens. */
+export const TAB_ROOTS = ['/dex', '/learn', '/map', '/me'];
+
 // ---------- where she was ----------
 type FocusKey = NonNullable<ReturnType<typeof focusKey>>;
 /** A photo tile and how far from the top of the screen it sat. */
 export interface Anchor { tile: string; top: number }
 /** Where she was on a screen as she left it: its scroll, the first tile wholly on screen, and the control she left by. */
 export interface Place { y: number; anchor: Anchor | null; focus: FocusKey | null }
-// By address (going back up to a shallower screen) and by history entry (Back and Forward), for the session.
+// By address (going back up to a shallower screen, or to a tab through the tab bar) and by history entry (Back and
+// Forward), for the session.
 const byPath = new Map<string, Place>();
 const byEntry = new Map<string, Place>();
 
@@ -64,6 +70,19 @@ let pressed: { el: Element; at: number } | null = null;
 let keys = false;
 /** True when her last input was a key, so a focus moved for her shows its ring. */
 export const keyboardLast = () => keys;
+
+// The tab bar is about to change the address (TabBar): going back to a tab's own screen returns to where she was.
+let tabTap = false;
+/** Called by the tab bar just before it changes the address. */
+export function viaTabBar() {
+  tabTap = true;
+  setTimeout(() => { tabTap = false; });
+}
+/** The tab she is on, tapped on its own screen: glide to the top (at once with reduced motion) and forget the place. */
+export function toTop(path: string) {
+  byPath.delete(path);
+  window.scrollTo({ top: 0, behavior: motionOK() ? 'smooth' : 'auto' });
+}
 
 // Where the screen being drawn lands: its scroll and tile, the tile to keep in sight on going back from its species
 // page, and the control to give focus back to.
@@ -146,6 +165,8 @@ function placeHere(): Place {
 
 function onRouteChange(prev: Location, next: Location, action: Action, apply: () => void) {
   const from = prev.pathname + prev.search, to = next.pathname + next.search;
+  const viaTab = tabTap;
+  tabTap = false;
   // Only the history state changed (the same screen), or the first draw's redirect from an empty address.
   if (from === to || prev.pathname === '/') { apply(); return; }
   // Leaving the screen on show (not one a quick second tap is already replacing): keep where she was on it.
@@ -166,10 +187,10 @@ function onRouteChange(prev: Location, next: Location, action: Action, apply: ()
   const hero = !tapped && fromId && !toId && goingBack && motionOK() ? viewEl()?.querySelector<HTMLElement>('[data-hero-frame]') : null;
   if (hero && inView(hero)) { nameFor(hero, 'sp-hero'); shrinkTo = fromId; }
   // Where the new screen lands. Back and Forward: where she left that history entry (or, for an entry from before
-  // this session, going back up as below). Going back up to a shallower screen: where she was on it. Anything else
-  // starts at the top.
+  // this session, going back up as below). Going back up to a shallower screen, or to a tab's own screen through the
+  // tab bar: where she was on it. Anything else starts at the top.
   const back = action === 'POP' ? byEntry.get(next.key) ?? (nav === 'back' ? byPath.get(to) : undefined)
-    : nav === 'back' ? byPath.get(to) : undefined;
+    : nav === 'back' || (viaTab && TAB_ROOTS.includes(to)) ? byPath.get(to) : undefined;
   pending = {
     key: next.key,
     y: back?.y ?? 0,
@@ -287,4 +308,5 @@ export function forgetPlaces() {
   returning = null;
   pressed = null;
   drawnKey = null;
+  tabTap = false;
 }
