@@ -88,30 +88,51 @@ export function flip(update: () => unknown, { selector = '[data-tile]', key = (e
 // ---------- stamped numbers ----------
 // v1 draws a count once; a React screen can draw it again while it is still counting (Targets' "to find" goes
 // 177 then 180 when the regional data arrives). The newest count on an element wins: an older one stops writing,
-// so the number never ends on the value it was first drawn with.
-const counting = new WeakMap<HTMLElement, number>();
+// so the number never ends on the value it was first drawn with. A screen that only has a newer number for the
+// same count can instead send the running count on to it (countOnTo), so it stays one count.
+const counting = new WeakMap<HTMLElement, (to: number) => void>();
 export function countUp(el: HTMLElement | null, from: number, to: number, { delay = 0, duration, format = (n: number) => String(n) }: {
   delay?: number; duration?: number; format?: (n: number) => string;
 } = {}) {
   if (!el) return Promise.resolve();
-  const run = (counting.get(el) || 0) + 1;
-  counting.set(el, run);
   from = Number(from) || 0; to = Number(to) || 0;
-  if (!motionOK() || document.hidden || from === to) { el.textContent = format(to); return Promise.resolve(); }
-  const dur = duration ?? Math.min(900, 240 + Math.abs(to - from) * 40);
+  if (!motionOK() || document.hidden || from === to) { counting.delete(el); el.textContent = format(to); return Promise.resolve(); }
+  const timeFor = (a: number, b: number) => duration ?? Math.min(900, 240 + Math.abs(b - a) * 40);
+  let dur = timeFor(from, to), shown = from, start: number | null = null, wait = delay, moving = false;
   el.textContent = format(from);
   return new Promise<void>(resolve => {
-    let start: number | null = null;
+    // A newer number for this count. Before the count has moved, it heads for the new number after the usual
+    // pause, as if the number had been drawn with it (v1 draws a screen once its data is in, then counts). Once
+    // it is moving, it carries on from the number on screen. Either way it never jumps back or starts again.
+    const onTo = (next: number) => {
+      if (moving) { from = shown; wait = 0; }
+      start = null;
+      to = next;
+      dur = timeFor(from, to);
+      el.textContent = format(shown);
+    };
+    counting.set(el, onTo);
     const step = (now: number) => {
-      if (counting.get(el) !== run) { resolve(); return; }
-      start ??= now + delay;
+      if (counting.get(el) !== onTo) { resolve(); return; }
+      start ??= now + wait;
       const t = Math.min(1, Math.max(0, (now - start) / dur));
-      el.textContent = format(Math.round(from + (to - from) * (1 - (1 - t) ** 3)));
+      if (t > 0) moving = true;
+      shown = Math.round(from + (to - from) * (1 - (1 - t) ** 3));
+      el.textContent = format(shown);
       if (t < 1 && el.isConnected) { requestAnimationFrame(step); return; }
+      counting.delete(el);
       el.textContent = format(to);
       el.animate?.([{ transform: 'scale(1.25)' }, { transform: 'none' }], { duration: 360, easing: STAMP });
       resolve();
     };
     requestAnimationFrame(step);
   });
+}
+
+/** Sends the count still running on `el` on to `to`, as one count. False when nothing is counting there. */
+export function countOnTo(el: HTMLElement | null, to: number) {
+  const onTo = el && counting.get(el);
+  if (!onTo) return false;
+  onTo(Number(to) || 0);
+  return true;
 }
