@@ -220,7 +220,7 @@ export default function Me({ sub }: { sub?: AccountSheet }) {
                   <svg viewBox="0 0 64 64"><circle className="me-ring-track" cx="32" cy="32" r="29" /><circle className="me-ring-fill" cx="32" cy="32" r="29" pathLength="100" /></svg>
                   <span className="me-medal-face">{b.done ? <svg viewBox="0 0 24 24" aria-hidden="true">{I.tick}</svg> : <b>{b.have}<small>/{b.need}</small></b>}</span>
                 </span>
-                <strong>{b.name}</strong>{' '}<span className="sr-only">{b.done ? 'Earned' : `${b.have} of ${b.need}`}. {b.desc}</span>
+                {' '}<strong>{b.name}</strong>{' '}<span className="sr-only">{b.done ? 'Earned' : `${b.have} of ${b.need}`}. {b.desc}</span>
               </Link>
             </li>
           );
