@@ -45,6 +45,9 @@ export const ICON = {
   deck: svg(line('M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10')),
   tick: svg(line('M5 12.5l4.5 4.5L19 7.5', 2.6)),
   cross: svg(line('M7 7l10 10M17 7L7 17', 2.6)),
+  // The Dex's tier marks: an ear for a species she has only heard, a camera for one she has photographed.
+  ear: svg(<>{line('M6.5 9a5.75 5.75 0 0 1 11.5 0c0 4.6-5 5.2-5 9a3.1 3.1 0 0 1-6.2 0', 2.4)}{line('M14.6 9.2a2.35 2.35 0 0 0-4.7 0v.9a1.9 1.9 0 0 1 0 3.8', 2.2)}</>),
+  camera: svg(<>{line('M4.5 8.6A1.6 1.6 0 0 1 6.1 7h1.8l1.6-2.2h5l1.6 2.2h1.8a1.6 1.6 0 0 1 1.6 1.6v8.8a1.6 1.6 0 0 1-1.6 1.6H6.1a1.6 1.6 0 0 1-1.6-1.6z', 2.1)}<circle cx="12" cy="12.8" r="3.1" fill="none" stroke="currentColor" strokeWidth="2.1" /></>),
 };
 
 /** v1 fmtDate: '2026-10-28' -> '28 Oct 2026'. */
