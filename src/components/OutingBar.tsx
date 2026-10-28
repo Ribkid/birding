@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { plural, useActiveOutingId, useOutingRows, useSightingRows } from '../screens/lists/shared';
-import { useViewTransitionNavigate } from './Motion';
 
 /**
  * v1's renderOutingBar (js/app.js:1054): while an outing runs, a bar above the tab bar on every other screen leads
@@ -10,7 +9,6 @@ import { useViewTransitionNavigate } from './Motion';
  */
 export function OutingBar() {
   const { pathname } = useLocation();
-  const go = useViewTransitionNavigate();
   const activeId = useActiveOutingId();
   const outings = useOutingRows();
   const sightings = useSightingRows();
@@ -27,14 +25,7 @@ export function OutingBar() {
   return (
     <div id="outing-bar" className="outing-bar" hidden={!show}>
       {show && o && (
-        <Link
-          to={to}
-          onClick={(e) => {
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-            e.preventDefault();
-            go(to);
-          }}
-        >
+        <Link to={to}>
           <span className="pulse" aria-hidden="true" />
           <span><strong>Outing in progress</strong> {o.place || ''}</span>
           <span className="outing-bar-n">{plural(n, 'species', 'species')}</span>

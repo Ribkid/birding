@@ -5,7 +5,6 @@ import { db } from '../core/db.js';
 import { onAuth } from '../core/cloud.js';
 import { configured, getMyCloud, getProfile, initProfile, myName, signedIn, avatarUrl } from '../core/profile.js';
 import { SpeciesImage } from './SpeciesImage';
-import { useViewTransitionNavigate } from './Motion';
 import { PlusSheet } from './PlusSheet';
 
 const TABS = [
@@ -91,7 +90,6 @@ function MeTabIcon({ dot }: { dot: boolean }) {
 }
 
 export function TabBar() {
-  const go = useViewTransitionNavigate();
   const location = useLocation();
   const [, force] = useReducer((n: number) => n + 1, 0);
   const [notNow, setNotNow] = useState(false);
@@ -135,11 +133,6 @@ export function TabBar() {
               id={tab.key === 'me' ? 'me-tab' : undefined}
               aria-label={tab.key === 'me' && dot ? 'Me, not signed in' : undefined}
               aria-current={active ? 'page' : 'false'}
-              onClick={(e) => {
-                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
-                e.preventDefault();
-                go(tab.to);
-              }}
             >
               {tab.key === 'me' ? (
                 <MeTabIcon dot={dot} />

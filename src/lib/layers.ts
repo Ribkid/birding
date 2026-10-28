@@ -121,12 +121,16 @@ export function closeLayer(layer: Layer, { restore = true } = {}): boolean {
 function restoreFocus(layer: Layer) {
   const top = topLayer();
   const scope = top ? top.dialog : document;
-  let t: Element | null = layer.returnTo;
+  // Opened while nothing had focus: <body> can't take focus back, so there is no control to return to.
+  const from = layer.returnTo;
+  let t: Element | null = from && from !== document.body && from !== document.documentElement ? from : null;
   const usable = (el: Element | null) => el && el.isConnected && !el.closest('[inert]') && scope.contains(el);
   if (!usable(t)) t = findByKey(layer.key, scope);
   if (!usable(t)) t = top ? focusables(top.dialog)[0] || top.dialog : null;
   (t as HTMLElement | null)?.focus?.({ preventScroll: true });
-  if (!top && lost()) {
+  // Focus still inside the layer that is going is lost too: it drops to <body> as the layer is taken away.
+  const a = document.activeElement;
+  if (!top && (lost() || (!!a && layer.el.contains(a)))) {
     const h = document.querySelector<HTMLElement>('#view h1');
     if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } else document.getElementById('view')?.focus({ preventScroll: true });
   }

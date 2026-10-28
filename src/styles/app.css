@@ -622,11 +622,6 @@ body.has-sheet .tabbar .tab-plus { rotate: 45deg; }
 .hit .btn--small { min-height: var(--tap); }
 .hit--live { background: linear-gradient(90deg, color-mix(in srgb, var(--sun) 22%, transparent), transparent); }
 .hit .row-main .meter { margin-top: 4px; }
-.scan-drop { display: block; cursor: pointer; }
-.scan-preview { display: grid; place-items: center; gap: 4px; text-align: center; min-height: 220px; border-radius: var(--r-3); border: 2px dashed var(--line-strong); background: var(--surface); padding: 20px; overflow: hidden; }
-.scan-preview svg { width: 44px; height: 44px; color: var(--azure); }
-.scan-preview em { font-style: normal; font-size: .85rem; color: var(--ink-2); }
-.scan-preview img { width: 100%; max-height: 360px; object-fit: contain; border-radius: 12px; }
 
 /* quiz */
 .quiz-intro { display: grid; gap: 10px; }
