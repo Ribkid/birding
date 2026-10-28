@@ -108,7 +108,7 @@ function Options({ q, picked, onPick, rapid, round, still = false }: { q: QuizQu
             <button key={o.key} type="button" className={`lq-side${cls}${calm}`} data-pick={o.key} aria-disabled={disabled || undefined} aria-label={named ? `${o.label}${suffix}` : SIDES[n]?.[i] || `Photo ${i + 1}`} onClick={() => onPick(o.key)}>
               <PhotoBox key={`${round}-${o.key}`} photos={o.photos} alt="" cls="lq-photo lq-photo--duel" missing="Photo not saved on this phone" />
               <span className="lq-side-name" data-name>{named ? o.label : ''}</span>
-              <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24">{QI.cross}</svg> : null}</span>
+              <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.cross}</svg> : null}</span>
               <span className="sr-only">{suffix}</span>
             </button>
           );
@@ -124,7 +124,7 @@ function Options({ q, picked, onPick, rapid, round, still = false }: { q: QuizQu
         return (
           <button key={o.key} type="button" className={`lq-opt${cls}${calm}`} data-pick={o.key} aria-disabled={disabled || undefined} onClick={() => onPick(o.key)}>
             <span className={`lq-opt-label${q.italic ? ' is-sci' : ''}`}>{o.label}</span>
-            <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24">{QI.cross}</svg> : null}</span>
+            <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.cross}</svg> : null}</span>
             <span className="sr-only">{suffix}</span>
           </button>
         );
@@ -164,20 +164,20 @@ function Feedback({ q, right, game, onNext, onPlay, playing, restore = false }: 
   }, []);
   return (
     <div ref={fbRef} className={`lq-fb ${right ? 'is-right' : 'is-wrong'}${restore ? ' no-anim' : ''}`} data-fb tabIndex={-1}>
-      <p className="lq-verdict"><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{verdictText}</span></p>
+      <p className="lq-verdict"><svg viewBox="0 0 24 24" aria-hidden="true">{right ? QI.tick : QI.cross}</svg><span>{verdictText}</span></p>
       {speciesQ && <p className="lq-name"><Link to={`/bird/${ans.id}`}>{ans.name}</Link> <span className="lq-sci">{ans.sci}</span></p>}
       {(q.type === 'call' || q.type === 'whoami') && q.photos?.length ? <PhotoBox photos={q.photos} alt={ans.name} cls="lq-photo lq-photo--answer" /> : null}
       {line && <p className="lq-line">{line}</p>}
       {mark && <p className="lq-line">{mark}</p>}
       {tell && <p className="lq-tell"><strong>How to tell them apart.</strong> {tell}</p>}
-      {q.safety && <p className="lq-safety"><svg viewBox="0 0 24 24">{QI.warn}</svg><span>{q.safety}</span></p>}
+      {q.safety && <p className="lq-safety"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.warn}</svg><span>{q.safety}</span></p>}
       {q.type === 'fact' && q.source?.title && (
         <p className="lq-source">Source: {q.source.url ? <a href={q.source.url} target="_blank" rel="noopener">{q.source.title}</a> : q.source.title}</p>
       )}
       <div className="lq-actions">
         {Q.hasCall(ans.id) && q.type !== 'fact' && <PlayButton on={playing} which={q.type === 'call' ? 'answer' : String(ans.id)} label={q.type === 'call' ? 'Hear it again' : 'Hear its call'} onPlay={onPlay} />}
         {!right && pickedSp && Q.hasCall(pickedSp.id) && q.type !== 'fact' && <PlayButton on={playing} which={String(pickedSp.id)} label="Hear the one you picked" onPlay={onPlay} />}
-        {!right && pickedSp && pickedSp.kind === ans.kind && <Link className="btn lq-act" to={`/compare/${ans.id}/${pickedSp.id}`}><svg viewBox="0 0 24 24">{QI.compare}</svg><span>Compare the two</span></Link>}
+        {!right && pickedSp && pickedSp.kind === ans.kind && <Link className="btn lq-act" to={`/compare/${ans.id}/${pickedSp.id}`}><svg viewBox="0 0 24 24" aria-hidden="true">{QI.compare}</svg><span>Compare the two</span></Link>}
       </div>
       <button type="button" className="btn btn--primary btn--block lq-next" onClick={onNext}>{last ? (game.daily ? "See today's result" : 'See how you went') : 'Next question'}</button>
     </div>
@@ -257,7 +257,7 @@ function Results({ game, total, onAgain, onAgainMissed, onHub, takeFocus }: {
                 <li key={i} className={`lr-card kind--${sp.kind}`}>
                   <Link to={`/bird/${sp.id}`}>
                     <span className="lr-card-img">{face ? <FadeImage key={sp.id} src={face} /> : null}</span>
-                    <span className="lr-mark"><svg viewBox="0 0 24 24">{QI.cross}</svg><span className="sr-only">Wrong:</span></span>
+                    <span className="lr-mark"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.cross}</svg><span className="sr-only">Wrong:</span></span>
                     <span className="lr-card-txt"><strong>{sp.name}</strong><span>{sub}</span></span>
                   </Link>
                 </li>
@@ -276,7 +276,7 @@ function Results({ game, total, onAgain, onAgainMissed, onHub, takeFocus }: {
               const title = q.type === 'fact' && q.ttype !== 'Calls' ? q.prompt : sp.name;
               return (
                 <li key={i} className="is-right">
-                  <span className="lr-mark"><svg viewBox="0 0 24 24">{QI.tick}</svg><span className="sr-only">Right</span></span>
+                  <span className="lr-mark"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.tick}</svg><span className="sr-only">Right</span></span>
                   <Link className="lr-main" to={`/bird/${sp.id}`}><strong>{title}</strong><span className="small muted">{q.type === 'fact' ? q.options.find((o) => o.key === q.answer)?.label : 'Got it'}</span></Link>
                 </li>
               );
@@ -529,7 +529,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     <div className={`lq-screen lq-screen--${game.mode}${game.kind && game.kind !== 'animals' ? ` kind--${game.kind}` : ''}`} data-own-topbar>
       <header className="lq-head glass">
         <button type="button" className="iconbtn" data-quit aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { setActive(null); if (!game.daily) setGame(null); navigate('/learn', { replace: true }); }}>
-          <svg viewBox="0 0 24 24">{game.daily ? QI.back : QI.close}</svg>
+          <svg viewBox="0 0 24 24" aria-hidden="true">{game.daily ? QI.back : QI.close}</svg>
         </button>
         {game.mode === 'rapid' ? (
           <span className="lq-bar lq-bar--time" aria-hidden="true"><span style={{ transform: `scaleX(${(rapidLeft / RAPID_MS).toFixed(3)})` }} /></span>
@@ -549,11 +549,11 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       <div className={`lq lq--${q.type}`}>
         <h1 ref={promptRef} className="lq-prompt" tabIndex={-1}>{promptFor(q)}</h1>
         {sub && <p className="lq-sub">{sub}</p>}
-        {safety && <p className="lq-safety"><svg viewBox="0 0 24 24">{QI.warn}</svg><span>{safety}</span></p>}
+        {safety && <p className="lq-safety"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.warn}</svg><span>{safety}</span></p>}
         <Media key={game.i} q={q} still={resumed} />
         <Options q={q} picked={picked} onPick={pick} rapid={game.mode === 'rapid'} round={game.i} still={resumed} />
         {picked != null && game.mode !== 'rapid' && <Feedback q={q} right={right} game={game} onNext={next} onPlay={play} playing={buttons.on} restore={resumed} />}
-        {picked != null && game.mode === 'rapid' && <p className={`lq-verdict lq-fb ${right ? 'is-right' : 'is-wrong'} lq-fb--brief${resumed ? ' no-anim' : ''}`}><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{right ? 'Correct.' : `Not quite. It's the ${speciesName(q.focus)}.`}</span></p>}
+        {picked != null && game.mode === 'rapid' && <p className={`lq-verdict lq-fb ${right ? 'is-right' : 'is-wrong'} lq-fb--brief${resumed ? ' no-anim' : ''}`}><svg viewBox="0 0 24 24" aria-hidden="true">{right ? QI.tick : QI.cross}</svg><span>{right ? 'Correct.' : `Not quite. It's the ${speciesName(q.focus)}.`}</span></p>}
       </div>
     </div>
   );
@@ -663,7 +663,7 @@ function Deck({ onBack }: { onBack: () => void }) {
     return (
       <div className="lq-screen lq-screen--deck" data-own-topbar>
         <header className="lq-head glass">
-          <button type="button" className="iconbtn" data-quit aria-label="Stop reviewing" onClick={() => { setGame(null); setMode('overview'); }}><svg viewBox="0 0 24 24">{QI.close}</svg></button>
+          <button type="button" className="iconbtn" data-quit aria-label="Stop reviewing" onClick={() => { setGame(null); setMode('overview'); }}><svg viewBox="0 0 24 24" aria-hidden="true">{QI.close}</svg></button>
           <span className="lq-bar" role="progressbar" aria-label={`Card ${game.n! + 1} of ${game.total}`} aria-valuemin={1} aria-valuemax={game.total} aria-valuenow={game.n! + 1}><span style={{ transform: `scaleX(${(game.n! / Math.max(1, game.total!)).toFixed(3)})` }} /></span>
           <span className="lq-count" aria-hidden="true">{game.queue!.length}<span> left</span></span>
         </header>
@@ -684,9 +684,9 @@ function Deck({ onBack }: { onBack: () => void }) {
               </dl>
               {c.skill === 'call' && <PhotoBox photos={photos} alt={sp.name} cls="lq-photo lq-photo--answer" />}
               <div className="ld-grade" role="group" aria-label="How did you go?">
-                <button type="button" className="btn" onClick={() => grade('missed')}><svg viewBox="0 0 24 24">{QI.cross}</svg><span>Missed</span></button>
+                <button type="button" className="btn" onClick={() => grade('missed')}><svg viewBox="0 0 24 24" aria-hidden="true">{QI.cross}</svg><span>Missed</span></button>
                 <button type="button" className="btn" onClick={() => grade('unsure')}><span>Unsure</span></button>
-                <button type="button" className="btn btn--primary" onClick={() => grade('knew')}><svg viewBox="0 0 24 24">{QI.tick}</svg><span>Knew it</span></button>
+                <button type="button" className="btn btn--primary" onClick={() => grade('knew')}><svg viewBox="0 0 24 24" aria-hidden="true">{QI.tick}</svg><span>Knew it</span></button>
               </div>
             </div>
           )}
@@ -709,7 +709,7 @@ function Deck({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <header className="page-head page-head--back"><Link className="iconbtn" to="/learn" aria-label="Back to Learn"><svg viewBox="0 0 24 24">{QI.back}</svg></Link><h1 className="lh-title">Review deck</h1></header>
+      <header className="page-head page-head--back"><Link className="iconbtn" to="/learn" aria-label="Back to Learn"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.back}</svg></Link><h1 className="lh-title">Review deck</h1></header>
       <div className="learn">
         <div className="ld-summary">
           <span className="lh-boxes lh-boxes--big" aria-hidden="true">
@@ -724,8 +724,8 @@ function Deck({ onBack }: { onBack: () => void }) {
           : <p className="ld-none" role="status">{cards.length ? `Nothing to review right now. ${nextTxt}` : 'Add a set to start. Species you miss in any round are added for you.'}</p>}
         <section className="lh-sec"><div className="lh-sec-h"><h2>Add cards</h2></div>
           <div className="ld-add">
-            <button type="button" className="btn btn--block" onClick={() => add('month')}><span className="ld-add-ic"><svg viewBox="0 0 24 24">{QI.deck}</svg></span><span>Add 10 {deckKind === 'animals' ? 'animals' : KINDS[deckKind]?.label.toLowerCase()} around in {monthName()}</span></button>
-            <button type="button" className="btn btn--block" onClick={() => add('seen')}><span className="ld-add-ic"><svg viewBox="0 0 24 24">{QI.deck}</svg></span><span>Add the ones I've seen</span></button>
+            <button type="button" className="btn btn--block" onClick={() => add('month')}><span className="ld-add-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.deck}</svg></span><span>Add 10 {deckKind === 'animals' ? 'animals' : KINDS[deckKind]?.label.toLowerCase()} around in {monthName()}</span></button>
+            <button type="button" className="btn btn--block" onClick={() => add('seen')}><span className="ld-add-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.deck}</svg></span><span>Add the ones I've seen</span></button>
           </div>
           <p className="small muted">Birds and frogs with recordings get a call card as well as a photo card.</p>
         </section>

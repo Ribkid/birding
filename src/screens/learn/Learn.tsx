@@ -215,7 +215,7 @@ export default function Learn() {
                 const p = picks[i];
                 const from = once.current?.pipsFrom ?? 0;
                 const cls = p ? `${p.right ? 'is-right' : 'is-wrong'}${motionOK() && i >= from ? ' is-new' : ''}` : '';
-                return <i key={i} className={cls} style={{ '--j': Math.max(0, i - from) } as React.CSSProperties}>{p ? (p.right ? <svg viewBox="0 0 24 24">{TICK}</svg> : <svg viewBox="0 0 24 24">{CROSS}</svg>) : null}</i>;
+                return <i key={i} className={cls} style={{ '--j': Math.max(0, i - from) } as React.CSSProperties}>{p ? (p.right ? <svg viewBox="0 0 24 24" aria-hidden="true">{TICK}</svg> : <svg viewBox="0 0 24 24" aria-hidden="true">{CROSS}</svg>) : null}</i>;
               })}
             </span>
             <span className="lh-go">{doneToday ? 'See how you went' : picks.length ? 'Carry on' : 'Start'}</span>
@@ -281,7 +281,7 @@ export default function Learn() {
                 <li key={m} className={m === 'quick' ? 'lh-mode--wide' : ''}>
                   <Link className={`lh-mode lh-mode--${m}${off ? ' is-off' : ''}`} to={off ? '#' : `/learn/play/${m}`} aria-disabled={off || undefined} onClick={(e) => { if (off) { e.preventDefault(); setNotice('Calls are for birds and frogs. Choose All animals, Birds or Frogs.'); } }}>
                     <span className={`lh-mode-bg${pics.length > 1 ? ' is-split' : ''}`} aria-hidden="true">{!faces ? <Waiting /> : pics.map((src, i) => <FadeImage key={`${i}|${src}`} src={src} />)}</span>
-                    <span className="lh-mode-top"><span className="lh-mode-ic" aria-hidden="true"><svg viewBox="0 0 24 24">{MODE_ICONS[m]}</svg></span>{b != null && <span className="lh-best">{m === 'rapid' ? 'Best streak' : 'Best'} <b>{b}</b>{m === 'rapid' ? null : <span>/{ROUND}</span>}</span>}</span>
+                    <span className="lh-mode-top"><span className="lh-mode-ic" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true">{MODE_ICONS[m]}</svg></span>{b != null && <span className="lh-best">{m === 'rapid' ? 'Best streak' : 'Best'} <b>{b}</b>{m === 'rapid' ? null : <span>/{ROUND}</span>}</span>}</span>
                     <span className="lh-mode-txt"><strong>{title}</strong><span className="lh-mode-desc">{off ? 'Calls are for birds and frogs. Choose All animals, Birds or Frogs.' : desc}</span></span>
                   </Link>
                 </li>
