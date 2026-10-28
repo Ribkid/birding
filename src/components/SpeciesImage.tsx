@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { sized } from '../core/media.js';
 import { dexCode, RARITY, type Species } from '../lib/data';
 import { mediaSettled, useMedia } from '../lib/hooks';
+import { washFor } from '../lib/wash';
 
 const cx = (...parts: (string | false | null | undefined)[]) => parts.filter(Boolean).join(' ');
 
@@ -31,11 +32,12 @@ async function decoded(url: string) {
 /**
  * The loading state of one photo, v1's settleImages and patchSpeciesImages:
  * - a photo already shown this session, or already complete when drawn (memory cache), shows at once, no fade;
- * - any other fades in once it has loaded;
+ * - any other fades in once it has loaded (with `develop`, once it has loaded and decoded, so the first frames of
+ *   the hero's develop never paint an empty image);
  * - when a better address arrives later (the photo index, gallery.json), a photo already on screen stays until
  *   the new one has decoded, so it never blanks; one still loading, or one that failed, switches at once.
  */
-function usePhotoLoad(url: string | null | undefined) {
+function usePhotoLoad(url: string | null | undefined, { develop = false } = {}) {
   const [src, setSrc] = useState<string | null>(url || null);
   const [look, setLook] = useState<Look>(() => (url && shown.has(url) ? 'in' : 'wait'));
   const ref = useRef<HTMLImageElement>(null);
@@ -72,21 +74,50 @@ function usePhotoLoad(url: string | null | undefined) {
     }
   }, [src, look]);
 
+  const arrive = (at: string | null) => {
+    if (at) shown.add(at);
+    setLook('in');
+  };
   return {
     ref,
     src,
     look,
     onLoad: () => {
-      if (src) shown.add(src);
-      setLook('in');
+      const el = ref.current;
+      if (!develop || !el?.decode) {
+        arrive(src);
+        return;
+      }
+      const at = src;
+      const done = () => {
+        if (el.isConnected && el.getAttribute('src') === at) arrive(at);
+      };
+      el.decode().then(done, done);
     },
     onError: () => setLook('failed'),
   };
 }
 
 /**
+ * Paints the plumage wash (lib/wash.ts) on the frame around a photo while it is on its way. The frames that show it
+ * (look.css) are the dex tiles and the other small species photos; a frame whose photo won't load keeps its
+ * striped no-photo block instead.
+ */
+function useFrameWash(ref: RefObject<HTMLElement | null>, wash: string | null) {
+  useLayoutEffect(() => {
+    const frame = ref.current?.parentElement;
+    if (!frame || !wash) return;
+    frame.style.setProperty('--wash', wash);
+    return () => {
+      frame.style.removeProperty('--wash');
+    };
+  }, [ref, wash]);
+}
+
+/**
  * A photo by its address with v1's loading look (js/learn.js imgTag and wireFaces): it shimmers in its frame,
- * fades in once, and if it can't load it hides (.is-gone) so the card's own colour shows instead.
+ * fades in once, and if it can't load it hides (.is-gone) so the card's own colour shows instead. Learn uses it, so
+ * it never draws a wash or any other photo: the neutral frame can't give an answer away.
  */
 export function FadeImage({ src, alt = '', className }: { src: string; alt?: string; className?: string }) {
   const p = usePhotoLoad(src);
@@ -103,33 +134,50 @@ export function FadeImage({ src, alt = '', className }: { src: string; alt?: str
   );
 }
 
+/** The species page hero's photo: the address the page drew it with, and the same photo at tile size. */
+export interface HeroPhotoSrc {
+  /** Undefined while the slide isn't woken yet, or while the photo index and gallery.json are still being read. */
+  src?: string;
+  /** The tile-sized copy (sized(id, 'small'), the same address as the dex tile), or none for a gallery photo. */
+  small?: string | null;
+}
+
 interface Props {
   sp: Species;
   size?: 'small' | 'large';
   className?: string;
   /** Show the whole photo (letterboxed over a blurred copy) instead of cropping. */
   whole?: boolean;
-  /** v1 birdImg's alt: the name, or '' where the name is written right beside the photo, so it isn't read twice. */
+  /** v1 birdImg's alt: the name, or '' where the name is written right beside it, so it isn't read twice. */
   alt?: string;
   /** The hero photo: fetched first rather than lazily (v1 prioritiseHero). */
   eager?: boolean;
+  /**
+   * Hero mode, for the species page: the small photo underneath, soft, while the large one loads; the large one
+   * develops in over it once decoded; if it can't load (no signal) the small one stays, sharper. Under both, the
+   * plumage wash, so the hero is never an empty block.
+   */
+  hero?: HeroPhotoSrc;
 }
 
 /**
- * The dex photo for a species: v1's birdImg, with its fallbacks and its loading look (shimmer, a single fade-in,
- * no fade for a photo already shown, a better photo swapped in without blanking).
+ * The dex photo for a species: v1's birdImg, with its fallbacks and its loading look (shimmer over the plumage
+ * wash, a single fade-in, no fade for a photo already shown, a better photo swapped in without blanking).
  */
 export function SpeciesImage(props: Props) {
   // A different species starts afresh rather than keeping the old one's photo until the new one has decoded.
+  if (props.hero) return <HeroPhoto key={props.sp.id} {...props} hero={props.hero} />;
   return <SpeciesPhoto key={props.sp.id} {...props} />;
 }
 
 function SpeciesPhoto({ sp, size = 'small', className, whole = false, alt = sp.name, eager = false }: Props) {
   useMedia();
   const p = usePhotoLoad(sized(sp.id, size) as string | null);
+  const missing = p.look === 'failed' || (!p.src && mediaSettled());
+  useFrameWash(p.ref, missing ? null : washFor(sp));
   if (!p.src || p.look === 'failed') {
     // The saved photo index or gallery.json isn't read yet: the photo is on its way, so it shimmers in its frame.
-    if (!p.src && !mediaSettled()) return <img className={cx(className, 'fade')} alt="" aria-hidden="true" />;
+    if (!missing) return <img ref={p.ref} className={cx(className, 'fade')} alt="" aria-hidden="true" />;
     // No photo, or it wouldn't load: v1's striped no-photo block rather than a broken image.
     return <span className={cx(className, 'img-missing')} {...(alt ? { role: 'img', 'aria-label': alt } : { 'aria-hidden': true })} />;
   }
@@ -144,6 +192,111 @@ function SpeciesPhoto({ sp, size = 'small', className, whole = false, alt = sp.n
     );
   }
   return <img ref={p.ref} className={cx(className, fade)} src={p.src} alt={alt} {...load} onLoad={p.onLoad} onError={p.onError} />;
+}
+
+/**
+ * Hero mode (species.css draws it): two stacked photos in a `.whole` frame painted with the plumage wash.
+ * - .whole-bg: the small photo (memory, HTTP or service-worker cache, as the dex tile drew it), soft and a touch
+ *   larger than the frame;
+ * - .whole-fg: the large photo, which develops in (opacity and blur) once it has loaded and decoded.
+ * A photo already shown this session is drawn at once. If the large one fails, .is-small keeps the small one; with
+ * no small one either (offline, a bird she hasn't seen yet), the frame keeps the plumage wash rather than going to
+ * an empty block. A species with no photo at all is still v1's no-photo block (Bird.tsx).
+ */
+function HeroPhoto({ sp, hero, className, alt = sp.name, eager = false }: Props & { hero: HeroPhotoSrc }) {
+  const top = usePhotoLoad(hero.src, { develop: true });
+  const base = usePhotoLoad(hero.small && hero.small !== hero.src ? hero.small : null);
+  // A small copy once drawn stays, even if a later photo index no longer offers one for this photo (the hero keeps
+  // the photos it was drawn with), so the frame never empties under a large photo still on its way.
+  const small = base.src && base.src !== top.src ? base.src : null;
+  const keepSmall = top.look === 'failed' && !!small && base.look !== 'failed';
+  const loading = eager ? 'eager' : 'lazy';
+  return (
+    <span
+      className={cx('whole', className, keepSmall && 'is-small')}
+      style={{ '--wash': washFor(sp) } as CSSProperties}
+    >
+      {small ? (
+        <img
+          ref={base.ref}
+          className={cx('whole-bg', 'fade', base.look === 'in' && 'in')}
+          src={small}
+          alt=""
+          aria-hidden="true"
+          loading={loading}
+          onLoad={base.onLoad}
+          onError={base.onError}
+        />
+      ) : null}
+      <img
+        ref={top.ref}
+        className={cx('whole-fg', 'fade', top.look === 'in' && 'in')}
+        src={top.src || undefined}
+        alt={alt}
+        loading={loading}
+        fetchPriority={eager ? 'high' : undefined}
+        decoding="async"
+        onLoad={top.onLoad}
+        onError={top.onError}
+      />
+    </span>
+  );
+}
+
+// Large photos started by a press, held until they settle so a collected Image can't drop its load.
+const preloads = new Map<string, HTMLImageElement>();
+const saveData = () => !!(navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+
+/** Starts loading a species' large photo (the hero's), unless it is already shown or on its way. */
+export function preloadLarge(id: number) {
+  const url = sized(id, 'large') as string | null;
+  if (!url || shown.has(url) || preloads.has(url)) return;
+  const img = new Image();
+  img.decoding = 'async';
+  // The hero's own <img> (fetchpriority high) takes over this request rather than asking again, and the browser
+  // keeps the priority the request started with, so it starts high too: at the default (low, as an image off screen)
+  // the hero's photo would queue behind the dex thumbnails still loading.
+  img.fetchPriority = 'high';
+  img.onload = img.onerror = () => {
+    preloads.delete(url);
+  };
+  preloads.set(url, img);
+  img.src = url;
+}
+
+/**
+ * Pressing a species (a link to its page or a dex tile) starts its large photo, so the hero has a head start on
+ * the tap. One delegated pointerdown listener, installed once from App; it returns its own removal. Only with
+ * signal and without Data Saver. A touch waits until it has held still a moment or lifted, and one the browser
+ * takes for a scroll starts nothing, so scrolling the dex doesn't fetch a large photo for every tile touched.
+ */
+export function preloadOnPress(): () => void {
+  const onDown = (e: PointerEvent) => {
+    if (!e.isPrimary || e.button > 0) return;
+    const el = (e.target as Element | null)?.closest?.('a[href^="#/bird/"], [data-tile]');
+    if (!el) return;
+    const id = Number(el.getAttribute('data-tile') || /^#\/bird\/(\d+)/.exec(el.getAttribute('href') || '')?.[1]);
+    if (!id || !navigator.onLine || saveData()) return;
+    if (e.pointerType !== 'touch') {
+      preloadLarge(id);
+      return;
+    }
+    let timer = 0;
+    const off = () => {
+      clearTimeout(timer);
+      document.removeEventListener('pointerup', go, true);
+      document.removeEventListener('pointercancel', off, true);
+    };
+    const go = () => {
+      off();
+      preloadLarge(id);
+    };
+    document.addEventListener('pointerup', go, true);
+    document.addEventListener('pointercancel', off, true);
+    timer = window.setTimeout(go, 90);
+  };
+  document.addEventListener('pointerdown', onDown, { capture: true, passive: true });
+  return () => document.removeEventListener('pointerdown', onDown, { capture: true });
 }
 
 /** The green-ringed dex number badge shown on tiles and rows. */

@@ -33,7 +33,7 @@ let pending: { key: string; y: number; tile: number | null } | null = null;
 const THUMB = '.tile-img, .row-thumb, .botd-img, .cmp-img';
 // A photo just tapped on its way to a species page, and which kind of photo opened each species page (a tile, Bird of
 // the day, a row), so going back shrinks into that one.
-let morph: { id: number; url: string; kind: string } | null = null;
+let morph: { id: number; kind: string } | null = null;
 const cameFrom = new Map<string, string>();
 const thumbKind = (thumb: Element) => THUMB.split(', ').find((s) => thumb.matches(s)) || '';
 // The photo itself flies, not its frame: the seen ring and tick stay behind and fade with the page.
@@ -50,7 +50,7 @@ function nameTappedPhoto(e: MouseEvent) {
   const thumb = a.matches(THUMB) ? a : a.querySelector(THUMB);
   if (!thumb) return;
   const el = pic(thumb);
-  const m = morph = { id: Number(a.getAttribute('href')!.split('/')[2]), url: thumb.querySelector('img')?.currentSrc || '', kind: thumbKind(thumb) };
+  const m = morph = { id: Number(a.getAttribute('href')!.split('/')[2]), kind: thumbKind(thumb) };
   nameFor(el, 'sp-hero');
   // If no navigation follows (a long press, a cancelled tap), take the name off again.
   setTimeout(() => { if (morph === m) { morph = null; if (!document.documentElement.dataset.nav) el.style.viewTransitionName = ''; } }, 700);
@@ -87,9 +87,11 @@ function onRouteChange(prev: Location, next: Location, apply: () => void) {
     if (view && tapped) {
       const frame = view.querySelector<HTMLElement>('[data-hero-frame]');
       if (frame) {
-        // The small photo is already decoded, so the hero shows it while the large one loads.
-        const box = frame.querySelector<HTMLElement>('.whole, .img-missing') || frame;
-        if (tapped.url) Object.assign(box.style, { backgroundImage: `url("${tapped.url.replace(/"/g, '%22')}")`, backgroundSize: 'cover', backgroundPosition: '50% 30%' });
+        // The hero draws the photo she tapped (the same small address, already in memory) underneath while the large
+        // one loads (SpeciesImage's hero mode). The new view waits a moment for it to decode, so the photo grows
+        // into a photo rather than into its wash.
+        const small = frame.querySelector<HTMLImageElement>('img.whole-bg[src]');
+        if (small?.decode) waits.push(small.decode());
         nameFor(frame, 'sp-hero');
       }
     }

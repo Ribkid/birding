@@ -13,6 +13,7 @@
   --r-card: 20px;
   --shadow-card: 0 1px 2px rgba(15, 23, 35, .06), 0 8px 24px -10px rgba(15, 23, 35, .22);
   --shadow-float: 0 18px 40px -14px rgba(12, 18, 27, .45), 0 2px 8px rgba(12, 18, 27, .12);
+  --wash-mix: 82%;                   /* how much of the bird's colour the loading wash takes (lib/wash.ts) */
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="outdoor"]) {
@@ -21,6 +22,7 @@
     --glass-edge: color-mix(in srgb, #fff 12%, transparent);
     --shadow-card: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 26px -12px rgba(0, 0, 0, .6);
     --shadow-float: 0 18px 44px -14px rgba(0, 0, 0, .75), 0 2px 8px rgba(0, 0, 0, .35);
+    --wash-mix: 62%;
   }
 }
 :root[data-theme="dark"] {
@@ -29,6 +31,7 @@
   --glass-edge: color-mix(in srgb, #fff 12%, transparent);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 26px -12px rgba(0, 0, 0, .6);
   --shadow-float: 0 18px 44px -14px rgba(0, 0, 0, .75), 0 2px 8px rgba(0, 0, 0, .35);
+  --wash-mix: 62%;
 }
 /* Outdoor and reduced transparency: solid surfaces, firm edges. */
 :root[data-theme="outdoor"] { --glass: var(--surface); --glass-strong: var(--surface); --glass-edge: var(--line-strong); }
@@ -108,13 +111,18 @@ body.has-sheet .topbar { pointer-events: none; }
 .btn, .chip, .kind-tab, .botd, .idbtn, .plus-opt, .totals a, .statgrid div, .patches a { border-radius: var(--r-card); }
 .btn--small, .chip { border-radius: var(--r-pill); }
 
-/* Loading photos shimmer instead of sitting as flat blocks. */
+/* Loading photos shimmer instead of sitting as flat blocks. SpeciesImage paints the frame with the bird's plumage
+   wash (lib/wash.ts) while its photo is on its way, so the shimmer runs over the bird's colours and the photo fades
+   in over them (opacity only, no blur on the grid). A photo that won't load keeps the striped block. */
+.tile-img, .row-thumb, .botd-img { background-image: var(--wash, none); }
 .tile-img:has(> img.fade:not(.in)):not(:has(.img-missing))::after,
 .row-thumb:has(> img.fade:not(.in))::after,
 .botd-img:has(> img.fade:not(.in))::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
-  background: linear-gradient(100deg, transparent 20%, color-mix(in srgb, #fff 45%, transparent) 50%, transparent 80%) var(--surface-2);
-  background-size: 220% 100%; animation: shimmer 1.3s linear infinite;
+  background:
+    linear-gradient(100deg, transparent 20%, color-mix(in srgb, #fff 45%, transparent) 50%, transparent 80%) 0 0 / 220% 100%,
+    var(--wash, linear-gradient(var(--surface-2), var(--surface-2))) 0 0 / 100% 100% var(--surface-2);
+  animation: shimmer 1.3s linear infinite;
 }
 .row-thumb, .botd-img { position: relative; }
 @keyframes shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }

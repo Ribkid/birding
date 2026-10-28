@@ -20,7 +20,7 @@ import { learnReady, masteryOf } from '../core/learn.js';
 import { topLayer } from '../lib/layers';
 import { Icon } from '../components/Icon';
 import { MinePhoto } from '../components/MinePhoto';
-import { Band, Pips, SpeciesImage, shownPhotos } from '../components/SpeciesImage';
+import { Band, Pips, SpeciesImage } from '../components/SpeciesImage';
 import { CallsSection, PauseIcon, PlayIcon, hasCalls, useCallPlayer } from './BirdCalls';
 import { CardOverlay, askMotion, shareCard, type CardInfo } from './BirdCard';
 import { openSearch } from './DexSearch';
@@ -54,19 +54,25 @@ function similarSpecies(sp: Species, n = 4) {
   return (group.length >= 2 ? group : kin).map((s) => ({ s, d: gap(s) })).sort((a, b) => a.d - b.d).slice(0, n).map((x) => x.s);
 }
 
-interface Photo { src: string; wiki?: boolean; credit?: string; license?: string; page?: string }
+interface Photo { src: string; small?: string; wiki?: boolean; credit?: string; license?: string; page?: string }
 interface Details { url?: string; extract?: string; credit?: { artist: string; license: string; page: string } | null }
 interface Info { text: string; status: string; sources: { title?: string; url: string }[] }
 
-// Photos for the species page: the Wikipedia picture first, then the gallery (data/gallery.json).
+// Photos for the species page: the Wikipedia picture first, then the gallery (data/gallery.json). The species'
+// cover photo (the one its dex tile shows) carries its tile-sized copy, which the hero draws underneath while the
+// large one loads; the other gallery photos load as one layer, so the page asks for no address it didn't before.
 function heroPhotos(sp: Species, det: Details | null): Photo[] {
   const out: Photo[] = [];
   const wiki = photoFor(sp.id) as { url: string } | null;
+  const small = (sized(sp.id, 'small') as string | null) || undefined;
   if (wiki) {
     const c = det?.credit;
-    out.push({ src: sized(sp.id, 'large') as string, wiki: true, credit: c?.artist || '', license: c?.license || '', page: c?.page || wiki.url });
+    out.push({ src: sized(sp.id, 'large') as string, small, wiki: true, credit: c?.artist || '', license: c?.license || '', page: c?.page || wiki.url });
   }
-  for (const g of galleryFor(sp.id) as Photo[]) if (!out.some((o) => o.src === g.src)) out.push({ ...g });
+  for (const g of galleryFor(sp.id) as Photo[]) {
+    if (out.some((o) => o.src === g.src)) continue;
+    out.push({ ...g, small: !wiki && !out.length && g.src === sized(sp.id, 'large') ? small : undefined });
+  }
   return out.slice(0, 7);
 }
 // One small line under the photo: the author (linked to the source) and the licence.
@@ -79,37 +85,6 @@ const sourceLabel = (u: string) => { try { return new URL(u).hostname.replace(/^
 const ShareIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4M5 13v6h14v-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 const LearnIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 const TickIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
-
-// Photos fade in the first time they arrive; ones already shown this session (anywhere in the app) come back at
-// full strength.
-const shown = shownPhotos;
-function FadeImg({ src, alt, className = '', eager = false, hidden = false, onMissing }: {
-  src?: string; alt: string; className?: string; eager?: boolean; hidden?: boolean; onMissing?: (img: HTMLImageElement) => void;
-}) {
-  const [inn, setIn] = useState(() => !!src && shown.has(src));
-  return (
-    <img
-      className={`${className} fade${inn ? ' in' : ''}`}
-      src={src}
-      alt={alt}
-      aria-hidden={hidden || undefined}
-      loading={eager ? 'eager' : 'lazy'}
-      fetchPriority={eager ? 'high' : undefined}
-      decoding="async"
-      onLoad={() => { if (src) shown.add(src); setIn(true); }}
-      onError={(e) => onMissing?.(e.currentTarget)}
-    />
-  );
-}
-// The whole photo (no cropping) over a soft blurred copy. A slide not yet woken has no src.
-function WholeImg({ src, alt, className = '', eager = false }: { src?: string; alt: string; className?: string; eager?: boolean }) {
-  return (
-    <span className={`whole ${className}`}>
-      <FadeImg key={`bg-${src}`} src={src} alt="" hidden className="whole-bg" eager={eager} />
-      <FadeImg key={`fg-${src}`} src={src} alt={alt} className="whole-fg" eager={eager} onMissing={(img) => img.closest('.whole')?.classList.add('img-missing')} />
-    </span>
-  );
-}
 
 export default function Bird() {
   const { id } = useParams();
@@ -327,12 +302,18 @@ function SpeciesPage({ sp }: { sp: Species }) {
           >
             {n ? photos.map((ph, i) => (
               <figure className="slide" key={ph.src} data-hero-frame={i ? undefined : ''}>
-                <WholeImg src={isAwake(i) ? ph.src : undefined} alt={`${sp.name}${n > 1 ? `, photo ${i + 1} of ${n}` : ''}`} className="bird-photo" eager={i === 0} />
+                <SpeciesImage
+                  sp={sp}
+                  hero={isAwake(i) ? { src: ph.src, small: ph.small } : {}}
+                  alt={`${sp.name}${n > 1 ? `, photo ${i + 1} of ${n}` : ''}`}
+                  className="bird-photo"
+                  eager={i === 0}
+                />
               </figure>
             )) : !mediaSettled() ? (
               // The saved photo index or gallery.json isn't read yet: the photo is on its way, so the frame waits as
-              // a loading photo does, rather than showing the no-photo block first.
-              <figure className="slide" data-hero-frame=""><WholeImg alt={sp.name} className="bird-photo" eager /></figure>
+              // a loading photo does (over the plumage wash), rather than showing the no-photo block first.
+              <figure className="slide" data-hero-frame=""><SpeciesImage sp={sp} hero={{}} alt={sp.name} className="bird-photo" eager /></figure>
             ) : (
               <figure className="slide" data-hero-frame=""><span className="bird-photo img-missing" role="img" aria-label={sp.name} /></figure>
             )}

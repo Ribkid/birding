@@ -21,7 +21,8 @@ vi.mock('../lib/hooks', () => ({
   mediaSettled: () => media.state.settled,
 }));
 
-import { FadeImage, SpeciesImage } from '../components/SpeciesImage';
+import { FadeImage, SpeciesImage, preloadOnPress } from '../components/SpeciesImage';
+import { washFor } from '../lib/wash';
 
 // jsdom loads no images: which addresses count as loaded (in the memory cache) is set by hand.
 const loaded = new Set<string>();
@@ -166,5 +167,251 @@ describe('FadeImage', () => {
     const gone = render(<FadeImage src="https://x/g2.jpg" />);
     fireEvent.error(img(gone.container));
     expect(img(gone.container).className).toBe('fade is-gone');
+  });
+});
+
+// Item 4, never a blank species photo: the hero's small photo underneath, the develop, the plumage wash and the
+// preload on press.
+describe('SpeciesImage hero mode', () => {
+  const hero = (c: HTMLElement) => ({
+    frame: c.querySelector('.whole') as HTMLElement,
+    small: c.querySelector('img.whole-bg') as HTMLImageElement | null,
+    large: c.querySelector('img.whole-fg') as HTMLImageElement,
+  });
+
+  it('draws the small photo underneath and develops the large one only once it has loaded and decoded', async () => {
+    const sp = species('https://x/h1-small.jpg');
+    const { container } = render(<SpeciesImage sp={sp} hero={{ src: 'https://x/h1-large.jpg', small: 'https://x/h1-small.jpg' }} className="bird-photo" eager />);
+    const h = hero(container);
+    expect(h.frame.className).toBe('whole bird-photo');
+    expect(h.frame.style.getPropertyValue('--wash')).toContain('radial-gradient(');
+    expect(h.small!.getAttribute('src')).toBe('https://x/h1-small.jpg');
+    expect(h.small!.getAttribute('alt')).toBe('');
+    expect(h.small!.getAttribute('aria-hidden')).toBe('true');
+    expect(h.small!.className).toBe('whole-bg fade');
+    expect(h.large.getAttribute('src')).toBe('https://x/h1-large.jpg');
+    expect(h.large.alt).toBe('Emu');
+    expect(h.large.getAttribute('fetchpriority')).toBe('high');
+    expect(h.large.getAttribute('loading')).toBe('eager');
+    expect(h.large.className).toBe('whole-fg fade');
+
+    loaded.add('https://x/h1-small.jpg');
+    fireEvent.load(h.small!);
+    expect(h.small!.className).toBe('whole-bg fade in');
+
+    // Loaded is not enough: it develops once decoded, so the first frames never paint an empty photo.
+    loaded.add('https://x/h1-large.jpg');
+    fireEvent.load(h.large);
+    expect(h.large.className).toBe('whole-fg fade');
+    expect(decodes.map((d) => d.src)).toEqual(['https://x/h1-large.jpg']);
+    await act(async () => { decodes[0].resolve(); });
+    expect(h.large.className).toBe('whole-fg fade in');
+  });
+
+  it('shows the small photo at once when it is already in memory (the tile she tapped), and a photo shown before with no develop', async () => {
+    loaded.add('https://x/h2-small.jpg');
+    const first = render(<SpeciesImage sp={species(null)} hero={{ src: 'https://x/h2-large.jpg', small: 'https://x/h2-small.jpg' }} />);
+    expect(hero(first.container).small!.className).toBe('whole-bg fade in');
+    loaded.add('https://x/h2-large.jpg');
+    fireEvent.load(hero(first.container).large);
+    await act(async () => { decodes[0].resolve(); });
+    cleanup();
+    const again = render(<SpeciesImage sp={species(null)} hero={{ src: 'https://x/h2-large.jpg', small: 'https://x/h2-small.jpg' }} />);
+    expect(hero(again.container).large.className).toBe('whole-fg fade in');
+  });
+
+  it('keeps the small photo, sharper, when the large one cannot load, and the plumage wash when neither can', () => {
+    const kept = render(<SpeciesImage sp={species(null)} hero={{ src: 'https://x/h3-large.jpg', small: 'https://x/h3-small.jpg' }} />);
+    loaded.add('https://x/h3-small.jpg');
+    fireEvent.load(hero(kept.container).small!);
+    fireEvent.error(hero(kept.container).large);
+    expect(hero(kept.container).frame.className).toBe('whole is-small');
+    expect(hero(kept.container).small!.className).toBe('whole-bg fade in');
+    // The large photo keeps its alt, so the name is still read out.
+    expect(hero(kept.container).large.alt).toBe('Emu');
+
+    const neither = render(<SpeciesImage sp={species(null)} hero={{ src: 'https://x/h4-large.jpg', small: 'https://x/h4-small.jpg' }} />);
+    fireEvent.error(hero(neither.container).large);
+    expect(hero(neither.container).frame.className).toBe('whole is-small'); // the small one may still arrive
+    fireEvent.error(hero(neither.container).small!);
+    // Offline with neither photo to hand, the hero is never an empty block: the bird's own colours stay, and the
+    // name is still read out.
+    expect(hero(neither.container).frame.className).toBe('whole');
+    expect(hero(neither.container).frame.style.getPropertyValue('--wash')).toContain('radial-gradient(');
+    expect(hero(neither.container).large.alt).toBe('Emu');
+
+    const single = render(<SpeciesImage sp={species(null)} hero={{ src: 'https://x/h5-large.jpg' }} />);
+    fireEvent.error(hero(single.container).large);
+    expect(hero(single.container).frame.className).toBe('whole');
+    expect(hero(single.container).frame.style.getPropertyValue('--wash')).toContain('radial-gradient(');
+  });
+
+  it('keeps a small copy once drawn when a later photo index no longer offers one, so the frame never empties', () => {
+    const sp = species(null);
+    const { container, rerender } = render(<SpeciesImage sp={sp} hero={{ src: 'https://x/h7-large.jpg', small: 'https://x/h7-small.jpg' }} />);
+    loaded.add('https://x/h7-small.jpg');
+    fireEvent.load(hero(container).small!);
+    // The hero keeps the photo it was drawn with; the index that arrived since gives that photo no small copy.
+    rerender(<SpeciesImage sp={sp} hero={{ src: 'https://x/h7-large.jpg' }} />);
+    expect(hero(container).small!.getAttribute('src')).toBe('https://x/h7-small.jpg');
+    expect(hero(container).small!.className).toBe('whole-bg fade in');
+  });
+
+  it('draws one layer for a photo with no small copy, and a slide not woken yet keeps its alt over the wash', () => {
+    const gallery = render(<SpeciesImage sp={species(null)} hero={{ src: 'https://x/h6.jpg', small: 'https://x/h6.jpg' }} alt="Emu, photo 2 of 3" />);
+    expect(gallery.container.querySelectorAll('img')).toHaveLength(1);
+    expect(hero(gallery.container).large.alt).toBe('Emu, photo 2 of 3');
+
+    const asleep = render(<SpeciesImage sp={species(null)} hero={{}} alt="Emu, photo 3 of 3" />);
+    const h = hero(asleep.container);
+    expect(h.small).toBeNull();
+    expect(h.large.getAttribute('src')).toBeNull();
+    expect(h.large.alt).toBe('Emu, photo 3 of 3');
+    expect(h.large.getAttribute('loading')).toBe('lazy');
+    expect(h.frame.style.getPropertyValue('--wash')).toContain('radial-gradient(');
+  });
+});
+
+describe('plumage wash', () => {
+  const frameOf = (c: HTMLElement) => c.querySelector('.tile-img') as HTMLElement;
+
+  it("takes a bird's head, back and belly colours from its palette, and other kinds' from their kind colour", () => {
+    const kook = washFor({ name: 'Laughing Kookaburra', kind: 'bird' });
+    const at = (c: string) => kook.indexOf(c);
+    // PAL: back #6a4e34, belly #f1ece2, head #e8e2d6.
+    expect(at('#e8e2d6')).toBeGreaterThan(0);
+    expect(at('#e8e2d6')).toBeLessThan(at('#6a4e34'));
+    expect(at('#6a4e34')).toBeLessThan(at('#f1ece2'));
+    expect(kook).toMatch(/^radial-gradient\(/);
+    expect(washFor({ name: 'Koala', kind: 'mammal' })).toContain('var(--k-mammal)');
+    expect(washFor({ name: 'Not a real bird', kind: 'bird' })).toContain('var(--k-bird)');
+    expect(washFor({ name: 'x', kind: 'bad kind;' })).toContain('var(--k-bird)');
+  });
+
+  it('paints a tile frame while its photo is on its way, and leaves the striped block alone when it fails', () => {
+    const sp = species('https://x/w1.jpg', 'Laughing Kookaburra');
+    const { container } = render(<span className="tile-img"><SpeciesImage sp={sp} alt="" /></span>);
+    expect(frameOf(container).style.getPropertyValue('--wash')).toContain('#6a4e34');
+    loaded.add('https://x/w1.jpg');
+    fireEvent.load(img(container));
+    // Kept under the photo while it fades in (opacity only).
+    expect(frameOf(container).style.getPropertyValue('--wash')).toContain('#6a4e34');
+
+    const bad = render(<span className="tile-img"><SpeciesImage sp={species('https://x/w2.jpg', 'Laughing Kookaburra')} alt="" /></span>);
+    fireEvent.error(img(bad.container));
+    expect(frameOf(bad.container).style.getPropertyValue('--wash')).toBe('');
+    expect(bad.container.querySelector('.img-missing')).not.toBeNull();
+  });
+
+  it('paints the frame while the photo index is still being read, and not once a species turns out to have no photo', () => {
+    media.state.settled = false;
+    const { container } = render(<span className="tile-img"><SpeciesImage sp={species(null, 'Laughing Kookaburra')} alt="" /></span>);
+    expect(frameOf(container).style.getPropertyValue('--wash')).toContain('radial-gradient(');
+    media.state.settled = true;
+    act(() => media.bump());
+    expect(frameOf(container).style.getPropertyValue('--wash')).toBe('');
+  });
+
+  it("never paints Learn's photo frames, so a slow photo can't give the answer away", () => {
+    const { container } = render(<span className="lr-card-img"><FadeImage src="https://x/w3.jpg" /></span>);
+    const frame = container.querySelector('.lr-card-img') as HTMLElement;
+    expect(frame.style.getPropertyValue('--wash')).toBe('');
+    expect(frame.getAttribute('style')).toBeNull();
+  });
+});
+
+describe('preloadOnPress', () => {
+  let made: string[] = [];
+  let priorities: string[] = [];
+  let off: () => void = () => {};
+  const online = (on: boolean) => Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => on });
+  const press = (el: Element, pointerType = 'mouse', type = 'pointerdown') => {
+    const e = new Event(type, { bubbles: true, cancelable: true });
+    Object.assign(e, { isPrimary: true, button: 0, pointerType });
+    el.dispatchEvent(e);
+  };
+  const link = (id: number, attrs: Record<string, string> = { href: `#/bird/${id}` }) => {
+    const a = document.createElement(attrs.href ? 'a' : 'div');
+    for (const [k, v] of Object.entries(attrs)) a.setAttribute(k, v);
+    a.innerHTML = '<span class="tile-img"><img alt=""></span>';
+    document.body.append(a);
+    return a.querySelector('img')!;
+  };
+  beforeEach(() => {
+    made = [];
+    priorities = [];
+    vi.stubGlobal('Image', class {
+      decoding = '';
+      fetchPriority = 'auto';
+      onload: unknown = null;
+      onerror: unknown = null;
+      set src(v: string) { made.push(v); priorities.push(this.fetchPriority); }
+    });
+    online(true);
+    off = preloadOnPress();
+  });
+  afterEach(() => {
+    off();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    delete (navigator as { connection?: unknown }).connection;
+    document.body.innerHTML = '';
+  });
+
+  it('starts the large photo of a species she presses, once', () => {
+    const sp = species('https://x/p1-large.jpg');
+    const target = link(sp.id);
+    press(target);
+    expect(made).toEqual(['https://x/p1-large.jpg']);
+    // At high priority from the start: the hero's own <img> takes this request over and keeps its priority.
+    expect(priorities).toEqual(['high']);
+    press(target);
+    expect(made).toHaveLength(1);
+    // A dex tile names its species with data-tile.
+    const tile = species('https://x/p2-large.jpg');
+    press(link(tile.id, { 'data-tile': String(tile.id) }));
+    expect(made).toEqual(['https://x/p1-large.jpg', 'https://x/p2-large.jpg']);
+  });
+
+  it('does nothing without signal, with Data Saver on, or away from a species', () => {
+    online(false);
+    press(link(species('https://x/p3-large.jpg').id));
+    online(true);
+    Object.defineProperty(navigator, 'connection', { configurable: true, value: { saveData: true } });
+    press(link(species('https://x/p4-large.jpg').id));
+    delete (navigator as { connection?: unknown }).connection;
+    const other = document.createElement('button');
+    document.body.append(other);
+    press(other);
+    expect(made).toEqual([]);
+  });
+
+  it('waits for a touch to be a tap, and starts nothing for a touch that becomes a scroll', () => {
+    vi.useFakeTimers();
+    const scrolled = link(species('https://x/p5-large.jpg').id);
+    press(scrolled, 'touch');
+    expect(made).toEqual([]);
+    press(scrolled, 'touch', 'pointercancel');
+    vi.advanceTimersByTime(200);
+    expect(made).toEqual([]);
+
+    const tapped = link(species('https://x/p6-large.jpg').id);
+    press(tapped, 'touch');
+    press(tapped, 'touch', 'pointerup');
+    expect(made).toEqual(['https://x/p6-large.jpg']);
+
+    const held = link(species('https://x/p7-large.jpg').id);
+    press(held, 'touch');
+    vi.advanceTimersByTime(100);
+    expect(made).toEqual(['https://x/p6-large.jpg', 'https://x/p7-large.jpg']);
+  });
+
+  it('skips a photo already shown this session', () => {
+    const sp = species('https://x/p8-large.jpg');
+    const { container } = render(<SpeciesImage sp={sp} />);
+    loaded.add('https://x/p8-large.jpg');
+    fireEvent.load(img(container));
+    press(link(sp.id));
+    expect(made).toEqual([]);
   });
 });
