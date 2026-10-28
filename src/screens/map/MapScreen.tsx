@@ -20,6 +20,7 @@ import { describeArea } from '../../core/mapinfo.js';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { SpeciesImage } from '../../components/SpeciesImage';
+import { SunToggle } from '../../components/SunToggle';
 import { announce, toast as appToast } from '../../lib/toast';
 import { localPlaceMatches, myPlaces, searchAddress } from '../../lib/places';
 
@@ -1324,6 +1325,9 @@ function MapView() {
             />
           </svg>
         </button>
+
+        {/* Sun: the Outdoor theme in one tap, above locate in the right-hand stack. */}
+        <SunToggle className="map-sun" />
 
         <div className={`map-cross ${patchOpen ? '' : 'hidden'}`} aria-hidden="true" />
 
