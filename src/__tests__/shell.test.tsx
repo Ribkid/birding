@@ -28,6 +28,7 @@ vi.mock('../components/SpeciesImage', () => ({ SpeciesImage: () => null }));
 vi.mock('../components/PlusSheet', () => ({ PlusSheet: () => null }));
 
 import { TabBar } from '../components/TabBar';
+import { applyTheme, THEME_KEY } from '../screens/progress/theme';
 
 const html = readFileSync(resolve(__dirname, '../../index.html'), 'utf8');
 const page = new DOMParser().parseFromString(html, 'text/html');
@@ -89,6 +90,20 @@ describe('the static shell', () => {
       const main = shellOn(hash).querySelector('[data-shell]')!;
       expect(main.children.length, hash).toBe(0);
     }
+  });
+
+  it("opens in the theme she chose in Settings, from the copy applyTheme keeps", () => {
+    const root = document.documentElement;
+    applyTheme('dark');
+    expect(localStorage.getItem(THEME_KEY)).toBe('dark');
+    delete root.dataset.theme;
+    shellOn('#/dex');
+    expect(root.dataset.theme).toBe('dark');
+    applyTheme('auto');
+    expect(root.dataset.theme).toBeUndefined();
+    shellOn('#/dex');
+    expect(root.dataset.theme).toBeUndefined();
+    localStorage.clear();
   });
 
   it('is the screen React draws over: #view, before the tab bar, inside #root', () => {
