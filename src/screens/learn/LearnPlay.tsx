@@ -15,6 +15,7 @@ import {
 } from '../../core/learn.js';
 import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, usePlayButtons, PlayButton, type CallClip, type PlayButtonState } from './QuizMedia';
 import { FadeImage } from '../../components/SpeciesImage';
+import { lookAfterDraw } from '../../lib/look';
 import './learn.css';
 
 const SIDES: Record<number, string[]> = {
@@ -47,6 +48,13 @@ const focusInView = () => {
   const a = document.activeElement;
   return !!view && !!a && a !== document.body && a.isConnected && view.contains(a);
 };
+// v1 drawn() runs lookAfterDraw after every question, card and result, so the frosted top bar follows the screen on
+// it (its back control is the screen's [data-quit] or page-head back link), not the loading shell the route began with.
+function useLookAfterDraw(deps: unknown[]) {
+  useEffect(() => {
+    lookAfterDraw(document.getElementById('view'));
+  }, deps);
+}
 function useRememberScroll(round: object | null) {
   useEffect(() => {
     if (!round) return;
@@ -487,6 +495,8 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     buttons.toggle(which, clip);
   };
 
+  useLookAfterDraw([ready, game, game?.i, isOver, error]);
+
   if (isDeck) return <Deck onBack={() => navigate('/learn')} />;
 
   if (error) {
@@ -518,7 +528,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   return (
     <div className={`lq-screen lq-screen--${game.mode}${game.kind && game.kind !== 'animals' ? ` kind--${game.kind}` : ''}`} data-own-topbar>
       <header className="lq-head glass">
-        <button type="button" className="iconbtn" aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { setActive(null); if (!game.daily) setGame(null); navigate('/learn', { replace: true }); }}>
+        <button type="button" className="iconbtn" data-quit aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { setActive(null); if (!game.daily) setGame(null); navigate('/learn', { replace: true }); }}>
           <svg viewBox="0 0 24 24">{game.daily ? QI.back : QI.close}</svg>
         </button>
         {game.mode === 'rapid' ? (
@@ -592,6 +602,7 @@ function Deck({ onBack }: { onBack: () => void }) {
   // Each card and the done screen start at the top (v1 drawn()); showing the answer does not. A card missed and put
   // back is a new queue entry, so it counts as a new card even when it is the only one left.
   useEffect(() => { if (!resuming.current) window.scrollTo(0, 0); }, [game?.queue?.[0], mode]);
+  useLookAfterDraw([ready, game, game?.queue?.[0], mode]);
   useEffect(() => {
     if (!ready || !resuming.current) return;
     resuming.current = false;
@@ -648,7 +659,7 @@ function Deck({ onBack }: { onBack: () => void }) {
     return (
       <div className="lq-screen lq-screen--deck" data-own-topbar>
         <header className="lq-head glass">
-          <button type="button" className="iconbtn" aria-label="Stop reviewing" onClick={() => { setGame(null); setMode('overview'); }}><svg viewBox="0 0 24 24">{QI.close}</svg></button>
+          <button type="button" className="iconbtn" data-quit aria-label="Stop reviewing" onClick={() => { setGame(null); setMode('overview'); }}><svg viewBox="0 0 24 24">{QI.close}</svg></button>
           <span className="lq-bar" role="progressbar" aria-label={`Card ${game.n! + 1} of ${game.total}`} aria-valuemin={1} aria-valuemax={game.total} aria-valuenow={game.n! + 1}><span style={{ transform: `scaleX(${(game.n! / Math.max(1, game.total!)).toFixed(3)})` }} /></span>
           <span className="lq-count" aria-hidden="true">{game.queue!.length}<span> left</span></span>
         </header>
