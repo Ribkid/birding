@@ -286,7 +286,8 @@ interface ModalProps {
 /** A v1-style bottom sheet on the shared layer stack, so the page behind is inert. */
 export function Modal({ title, onClose, children, wide = false }: ModalProps) {
   return (
-    <Sheet open onClose={onClose} label={title} wide={wide}>
+    // Named by its heading (aria-labelledby), as v1's openLayer named every sheet.
+    <Sheet open onClose={onClose} wide={wide}>
       <h2 className="sheet-title">{title}</h2>
       {children}
     </Sheet>

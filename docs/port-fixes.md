@@ -815,6 +815,39 @@ Twelve branches, each forked from `fd537c7`, were merged into `port-fixes` with 
 - Shared pieces kept once: `lib/toast.ts` (toast, announce and the one `#announce`), `lib/install.ts` (one install offer for the welcome card, Settings and the Dex), `components/OutingBar.tsx` (one `#outing-bar`, `body.has-outing`), `components/RouteFocus.tsx` (heading focus after navigation), `screens/DexSearch.tsx` (search from the Dex and the species hero), `lib/layers.ts`' single Escape/Tab listener, and `components/Sheet.tsx` (open class, labelledBy, step, focus into the sheet, solid surface). The + tab is v1's `<a href="#/add" id="plus">`.
 - `3207bc1`: the manifest's `theme_color` is the paper colour `#F4F6F9`. `b906aef`: the species page's Group link filters the dex.
 
+### Leftovers: Settings, Dex filter and search (branch `left-settings-dex-search`)
+
+- 16 and 22, checked against v1 with nothing to change. Account deletion refuses while offline before any sheet opens. A failed request closes the sheet and shows v1's `Couldn't delete the account: <message>`, which replaces "Deleting your account…". The Ready ring's fill has `pathLength="100"`. With the service worker running, every row reports what v1 reports, and the App row's total is the build's precache count (39 on this build, all saved).
+- `1118733`: search. `SearchHost` in `DexSearch.tsx` is mounted once in App. `/` opens it on every screen, as in v1. The Dex hero, the Dex's empty state, the species hero and Scan's 'Search the dex' all open it through `openSearch()`.
+- `9da0cfb`: item 76's remainder.
+  - The sign-in page uses the shared `SignInForm`.
+  - Signed-out Edit profile goes to Sign in once the saved sign-in has been checked.
+  - Me's public-profile messages and the group outcomes are toasts, and Leave asks in a confirm sheet.
+  - Letter avatars use her shown name.
+  - Public profile tiles read "You too Australian Brush-turkey".
+- Checked: the Group link (`b906aef`) filters the dex the way v1's does. The species page shows the rarity line once.
+- Second comparison with v1, checked in the browser on both apps:
+  - `18d0740`: Sign up free, Sign in and Edit profile are sheets over the screen that asked for them, as in v1, not pages.
+    - `#/me/signup`, `#/me/signin` and `#/me/edit` land on Me, put the address back to `#/me` and open the sheet once the saved sign-in has been checked. Signed in, `#/me/edit` opens Edit profile and `#/me/signin` is just Me; v1 offered Sign in in both cases.
+    - Me's join card buttons, Edit profile (Me and your own public profile) and Groups are v1's buttons, and "View my public profile" is v1's `#/me` link until the public id is known.
+    - Choosing a species and framing a photo are steps of the Edit profile sheet. Closing the species list or Cancel on the photo come back to Edit profile, as v1 reopened it.
+    - Groups scrolls the leaderboard to its Groups section once the groups have loaded, through v1's one-shot `openGroups` instead of `?groups=1`.
+    - Every sheet slides away (fades under reduced motion) when dismissed, and goes at once on a route change, as v1's closeSheet did.
+    - The tab bar's avatar follows Edit profile.
+  - `68b20a2`: `/` opens search over a sheet, as in v1. Escape closes search first and gives focus back to the sheet. Modal and confirm sheets are named by their heading (`aria-labelledby`), and each Ready row carries v1's `data-field`.
+  - Kept on purpose: Ctrl, Alt and Cmd with `/` stay the browser's and screen readers' (AltGr's `/` still counts), spaced accessible names on Me's medals, `type="button"` on buttons, `row.is_me` for the public profile's back link, and the not-found page (item 71).
+  - Environment, not code: the storage figure under Backup, the species carousel count and credit, Me's fan photos, and the "Photo index failed" warning (v1 logs it too) depend on what Wikipedia and the ALA return.
+- Third comparison with v1, checked in the browser on both apps:
+  - `167ad2c`: the + link carries `aria-current="false"`, as v1's drawRoute marks every tab link.
+  - Kept on purpose, because React does what v1's own code meant to do:
+    - Restore backup clears the file input after each pick, so the same file can be chosen again after a bad pick or a cancelled confirm. In v1 nothing happens until a reload.
+    - Sign up free and Sign in put focus on Continue with Google as they open. v1's openSheet means to do this too, but it picks the first control before the form is drawn, so focus stays on the page.
+    - Closing a search opened with `/` from the page lands on the screen's heading, without scrolling. v1's layers.js has the same fallback, but it removes the overlay after restoring focus, so focus falls to the page.
+    - Clear and Clear search in the dex move focus to the All chip; in v1 it falls to the page.
+    - Browser Back returns to where she was on the page, with no jump (the species page after its Group link, for one). v1 decides by screen depth, so Back to a deeper screen starts at the top.
+  - Not a difference: both apps log the same four "GPU stall due to ReadPixels" WebGL warnings while the 3D model draws. The storage figure under Backup varies from run to run in both.
+  - Left to `left-log-sheet`, which rebuilds them: All sightings' card rows, counts and row text, and the species page's Log a sighting sheet (current outing, Choose on map, recent places, Notes, "Change species", the photo card).
+
 ### Partial
 
 - None.

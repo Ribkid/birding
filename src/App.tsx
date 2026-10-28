@@ -20,8 +20,7 @@ import { RouteFocus } from './components/RouteFocus';
 import Learn from './screens/learn/Learn';
 import LearnPlay from './screens/learn/LearnPlay';
 import Me from './screens/me/Me';
-import EditProfile from './screens/me/EditProfile';
-import SignIn from './screens/me/SignIn';
+import { AccountSheets } from './screens/me/AccountSheets';
 import PublicProfile from './screens/me/PublicProfile';
 import { Placeholder } from './screens/Placeholder';
 import { TabBar } from './components/TabBar';
@@ -29,9 +28,11 @@ import { ScreenBoundary } from './components/ErrorBoundary';
 import { Welcome } from './components/Welcome';
 import { OutingBar } from './components/OutingBar';
 import { Celebrations } from './components/Celebrate';
+import { SearchHost } from './screens/DexSearch';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
 import { closeAllLayers } from './lib/layers';
+import { flushClosingSheets } from './components/Sheet';
 import { syncTitle, watchTitle } from './lib/title';
 import { initProfile } from './core/profile.js';
 import { initAccount, onStatus, syncStatus } from './core/account.js';
@@ -44,6 +45,7 @@ function ScrollReset() {
   useEffect(() => {
     window.scrollTo(0, 0);
     closeAllLayers('nav');
+    flushClosingSheets();
   }, [pathname]);
   return null;
 }
@@ -124,9 +126,10 @@ export default function App() {
           <Route path="/listen" element={<Listen />} />
 
           <Route path="/me" element={<Me />} />
-          <Route path="/me/edit" element={<EditProfile />} />
-          <Route path="/me/signup" element={<SignIn key="signup" mode="signup" />} />
-          <Route path="/me/signin" element={<SignIn key="signin" mode="signin" />} />
+          {/* v1 renderMe(sub): Me, with the sheet open over it and the address back at #/me. */}
+          <Route path="/me/edit" element={<Me sub="edit" />} />
+          <Route path="/me/signup" element={<Me sub="signup" />} />
+          <Route path="/me/signin" element={<Me sub="signin" />} />
           <Route path="/u/:publicId" element={<PublicProfile />} />
 
           <Route path="/badges" element={<Badges />} />
@@ -140,6 +143,8 @@ export default function App() {
       </main>
       <OutingBar />
       <TabBar />
+      <SearchHost />
+      <AccountSheets />
       <Celebrations />
     </>
   );

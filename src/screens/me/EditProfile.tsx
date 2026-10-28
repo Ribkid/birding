@@ -1,18 +1,20 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { SPECIES, byId, type Species } from '../../lib/data';
+// Edit profile: v1 js/me.js openEdit, a sheet over the screen that opened it (Me, your own public profile, or the
+// #/me/edit links from Settings and the leaderboard, which land on Me). Framing a photo (v1 openCrop) and choosing an
+// avatar species (v1 account.js pickAvatar) took the sheet's place in v1, so here they are steps of the same sheet:
+// Cancel on the framing step and closing the species list come back to Edit profile, as v1 reopened it.
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import { SPECIES, type Species } from '../../lib/data';
 import { useSeen, useMedia } from '../../lib/hooks';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { Sheet } from '../../components/Sheet';
-import { onStatus, syncStatus } from '../../core/account.js';
+import { AccountAvatar } from './accountBits';
 import {
-  signedIn, configured, getProfile, getMyCloud, myName, initProfile, saveMyProfile, setCloud,
-  uploadAvatarPhoto, removeAvatarPhoto, avatarUrl, problem, resizeImage, squareJpeg,
+  getProfile, getMyCloud, myName, initProfile, saveMyProfile, setCloud,
+  uploadAvatarPhoto, removeAvatarPhoto, problem, resizeImage, squareJpeg,
 } from '../../core/profile.js';
 import './me.css';
 
 const I = {
-  back: <path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />,
   cam: <><path d="M4 8h3l2-3h6l2 3h3v11H4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" strokeWidth="2" /></>,
   leaf: <path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14zM5 19l7-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />,
   search: <><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M15 15l5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></>,
@@ -26,19 +28,26 @@ const clampCrop = (c: Crop): Crop => {
   return { ...c, tx: Math.min(0, Math.max(c.S - c.W * sc, c.tx)), ty: Math.min(0, Math.max(c.S - c.H * sc, c.ty)) };
 };
 
-export default function EditProfile() {
-  const navigate = useNavigate();
+type Step = 'edit' | 'crop' | 'pick';
+// Each step's heading names the sheet.
+const HEAD = 'me-edit-h';
+
+/** Tell every profile subscriber (Me, the tab bar's avatar, Settings) to draw again, as v1's paintTab and redraw did. */
+const repaint = () => { void initProfile(); };
+
+export function EditProfileSheet({ onClose }: { onClose: () => void }) {
   const seen = useSeen();
   const fileRef = useRef<HTMLInputElement>(null);
   useMedia();
-  const [tick, setTick] = useState(0);
-  const [name, setName] = useState('');
-  const [showLb, setShowLb] = useState(true);
+  const [, setTick] = useState(0);
+  const [name, setName] = useState(() => getProfile().displayName || '');
+  const [showLb, setShowLb] = useState(() => getProfile().showOnLeaderboard !== false);
+  const typed = useRef(false);
   // The found-species switch shows the cached cloud value, or the choice being saved while that is pending.
   const [dexPending, setDexPending] = useState<boolean | null>(null);
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
-  const [picking, setPicking] = useState(false);
+  const [step, setStep] = useState<Step>('edit');
   const [q, setQ] = useState('');
   const [crop, setCrop] = useState<Crop | null>(null);
   const [cropErr, setCropErr] = useState('');
@@ -48,23 +57,21 @@ export default function EditProfile() {
   const cropLast = useRef<{ x: number; y: number; d?: number } | null>(null);
   const cropState = useRef(crop);
   cropState.current = crop;
+  const nameNow = useRef(name);
+  nameNow.current = name;
 
+  // v1 openEdit read the saved profile before it drew the sheet.
   useEffect(() => {
     let alive = true;
     const off = initProfile(() => setTick((n) => n + 1));
     void off.ready.then((p: any) => {
-      if (!alive) return;
+      if (!alive || typed.current) return;
       setName(p.displayName || '');
       setShowLb(p.showOnLeaderboard !== false);
     });
     return () => { alive = false; off(); };
   }, []);
 
-  const [sync, setSync] = useState(syncStatus());
-  useEffect(() => { const off = onStatus((state: typeof sync) => setSync(state)); return () => { off(); }; }, []);
-
-  // Every hook sits above the early returns below: signing in or out while this screen is open changes which
-  // branch renders, and a hook after a return would then crash the screen (React #300 / #310).
   useEffect(() => () => { if (cropState.current) URL.revokeObjectURL(cropState.current.url); }, []);
 
   useEffect(() => {
@@ -89,10 +96,26 @@ export default function EditProfile() {
 
   const prof = getProfile();
   const m = getMyCloud();
-  const u = signedIn();
 
-  if (!configured) return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link><h1>Edit profile</h1></header><div className="me-msg"><p>Profiles need accounts, which are not set up in this copy of the app.</p></div></div>;
-  if (!u) return <div className="me"><header className="page-head page-head--back"><Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link><h1>Edit profile</h1></header><div className="me-msg"><p>Sign in to edit your profile.</p><Link className="btn btn--primary" to="/me/signin">Sign in</Link></div></div>;
+  const saveName = async () => {
+    const v = nameNow.current.trim().slice(0, 40);
+    if (v === (getProfile().displayName || '')) return;
+    await saveMyProfile({ displayName: v });
+    setMsg('Name saved.');
+    repaint();
+  };
+  const dropCrop = () => {
+    if (cropState.current) URL.revokeObjectURL(cropState.current.url);
+    setCrop(null);
+    setCropErr('');
+  };
+  // v1 onSheetClose: the name is saved however the sheet closes, and Me and the tab bar draw again.
+  const close = () => { void saveName(); dropCrop(); onClose(); };
+  const back = (note = '') => { setMsg(note); setQ(''); setStep('edit'); };
+  const onSheetClose = (why?: string) => {
+    if (step === 'pick' && why !== 'nav') back(); // v1: closing the species list reopens Edit profile
+    else close();
+  };
 
   const zoomTo = (nz: number, cx?: number, cy?: number) => {
     setCrop((cur) => {
@@ -104,12 +127,6 @@ export default function EditProfile() {
       return clampCrop({ ...cur, z: next, tx: ax - (ax - cur.tx) * k, ty: ay - (ay - cur.ty) * k });
     });
   };
-  const closeCrop = () => {
-    if (cropState.current) URL.revokeObjectURL(cropState.current.url);
-    setCrop(null);
-    setCropErr('');
-  };
-
   const cropMid = () => {
     const [a, b] = [...cropPts.current.values()];
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) };
@@ -156,8 +173,8 @@ export default function EditProfile() {
     zoomTo((crop?.z || 1) * (e.deltaY < 0 ? 1.08 : 1 / 1.08), e.clientX - r.left, e.clientY - r.top);
   };
   const cropKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    const step = e.shiftKey ? 40 : 12;
-    const moves: Record<string, [number, number]> = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+    const stepPx = e.shiftKey ? 40 : 12;
+    const moves: Record<string, [number, number]> = { ArrowLeft: [stepPx, 0], ArrowRight: [-stepPx, 0], ArrowUp: [0, stepPx], ArrowDown: [0, -stepPx] };
     const mv = moves[e.key];
     if (mv) { e.preventDefault(); setCrop((cur) => cur ? clampCrop({ ...cur, tx: cur.tx + mv[0], ty: cur.ty + mv[1] }) : cur); }
     if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomTo((crop?.z || 1) * 1.1); }
@@ -173,29 +190,24 @@ export default function EditProfile() {
       const sc = baseFor(crop.S, crop.W, crop.H) * crop.z;
       const out = await squareJpeg(crop.img, -crop.tx / sc, -crop.ty / sc, crop.S / sc);
       await uploadAvatarPhoto(out);
-      closeCrop();
-      setMsg('Photo saved. It shows on your profile and the leaderboard.');
-      setTick((n) => n + 1);
+      dropCrop();
+      back('Photo saved. It shows on your profile and the leaderboard.');
+      repaint();
     } catch (x) { setCropErr(problem(x)); }
     finally { setCropBusy(false); }
   };
 
-  const saveName = async () => {
-    const v = name.trim().slice(0, 40);
-    if (v === (prof.displayName || '')) return;
-    await saveMyProfile({ displayName: v });
-    setMsg('Name saved.');
-  };
-  const choose = async (sp: Species | null) => {
-    if (!sp) { setPicking(false); return; }
-    await saveName();
+  const pick = async () => { await saveName(); setStep('pick'); };
+  const choose = async (sp: Species) => {
     await saveMyProfile({ avatarSpeciesId: sp.id });
     let note = `${sp.name} is your picture.`;
+    // A photo would keep showing over the species, so it goes.
     if (getMyCloud()?.avatarPath) {
       if (navigator.onLine) { try { await removeAvatarPhoto(); } catch (x) { note = problem(x); } }
       else note = 'Saved. Your photo shows until you are back online and remove it.';
     }
-    setMsg(note); setPicking(false); setTick((n) => n + 1);
+    back(note);
+    repaint();
   };
   const upload = async (file?: File) => {
     if (!file) return;
@@ -209,6 +221,8 @@ export default function EditProfile() {
       img.src = url;
       try { await img.decode(); } catch { URL.revokeObjectURL(url); throw new Error("That file couldn't be opened as a photo."); }
       setCrop({ url, img, W: img.naturalWidth, H: img.naturalHeight, S: 0, z: 1, tx: 0, ty: 0 });
+      setCropErr('');
+      setStep('crop');
     } catch (x) {
       if (url && !cropState.current) URL.revokeObjectURL(url);
       setMsg(problem(x));
@@ -217,7 +231,7 @@ export default function EditProfile() {
   const remove = async () => {
     if (!navigator.onLine) { setMsg('Removing your photo needs a connection.'); return; }
     setBusy(true);
-    try { await removeAvatarPhoto(); setMsg('Photo removed.'); setTick((n) => n + 1); }
+    try { await removeAvatarPhoto(); setMsg('Photo removed.'); repaint(); }
     catch (x) { setMsg(problem(x)); }
     finally { setBusy(false); }
   };
@@ -226,50 +240,11 @@ export default function EditProfile() {
     .sort((a, b) => (Number(seen.has(b.id)) - Number(seen.has(a.id))) || a.id - b.id)
     .slice(0, 60);
 
-  return (
-    <>
-      <header className="page-head page-head--back">
-        <Link className="iconbtn" to="/me" aria-label="Back to Me"><svg viewBox="0 0 24 24">{I.back}</svg></Link>
-        <h1>Edit profile</h1>
-      </header>
-      <div className="me me--edit pad-x">
-        <div className="me-edit-av">
-          <span className="me-edit-pic">
-            <span className={`acct-av me-av-xl${m?.avatarPath ? ' acct-av--photo' : ''}`} aria-hidden="true">
-              {m?.avatarPath ? <img src={avatarUrl(m.avatarPath)} alt="" /> : byId.get(Number(prof.avatarSpeciesId)) ? <SpeciesImage sp={byId.get(Number(prof.avatarSpeciesId))!} size="large" /> : <span className="acct-av-letter">{(name || 'You').slice(0, 1).toUpperCase()}</span>}
-            </span>
-          </span>
-          <div className="me-edit-picks">
-            <button type="button" className="btn btn--small" disabled={busy} onClick={() => { if (!navigator.onLine) { setMsg('Uploading a photo needs signal. Your species picture works offline.'); return; } fileRef.current?.click(); }}><svg viewBox="0 0 24 24">{I.cam}</svg> {m?.avatarPath ? 'New photo' : 'Upload a photo'}</button>
-            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; void upload(f); }} />
-            <button type="button" className="btn btn--small" onClick={() => setPicking(true)}><svg viewBox="0 0 24 24">{I.leaf}</svg> Choose a species</button>
-            {m?.avatarPath && <button type="button" className="btn btn--small btn--quiet btn--danger" disabled={busy} onClick={() => void remove()}>Remove photo</button>}
-          </div>
-        </div>
-        <p className="small me-edit-msg" role="status" aria-live="polite">{msg}</p>
-        <label className="field"><span>Display name</span><input maxLength={40} autoComplete="nickname" value={name} placeholder={myName()} onChange={(e) => setName(e.target.value)} onBlur={() => void saveName()} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void saveName(); } }} /></label>
-        <label className="check check--card me-check">
-          <input type="checkbox" checked={showLb} onChange={async (e) => { setShowLb(e.target.checked); await saveMyProfile({ showOnLeaderboard: e.target.checked }); setMsg(e.target.checked ? 'You show on the leaderboard.' : 'You are hidden from the Everyone board.'); }} />
-          <span><strong>Show me on the leaderboard</strong><span className="small muted">Only your name, picture and counts are shown, never your sightings, places, notes or photos. Groups you join always show you to their members.</span></span>
-        </label>
-        <label className="check check--card me-check">
-          <input type="checkbox" checked={dexPending ?? !!m?.showDex} disabled={dexPending !== null} onChange={async (e) => {
-            const on = e.target.checked;
-            // v1 me.js: offline the switch stays where it was and says why.
-            if (!navigator.onLine) { setMsg('Changing this needs a connection.'); return; }
-            setDexPending(on);
-            try { await setCloud({ show_dex: on }); setMsg(on ? 'Your found species show on your profile.' : 'Your found species are hidden.'); }
-            catch (x) { setMsg(problem(x)); }
-            finally { setDexPending(null); }
-          }} />
-          <span><strong>Show the species I've found on my profile</strong><span className="small muted">People who can open your profile see which species you have found. Never where or when, your notes or your photos.</span></span>
-        </label>
-        <p className="small muted" data-state={sync.state}>{sync.text || ''}</p>
-        <div className="row-end"><button type="button" className="btn btn--primary" onClick={async () => { await saveName(); navigate('/me'); }}>Done</button></div>
-      </div>
-
-      <Sheet open={!!crop} onClose={closeCrop} label="Frame your photo" cls="me-crop-sheet">
-        <h2 className="sheet-title">Frame your photo</h2>
+  let body;
+  if (step === 'crop') {
+    body = (
+      <>
+        <h2 className="sheet-title" id={HEAD}>Frame your photo</h2>
         <p className="small muted">Drag to move it. Pinch or use the slider to zoom.</p>
         <div
           ref={cropRef}
@@ -295,22 +270,67 @@ export default function EditProfile() {
           <span className="me-crop-mask" aria-hidden="true" />
         </div>
         <label className="field me-zoom"><span>Zoom</span><input type="range" min="1" max="4" step="0.01" value={crop?.z || 1} onChange={(e) => zoomTo(Number(e.target.value))} /></label>
-        {cropErr && <p className="form-error" role="alert">{cropErr}</p>}
+        <p className="form-error" role="alert">{cropErr}</p>
         <div className="row-end">
-          <button type="button" className="btn" onClick={closeCrop}>Cancel</button>
+          <button type="button" className="btn" onClick={() => { dropCrop(); back(); }}>Cancel</button>
           <button type="button" className="btn btn--primary" disabled={cropBusy} onClick={() => void useCrop()}>{cropBusy ? 'Uploading…' : 'Use this photo'}</button>
         </div>
-      </Sheet>
-
-      <Sheet open={picking} onClose={() => choose(null)} label="Choose an avatar" wide>
-        <h2 className="sheet-title">Choose an avatar</h2>
-        <div className="searchbox"><svg viewBox="0 0 24 24">{I.search}</svg><input type="search" placeholder="Search species" aria-label="Search species" value={q} onChange={(e) => setQ(e.target.value)} autoFocus /></div>
+      </>
+    );
+  } else if (step === 'pick') {
+    body = (
+      <>
+        <h2 className="sheet-title" id={HEAD}>Choose an avatar</h2>
+        <div className="searchbox"><svg viewBox="0 0 24 24" aria-hidden="true">{I.search}</svg><input type="search" placeholder="Search species" aria-label="Search species" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <ul className="rows acct-picklist">
           {results.map((s) => (
             <li key={s.id}><button type="button" className="row row--sp" onClick={() => void choose(s)}><span className="row-thumb"><SpeciesImage sp={s} /></span><span className="row-main"><strong>{s.name}</strong>{seen.has(s.id) && <span className="small muted">In your dex</span>}</span></button></li>
           ))}
         </ul>
-      </Sheet>
-    </>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <h2 className="sheet-title" id={HEAD}>Edit profile</h2>
+        <div className="me-edit-av">
+          <span className="me-edit-pic">
+            {/* v1 avatarHtml with her shown name (myName), so a letter avatar is her initial, not the Y of 'You'. */}
+            <AccountAvatar spId={prof.avatarSpeciesId} path={m?.avatarPath} name={name.trim() || myName()} cls="acct-av me-av-xl" size="large" />
+          </span>
+          <div className="me-edit-picks">
+            <button type="button" className="btn btn--small" disabled={busy} onClick={() => { if (!navigator.onLine) { setMsg('Uploading a photo needs signal. Your species picture works offline.'); return; } fileRef.current?.click(); }}><svg viewBox="0 0 24 24" aria-hidden="true">{I.cam}</svg> {m?.avatarPath ? 'New photo' : 'Upload a photo'}</button>
+            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; void upload(f); }} />
+            <button type="button" className="btn btn--small" onClick={() => void pick()}><svg viewBox="0 0 24 24" aria-hidden="true">{I.leaf}</svg> Choose a species</button>
+            {m?.avatarPath && <button type="button" className="btn btn--small btn--quiet btn--danger" disabled={busy} onClick={() => void remove()}>Remove photo</button>}
+          </div>
+        </div>
+        <p className="small me-edit-msg" role="status" aria-live="polite">{msg}</p>
+        <label className="field"><span>Display name</span><input name="displayName" maxLength={40} autoComplete="nickname" value={name} placeholder={myName()} onChange={(e) => { typed.current = true; setName(e.target.value); }} onBlur={() => void saveName()} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void saveName(); } }} /></label>
+        <label className="check check--card me-check">
+          <input type="checkbox" checked={showLb} onChange={async (e) => { const on = e.target.checked; setShowLb(on); await saveMyProfile({ showOnLeaderboard: on }); setMsg(on ? 'You show on the leaderboard.' : 'You are hidden from the Everyone board.'); }} />
+          <span><strong>Show me on the leaderboard</strong><span className="small muted">Only your name, picture and counts are shown, never your sightings, places, notes or photos. Groups you join always show you to their members.</span></span>
+        </label>
+        <label className="check check--card me-check">
+          <input type="checkbox" checked={dexPending ?? !!m?.showDex} disabled={dexPending !== null} onChange={async (e) => {
+            const on = e.target.checked;
+            // v1 me.js: offline the switch stays where it was and says why.
+            if (!navigator.onLine) { setMsg('Changing this needs a connection.'); return; }
+            setDexPending(on);
+            try { await setCloud({ show_dex: on }); setMsg(on ? 'Your found species show on your profile.' : 'Your found species are hidden.'); }
+            catch (x) { setMsg(problem(x)); }
+            finally { setDexPending(null); }
+          }} />
+          <span><strong>Show the species I've found on my profile</strong><span className="small muted">People who can open your profile see which species you have found. Never where or when, your notes or your photos.</span></span>
+        </label>
+        <div className="row-end"><button type="button" className="btn btn--primary" onClick={close}>Done</button></div>
+      </>
+    );
+  }
+
+  return (
+    <Sheet open onClose={onSheetClose} labelledBy={HEAD} cls={step === 'edit' ? 'me-edit' : step === 'crop' ? 'me-crop-sheet' : ''} wide={step === 'pick'} step={step}>
+      <Fragment key={step}>{body}</Fragment>
+    </Sheet>
   );
 }

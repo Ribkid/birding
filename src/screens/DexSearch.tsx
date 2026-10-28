@@ -1,11 +1,12 @@
 // Search everything (v1 js/app.js openSearch): species, hotspots, her patches and her sightings, in a full-screen
-// layer. The one search overlay, opened from the dex (its search button and '/') and the species page's hero. A result
-// link closes it through the route change.
+// layer. There is one overlay for the whole app, mounted once in App as <SearchHost />. openSearch() opens it from the
+// dex's round button and empty state, the species page's hero and Scan's 'Search the dex', and '/' opens it on every
+// screen, as v1's boot wired it. A result link closes it through the route change.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { GROUPS, HABITATS, KINDS, SPECIES, byId, dexCode, kindsPresent } from '../lib/data';
-import { useMedia } from '../lib/hooks';
+import { useMedia, useSightings } from '../lib/hooks';
 import { closeLayer, openLayer, type Layer } from '../lib/layers';
 import { db } from '../core/db.js';
 import { hotspots } from '../core/seqdata.js';
@@ -25,9 +26,58 @@ interface PatchRow { id: number; name: string }
 
 const IDEAS = ['kingfisher', 'koala', 'Oxley', 'wetlands', 'tree frog', 'gum'];
 
-export function DexSearch({ initial, sightings, seen, onClose }: {
+// The mounted host's opener. Before it mounts (and in tests that render a screen alone) opening does nothing.
+let opener: ((initial: string) => void) | null = null;
+/** Open Search everything, with `initial` already typed (v1 openSearch(initial)). It is ignored while it is open. */
+export function openSearch(initial = '') {
+  opener?.(initial);
+}
+
+// Her patches, kept current like her sightings, so the overlay draws whole the moment it opens (v1 held both in
+// memory).
+function usePatchRows(): PatchRow[] {
+  const [rows, setRows] = useState<PatchRow[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const load = () => { void (db.all('patches') as Promise<PatchRow[]>).then((r) => { if (alive) setRows(r); }).catch(() => {}); };
+    load();
+    const off = db.onChange((name: string) => { if (name === 'patches') load(); });
+    return () => { alive = false; off(); };
+  }, []);
+  return rows;
+}
+
+/** The app's one search overlay and its '/' key. Render it once, inside the router. */
+export function SearchHost() {
+  const [initial, setInitial] = useState<string | null>(null);
+  const sightings = useSightings() as SightingLike[];
+  const patches = usePatchRows();
+  const seen = useMemo(() => new Set(sightings.map((s) => s.speciesId)), [sightings]);
+
+  useEffect(() => {
+    opener = (q) => setInitial((open) => open ?? q);
+    // '/' opens it from any screen, as in v1, over a sheet or the welcome card too (Escape then closes search first),
+    // but not while she types in a field. Unlike v1, Ctrl, Alt and Cmd with '/' are left to the browser, the system
+    // and screen readers; a '/' typed with AltGr (Brazilian ABNT2, for one) still opens it.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.defaultPrevented) return;
+      if (e.metaKey || ((e.ctrlKey || e.altKey) && !e.getModifierState?.('AltGraph'))) return;
+      if ((e.target as Element | null)?.closest?.('input, textarea, select, [contenteditable]')) return;
+      e.preventDefault();
+      setInitial((open) => open ?? '');
+    };
+    document.addEventListener('keydown', onKey);
+    return () => { opener = null; document.removeEventListener('keydown', onKey); };
+  }, []);
+
+  if (initial == null) return null;
+  return <DexSearch initial={initial} sightings={sightings} patches={patches} seen={seen} onClose={() => setInitial(null)} />;
+}
+
+function DexSearch({ initial, sightings, patches, seen, onClose }: {
   initial: string;
   sightings: SightingLike[];
+  patches: PatchRow[];
   seen: Set<number>;
   onClose: () => void;
 }) {
@@ -37,13 +87,6 @@ export function DexSearch({ initial, sightings, seen, onClose }: {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const [q, setQ] = useState(initial);
-  const [patches, setPatches] = useState<PatchRow[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    void (db.all('patches') as Promise<PatchRow[]>).then((rows) => { if (alive) setPatches(rows); }).catch(() => {});
-    return () => { alive = false; };
-  }, []);
 
   useEffect(() => {
     const el = ovRef.current;

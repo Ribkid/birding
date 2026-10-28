@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { KINDS, kindsPresent } from '../../lib/data';
 import {
   client,
@@ -11,6 +11,8 @@ import {
 import { schedule } from '../../core/sync.js';
 import { Icon } from '../../components/Icon';
 import { AccountAvatar } from '../me/accountBits';
+import { ConfirmDialog } from '../lists/shared';
+import { toast } from '../../lib/toast';
 import './progress.css';
 
 type Period = 'life' | 'year' | 'month';
@@ -42,31 +44,42 @@ interface Group {
   members: number;
 }
 
-function friendly(error: unknown) {
+function friendly(error: unknown, offline = 'The leaderboard needs a connection.') {
   const message =
     error instanceof Error
       ? error.message
       : error && typeof error === 'object' && 'message' in error
         ? String((error as { message?: unknown }).message ?? '')
         : String(error ?? '');
-  if (/fetch|network/i.test(message)) return 'The leaderboard needs a connection.';
+  if (/fetch|network/i.test(message)) return offline;
   return message || 'Something went wrong. Try again.';
 }
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
+// v1 openGroups, the Me tab's Groups button: the leaderboard, scrolled to its Groups section once the groups have
+// loaded (or failed to, or there is no connection to ask).
+let toGroups = false;
+export function openGroups(go: (to: string) => void) {
+  toGroups = true;
+  go('/leaderboard');
+}
+
 export default function Leaderboard() {
-  const location = useLocation();
   const groupsRef = useRef<HTMLElement>(null);
   const [authReady, setAuthReady] = useState(!configured);
   const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
   const [online, setOnline] = useState(() => navigator.onLine);
+  const [groupsTried, setGroupsTried] = useState(false);
 
   useEffect(() => {
-    if (!new URLSearchParams(location.search).has('groups')) return;
-    const timer = window.setTimeout(() => groupsRef.current?.scrollIntoView({ block: 'start' }), 120);
-    return () => window.clearTimeout(timer);
-  }, [location.search]);
+    if (!toGroups || !authReady || !accountUser || (online && !groupsTried)) return;
+    const id = requestAnimationFrame(() => {
+      toGroups = false;
+      groupsRef.current?.scrollIntoView({ block: 'start' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [authReady, accountUser, online, groupsTried]);
 
   const [period, setPeriod] = useState<Period>('life');
   const [kind, setKind] = useState('');
@@ -81,7 +94,10 @@ export default function Leaderboard() {
   const [joinCode, setJoinCode] = useState('');
   const [groupMsg, setGroupMsg] = useState('');
   const [groupError, setGroupError] = useState(false);
-  const [groupBusy, setGroupBusy] = useState(false);
+  // One group request at a time. The buttons stay enabled (as in v1), because disabling the one she pressed would
+  // drop her focus to the page.
+  const groupBusy = useRef(false);
+  const setGroupBusy = (on: boolean) => { groupBusy.current = on; };
   const [leaveAsk, setLeaveAsk] = useState<Group | null>(null);
 
   useEffect(() => {
@@ -176,6 +192,8 @@ export default function Leaderboard() {
         setGroup((current) => (current && !list.some((g) => g.id === current) ? '' : current));
       } catch {
         /* groups are secondary; the board still works */
+      } finally {
+        if (alive) setGroupsTried(true);
       }
     })();
     return () => {
@@ -193,6 +211,7 @@ export default function Leaderboard() {
       setGroupMsg('Groups need a connection.');
       return false;
     }
+    if (groupBusy.current) return false;
     setGroupBusy(true);
     setGroupError(false);
     setGroupMsg('');
@@ -203,11 +222,11 @@ export default function Leaderboard() {
       const result = (Array.isArray(data) ? data[0] : data) as Group | null;
       await loadGroups();
       if (result?.id) setGroup(result.id);
-      setGroupMsg(message(result));
+      toast(message(result));
       return true;
     } catch (err) {
       setGroupError(true);
-      setGroupMsg(friendly(err));
+      setGroupMsg(friendly(err, 'Groups need a connection.'));
       return false;
     } finally {
       setGroupBusy(false);
@@ -243,11 +262,9 @@ export default function Leaderboard() {
         await navigator.share({ text });
       } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(target.code);
-        setGroupError(false);
-        setGroupMsg('Code copied');
+        toast('Code copied');
       } else {
-        setGroupError(false);
-        setGroupMsg(`Code: ${target.code}`);
+        toast(`Code: ${target.code}`);
       }
     } catch {
       /* sharing was cancelled */
@@ -255,25 +272,23 @@ export default function Leaderboard() {
   };
 
   const leaveGroup = async (target: Group) => {
+    setLeaveAsk(null);
     if (!navigator.onLine) {
-      setGroupError(true);
-      setGroupMsg('Groups need a connection.');
+      toast('Groups need a connection.');
       return;
     }
+    if (groupBusy.current) return;
     setGroupBusy(true);
-    setGroupError(false);
-    setGroupMsg('');
     try {
       const supabase = await client();
       const { error } = await supabase.rpc('leave_group', { p_group: target.id });
       if (error) throw error;
       if (group === target.id) setGroup('');
       await loadGroups();
-      setLeaveAsk(null);
-      setGroupMsg(`Left ${target.name}.`);
+      // v1 says nothing here; the group just goes. Focus has nowhere to return to, so the change is read out.
+      toast(`You left ${target.name}`);
     } catch (err) {
-      setGroupError(true);
-      setGroupMsg(friendly(err));
+      toast(friendly(err, 'Groups need a connection.'));
     } finally {
       setGroupBusy(false);
     }
@@ -494,7 +509,6 @@ export default function Leaderboard() {
                 </button>
                 <button
                   className="btn btn--small btn--quiet"
-                  disabled={groupBusy}
                   onClick={() => setLeaveAsk(g)}
                 >
                   Leave
@@ -504,23 +518,13 @@ export default function Leaderboard() {
           </ul>
         )}
         {leaveAsk && (
-          <div className="empty-inline backup-confirm">
-            <p>
-              Leave <strong>{leaveAsk.name}</strong>? You can join again with its code.
-            </p>
-            <div className="row-start">
-              <button
-                className="btn btn--primary"
-                disabled={groupBusy}
-                onClick={() => void leaveGroup(leaveAsk)}
-              >
-                {groupBusy ? 'Leaving…' : 'Leave group'}
-              </button>
-              <button className="btn" disabled={groupBusy} onClick={() => setLeaveAsk(null)}>
-                Cancel
-              </button>
-            </div>
-          </div>
+          <ConfirmDialog
+            title="Leave this group?"
+            body="You can join again with its code."
+            confirmLabel="Leave group"
+            onCancel={() => setLeaveAsk(null)}
+            onConfirm={() => void leaveGroup(leaveAsk)}
+          />
         )}
         <form className="form lb-form" onSubmit={createGroup}>
           <label className="field">
@@ -534,7 +538,7 @@ export default function Leaderboard() {
               onChange={(event) => setNewGroupName(event.target.value)}
             />
           </label>
-          <button className="btn" disabled={groupBusy}>
+          <button className="btn">
             Create
           </button>
         </form>
@@ -552,12 +556,12 @@ export default function Leaderboard() {
               onChange={(event) => setJoinCode(event.target.value)}
             />
           </label>
-          <button className="btn" disabled={groupBusy}>
+          <button className="btn">
             Join
           </button>
         </form>
-        {groupMsg && (
-          <p className={groupError ? 'form-error' : 'small muted progress-status'} role={groupError ? 'alert' : 'status'}>
+        {groupMsg && groupError && (
+          <p className="form-error" role="alert">
             {groupMsg}
           </p>
         )}

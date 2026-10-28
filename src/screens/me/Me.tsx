@@ -9,11 +9,14 @@ import { learnReady, learnStats } from '../../core/learn.js';
 import {
   getProfile, getMyCloud, signedIn, myName, memberSince, coverSpecies, kindCounts, dayPick, configured, myPublicId,
 } from '../../core/profile.js';
-import { onStatus, syncStatus } from '../../core/account.js';
+import { authSettled, onStatus, syncStatus } from '../../core/account.js';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { CountUp, useStagger } from '../../components/Motion';
 import { applyTint } from '../../lib/look';
+import { toast } from '../../lib/toast';
 import { AccountAvatar as Avatar, useProfile } from './accountBits';
+import { onAccountSheetClosed, openEditProfile, openSignIn, type AccountSheet } from './AccountSheets';
+import { openGroups } from '../progress/Leaderboard';
 import './me.css';
 
 // v1 js/me.js I: bare shapes, so me.css sets each icon's fill, stroke and width (an inline stroke-width would win).
@@ -91,7 +94,7 @@ function JoinCard() {
           <h2 className="me-join-h" id="me-join-h">Back up your dex</h2>
           <p>{n ? `${n} species saved on this phone only.` : 'Sign up free, use it on any phone.'}</p>
         </div>
-        <Link className="btn btn--small me-join-go" to="/me/signup">Sign up</Link>
+        <button type="button" className="btn btn--small me-join-go" data-signup onClick={() => openSignIn('signup')}>Sign up</button>
       </section>
     );
   }
@@ -102,21 +105,26 @@ function JoinCard() {
         <h2 className="me-join-h" id="me-join-h">Keep your dex safe</h2>
         <p className="me-join-p">Sign up free to back up your dex, use it on any phone, join the leaderboard and see friends' profiles.</p>
         {n > 0 && <p className="me-join-note"><svg viewBox="0 0 24 24" aria-hidden="true">{I.cloud}</svg><span>{n} species {n === 1 ? 'is' : 'are'} saved on this phone only.</span></p>}
-        <div className="me-join-acts"><Link className="btn me-join-go" to="/me/signup">Sign up free</Link><Link className="btn me-join-in" to="/me/signin">Sign in</Link></div>
-        <button type="button" className="btn btn--quiet me-join-later" onClick={() => void notNow()}>Not now</button>
+        <div className="me-join-acts"><button type="button" className="btn me-join-go" data-signup onClick={() => openSignIn('signup')}>Sign up free</button><button type="button" className="btn me-join-in" data-signin onClick={() => openSignIn('signin')}>Sign in</button></div>
+        <button type="button" className="btn btn--quiet me-join-later" data-notnow onClick={() => void notNow()}>Not now</button>
       </div>
     </section>
   );
 }
 
-export default function Me() {
+// #/me/signup, #/me/signin and #/me/edit (v1 renderMe(sub)): the address goes back to #/me at once, so closing the
+// sheet doesn't leave a route that reopens it, and the sheet opens over Me once the saved sign-in has been checked (v1
+// drew before it had loaded, so a signed-in cold start was offered Sign in). Kept outside the component, as the route
+// change may draw a new Me.
+let pendingSub: AccountSheet | null = null;
+
+export default function Me({ sub }: { sub?: AccountSheet }) {
   const [, force] = useReducer((x: number) => x + 1, 0);
   useProfile();
   const sightings = useSightings();
   const outings = useOutings();
   const patches = usePatches();
   const navigate = useNavigate();
-  const [profileMsg, setProfileMsg] = useState('');
   useMedia();
   // The hub's sections rise in once per session (v1 renderMe: stagger '.me-sheet > *', key me-hub).
   const root = useStagger<HTMLDivElement>('.me-sheet > *', 'me-hub', 8);
@@ -124,6 +132,26 @@ export default function Me() {
   useEffect(() => {
     void learnReady().then(() => force()).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!sub) return;
+    pendingSub = sub;
+    navigate('/me', { replace: true });
+  }, [sub]);
+  useEffect(() => {
+    const what = pendingSub;
+    if (sub || !what) return;
+    let alive = true;
+    void authSettled.then(() => {
+      if (!alive || pendingSub !== what) return;
+      pendingSub = null;
+      if (what === 'edit') openEditProfile();
+      else if (!signedIn()) openSignIn(what);
+    });
+    return () => { alive = false; };
+  }, [sub]);
+  // v1 rerenderMine: Me draws again once Edit profile or Sign in closes.
+  useEffect(() => onAccountSheetClosed(() => force()), []);
 
   useEffect(() => { const off = onStatus((state: typeof sync) => setSync(state)); return () => { off(); }; }, []);
 
@@ -136,7 +164,7 @@ export default function Me() {
   const counts = kindCounts(seen) as Record<string, number>;
   let learning: Record<string, number> = {};
   try { learning = learnStats() as Record<string, number>; } catch { /* not loaded yet */ }
-  const list = computeBadges(sightings, outings, learning) as { key: string; name: string; desc: string; have: number; need: number; done: boolean }[];
+  const list = computeBadges(sightings, outings, learning) as { id: string; name: string; desc: string; have: number; need: number; done: boolean }[];
   const earned = list.filter((b) => b.done);
   const cover = coverSpecies(sightings, prof.avatarSpeciesId) as Species | null;
   const nPatch = patches.length;
@@ -145,14 +173,14 @@ export default function Me() {
   const [sync, setSync] = useState(syncStatus());
 
   const openProfile = async () => {
-    setProfileMsg('');
-    if (!navigator.onLine) { setProfileMsg('Your public profile needs a connection.'); return; }
+    // v1 openMyProfile: the outcome is a toast, read out through #announce.
+    if (!navigator.onLine) { toast('Your public profile needs a connection.'); return; }
     try {
       const id = await myPublicId();
       if (id) navigate(`/u/${id}`);
-      else setProfileMsg("Your profile hasn't reached the cloud yet. Try again in a minute.");
+      else toast("Your profile hasn't reached the cloud yet. Try again in a minute.");
     } catch {
-      setProfileMsg("Your profile hasn't reached the cloud yet. Try again in a minute.");
+      toast("Your profile hasn't reached the cloud yet. Try again in a minute.");
     }
   };
 
@@ -186,7 +214,7 @@ export default function Me() {
         {pick.map((b) => {
           const p = b.done ? 1 : b.have / b.need;
           return (
-            <li key={b.key} className={`me-medal ${b.done ? 'me-medal--done' : ''}`}>
+            <li key={b.id} className={`me-medal ${b.done ? 'me-medal--done' : ''}`}>
               <Link to="/badges">
                 <span className="me-medal-disc" style={{ '--p': p.toFixed(3) } as React.CSSProperties} aria-hidden="true">
                   <svg viewBox="0 0 64 64"><circle className="me-ring-track" cx="32" cy="32" r="29" /><circle className="me-ring-fill" cx="32" cy="32" r="29" pathLength="100" /></svg>
@@ -246,17 +274,17 @@ export default function Me() {
 
         {u && (
           <nav className="me-acts" aria-label="Your profile">
-            <Link className="me-act me-act--primary" to="/me/edit"><svg viewBox="0 0 24 24" aria-hidden="true">{I.edit}</svg><span>Edit profile</span></Link>
+            <button type="button" className="me-act me-act--primary" data-edit onClick={openEditProfile}><svg viewBox="0 0 24 24" aria-hidden="true">{I.edit}</svg><span>Edit profile</span></button>
+            {/* Until her public id is known, v1's link stays on #/me and finds it first (openMyProfile). */}
             {m?.publicId ? (
               <Link className="me-act" to={`/u/${m.publicId}`}><svg viewBox="0 0 24 24" aria-hidden="true">{I.eye}</svg><span>View my public profile</span></Link>
             ) : (
-              <button type="button" className="me-act" onClick={() => void openProfile()}><svg viewBox="0 0 24 24" aria-hidden="true">{I.eye}</svg><span>View my public profile</span></button>
+              <Link className="me-act" to="/me" data-public onClick={(e) => { e.preventDefault(); void openProfile(); }}><svg viewBox="0 0 24 24" aria-hidden="true">{I.eye}</svg><span>View my public profile</span></Link>
             )}
             <Link className="me-act" to="/leaderboard"><svg viewBox="0 0 24 24" aria-hidden="true">{I.trophy}</svg><span>Leaderboard</span></Link>
-            <Link className="me-act" to="/leaderboard?groups=1"><svg viewBox="0 0 24 24" aria-hidden="true">{I.people}</svg><span>Groups</span></Link>
+            <button type="button" className="me-act" data-groups onClick={() => openGroups(navigate)}><svg viewBox="0 0 24 24" aria-hidden="true">{I.people}</svg><span>Groups</span></button>
           </nav>
         )}
-        {profileMsg && <p className="small muted" role="status">{profileMsg}</p>}
 
         <section className="me-sec" aria-labelledby="me-lists-h">
           <div className="me-sec-h"><h2 id="me-lists-h">My lists</h2><Link to="/lists">Open lists</Link></div>

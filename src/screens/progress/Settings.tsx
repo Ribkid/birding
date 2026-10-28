@@ -194,7 +194,7 @@ function ReadyCard() {
           const r = field[key];
           const cls = r?.busy ? ' ready-row--busy' : r ? (r.ok ? ' ready-row--ok' : ' ready-row--todo') : '';
           return (
-            <li key={key} className={`ready-row${cls}`}>
+            <li key={key} className={`ready-row${cls}`} data-field={key}>
               <strong className="ready-name">{label}</strong>
               <div className="ready-act">
                 {!r ? <span className="ready-chip ready-chip--wait">Checking</span>
