@@ -1,140 +1,65 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+// #/add: the Log a sighting form as a page, for deep links and the Scan hand-off. Everywhere else the + sheet, the
+// species page and the dex open the same form in a sheet over the current screen, as v1 did (SightingSheet.tsx).
+import { useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Icon } from '../../components/Icon';
-import { db } from '../../core/db.js';
-import { resizeImage } from '../../core/profile.js';
-import { takePending } from '../field/scanHandoff';
-import {
-  PhotoField,
-  SightingFields,
-  buildSighting,
-  emptyDraft,
-  getPosition,
-  saveSighting,
-  useObjectUrl,
-  type SightingDraft,
-} from './shared';
+import { SightingForm } from '../../components/SightingSheet';
+import { byId } from '../../lib/data';
+import { toast } from '../../lib/toast';
+import { takePending, type PendingScan } from '../field/scanHandoff';
+import { announceSaved, useLogData } from './shared';
 import './lists.css';
+
+// The scan hand-off is taken once per visit to this page, even if React draws the page twice.
+let claimed: { key: string; value: PendingScan | null } | null = null;
+function claimScan(key: string, fromScan: boolean): PendingScan | null {
+  if (claimed?.key === key) return claimed.value;
+  claimed = { key, value: fromScan ? takePending() : null };
+  return claimed.value;
+}
 
 export default function AddSighting() {
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
-  const fromScan = useRef(false);
-  const [draft, setDraft] = useState<SightingDraft>(() => {
-    const d = emptyDraft();
-    const species = Number(params.get('species'));
-    if (species && Number.isFinite(species)) d.speciesId = species;
-    return d;
-  });
-  const [error, setError] = useState('');
-  const [status, setStatus] = useState('No location yet');
-  const [locating, setLocating] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
-  const photoUrl = useObjectUrl(photoBlob);
-
-  // v1 app.js: a picked photo is resized (1600 px, JPEG 0.82) before it is kept.
-  const pickPhoto = async (file: File) => {
-    setError('');
-    const blob = await resizeImage(file);
-    if (!blob) {
-      setError("That file couldn't be opened as a photo.");
-      return;
-    }
-    setPhotoBlob(blob);
+  const data = useLogData();
+  const [scan] = useState(() => claimScan(location.key, !!(location.state as { scan?: boolean } | null)?.scan));
+  const asked = Number(params.get('species'));
+  const speciesId = asked && byId.has(asked) ? asked : null;
+  const sp = speciesId != null ? byId.get(speciesId) : undefined;
+  // Opened from inside the app (the Scan result, a link): back to where she was, as v1's sheet left her there.
+  // Opened cold from a link: on to the species page, or the dex.
+  const inApp = location.key !== 'default';
+  const leave = (logged: number | null = speciesId) => {
+    if (inApp) navigate(-1);
+    else navigate(logged != null ? `/bird/${logged}` : '/dex', { replace: true });
   };
-
-  const locate = async () => {
-    setLocating(true);
-    setStatus('Finding you…');
-    try {
-      const pos = await getPosition();
-      setDraft((current) => ({
-        ...current,
-        lat: pos.lat.toFixed(6),
-        lng: pos.lng.toFixed(6),
-        acc: pos.acc,
-      }));
-      setStatus(`${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)} (±${pos.acc} m)`);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : 'Could not get your location.');
-    } finally {
-      setLocating(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!location.state?.scan) return;
-    const pending = takePending();
-    if (!pending) return;
-    fromScan.current = true;
-    setPhotoBlob(pending.blob);
-    setDraft((current) => ({ ...current, note: pending.notes || current.note }));
-    if (pending.autoGps) void locate();
-    // Run once when the scan hand-off opens this form.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const cancel = () => {
-    if (fromScan.current) navigate(-1);
-    else navigate('/lists');
-  };
-
-  const save = async (event: FormEvent) => {
-    event.preventDefault();
-    setError('');
-    const { rec, error: problem } = buildSighting(draft);
-    if (!rec) {
-      setError(problem ?? 'That sighting is not complete.');
-      return;
-    }
-    setSaving(true);
-    let photoId: number | null = null;
-    try {
-      if (photoBlob) photoId = (await db.add('photos', { blob: photoBlob, at: Date.now() })) as number;
-      await saveSighting(photoId != null ? { ...rec, photoId } : rec);
-      navigate('/lists');
-    } catch {
-      if (photoId != null) await db.del('photos', photoId).catch(() => {});
-      setError('The sighting could not be saved. Try again.');
-      setSaving(false);
-    }
-  };
+  const backLabel = scan ? 'Back to the scan result' : inApp ? 'Back' : sp ? `Back to the ${sp.name}` : 'Back to the dex';
 
   return (
     <>
       <header className="page-head page-head--back">
-        <button type="button" className="iconbtn" aria-label={fromScan.current ? 'Back to the scan result' : 'Back to lists'} onClick={cancel}>
+        <button type="button" className="iconbtn" aria-label={backLabel} onClick={() => leave()}>
           <Icon name="back" />
         </button>
         <h1>Log a sighting</h1>
       </header>
-
-      <p className="muted small pad-x">
-        Pick the species, then add when and where you saw it. Count, place and coordinates are
-        optional.
-      </p>
-
-      <form className="form pad" onSubmit={save} noValidate>
-        <SightingFields
-          draft={draft}
-          onChange={setDraft}
-          status={status}
-          onLocate={locate}
-          locating={locating}
-          error={error}
-          photo={<PhotoField url={photoUrl} onPick={(file) => void pickPhoto(file)} onRemove={() => setPhotoBlob(null)} />}
+      {data && (
+        <SightingForm
+          className="pad log-page"
+          data={data}
+          speciesId={speciesId}
+          autoGps={!!scan?.autoGps}
+          photoBlob={scan?.blob ?? null}
+          notes={scan?.notes ?? ''}
+          onCancel={() => leave()}
+          onSaved={(rec, outcome) => {
+            leave(rec.speciesId ?? null);
+            announceSaved(rec, outcome, { afterNav: true });
+            if (!outcome.isNew) toast(`${byId.get(rec.speciesId as number)?.name ?? 'Sighting'} saved`);
+          }}
         />
-        <div className="row-end">
-          <button type="button" className="btn" onClick={cancel}>
-            Cancel
-          </button>
-          <button type="submit" className="btn btn--primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save sighting'}
-          </button>
-        </div>
-      </form>
+      )}
     </>
   );
 }

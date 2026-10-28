@@ -5,7 +5,7 @@ import {
   type MouseEvent, type PointerEvent, type ReactNode,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   ANIMALS, ANIMAL_KINDS, GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, inSeason, kindsPresent, ofKind,
   pluralFor, type Species,
@@ -27,6 +27,7 @@ import { onStatus, syncStatus } from '../core/account.js';
 import { avatarUrl, getMyCloud, getProfile, myName, signedIn } from '../core/profile.js';
 import { currentStreak, dayStr, dueCards, getDaily, getLearn, learnReady, monthName } from '../core/learn.js';
 import { DexSearch } from './DexSearch';
+import { openSightingSheet } from '../components/SightingSheet';
 import { ICON, Photo, Ring } from './dexParts';
 import { promptInstall, useCanInstall } from '../lib/install';
 import { announce } from '../lib/toast';
@@ -180,7 +181,6 @@ function LearnTeaser() {
 }
 
 export default function Dex() {
-  const navigate = useNavigate();
   const [, force] = useReducer((n: number) => n + 1, 0);
   useMedia();
   const sightings = useSightings();
@@ -347,7 +347,7 @@ export default function Dex() {
   const reset = () => redraw({ q: '', show: 'all', group: '', habitat: '', rarity: '', season: false });
   const openSearch = (initial = '') => setSearch(initial);
 
-  // Press and hold a tile to log it fast.
+  // Press and hold a tile to log it fast: v1's Log a sighting sheet opens over the dex and finds her (GPS).
   const cancelPress = () => { clearTimeout(press.current.timer); press.current.timer = 0; };
   const onPointerDown = (e: PointerEvent) => {
     const t = (e.target as Element).closest<HTMLElement>('[data-tile]');
@@ -359,7 +359,7 @@ export default function Dex() {
       suppressClick.current = true;
       setTimeout(() => { suppressClick.current = false; }, 800);
       if ((navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive) navigator.vibrate?.(25);
-      navigate(`/add?species=${t.dataset.tile}`);
+      openSightingSheet({ speciesId: Number(t.dataset.tile), autoGps: true });
     }, 520);
   };
   const onPointerMove = (e: PointerEvent) => {

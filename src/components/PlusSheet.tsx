@@ -4,6 +4,7 @@ import { db } from '../core/db.js';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
 import { LocationPicker, type PickedPlace } from './LocationPicker';
+import { openSightingSheet } from './SightingSheet';
 import { knownPlace, myPlaces, nearestPlaceName, outingPlaceChips, reverseGeocode } from '../lib/places';
 import { toast } from '../lib/toast';
 import {
@@ -142,7 +143,8 @@ export function PlusSheet({ open, onClose }: { open: boolean; onClose: () => voi
         <>
           <h2 className="sheet-title" id="plus-sheet-h">Add a sighting</h2>
           <div className="plus-grid">
-            <button type="button" className="plus-tile plus-tile--main" onClick={() => closeAnd('/add')}>
+            {/* v1: the Log a sighting sheet replaces this one, over the current screen. */}
+            <button type="button" className="plus-tile plus-tile--main" onClick={() => { onClose(); openSightingSheet(); }}>
               <span className="plus-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{pencil}</svg></span>
               <strong>Log one sighting</strong><span>With photo, place and notes</span>
             </button>

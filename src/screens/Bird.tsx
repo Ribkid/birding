@@ -22,7 +22,7 @@ import { Band, Pips } from '../components/SpeciesImage';
 import { CallsSection, PauseIcon, PlayIcon, hasCalls, useCallPlayer } from './BirdCalls';
 import { CardOverlay, askMotion, shareCard, type CardInfo } from './BirdCard';
 import { DexSearch } from './DexSearch';
-import { SightingEditSheet } from './SightingEditSheet';
+import { openSightingSheet } from '../components/SightingSheet';
 import { toast } from '../lib/toast';
 import type { SightingRow } from './lists/shared';
 import './species.css';
@@ -164,8 +164,6 @@ function SpeciesPage({ sp }: { sp: Species }) {
   const [, setTick] = useState(0);
   const sightings = useSightings() as SightingRow[];
   const [det, setDet] = useState<Details | null>(null);
-  const [editing, setEditing] = useState<SightingRow | null>(null);
-  const [logging, setLogging] = useState(false);
   const [searching, setSearching] = useState(false);
   const [carding, setCarding] = useState(false);
   const [hero, setHero] = useState<'photo' | 'model'>('photo');
@@ -400,7 +398,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
             : mastery > 0 ? <span className="mastery"><i style={{ '--p': Math.round(mastery * 100) } as CSSProperties} aria-hidden="true" />Learning</span> : null}</span>
         </div>
         <div className="bird-actions">
-          <button type="button" className="btn btn--primary btn--grow" ref={logRef} data-log="" onClick={() => setLogging(true)}>{seen ? 'Log another sighting' : 'Log a sighting'}</button>
+          <button type="button" className="btn btn--primary btn--grow" ref={logRef} data-log="" onClick={() => openSightingSheet({ speciesId: sp.id })}>{seen ? 'Log another sighting' : 'Log a sighting'}</button>
           {seen && <button type="button" className="btn btn--share" data-sharecard="" aria-label="Share card" onClick={() => void shareCard(sp, cardInfo)}><ShareIcon /></button>}
         </div>
         {seen && <p className="seen-line">Seen {plural(hist.length, 'time')}. First on {fmtDate(first.date)}{first.place ? ` at ${first.place}` : ''}.</p>}
@@ -500,7 +498,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
             <ul className="mine-strip">
               {snaps.map((h) => (
                 <li key={h.id}>
-                  <button type="button" className="mine-ph" data-edit={h.id} aria-label={`Your photo from ${fmtDate(h.date)}`} onClick={() => setEditing(h)}>
+                  <button type="button" className="mine-ph" data-edit={h.id} aria-label={`Your photo from ${fmtDate(h.date)}`} onClick={() => openSightingSheet({ sighting: h })}>
                     <MinePhoto photoId={h.photoId as number} />
                   </button>
                 </li>
@@ -511,7 +509,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
             <ul className="hist">
               {hist.map((h) => (
                 <li key={h.id}>
-                  <button type="button" className="hist-row" data-edit={h.id} onClick={() => setEditing(h)}>
+                  <button type="button" className="hist-row" data-edit={h.id} onClick={() => openSightingSheet({ sighting: h })}>
                     <span className="hist-main"><strong>{fmtDate(h.date)}</strong>{h.time ? <> <span className="muted">{h.time}</span></> : null}<br /><span className="muted">{h.place || 'No place name'}</span></span>
                     {' '}<span className="hist-n">{h.count ? `×${h.count}` : 'X'}{h.heard ? <><br /><span className="muted small">heard</span></> : null}</span>
                   </button>
@@ -537,11 +535,9 @@ function SpeciesPage({ sp }: { sp: Species }) {
 
       <div className={`logbar${barOn ? ' logbar--on' : ''}`} data-logbar="" inert={!barOn}>
         <Band sp={sp} seen={seen} /><strong>{sp.name}</strong>{' '}
-        <button type="button" className="btn btn--primary btn--small" data-log="" aria-label={`Log a sighting of the ${sp.name}`} onClick={() => setLogging(true)}>Log it</button>
+        <button type="button" className="btn btn--primary btn--small" data-log="" aria-label={`Log a sighting of the ${sp.name}`} onClick={() => openSightingSheet({ speciesId: sp.id })}>Log it</button>
       </div>
 
-      {logging && <SightingEditSheet speciesId={sp.id} onClose={() => setLogging(false)} />}
-      {editing && <SightingEditSheet sighting={editing} onClose={() => setEditing(null)} />}
       {carding && <CardOverlay sp={sp} info={cardInfo} onClose={() => setCarding(false)} />}
       {searching && <DexSearch initial="" sightings={sightings} seen={seenIds} onClose={() => setSearching(false)} />}
     </article>
