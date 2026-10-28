@@ -17,6 +17,19 @@ function Late({ ms }: { ms: number }) {
   return ready ? <h1>Learn</h1> : <div aria-busy="true" />;
 }
 
+/** Draws a placeholder heading, then replaces it with the real one (a new element). */
+function Swap() {
+  const [real, setReal] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setReal(true), 60); return () => clearTimeout(t); }, []);
+  return real ? <h1 key="real">Stats</h1> : <h1 key="wait">Loading</h1>;
+}
+
+/** A control that goes away when pressed (an outing's search result once it is added). */
+function Gone() {
+  const [shown, setShown] = useState(true);
+  return shown ? <button type="button" onClick={() => setShown(false)}>Add</button> : null;
+}
+
 function Shell() {
   return (
     <>
@@ -33,6 +46,8 @@ const setup = (late = 50) => {
       { path: 'dex', element: <><h1 className="wordmark">Dex</h1><input aria-label="Search" /></> },
       { path: 'stats', element: <h1>Stats</h1> },
       { path: 'learn', element: <Late ms={late} /> },
+      { path: 'swap', element: <Swap /> },
+      { path: 'tally', element: <><h1>Outing</h1><Gone /></> },
     ] },
   ], { initialEntries: ['/dex'] });
   render(<RouterProvider router={router} />);
@@ -61,5 +76,26 @@ describe('RouteFocus', () => {
     await act(() => wait(150));
     expect(document.activeElement?.tagName).toBe('H1');
     expect(document.activeElement?.textContent).toBe('Learn');
+  });
+
+  it('follows the heading when the screen swaps it for another', async () => {
+    const router = setup();
+    await act(() => router.navigate('/swap'));
+    await act(frame);
+    expect(document.activeElement?.textContent).toBe('Loading');
+    await act(() => wait(120));
+    expect(document.activeElement?.textContent).toBe('Stats');
+  });
+
+  it('leaves focus to the screen once she has moved it, even if that control goes away', async () => {
+    const router = setup();
+    await act(() => router.navigate('/tally'));
+    await act(frame);
+    expect(document.activeElement?.textContent).toBe('Outing');
+    const add = document.querySelector('#view button') as HTMLButtonElement;
+    add.focus();
+    await act(async () => { add.click(); });
+    await act(() => wait(50));
+    expect(document.activeElement).toBe(document.body);
   });
 });
