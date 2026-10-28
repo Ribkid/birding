@@ -56,6 +56,11 @@
 .shell-ghost { visibility: hidden; }
 [data-shell] .dex-sheet { min-height: 40vh; }
 .dex-cap-ring { --kc: var(--seen); width: 34px; height: 34px; }
+/* The capsule's quiet second line (photographed, heard only) fits beside the 34px ring, so the capsule keeps the
+   static shell's height whether or not the line is there and the wordmark above it never moves. */
+.dex-cap-txt { display: grid; align-content: center; min-height: 34px; }
+.dex-cap-txt > span:first-child { line-height: 1; }
+.dex-cap-sub { margin-top: 1px; font-size: var(--fs-1); font-weight: 600; line-height: 1; color: var(--ink-2); white-space: nowrap; }
 
 /* Rings: a track and an arc in the kind colour, filled from empty on the first draw of a session. */
 .ring { flex: none; transform: rotate(-90deg); }
@@ -165,6 +170,48 @@
 .dex-tools .iconbtn--tool { border-radius: 50%; }
 .dex-sheet .dex-group-h { position: static; background: none; }
 .dex-sheet .chips--dex { padding-top: 8px; }
+
+/* Tiers: heard only and photographed (lib/tiers.ts). Shape tells them apart, not colour alone, so they survive glare
+   and greyscale: a seen tile has a solid ring and a filled tick; a heard-only one a dashed ring and a hollow ear disc
+   in the tick's corner; her own photo a frosted camera stamp bottom left. One mark per corner, two at most. */
+.tile.tile--heard .tile-img { box-shadow: var(--shadow-card); outline: 3px dashed var(--seen); outline-offset: 0; }
+.tile.tile--heard .tile-img::before { content: none; }
+@media (hover: hover) { .tile.tile--heard:hover .tile-img { box-shadow: var(--shadow-float); } }
+.tile-mark { position: absolute; z-index: 2; display: grid; place-items: center; border-radius: 50%; pointer-events: none; }
+.tile-mark svg { display: block; }
+.tile-ear {
+  top: 6px; right: 6px; width: 22px; height: 22px; background: var(--surface); color: var(--seen);
+  box-shadow: inset 0 0 0 1.5px var(--seen), 0 1px 3px rgba(0, 0, 0, .35);
+}
+.tile-ear svg { width: 15px; height: 15px; }
+.tile-stamp {
+  left: 6px; bottom: 6px; width: 26px; height: 26px; color: #fff;
+  background: rgba(12, 16, 22, .55); -webkit-backdrop-filter: blur(8px) saturate(1.4); backdrop-filter: blur(8px) saturate(1.4);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 45%, transparent), 0 1px 3px rgba(0, 0, 0, .3);
+}
+.tile-stamp svg { width: 15px; height: 15px; }
+/* Other kinds carry a colour strip along the photo's foot; the stamp sits just above it. */
+.tile:not(.kind--bird) .tile-stamp { bottom: 10px; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .tile-stamp { background: rgba(12, 16, 22, .74); } }
+@media (prefers-reduced-transparency: reduce) { .tile-stamp { background: rgba(12, 16, 22, .82); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+:root[data-theme="outdoor"] .tile-stamp { background: #121821; -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* Rows: the same dashed ring on the thumbnail, and the ear and camera hung just under the band, out of the flow,
+   so the band stays centred on the row and no name loses width to them. */
+.row .row-thumb.row-thumb--heard { box-shadow: none; outline: 2.5px dashed var(--seen); outline-offset: 0; }
+.row-band { position: relative; flex: none; display: inline-flex; }
+.row-marks { position: absolute; top: calc(100% + 3px); right: 0; display: flex; gap: 3px; }
+.row-mark { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; }
+.row-mark svg { width: 13px; height: 13px; }
+.row-mark--ear { color: var(--seen); box-shadow: inset 0 0 0 1.5px var(--seen); }
+.row-mark--photo { color: var(--ink-2); }
+.row-mark--photo svg { width: 16px; height: 16px; }
+/* The Heard only and No photo yet chips carry the same glyphs as the marks they filter for, and their count. Each
+   chip holds its screen-reader comma itself (position: relative), so a chip scrolled out of the row can't widen the
+   page. */
+.chip--tier { position: relative; gap: 5px; padding-left: 12px; }
+.chip--tier > svg { width: 16px; height: 16px; flex: none; }
+.chip-n { font-variant-numeric: tabular-nums; opacity: .8; }
+.chip--on .chip-n { opacity: .9; }
 
 /* Groups further down skip layout and paint until they come near the screen; their height is estimated inline. */
 .dex-group--later { content-visibility: auto; }
