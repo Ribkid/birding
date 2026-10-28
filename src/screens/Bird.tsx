@@ -6,9 +6,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, type Species } from '../lib/data';
-import { useMedia, useSightings } from '../lib/hooks';
+import { mediaSettled, useMedia, useSightings } from '../lib/hooks';
 import { useSeqReady } from '../lib/seq';
 import { lookAfterDraw } from '../lib/look';
+import { heroShown, type Drawn } from './heroShown';
 import { db } from '../core/db.js';
 import { galleryFor, infoFor, loadExtras } from '../core/gallery.js';
 import { details, loadCallPack, photoFor, sized } from '../core/media.js';
@@ -256,16 +257,16 @@ function SpeciesPage({ sp }: { sp: Species }) {
     return () => io.disconnect();
   }, [hasMonths, grown]);
 
-  // The Wikipedia photo can arrive after the gallery photos are on screen. Until she has touched the gallery, it
-  // stays on the first photo rather than following the old first one along (scroll snap would keep that in view).
-  // Once she has, the list is kept as it is, as v1 keeps the gallery's slide (nothing is redrawn mid-use).
+  // The photos known when the page is drawn, drawn again when gallery.json arrives (heroShown.ts). Drawn again, the
+  // gallery stays on the first photo rather than following the old first one along (scroll snap would keep that in
+  // view); once she has touched it, it is kept as it is.
   const touched = useRef(false);
-  const kept = useRef<Photo[] | null>(null);
-  const live = heroPhotos(sp, det);
-  const photos = touched.current && kept.current?.length ? kept.current.map((k) => live.find((l) => l.src === k.src) || k) : live;
-  kept.current = photos;
+  const kept = useRef<Drawn<Photo> | null>(null);
+  kept.current = heroShown(kept.current, heroPhotos(sp, det), touched.current);
+  const photos = kept.current.photos;
   const n = photos.length;
-  // The tint comes from the first photo. If it arrives after the page (the photo index loads late), take it again.
+  // The tint comes from the first photo. If that changes after the page is drawn (gallery.json arriving, or a photo
+  // for a hero that had none), take it again.
   const heroSrc = photos[0]?.src || '';
   const firstSrc = useRef(heroSrc);
   useEffect(() => {
@@ -359,7 +360,11 @@ function SpeciesPage({ sp }: { sp: Species }) {
               <figure className="slide" key={ph.src} data-hero-frame={i ? undefined : ''}>
                 <WholeImg src={isAwake(i) ? ph.src : undefined} alt={`${sp.name}${n > 1 ? `, photo ${i + 1} of ${n}` : ''}`} className="bird-photo" eager={i === 0} />
               </figure>
-            )) : (
+            )) : !mediaSettled() ? (
+              // The saved photo index or gallery.json isn't read yet: the photo is on its way, so the frame waits as
+              // a loading photo does, rather than showing the no-photo block first.
+              <figure className="slide" data-hero-frame=""><WholeImg alt={sp.name} className="bird-photo" eager /></figure>
+            ) : (
               <figure className="slide" data-hero-frame=""><span className="bird-photo img-missing" role="img" aria-label={sp.name} /></figure>
             )}
           </div>
