@@ -126,6 +126,39 @@ function countKindTabs(view: HTMLElement) {
   dexCounts = now;
 }
 
+/**
+ * After a long press has opened the Log a sighting sheet, the click that lifting that finger (or mouse button) makes is
+ * dropped wherever it lands, with the mousedown a touch sends before it, which would move focus. The sheet slides up
+ * under the finger, so otherwise that click can tick Heard only or press Change. v1 only dropped it on the tile.
+ */
+function dropReleaseClick(pointerId: number) {
+  const opts = { capture: true } as const;
+  let stop = 0;
+  let released = false;
+  const off = () => {
+    clearTimeout(stop);
+    document.removeEventListener('click', drop, opts);
+    document.removeEventListener('mousedown', press, opts);
+    document.removeEventListener('pointerup', up, opts);
+    document.removeEventListener('pointercancel', up, opts);
+  };
+  const drop = (e: globalThis.MouseEvent) => { e.preventDefault(); e.stopPropagation(); off(); };
+  const press = (e: globalThis.MouseEvent) => { if (released) { e.preventDefault(); e.stopPropagation(); } };
+  const up = (e: globalThis.PointerEvent) => {
+    if (e.pointerId !== pointerId) return;
+    if (e.type === 'pointercancel') { off(); return; }
+    // The click follows the release at once; a release that makes none leaves nothing waiting.
+    released = true;
+    clearTimeout(stop);
+    stop = window.setTimeout(off, 400);
+  };
+  document.addEventListener('click', drop, opts);
+  document.addEventListener('mousedown', press, opts);
+  document.addEventListener('pointerup', up, opts);
+  document.addEventListener('pointercancel', up, opts);
+  stop = window.setTimeout(off, 10000);
+}
+
 /** v1 accountChip: her avatar and sync dot, linking to Me, once she is signed in. */
 function AccountChip() {
   const [, force] = useReducer((n: number) => n + 1, 0);
@@ -353,11 +386,13 @@ export default function Dex() {
     const t = (e.target as Element).closest<HTMLElement>('[data-tile]');
     if (!t) return;
     press.current.x = e.clientX; press.current.y = e.clientY;
+    const pointerId = e.pointerId;
     clearTimeout(press.current.timer);
     press.current.timer = window.setTimeout(() => {
       press.current.timer = 0;
       suppressClick.current = true;
       setTimeout(() => { suppressClick.current = false; }, 800);
+      dropReleaseClick(pointerId);
       if ((navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive) navigator.vibrate?.(25);
       openSightingSheet({ speciesId: Number(t.dataset.tile), autoGps: true });
     }, 520);
