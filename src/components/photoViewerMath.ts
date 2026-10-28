@@ -109,12 +109,17 @@ export function photoRect(fit: Rect, z: Zoom, W: number, H: number): Rect {
   return { x: W / 2 + z.x - w / 2, y: H / 2 + z.y - h / 2, w, h };
 }
 
-/** The photo a swipe lands on: past 18% of the width or a flick moves one photo; the ends hold. */
-export function swipeTarget(index: number, count: number, dx: number, vx: number, W: number) {
+/**
+ * The photo a swipe lands on: past 18% of the width or a flick moves one photo on, in her direction, from `index`
+ * (the photo on show, or the one the track was sliding to when her finger caught it); a shorter one settles on the
+ * photo nearest to where the track is (`off`, from index's rest: dx, or more if she caught it part way); the ends
+ * hold.
+ */
+export function swipeTarget(index: number, count: number, dx: number, vx: number, W: number, off = dx) {
   const far = Math.abs(dx) > W * 0.18;
   const flick = Math.abs(vx) > 0.35 && Math.sign(vx) === Math.sign(dx) && Math.abs(dx) > 8;
-  if (!far && !flick) return index;
-  return clamp(index + (dx < 0 ? 1 : -1), 0, Math.max(0, count - 1));
+  const to = far || flick ? index + (dx < 0 ? 1 : -1) : index + Math.round(-off / (W + GAP));
+  return clamp(to, 0, Math.max(0, count - 1));
 }
 
 /** A vertical drag closes past 100 px, or on a flick in the direction she is dragging. */

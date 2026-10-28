@@ -267,6 +267,11 @@ function SpeciesPage({ sp }: { sp: Species }) {
     }
     return el;
   };
+  // The name, scrim and glass controls drawn over the hero step aside while its photo is out in the viewer.
+  const heroCover = () => {
+    const box = galRef.current?.closest('[data-hero-box]');
+    return box ? [...box.querySelectorAll(':scope > :is(.hero-scrim, .hero-cap, .iconbtn--float, .hero-tabs)')] : [];
+  };
   const onGalleryClick = (e: MouseEvent<HTMLDivElement>) => {
     const g = galRef.current, fig = (e.target as Element).closest('.slide');
     if (!g || !fig || !n) return;
@@ -536,6 +541,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
           onIndex={(i) => { if (photos[i]) setViewing(photos[i].src); }}
           onClose={() => setViewing(null)}
           origin={slideAt}
+          cover={heroCover}
           returnTo={galRef.current}
         />
       )}

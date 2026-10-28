@@ -44,6 +44,9 @@ export interface PhotoViewerProps {
   /** The frame on the page that shows photo `index`: its rect is where the photo grows from and shrinks back into.
    *  Called when the viewer opens and again when it closes, so the caller can bring that photo into view first. */
   origin?: (index: number) => Element | null | undefined;
+  /** What the page draws over those frames (a name, a scrim, controls). It steps aside while the photo is out of
+   *  its frame and is back once the photo has landed, so it never blinks over the photo as it flies. */
+  cover?: () => Element[];
   /** Where focus goes back to on close (by default, whatever had focus when it opened). */
   returnTo?: Element | null;
 }
@@ -52,12 +55,20 @@ export const viewerLabel = (i: number, n: number, name: string) => `Photo ${i + 
 
 let uid = 0;
 
-export function PhotoViewer({ photos, index, onIndex, onClose, name, origin, returnTo }: PhotoViewerProps) {
+export function PhotoViewer({ photos, index, onIndex, onClose, name, origin, cover, returnTo }: PhotoViewerProps) {
   const n = photos.length;
   const i = clamp(index, 0, Math.max(0, n - 1));
   const rootRef = useRef<HTMLDivElement>(null);
-  const live = useRef<Live>({ index: i, n, onIndex, onClose, origin });
-  live.current = { index: i, n, onIndex, onClose, origin };
+  // The copy of the photo she opened that its frame on the page was showing (the small one while the large one is on
+  // its way, or with no signal). It stays underneath until the viewer's own copy is in, so the photo she tapped
+  // never leaves the screen for an empty stage.
+  const [standIn, setStandIn] = useState<{ src: string; shown: string } | null>(null);
+  const showing = (k: number, shown: string) => {
+    const ph = photos[k];
+    if (ph && shown && shown !== ph.src) setStandIn({ src: ph.src, shown });
+  };
+  const live = useRef<Live>({ index: i, n, onIndex, onClose, origin, cover, showing });
+  live.current = { index: i, n, onIndex, onClose, origin, cover, showing };
   const ctl = useRef<Controller | null>(null);
   const [statusId] = useState(() => `pv-status-${++uid}`);
 
@@ -102,7 +113,7 @@ export function PhotoViewer({ photos, index, onIndex, onClose, name, origin, ret
               aria-hidden={k === i ? undefined : true}
             >
               <div className="pv-zoom">
-                {Math.abs(k - i) <= 1 ? <ViewerImage ph={ph} alt={viewerLabel(k, n, name)} /> : null}
+                {Math.abs(k - i) <= 1 ? <ViewerImage ph={ph} alt={viewerLabel(k, n, name)} standIn={standIn?.src === ph.src ? standIn.shown : null} /> : null}
               </div>
             </div>
           ))}
@@ -126,10 +137,11 @@ export function PhotoViewer({ photos, index, onIndex, onClose, name, origin, ret
 type Look = 'wait' | 'in' | 'small' | 'missing';
 
 /**
- * One photo, drawn whole. The small copy (if any) shows soft underneath while the large one loads; if the large one
- * can't load the small one is kept; if neither can, the striped no-photo block shows, as on the page.
+ * One photo, drawn whole. The small copy (if any, or the copy the page was showing) shows soft underneath while the
+ * large one loads; if the large one can't load the small one is kept; if neither can, the striped no-photo block
+ * shows, as on the page.
  */
-function ViewerImage({ ph, alt }: { ph: ViewerPhoto; alt: string }) {
+function ViewerImage({ ph, alt, standIn }: { ph: ViewerPhoto; alt: string; standIn?: string | null }) {
   const [look, setLook] = useState<Look>(() => (shownPhotos.has(ph.src) ? 'in' : 'wait'));
   const ref = useRef<HTMLImageElement>(null);
   useLayoutEffect(() => {
@@ -140,7 +152,7 @@ function ViewerImage({ ph, alt }: { ph: ViewerPhoto; alt: string }) {
     }
   }, [look, ph.src]);
   if (look === 'missing') return <span className="pv-missing img-missing" role="img" aria-label={alt} />;
-  const small = ph.small && ph.small !== ph.src ? ph.small : null;
+  const small = [ph.small, standIn].find((s) => s && s !== ph.src) || null;
   return (
     <>
       {look === 'wait' ? <span className="pv-loading" aria-hidden="true" /> : null}
@@ -173,6 +185,9 @@ interface Live {
   onIndex: (i: number) => void;
   onClose: () => void;
   origin?: (i: number) => Element | null | undefined;
+  cover?: () => Element[];
+  /** The page's frame for photo i was showing this copy of it. */
+  showing: (i: number, shown: string) => void;
 }
 interface Controller {
   open: () => void;
@@ -187,6 +202,8 @@ interface Gesture {
   m0?: { x: number; y: number }; d0?: number; m?: { x: number; y: number };
   samples: [number, number, number][];
   dx: number; dy: number;
+  /** Where the track was, from the rest of the photo on show, when her finger caught it (0 if it was at rest). */
+  off0: number;
 }
 
 const EASE_OUT = 'cubic-bezier(.2, .8, .2, 1)';
@@ -229,16 +246,21 @@ function visibleRect(el: Element): Rect | null {
   return clip;
 }
 
-/** Where a frame on the page draws a photo of this shape: the whole photo's rect, and the part the frame shows. */
-function drawnIn(frame: Element, nat: { w: number; h: number } | null) {
-  const imgs = [...frame.querySelectorAll('img')].reverse();
-  // The photo on show (the large one, or the small copy under it while the large one loads), for the flight's image;
-  // the top one sets how the frame draws it (its box, object-fit and object-position).
-  const shownImg = imgs.find((im) => {
+/** The copy of the photo a frame on the page shows: the large one, or the small one under it while it loads. */
+function shownIn(frame: Element) {
+  return [...frame.querySelectorAll('img')].reverse().find((im) => {
     if (!im.complete || !im.naturalWidth) return false;
     const s = getComputedStyle(im);
     return s.visibility !== 'hidden' && parseFloat(s.opacity) > 0.5;
-  });
+  }) || null;
+}
+
+/** Where a frame on the page draws a photo of this shape: the whole photo's rect, and the part the frame shows. */
+function drawnIn(frame: Element, nat: { w: number; h: number } | null) {
+  const imgs = [...frame.querySelectorAll('img')].reverse();
+  // The photo on show, for the flight's image; the top one sets how the frame draws it (its box, object-fit and
+  // object-position).
+  const shownImg = shownIn(frame);
   const styled = imgs[0] || null;
   const size = nat || (shownImg ? { w: shownImg.naturalWidth, h: shownImg.naturalHeight } : null);
   const clip = visibleRect(frame);
@@ -269,8 +291,13 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
   const size = () => ({ W: root.clientWidth || innerWidth, H: root.clientHeight || innerHeight });
   const slideEl = (k = shown) => track.querySelector<HTMLElement>(`[data-pv="${k}"]`);
   const zoomEl = (k = shown) => slideEl(k)?.querySelector<HTMLElement>('.pv-zoom') || null;
-  const imgEl = (k = shown) => slideEl(k)?.querySelector<HTMLImageElement>('img.pv-img:not(.pv-img--soft)') || null;
-  const natural = (k = shown) => { const im = imgEl(k); return im && im.complete && im.naturalWidth ? { w: im.naturalWidth, h: im.naturalHeight } : null; };
+  // The photo drawn in slide k: the viewer's own copy once it is in, otherwise the small copy under it.
+  const shownEl = (k = shown) => {
+    const s = slideEl(k);
+    const ready = (im: HTMLImageElement | null | undefined) => (im && im.complete && im.naturalWidth ? im : null);
+    return ready(s?.querySelector<HTMLImageElement>('img.pv-img:not(.pv-img--soft)')) || ready(s?.querySelector<HTMLImageElement>('img.pv-img--soft'));
+  };
+  const natural = (k = shown) => { const im = shownEl(k); return im ? { w: im.naturalWidth, h: im.naturalHeight } : null; };
   const fitNow = () => { const { W, H } = size(); const nat = natural(); return fitRect(nat?.w || 0, nat?.h || 0, W, H); };
   const restX = (k: number) => -k * (size().W + GAP);
 
@@ -289,23 +316,32 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
   const backNow = () => parseFloat(getComputedStyle(back).opacity) || 0;
 
   // The frame on the page this photo goes back into is hidden while the photo flies or is dragged, so it isn't
-  // drawn twice; it is shown again once the photo has landed.
+  // drawn twice; it is shown again once the photo has landed. What the page draws over it (the name, the scrim, the
+  // controls) goes and comes back with it: the flying photo covers them where it starts and ends, so they would
+  // otherwise vanish, show through the clearing stage as it moves away, and vanish again.
   let hidden: HTMLElement | null = null;
+  let covered: HTMLElement[] = [];
   const hideOrigin = (el: HTMLElement | null) => {
     if (hidden === el) return;
     if (hidden) hidden.style.visibility = '';
+    for (const c of covered) c.style.visibility = '';
+    covered = [];
     hidden = el;
-    if (el) el.style.visibility = 'hidden';
+    if (!el) return;
+    el.style.visibility = 'hidden';
+    covered = (live.current.cover?.() || []).filter((c): c is HTMLElement => c instanceof HTMLElement && !c.style.visibility);
+    for (const c of covered) c.style.visibility = 'hidden';
   };
   const originOf = (k: number) => (live.current.origin?.(k) as HTMLElement | null | undefined) || null;
 
   // ---------- frame-by-frame settling (zoom, pan, the track, a drag springing back) ----------
-  let tw: { raf: number; frame: (e: number) => void; done?: () => void } | null = null;
-  const tween = (dur: number, frame: (e: number) => void, done?: () => void) => {
+  let tw: { raf: number; frame: (e: number) => void; done?: () => void; held: boolean } | null = null;
+  /** `held`: a new touch catches it where it is (a zoom or the track settling), rather than finishing it first. */
+  const tween = (dur: number, frame: (e: number) => void, done?: () => void, held = false) => {
     finishTween();
     if (!motionOK() || dur <= 0) { frame(1); done?.(); return; }
     const t0 = performance.now();
-    const me = { raf: 0, frame, done };
+    const me = { raf: 0, frame, done, held };
     tw = me;
     const step = (now: number) => {
       if (tw !== me) return;
@@ -317,7 +353,7 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     };
     me.raf = requestAnimationFrame(step);
   };
-  // A new touch takes over from wherever the last motion would have ended.
+  // Jump to where the last motion would have ended (a drag springing back, the window resized).
   function finishTween() {
     const t = tw;
     if (!t) return;
@@ -326,11 +362,27 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     t.frame(1);
     t.done?.();
   }
-  const animateZoom = (to: Zoom, dur = 280) => { const from = { ...z }; tween(dur, (e) => setZoom(lerpZoom(from, to, e))); };
+  // A new touch catches a settling zoom or a sliding track where it is, so a quick second swipe or a finger on a
+  // flung photo carries on from what she sees instead of the photo jumping ahead first.
+  function catchTween() {
+    const t = tw;
+    if (!t) return;
+    if (!t.held) { finishTween(); return; }
+    tw = null;
+    cancelAnimationFrame(t.raf);
+  }
+  const animateZoom = (to: Zoom, dur = 280) => { const from = { ...z }; tween(dur, (e) => setZoom(lerpZoom(from, to, e)), undefined, true); };
+  const offRest = () => trackX - restX(shown);
   const placeTrack = (animated: boolean) => {
     const to = restX(shown), from = trackX;
     if (!animated || Math.abs(to - from) < 0.5) { setTrack(to); return; }
-    tween(300, (e) => setTrack(from + (to - from) * e));
+    tween(300, (e) => setTrack(from + (to - from) * e), undefined, true);
+  };
+  // A zoom left part way (a settling zoom caught by a tap) goes to the nearest one she can rest at.
+  const zoomRest = (): Zoom => { const { W, H } = size(); return z.s <= 1.01 ? { ...IDENTITY } : clampZoom(z, fitNow(), W, H); };
+  const settleZoomIfOff = () => {
+    const r = zoomRest();
+    if (Math.abs(r.s - z.s) > 0.001 || Math.abs(r.x - z.x) > 0.5 || Math.abs(r.y - z.y) > 0.5) animateZoom(r, 220);
   };
 
   // Animations are kept until they are cancelled: one that has finished still holds its last frame (fill), which
@@ -373,8 +425,13 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
       hideOrigin(null);
       phase = 'open';
     };
+    const o = originOf(k);
+    // The copy the page was showing stands in until the viewer's own is in (a large photo still on its way, or no
+    // signal), so the photo doesn't fly out and then vanish into an empty stage.
+    const onPage = o ? shownIn(o) : null;
+    if (onPage) live.current.showing(k, onPage.currentSrc || onPage.src);
     if (!canAnimate) { done(); return; }
-    const from = motionOK() ? (() => { const o = originOf(k); return o ? { o, d: drawnIn(o, natural(k)) } : null; })() : null;
+    const from = motionOK() && o ? { o, d: drawnIn(o, natural(k)) } : null;
     if (!from?.d || !from.d.src) {
       // Reduced motion, or nothing on the page to grow from: the viewer fades in where it is.
       run(root, [{ opacity: 0 }, { opacity: 1 }], { duration: motionOK() ? 200 : 120, easing: motionOK() ? EASE_OUT : 'linear' });
@@ -437,7 +494,7 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     const nat = natural(k);
     const o = originOf(k);
     const to = motionOK() && o && nat ? drawnIn(o, nat) : null;
-    const im = imgEl(k);
+    const im = shownEl(k);
     if (!to || !nat || !im) {
       // Reduced motion, or the photo has nowhere on the page to go back to: the viewer fades where it is.
       hideOrigin(null);
@@ -475,7 +532,8 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
   }
   function indexChanged(k: number) {
     if (k === shown) return;
-    finishTween();
+    // The track carries on from where it is (a second arrow press, or a swipe caught mid-slide).
+    catchTween();
     const old = zoomEl(shown);
     if (old) old.style.transform = '';
     shown = k;
@@ -514,16 +572,16 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     if (phase !== 'open' || (e.pointerType === 'mouse' && e.button !== 0) || pts.size >= 2) return;
     try { stage.setPointerCapture(e.pointerId); } catch { /* the pointer is already gone */ }
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    finishTween();
+    catchTween();
     if (pts.size === 2) {
       // A second finger turns whatever the first was doing into a pinch.
-      if (g?.mode === 'swipe') setTrack(restX(shown));
+      if (Math.abs(offRest()) > 0.5) setTrack(restX(shown));
       if (g?.mode === 'drag') { endDrag(); setZoom({ ...IDENTITY }); setBack(null); setUi(1); hideOrigin(null); }
       const { m, d } = midDist();
-      g = { mode: 'pinch', x0: m.x, y0: m.y, z0: { ...z }, m0: m, d0: d, m, samples: [], dx: 0, dy: 0 };
+      g = { mode: 'pinch', x0: m.x, y0: m.y, z0: { ...z }, m0: m, d0: d, m, samples: [], dx: 0, dy: 0, off0: 0 };
       return;
     }
-    g = { mode: 'wait', x0: e.clientX, y0: e.clientY, z0: { ...z }, samples: [[e.timeStamp, e.clientX, e.clientY]], dx: 0, dy: 0 };
+    g = { mode: 'wait', x0: e.clientX, y0: e.clientY, z0: { ...z }, samples: [[e.timeStamp, e.clientX, e.clientY]], dx: 0, dy: 0, off0: offRest() };
   }
 
   function move(e: PointerEvent) {
@@ -548,7 +606,9 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     if (g.samples.length > 12) g.samples.shift();
     if (g.mode === 'wait') {
       if (Math.hypot(dx, dy) < 6) return;
-      g.mode = z.s > 1.01 ? 'pan' : Math.abs(dx) > Math.abs(dy) ? 'swipe' : 'drag';
+      // Photos caught while still sliding past are being swiped, whichever way the finger goes next.
+      g.mode = Math.abs(g.off0) > 8 ? 'swipe' : z.s > 1.01 ? 'pan' : Math.abs(dx) > Math.abs(dy) ? 'swipe' : 'drag';
+      if (g.mode !== 'swipe' && g.off0) { setTrack(restX(shown)); g.off0 = 0; }
       if (g.mode === 'drag') {
         root.classList.add('pv--dragging');
         hideOrigin(originOf(shown));
@@ -558,8 +618,9 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
       setZoom(softPan({ s: g.z0.s, x: g.z0.x + dx, y: g.z0.y + dy }, fitNow(), W, H));
     } else if (g.mode === 'swipe') {
       const n = live.current.n;
-      const edge = (shown <= 0 && dx > 0) || (shown >= n - 1 && dx < 0);
-      setTrack(restX(shown) + (edge ? rubber(dx, 0, 80) : dx));
+      const off = g.off0 + dx;
+      const edge = (shown <= 0 && off > 0) || (shown >= n - 1 && off < 0);
+      setTrack(restX(shown) + (edge ? rubber(off, 0, 80) : off));
     } else if (g.mode === 'drag') {
       const look = dragLook(dx, dy, H);
       setZoom(look.zoom);
@@ -577,7 +638,7 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
       if (pts.size === 1) {
         // One finger still down: it carries on panning from here.
         const [p] = [...pts.values()];
-        g = { mode: 'pan', x0: p.x, y0: p.y, z0: { ...z }, samples: [[e.timeStamp, p.x, p.y]], dx: 0, dy: 0 };
+        g = { mode: 'pan', x0: p.x, y0: p.y, z0: { ...z }, samples: [[e.timeStamp, p.x, p.y]], dx: 0, dy: 0, off0: 0 };
         return;
       }
       const m = g.m || { x: W / 2, y: size().H / 2 };
@@ -590,13 +651,21 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     g = null;
     const cancelled = e.type === 'pointercancel';
     const { vx, vy } = velocity(s.samples, e.timeStamp);
-    if (s.mode === 'wait') { if (!cancelled) tap(e); return; }
-    if (s.mode === 'pan') {
-      const { W: w, H: h } = size();
-      animateZoom(clampZoom({ s: z.s, x: z.x + vx * 160, y: z.y + vy * 160 }, fitNow(), w, h), 360);
+    if (s.mode === 'wait') {
+      // A tap that caught the photos sliding past lets them settle; one that caught a settling zoom lets it rest.
+      if (Math.abs(offRest()) > 0.5) { lastTap = { t: -1e9, x: 0, y: 0 }; placeTrack(true); return; }
+      if (!cancelled) tap(e);
       return;
     }
-    if (s.mode === 'swipe') { go(cancelled ? shown : swipeTarget(shown, live.current.n, s.dx, vx, W)); return; }
+    if (s.mode === 'pan') {
+      // Flung on a little, kept within the photo; a pinch that ended past 4x comes back about her finger.
+      const { W: w, H: h } = size();
+      let to: Zoom = { s: z.s, x: z.x + vx * 160, y: z.y + vy * 160 };
+      if (to.s > MAX_ZOOM) to = zoomAt(to, MAX_ZOOM, e.clientX, e.clientY, w, h);
+      animateZoom(to.s <= 1.01 ? { ...IDENTITY } : clampZoom(to, fitNow(), w, h), 360);
+      return;
+    }
+    if (s.mode === 'swipe') { go(cancelled ? shown : swipeTarget(shown, live.current.n, s.dx, vx, W, s.off0 + s.dx)); return; }
     endDrag();
     if (!cancelled && dragCloses(s.dy, vy)) close('drag');
     else springBack();
@@ -611,6 +680,7 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
       return;
     }
     lastTap = { t, x: e.clientX, y: e.clientY };
+    settleZoomIfOff();
   }
 
   function key(e: KeyboardEvent) {

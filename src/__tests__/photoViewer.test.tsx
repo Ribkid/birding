@@ -108,6 +108,16 @@ describe('photo viewer geometry', () => {
     expect(swipeTarget(0, 5, 200, 1, 390)).toBe(0);
   });
 
+  it('a swipe that caught the photos still sliding goes on from the one they were sliding to', () => {
+    // Sliding from photo 1 to photo 2 and caught 200 px short of it: another swipe on moves to photo 3...
+    expect(swipeTarget(1, 5, -100, -0.6, 390, 200 - 100)).toBe(2);
+    // ...a swipe back returns to photo 1 (index 0)...
+    expect(swipeTarget(1, 5, 90, 0.6, 390, 200 + 90)).toBe(0);
+    // ...and a short nudge settles on whichever photo is nearer.
+    expect(swipeTarget(1, 5, -20, 0, 390, 200 - 20)).toBe(1);
+    expect(swipeTarget(1, 5, 20, 0, 390, 200 + 20)).toBe(0);
+  });
+
   it('closes a vertical drag past 100 px or on a flick in its direction', () => {
     expect(dragCloses(CLOSE_DRAG + 1, 0)).toBe(true);
     expect(dragCloses(-(CLOSE_DRAG + 1), 0)).toBe(true);
@@ -164,16 +174,27 @@ const settled = () => act(async () => { await new Promise((r) => setTimeout(r, 0
 const zoomOf = () => document.querySelector<HTMLElement>('.pv-slide.is-current .pv-zoom')!.style.transform;
 const status = () => document.getElementById(document.querySelector('.pv')!.getAttribute('aria-labelledby')!)?.textContent;
 
-function setup(index = 0) {
+function setup(index = 0, extra: Partial<Parameters<typeof PhotoViewer>[0]> = {}) {
   const opener = document.createElement('button');
   opener.textContent = 'Photos';
   document.body.append(opener);
   opener.focus();
   const onIndex = vi.fn();
   const onClose = vi.fn();
-  const view = render(<PhotoViewer photos={photos} index={index} onIndex={onIndex} onClose={onClose} name="Crested Pigeon" returnTo={opener} />);
-  const rerender = (i: number) => view.rerender(<PhotoViewer photos={photos} index={i} onIndex={onIndex} onClose={onClose} name="Crested Pigeon" returnTo={opener} />);
+  const view = render(<PhotoViewer photos={photos} index={index} onIndex={onIndex} onClose={onClose} name="Crested Pigeon" returnTo={opener} {...extra} />);
+  const rerender = (i: number) => view.rerender(<PhotoViewer photos={photos} index={i} onIndex={onIndex} onClose={onClose} name="Crested Pigeon" returnTo={opener} {...extra} />);
   return { opener, onIndex, onClose, view, rerender };
+}
+// A frame on the page, as the species hero draws one: a photo that has loaded and is on show.
+function pageFrame(shown: string) {
+  const frame = document.createElement('figure');
+  const img = document.createElement('img');
+  img.src = shown;
+  img.style.opacity = '1';
+  Object.defineProperty(img, 'complete', { value: true });
+  frame.append(img);
+  document.body.append(frame);
+  return frame;
 }
 
 beforeAll(() => {
@@ -314,5 +335,36 @@ describe('the photo viewer', () => {
     const missing = document.querySelector('.pv-slide.is-current .pv-missing');
     expect(missing?.classList.contains('img-missing')).toBe(true);
     expect(missing?.getAttribute('aria-label')).toBe('Photo 1 of 4, Crested Pigeon');
+  });
+
+  it('keeps the copy the page was showing under the photo while it loads, and with no signal', () => {
+    // Photo 2 has no small copy of its own; the page's frame was showing a smaller one of it.
+    const frame = pageFrame('https://example.test/b-shown.jpg');
+    setup(1, { origin: () => frame });
+    const soft = document.querySelector('.pv-slide.is-current img.pv-img--soft');
+    expect(soft?.getAttribute('src')).toBe('https://example.test/b-shown.jpg');
+    fireEvent.error(document.querySelector('.pv-slide.is-current img.pv-img:not(.pv-img--soft)')!);
+    expect(document.querySelector('.pv-slide.is-current img.pv-img')?.getAttribute('src')).toBe('https://example.test/b-shown.jpg');
+    expect(document.querySelector('.pv-slide.is-current .pv-missing')).toBeNull();
+  });
+
+  it("the page's name and controls over the frame step aside while the photo is out, and come back", async () => {
+    const frame = pageFrame('https://example.test/a.jpg');
+    const name = document.createElement('h1');
+    document.body.append(name);
+    const a = setup(0, { origin: () => frame, cover: () => [name] });
+    pointer('pointerdown', 512, 300);
+    for (let y = 310; y <= 350; y += 10) pointer('pointermove', 512, y, 1, 60);
+    expect([frame.style.visibility, name.style.visibility]).toEqual(['hidden', 'hidden']);
+    pointer('pointerup', 512, 350, 1, 200);
+    await settled();
+    expect([frame.style.visibility, name.style.visibility]).toEqual(['', '']);
+    pointer('pointerdown', 512, 300, 1, 500);
+    for (let y = 320; y <= 460; y += 20) pointer('pointermove', 512, y, 1, 60);
+    expect(name.style.visibility).toBe('hidden');
+    pointer('pointerup', 512, 460, 1, 60);
+    await settled();
+    expect(a.onClose).toHaveBeenCalledTimes(1);
+    expect([frame.style.visibility, name.style.visibility]).toEqual(['', '']);
   });
 });
