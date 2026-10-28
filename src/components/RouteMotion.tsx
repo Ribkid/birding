@@ -13,6 +13,7 @@ import { closeAllLayers } from '../lib/layers';
 import { flushClosingSheets } from './Sheet';
 
 type Nav = 'forward' | 'back' | 'swap';
+type Action = ReturnType<typeof createHashHistory>['action'];
 
 // How deep each screen sits (v1 DEPTH). A screen not listed is one level down.
 const DEPTH: Record<string, number> = {
@@ -45,6 +46,20 @@ const inView = (el: Element) => { const r = el.getBoundingClientRect(); return r
 const birdId = (path: string) => Number(/^\/bird\/(\d+)$/.exec(path)?.[1]) || null;
 const viewEl = () => document.getElementById('view');
 
+// A photo in a dex group that skips drawing until it is near the screen (content-visibility: auto) isn't captured
+// while the screen she is going back to is still being drawn, so the hero would have nothing to shrink into. The
+// group is drawn for the length of the transition; it is on screen, so nothing moves when that ends.
+const revealed: HTMLElement[] = [];
+function reveal(el: Element) {
+  for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+    if (getComputedStyle(a).getPropertyValue('content-visibility') === 'auto') {
+      a.style.setProperty('content-visibility', 'visible');
+      revealed.push(a);
+    }
+  }
+}
+const unreveal = () => { for (const a of revealed.splice(0)) a.style.removeProperty('content-visibility'); };
+
 // Tapping a photo that links to a species names it, so the view transition grows it into that page's hero.
 function nameTappedPhoto(e: MouseEvent) {
   if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !motionOK()) return;
@@ -59,7 +74,7 @@ function nameTappedPhoto(e: MouseEvent) {
   setTimeout(() => { if (morph === m) { morph = null; if (!document.documentElement.dataset.nav) el.style.viewTransitionName = ''; } }, 700);
 }
 
-function onRouteChange(prev: Location, next: Location, apply: () => void) {
+function onRouteChange(prev: Location, next: Location, action: Action, apply: () => void) {
   const from = prev.pathname + prev.search, to = next.pathname + next.search;
   // Only the history state changed (the same screen), or the first draw's redirect from an empty address.
   if (from === to || prev.pathname === '/') { apply(); return; }
@@ -69,9 +84,11 @@ function onRouteChange(prev: Location, next: Location, apply: () => void) {
   const tapped = morph && morph.id === toId ? morph : null;
   morph = null;
   if (tapped) cameFrom.set(to, tapped.kind);
-  // Going back from a species page: its hero shrinks back into the photo it came from, if that is on screen.
+  // Going back from a species page, up to a shallower screen or with Back to a list beside it (not to another species
+  // page): its hero shrinks back into the photo it came from, if that is on screen.
   let shrinkTo: number | null = null;
-  const hero = !tapped && fromId && nav === 'back' && motionOK() ? viewEl()?.querySelector<HTMLElement>('[data-hero-frame]') : null;
+  const goingBack = nav === 'back' || action === 'POP';
+  const hero = !tapped && fromId && !toId && goingBack && motionOK() ? viewEl()?.querySelector<HTMLElement>('[data-hero-frame]') : null;
   if (hero && inView(hero)) { nameFor(hero, 'sp-hero'); shrinkTo = fromId; }
   // A new screen starts at the top, except going back, which returns to where she was.
   pending = { key: next.key, y: nav === 'back' ? scrollMem.get(to) || 0 : 0, tile: fromId && nav === 'back' && !shrinkTo ? fromId : null };
@@ -105,13 +122,20 @@ function onRouteChange(prev: Location, next: Location, apply: () => void) {
       const on = [...view.querySelectorAll<HTMLElement>(`[data-tile="${shrinkTo}"] :is(.tile-img, .row-thumb), a[href="#/bird/${shrinkTo}"] :is(${THUMB}), a[href="#/bird/${shrinkTo}"]:is(${THUMB})`)].filter(inView);
       const t = (kind && on.find((el) => el.matches(kind))) || on[0];
       if (t) {
-        nameFor(pic(t), 'sp-hero');
+        const el = pic(t);
+        reveal(el);
+        nameFor(el, 'sp-hero');
+        // The tile's photo was shown this session, so it is in memory, but a lazy image just drawn hasn't asked for
+        // it yet: ask now, so the hero shrinks into the photo rather than into an empty frame.
         const img = t.querySelector('img');
-        if (img?.decode) waits.push(img.decode());
+        if (img) {
+          if (img.loading === 'lazy') img.loading = 'eager';
+          if (img.decode) waits.push(img.decode());
+        }
       }
     }
     return settle(Promise.all(waits), 150);
-  }, { nav });
+  }, { nav }).then(unreveal);
 }
 
 /**
@@ -131,7 +155,7 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
     const off = history.listen(({ action, location: next }) => {
       const prev = shown.current;
       shown.current = next;
-      onRouteChange(prev, next, () => setState({ action, location: next }));
+      onRouteChange(prev, next, action, () => setState({ action, location: next }));
     });
     return () => { off(); document.removeEventListener('click', nameTappedPhoto, true); };
   }, [history]);
