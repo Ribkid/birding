@@ -1,6 +1,6 @@
 // Small text helpers shared by the species page and Compare, as in v1 (birding-refresh js/app.js).
 import type { Species } from '../lib/data';
-import { parseSize } from '../core/quiz.js';
+import { parseSize } from '../core/species.js';
 
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
