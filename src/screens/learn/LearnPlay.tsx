@@ -572,7 +572,6 @@ function Deck({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<'overview' | 'card' | 'done'>(saved?.mode || 'overview');
   const [game, setGame] = useState<RoundState | null>(saved?.game || null);
   const [revealed, setRevealed] = useState(saved?.revealed || false);
-  const [toast, setToast] = useState('');
   const backRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLHeadingElement>(null);
   const resuming = useRef(!!saved);
@@ -635,7 +634,8 @@ function Deck({ onBack }: { onBack: () => void }) {
     const cardsNow = getLearn()?.cards || {};
     list = list.filter((s: any) => !cardsNow[s.id]).slice(0, which === 'month' ? 10 : 30);
     const n = addCards(list, 'all');
-    setToast(n ? `Added ${n} ${n === 1 ? 'card' : 'cards'}.` : which === 'seen' ? (sightings.length ? 'Everything you have seen is already in the deck.' : 'Nothing logged yet. Log a sighting and it can go in the deck.') : 'Those are all in the deck already.');
+    // v1 renderDeck: what happened is a toast (read out through #announce), and the overview is drawn again.
+    toast(n ? `Added ${n} ${n === 1 ? 'card' : 'cards'}.` : which === 'seen' ? (sightings.length ? 'Everything you have seen is already in the deck.' : 'Nothing logged yet. Log a sighting and it can go in the deck.') : 'Those are all in the deck already.');
     force();
   };
 
@@ -711,27 +711,43 @@ function Deck({ onBack }: { onBack: () => void }) {
     <>
       <header className="page-head page-head--back"><Link className="iconbtn" to="/learn" aria-label="Back to Learn"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.back}</svg></Link><h1 className="lh-title">Review deck</h1></header>
       <div className="learn">
-        <div className="ld-summary">
-          <span className="lh-boxes lh-boxes--big" aria-hidden="true">
-            {boxN.map((n, i) => {
-              const max = Math.max(1, ...boxN);
-              return <span className="lh-box" key={i}><b>{n}</b><span className="lh-box-bar"><i style={{ '--h': (n / max).toFixed(3), '--j': i } as React.CSSProperties} /></span><em>{i + 1}</em></span>;
-            })}
-          </span>
-          <p className="small muted">{cards.length ? `${cards.length} cards. ${boxN[3] + boxN[4]} in box 4 or 5, which count as mastered.` : 'No cards yet.'} Knew it moves a card along a box: it comes back after 1, 3, 7, then 21 days. Missed sends it back to box 1.</p>
-        </div>
+        <DeckSummary boxN={boxN} cards={cards.length} />
         {due.length ? <button type="button" className="btn btn--primary btn--block" onClick={startReview}>Review {due.length > 20 ? 20 : due.length} {due.length === 1 ? 'card' : 'cards'}</button>
           : <p className="ld-none" role="status">{cards.length ? `Nothing to review right now. ${nextTxt}` : 'Add a set to start. Species you miss in any round are added for you.'}</p>}
         <section className="lh-sec"><div className="lh-sec-h"><h2>Add cards</h2></div>
           <div className="ld-add">
-            <button type="button" className="btn btn--block" onClick={() => add('month')}><span className="ld-add-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.deck}</svg></span><span>Add 10 {deckKind === 'animals' ? 'animals' : KINDS[deckKind]?.label.toLowerCase()} around in {monthName()}</span></button>
+            <button type="button" className="btn btn--block" onClick={() => add('month')}><span className="ld-add-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.facts}</svg></span><span>Add 10 {deckKind === 'animals' ? 'animals' : KINDS[deckKind]?.label.toLowerCase()} around in {monthName()}</span></button>
             <button type="button" className="btn btn--block" onClick={() => add('seen')}><span className="ld-add-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.deck}</svg></span><span>Add the ones I've seen</span></button>
           </div>
           <p className="small muted">Birds and frogs with recordings get a call card as well as a photo card.</p>
         </section>
-        {toast && <p className="small muted" role="status">{toast}</p>}
       </div>
     </>
+  );
+}
+
+// v1 renderDeck: the boxes grow from nothing each time the overview is drawn, once it is 40% on screen (data-grow and
+// growOnView), unless motion is reduced.
+function DeckSummary({ boxN, cards }: { boxN: number[]; cards: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [grow] = useState(motionOK);
+  const [isIn, setIn] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!grow || !el) return;
+    if (typeof IntersectionObserver !== 'function') { setIn(true); return; }
+    const io = new IntersectionObserver(([en]) => { if (en.isIntersecting) { setIn(true); io.disconnect(); } }, { threshold: 0.4 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  const max = Math.max(1, ...boxN);
+  return (
+    <div ref={ref} className={`ld-summary${isIn ? ' is-in' : ''}`} {...(grow ? { 'data-grow': '' } : {})}>
+      <span className="lh-boxes lh-boxes--big" aria-hidden="true">
+        {boxN.map((n, i) => <span className="lh-box" key={i}><b>{n}</b><span className="lh-box-bar"><i style={{ '--h': (n / max).toFixed(3), '--j': i } as React.CSSProperties} /></span><em>{i + 1}</em></span>)}
+      </span>
+      <p className="small muted">{cards ? `${cards} cards. ${boxN[3] + boxN[4]} in box 4 or 5, which count as mastered.` : 'No cards yet.'} Knew it moves a card along a box: it comes back after 1, 3, 7, then 21 days. Missed sends it back to box 1.</p>
+    </div>
   );
 }
 
