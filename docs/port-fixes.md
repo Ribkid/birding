@@ -802,11 +802,23 @@ Working tree is on `port-fixes`; nothing was pushed or merged. Every listed item
 - 81 — `7959ba7`: Edit profile checks online before the file picker and uses `myName()` as the placeholder.
 - 82 — `2661a9c`: the map layer toggle merges into the latest settings object.
 
+### Merged branches (second round)
+
+Twelve branches, each forked from `fd537c7`, were merged into `port-fixes` with `--no-ff`; `npm run build` and `npm test` passed after each one, and the merged build was smoke-tested on every route (light and dark, 390 and 320 px, 0 and 25 sightings) with no console errors.
+
+- `05bb1c6` fixes-sw, `de12269` fixes-brand, `55e2be7` fixes-data, `fc4eeb2` fixes-learn, `51a2c86` fixes-scan, `fdb90dd` fixes-map, `a98aafb` fixes-shell: the re-run fixes for items 11–13, 15, 17, 24, 27, 33, 38, 41, 47, 51, 52, 64–67, 72, 73, 75 and 81, and the re-run's new findings.
+- `e7f06d3` pages-stats: item 69 (v1's Stats page).
+- `d4075ba` pages-settings: items 57 and 76 (v1's Settings, sign-in entry points and copy, Me join card).
+- `44c7637` pages-dex: item 56 (v1's Dex home).
+- `85c2935` pages-lists: item 58 (v1's Lists hub, list view and targets).
+- `b8d5529` pages-species: item 55 (v1's species page).
+- Shared pieces kept once: `lib/toast.ts` (toast, announce and the one `#announce`), `lib/install.ts` (one install offer for the welcome card, Settings and the Dex), `components/OutingBar.tsx` (one `#outing-bar`, `body.has-outing`), `components/RouteFocus.tsx` (heading focus after navigation), `screens/DexSearch.tsx` (search from the Dex and the species hero), `lib/layers.ts`' single Escape/Tab listener, and `components/Sheet.tsx` (open class, labelledBy, step, focus into the sheet, solid surface). The + tab is v1's `<a href="#/add" id="plus">`.
+- `3207bc1`: the manifest's `theme_color` is the paper colour `#F4F6F9`. `b906aef`: the species page's Group link filters the dex.
+
 ### Partial
 
-- 76 — `846f244`: leaderboard sign-in points at `/me/signin` and `?groups=1` scrolls the Groups section into view. The remaining v1 profile-row/Edit-profile row and Google mark/copy parity were not ported.
+- None.
 
 ### Skipped
 
-- 55 (species page renderBird), 56 (Dex home renderDex), 57 (Settings renderSettings) and 58 (Lists renderLists): these are the four deliberately larger full-page rebuilds. They were not attempted because they are large visual rewrites with high regression risk; the current screens still render and the smaller fixes they cross-reference (back links, /learn copy, Badges learning count) were handled where cheap.
-- 69 (Stats renderStats restyle): skipped as the remaining large visual port. Item 68's wrong text and period chips were fixed; Stats still keeps the first-port card structure, headings and By year section.
+- None of the numbered items. Items 55–58 and 69 were done on the page branches above, and 76 on pages-settings.
