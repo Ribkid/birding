@@ -38,7 +38,8 @@ export function lookAfterDraw(view: HTMLElement | null) {
   document.body.classList.toggle('has-hero', !!hero);
   for (const k of ['--tint', '--tint-deep', '--tint-soft', '--tint-soft-dark', '--tint-ink-dark']) view.style.removeProperty(k);
   view.classList.remove('tinted');
-  const heroImgs = [...view.querySelectorAll<HTMLImageElement>('.bird-hero img.whole-fg, .bird-hero .slide img, [data-hero-frame] img')];
+  // The tint reads the hero's own photo, not the small copy drawn underneath it while it loads.
+  const heroImgs = [...view.querySelectorAll<HTMLImageElement>('.bird-hero img.whole-fg, .bird-hero .slide img:not(.whole-bg), [data-hero-frame] img:not(.whole-bg)')];
   const heroImg = heroImgs.find(i => readable(i.currentSrc || i.src || ''));
   if (heroImg) void applyTint(view, heroImg.currentSrc || heroImg.src);
   const own = $('.dex-tools, .mapwrap, [data-own-topbar]', view);

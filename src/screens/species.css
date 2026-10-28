@@ -32,8 +32,25 @@
 .bird .gallery, .bird .slide { height: 100%; }
 .bird .slide { background: var(--deep); }
 .bird .slide .whole, .bird .slide .img-missing { height: 100%; aspect-ratio: auto; }
-/* Full-bleed: the photo fills the frame; the blurred copy stays underneath while it loads. */
+/* Full-bleed, and never an empty block (SpeciesImage's hero mode). Under everything, the bird's plumage wash; over
+   it, the small photo the dex tile drew, soft and a touch larger than the frame; over that, the large photo, which
+   develops in once it has decoded: it fades up as it comes into focus. If the large one can't load (no signal),
+   the small one stays and sharpens a little so the bird is still plain to see. */
+.bird .slide .whole:not(.img-missing) { background-color: var(--deep); background-image: var(--wash, none); }
+.bird .slide .whole-bg {
+  inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 38%;
+  filter: blur(6px); transform: scale(1.05);
+}
+.bird .slide .is-small .whole-bg { filter: blur(2px); transform: scale(1.02); transition: filter var(--dur-3) var(--ease-out), transform var(--dur-3) var(--ease-out); }
 .bird .slide .whole-fg { object-fit: cover; object-position: 50% 38%; }
+.bird .slide .whole-fg.fade { filter: blur(8px); transition: opacity var(--dur-3) var(--ease-out), filter var(--dur-3) var(--ease-out); }
+.bird .slide .whole-fg.fade.in { filter: none; }
+/* Once the large photo is in, the soft copy under it is no longer drawn. */
+.bird .slide .whole:has(> .whole-fg.in) > .whole-bg { visibility: hidden; transition: visibility 0s linear var(--dur-3); }
+@media (prefers-reduced-motion: reduce) {
+  .bird .slide .whole-fg.fade { filter: none; transition: opacity 120ms linear; }
+  .bird .slide .is-small .whole-bg { transition: none; }
+}
 .bird .slide .img-missing { background: linear-gradient(160deg, color-mix(in srgb, var(--kc) 40%, #0B1F1A), var(--deep)); }
 
 /* The scrim: a little shade at the top for the status bar and controls, the tint rising from the foot for the name. */

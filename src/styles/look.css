@@ -13,6 +13,7 @@
   --r-card: 20px;
   --shadow-card: 0 1px 2px rgba(15, 23, 35, .06), 0 8px 24px -10px rgba(15, 23, 35, .22);
   --shadow-float: 0 18px 40px -14px rgba(12, 18, 27, .45), 0 2px 8px rgba(12, 18, 27, .12);
+  --wash-mix: 82%;                   /* how much of the bird's colour the loading wash takes (lib/wash.ts) */
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="outdoor"]) {
@@ -21,6 +22,7 @@
     --glass-edge: color-mix(in srgb, #fff 12%, transparent);
     --shadow-card: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 26px -12px rgba(0, 0, 0, .6);
     --shadow-float: 0 18px 44px -14px rgba(0, 0, 0, .75), 0 2px 8px rgba(0, 0, 0, .35);
+    --wash-mix: 62%;
   }
 }
 :root[data-theme="dark"] {
@@ -29,6 +31,7 @@
   --glass-edge: color-mix(in srgb, #fff 12%, transparent);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 26px -12px rgba(0, 0, 0, .6);
   --shadow-float: 0 18px 44px -14px rgba(0, 0, 0, .75), 0 2px 8px rgba(0, 0, 0, .35);
+  --wash-mix: 62%;
 }
 /* Outdoor and reduced transparency: solid surfaces, firm edges. */
 :root[data-theme="outdoor"] { --glass: var(--surface); --glass-strong: var(--surface); --glass-edge: var(--line-strong); }
