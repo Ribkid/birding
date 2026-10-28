@@ -442,7 +442,8 @@ export default function Scan() {
           )}
           <div ref={workRef} className="scan-work">
             <p className="scan-status" role="status" aria-live="polite">{status}</p>
-            {progress?.phase === 'model' && <div className="scan-progress"><div className="meter"><span style={{ width: `${Math.round(progress.frac * 100)}%` }} /></div><p className="scan-mb">{Math.round(progress.frac * photoModelMb())} of {photoModelMb()} MB</p></div>}
+            {/* Always present, as in v1: scan.css collapses .scan-work only when both the status and this are empty. */}
+            <div className="scan-progress" aria-hidden="true">{progress?.phase === 'model' && <><div className="meter"><span style={{ width: `${Math.round(progress.frac * 100)}%` }} /></div><p className="scan-mb">{Math.round(progress.frac * photoModelMb())} of {photoModelMb()} MB</p></>}</div>
           </div>
         </div>
       </section>
