@@ -2,13 +2,19 @@
 import { haversineKm } from './stats.js';
 
 let data = null;
+// v1 asked for the file once, at boot. Here the shell and each screen ask as they draw, so callers that ask while
+// it is on its way share the one request.
+let loading = null;
 export async function loadSeq() {
   if (data) return data;
-  try {
-    const r = await fetch('/data/seq.json');
-    data = await r.json();
-  } catch (_) { data = { species: {}, hotspots: [], effort: Array(12).fill(1) }; }
-  return data;
+  loading ??= (async () => {
+    try {
+      const r = await fetch('/data/seq.json');
+      data = await r.json();
+    } catch (_) { data = { species: {}, hotspots: [], effort: Array(12).fill(1) }; }
+    return data;
+  })();
+  return loading;
 }
 export const seq = () => data;
 
