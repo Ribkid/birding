@@ -146,7 +146,9 @@ describe('Scan', () => {
       vi.stubGlobal('fetch', vi.fn(fetcher));
       mount();
       fireEvent.click(identifyButton());
-      expect((await screen.findByRole('alert')).textContent).toBe(message);
+      // The reload notice is an alert in the result; v1's download message stays in the status line under Identify.
+      if (reload) expect((await screen.findByRole('alert')).textContent).toBe(message);
+      else await waitFor(() => expect(document.querySelector('.scan-status')?.textContent).toBe(message));
       expect(screen.queryByText('Reload BirdyDex') !== null).toBe(reload);
       expect(fetch).toHaveBeenCalledWith('/index.html', { cache: 'no-store' });
     });

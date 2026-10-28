@@ -245,13 +245,13 @@ export default function Scan() {
       if (updated) {
         setError('BirdyDex was updated. Reload to use Scan.');
         setNeedsReload(true);
+        setStatus('');
       } else {
-        const msg = importFailed || /offline-first-run|Failed to fetch|NetworkError|network/i.test(raw)
+        // v1 says why in the status line under Identify, where she is looking.
+        setStatus(importFailed || /offline-first-run|Failed to fetch|NetworkError|network/i.test(raw)
           ? `Photo ID needs a one-time download of about ${MB} MB. Connect to the internet (Wi-Fi is best) and try again.`
-          : `Photo ID couldn't run: ${raw}`;
-        setError(msg);
+          : `Photo ID couldn't run: ${raw}`);
       }
-      setStatus('');
     } finally { if (run === identifyRun.current) { setBusy(false); setProgress(null); } }
   };
 
