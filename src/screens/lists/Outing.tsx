@@ -6,9 +6,10 @@ import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { LocationPicker, type PickedPlace } from '../../components/LocationPicker';
 import { SpeciesImage } from '../../components/SpeciesImage';
-import { toast } from '../../lib/toast';
+import { announce, toast } from '../../lib/toast';
 import { countOnTo, countUp, stamp } from '../../lib/motion';
 import { CountKey } from './hubParts';
+import { FlockChooser, useHold } from './FlockChooser';
 import { buzz, useTally } from './useTally';
 import {
   ConfirmDialog,
@@ -256,6 +257,9 @@ export default function Outing() {
   const stamps = useRef<{ id: number; from: number | null }[]>([]);
   // What each row showed at the last draw, so a running count-up follows a change it didn't start (a rollback).
   const drawn = useRef(new Map<number, number | null>());
+  // The hold chooser, keyed so a late close of an older one leaves a newer one open.
+  const [flock, setFlock] = useState<{ key: number; sp: Species; anchor: HTMLButtonElement } | null>(null);
+  const flockKey = useRef(0);
 
   const recs = useMemo(
     () => sightings.filter((row) => row.outingId === outingId),
@@ -282,6 +286,7 @@ export default function Outing() {
   // The stored sighting per species; useTally adds the taps not stored yet, so the rows draw from it.
   const counts = useMemo(() => new Map(tally.map((rec) => [rec.speciesId, rec])), [tally]);
   const tallied = useTally(outing, counts);
+  const hold = useHold((anchor, sp) => setFlock({ key: ++flockKey.current, sp, anchor }));
 
   const seenOutside = useMemo(
     () =>
@@ -391,6 +396,13 @@ export default function Outing() {
     if (delta > 0 && query) setQuery('');
   };
 
+  // A flock from the hold chooser: the count runs up to the new total and is read out once.
+  const addFlock = (sp: Species, n: number) => {
+    const was = tallied.get(sp.id)?.count;
+    change(sp, n);
+    announce(`${n} more ${sp.name}, ${(was ?? 0) + n} in all.`);
+  };
+
   const tallyRow = (sp: Species) => {
     const row = tallied.get(sp.id);
     const firstEver = !seenOutside.has(sp.id);
@@ -427,7 +439,10 @@ export default function Outing() {
               data-inc={sp.id}
               className="tally-inc"
               aria-label={`Add ${sp.name}`}
-              onClick={() => change(sp, 1)}
+              {...hold.bind(sp)}
+              onClick={() => {
+                if (!hold.swallowClick()) change(sp, 1);
+              }}
             >
               +
             </button>
@@ -559,6 +574,16 @@ export default function Outing() {
               setBusy(false);
             }
           }}
+        />
+      )}
+
+      {flock && editing && (
+        <FlockChooser
+          key={flock.key}
+          sp={flock.sp}
+          anchor={flock.anchor}
+          onPick={(n) => addFlock(flock.sp, n)}
+          onClose={() => setFlock((f) => (f && f.key === flock.key ? null : f))}
         />
       )}
     </>
