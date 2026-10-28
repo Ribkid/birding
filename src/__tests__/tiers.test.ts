@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // lib/tiers.ts: heard only and photographed, worked out from the sightings the shared store holds. Decoration only:
-// the rules are core/stats badges()'s, heard still counts as seen, and nothing reads the photos store.
+// photographed is core/stats badges()'s photo rule, heard only (every sighting heard) is tiers.ts's own, heard still
+// counts as seen, and nothing reads the photos store.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { createElement } from 'react';

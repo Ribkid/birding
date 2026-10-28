@@ -574,6 +574,9 @@ export default function Dex() {
   };
   const update = (patch: Partial<DexFilters>) => setF((prev) => {
     const next = { ...prev, ...patch };
+    // Plants can't be heard, so Heard only doesn't come along to the Plants tab: it would light a chip that tab
+    // doesn't offer and an empty list telling her to tick a box their log sheet hides. The tab shows all its plants.
+    if (next.kind === 'plant' && next.show === 'heard') next.show = 'all';
     Object.assign(saved, next);
     return next;
   });
@@ -780,7 +783,7 @@ export default function Dex() {
           ))}
           {/* Her two to-do lists: birds to go and see properly, and ones to photograph. The count is for the kind tab. */}
           {([['heard', 'Heard only', heardN, ICON.ear], ['nophoto', 'No photo yet', noPhotoN, ICON.camera]] as [Show, string, number, ReactNode][])
-            .filter(([v]) => v !== 'heard' || canHear || f.show === 'heard')
+            .filter(([v]) => v !== 'heard' || canHear)
             .map(([v, l, n, ic]) => (
               <button key={v} type="button" className={`chip chip--tier ${f.show === v ? 'chip--on' : ''}`} data-show={v} aria-pressed={f.show === v} onClick={() => redraw({ show: v })}>
                 {ic}{l}<span className="chip-n"><span aria-hidden="true">·</span><span className="sr-only">,</span> <span data-tier-n>{n}</span></span>

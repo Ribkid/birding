@@ -2,10 +2,11 @@
 // photographed (one of her sightings carries a photo). Decoration only: heard still counts as seen everywhere, so
 // the counts, the badges and v1 parity are untouched.
 //
-// The rules are core/stats.js badges()'s: a species is photographed when any of its sightings has a photoId (its
-// photoSpecies set), and heard only when every one of its sightings has heard: true. A photo synced from another
-// device is a photoId like any other (sync.js gives it a photos row without its blob), and nothing here reads the
-// photos store: only the sightings the shared store already holds.
+// Photographed is core/stats.js badges()'s rule: a species is photographed when any of its sightings has a photoId
+// (its photoSpecies set, which the Snapshot and Portfolio badges count). badges() has no heard rule; heard only is
+// this file's own: every one of the species' sightings has heard: true, so one sighting she saw takes it off the
+// list. A photo synced from another device is a photoId like any other (sync.js gives it a photos row without its
+// blob), and nothing here reads the photos store: only the sightings the shared store already holds.
 import { useStore, type StoreState } from './store';
 
 export interface Tiers {
