@@ -11,6 +11,7 @@ import {
   pluralFor, type Species,
 } from '../lib/data';
 import { useDexReady, useKindCounts, useLastSeen, useMedia, useSeen } from '../lib/hooks';
+import { tierNote, useTiers } from '../lib/tiers';
 import { seqSettled } from '../lib/seq';
 import { keepFocus } from '../lib/layers';
 import { countUp, flip, motionOK } from '../lib/motion';
@@ -318,35 +319,87 @@ const DexHero = memo(function DexHero({ day, got, n, kind }: { day: DayPick | nu
   );
 });
 
-// One tile or row per species, drawn again only when what it shows changes: whether she has seen it, and for a row,
-// which second line it carries. Photos follow the photo index on their own (SpeciesImage). The link is a plain one:
-// a tap is handled once for the whole dex (Dex's onClick), and Ctrl, Cmd, Shift or a middle click open a new tab.
-// The spaces between the parts are v1's, so the link reads '028 Tawny Frogmouth, not seen' as text too.
-const seenNote = (seen: boolean) => <span className="sr-only">, {seen ? 'seen' : 'not seen'}</span>;
-const TileItem = memo(function TileItem({ id, seen }: { id: number; seen: boolean }) {
+// One tile or row per species, drawn again only when what it shows changes: whether she has seen it, whether she has
+// only heard it or has her own photo of it (lib/tiers.ts), and for a row, which second line it carries. Photos
+// follow the photo index on their own (SpeciesImage). The link is a plain one: a tap is handled once for the whole
+// dex (Dex's onClick), and Ctrl, Cmd, Shift or a middle click open a new tab. The spaces between the parts are v1's,
+// so the link reads '028 Tawny Frogmouth, not seen' as text too.
+interface ItemProps { id: number; seen: boolean; heard: boolean; photo: boolean }
+const seenNote = (seen: boolean, heard: boolean, photo: boolean) => <span className="sr-only">{tierNote(seen, heard, photo)}</span>;
+
+/**
+ * When a tile's tier changes while the dex is open (she logs a heard-only bird as seen from the long-press sheet, or a
+ * photo arrives), its new mark stamps in, so she sees what her sighting changed. Not on the first draw, and not under
+ * reduced motion.
+ */
+function useTierStamp(ref: { current: HTMLElement | null }, seen: boolean, heard: boolean, photo: boolean) {
+  const was = useRef({ seen, heard, photo });
+  useLayoutEffect(() => {
+    const before = was.current;
+    was.current = { seen, heard, photo };
+    const el = ref.current;
+    if (!el || !motionOK() || typeof el.animate !== 'function') return;
+    const stamp = [{ transform: 'scale(.4) rotate(-12deg)', opacity: 0 }, { transform: 'scale(1.15)', opacity: 1, offset: 0.6 }, { transform: 'none', opacity: 1 }];
+    const timing = { duration: 460, easing: 'cubic-bezier(.2, .8, .2, 1)' };
+    if (seen && before.seen && heard !== before.heard) {
+      const ear = el.querySelector<HTMLElement>('.tile-ear');
+      if (ear) ear.animate(stamp, timing);
+      else el.querySelector('.tile-img')?.animate(stamp, { ...timing, pseudoElement: '::before' });
+    }
+    if (photo && !before.photo) el.querySelector('.tile-stamp')?.animate(stamp, { ...timing, delay: 80 });
+  }, [ref, seen, heard, photo]);
+}
+
+const TileItem = memo(function TileItem({ id, seen, heard, photo }: ItemProps) {
   const s = byId.get(id)!;
+  const ref = useRef<HTMLAnchorElement>(null);
+  const heardOnly = seen && heard;
+  const photographed = seen && photo;
+  useTierStamp(ref, seen, heardOnly, photographed);
   return (
     <li>
-      <a className={`tile kind--${s.kind} ${seen ? 'tile--seen' : ''}`} href={`#/bird/${id}`} data-tile={id}>
-        <span className="tile-img"><Photo sp={s} /></span>{' '}
+      <a
+        ref={ref}
+        className={`tile kind--${s.kind} ${seen ? 'tile--seen' : ''}${heardOnly ? ' tile--heard' : ''}${photographed ? ' tile--photo' : ''}`}
+        href={`#/bird/${id}`}
+        data-tile={id}
+      >
+        <span className="tile-img">
+          <Photo sp={s} />
+          {/* One mark per corner: the ear takes the tick's place top right, her photo's stamp sits bottom left. */}
+          {heardOnly ? <span className="tile-mark tile-ear">{ICON.ear}</span> : null}
+          {photographed ? <span className="tile-mark tile-stamp">{ICON.camera}</span> : null}
+        </span>{' '}
         <Band sp={s} seen={seen} />{' '}
-        <span className="tile-name">{s.name}{seenNote(seen)}</span>
+        <span className="tile-name">{s.name}{seenNote(seen, heardOnly, photographed)}</span>
       </a>
     </li>
   );
 });
 // Under a group heading the group name would repeat on every row, so rows show the scientific name instead.
-const RowItem = memo(function RowItem({ id, seen, sci }: { id: number; seen: boolean; sci: boolean }) {
+const RowItem = memo(function RowItem({ id, seen, heard, photo, sci }: ItemProps & { sci: boolean }) {
   const s = byId.get(id)!;
+  const heardOnly = seen && heard;
+  const photographed = seen && photo;
   return (
     <li>
       <a className={`row row--sp kind--${s.kind}`} href={`#/bird/${id}`} data-tile={id}>
-        <span className={`row-thumb ${seen ? 'row-thumb--seen' : ''}`}><Photo sp={s} /></span>{' '}
+        <span className={`row-thumb ${seen ? 'row-thumb--seen' : ''}${heardOnly ? ' row-thumb--heard' : ''}`}><Photo sp={s} /></span>{' '}
         <span className="row-main">
-          <strong>{s.name}{seenNote(seen)}</strong>
+          <strong>{s.name}{seenNote(seen, heardOnly, photographed)}</strong>
           <span className="muted small">{sci ? <i>{s.sci}</i> : GROUPS[s.group]}</span>
         </span>
-        <Pips rarity={s.rarity} /> <Band sp={s} seen={seen} />
+        <Pips rarity={s.rarity} />{' '}
+        {/* The ear and camera hang under the band, so the pips and bands stay in their columns down the list. */}
+        <span className="row-band">
+          <Band sp={s} seen={seen} />
+          {heardOnly || photographed ? (
+            <span className="row-marks">
+              {heardOnly ? <span className="row-mark row-mark--ear">{ICON.ear}</span> : null}
+              {photographed ? <span className="row-mark row-mark--photo">{ICON.camera}</span> : null}
+            </span>
+          ) : null}
+        </span>
       </a>
     </li>
   );
@@ -372,6 +425,7 @@ export default function Dex() {
   const seen = useSeen();
   const kindCounts = useKindCounts();
   const lastSeen = useLastSeen();
+  const tiers = useTiers();
   const navigate = useNavigate();
 
   const location = useLocation();
@@ -537,9 +591,10 @@ export default function Dex() {
 
   // ---------- pieces ----------
   const sci = f.sort === 'dex';
+  const item = (s: Species) => ({ id: s.id, seen: seen.has(s.id), heard: tiers.heardOnly.has(s.id), photo: tiers.photographed.has(s.id) });
   const block = (items: Species[]) => (f.layout === 'list'
-    ? <ul className="rows pad-x">{items.map((s) => <RowItem key={s.id} id={s.id} seen={seen.has(s.id)} sci={sci} />)}</ul>
-    : <ul className="dex-grid">{items.map((s) => <TileItem key={s.id} id={s.id} seen={seen.has(s.id)} />)}</ul>);
+    ? <ul className="rows pad-x">{items.map((s) => <RowItem key={s.id} {...item(s)} sci={sci} />)}</ul>
+    : <ul className="dex-grid">{items.map((s) => <TileItem key={s.id} {...item(s)} />)}</ul>);
 
   const noun2 = scopeNoun(f.kind, 2);
   let body: ReactNode;
