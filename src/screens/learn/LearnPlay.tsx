@@ -39,6 +39,14 @@ function speciesName(id?: number | null) { return byId.get(Number(id))?.name || 
 // Compare and pressing Back puts her back where she was, as v1 does. This remembers how far down the page she was.
 const scrollOf = new WeakMap<object, number>();
 const hereNow = () => window.location.hash;
+
+// v1 focusWithin (js/learn.js:273): a screen drawn here only takes focus for its heading when she was already in the
+// screen, or the route's focus has parked on it while it loaded. A cold load leaves focus where the browser put it.
+const focusInView = () => {
+  const view = document.getElementById('view');
+  const a = document.activeElement;
+  return !!view && !!a && a !== document.body && a.isConnected && view.contains(a);
+};
 function useRememberScroll(round: object | null) {
   useEffect(() => {
     if (!round) return;
@@ -196,8 +204,9 @@ function ScoreHero({ round, big, of, frac, note }: { round: RoundState; big: num
   );
 }
 
-function Results({ game, total, onAgain, onAgainMissed, onHub }: {
+function Results({ game, total, onAgain, onAgainMissed, onHub, takeFocus }: {
   game: RoundState; total: number; onAgain: () => void; onAgainMissed: (ids: number[]) => void; onHub: () => void;
+  takeFocus: () => boolean;
 }) {
   const asked = game.qs.filter((q) => q.picked != null);
   const missed = asked.filter((q) => q.picked !== q.answer);
@@ -209,7 +218,9 @@ function Results({ game, total, onAgain, onAgainMissed, onHub }: {
   const wrongs = game.mode === 'rapid' ? missed.slice(0, 15) : missed;
   const roundName = game.daily ? "Today's challenge" : game.testId ? 'Test me' : game.pack ? packBy[game.pack]?.name : MODE_INFO[game.mode] || '';
   const headRef = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { headRef.current?.focus({ preventScroll: true }); }, [game]);
+  // v1 drawResults focuses its heading only if she was in the screen (See how you went, the clock running out while
+  // she answered); a cold load of a finished daily leaves focus alone, and the route's own focus covers arriving here.
+  useEffect(() => { if (takeFocus()) headRef.current?.focus({ preventScroll: true }); }, [game]);
   return (
     <div className="lr">
       <header className="page-head"><h1 ref={headRef} className="lh-title" tabIndex={-1}>{roundName}</h1></header>
@@ -314,12 +325,12 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         if (active.mode === 'rapid') setRapidLeft(Math.max(0, (active.endsAt || 0) - Date.now()));
         return;
       }
-      // v1 focuses the new screen's heading after a route change.
-      wantHeadFocus.current = true;
       if (isDaily) {
         const r = newDailyRound();
         if (!alive) return;
         if (r.error) { setError(r.error); return; }
+        // A new round takes focus for its heading only after in-app navigation (the route's focus is in the screen).
+        wantHeadFocus.current = focusInView();
         setGame(r.game);
         setActive(r.game);
         return;
@@ -336,6 +347,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         : await newPracticeRound(pack, { seen: seenNow } as any);
       if (!alive) return;
       if (r.error) { setError(r.error); return; }
+      wantHeadFocus.current = focusInView();
       setGame(r.game);
       setActive(r.game);
       if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
@@ -347,6 +359,8 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (!game || game.mode !== 'rapid') return;
     const tick = setInterval(() => {
       const left = Math.max(0, (game.endsAt || 0) - Date.now());
+      // Time up: the results take focus for their heading if she was answering (v1 ticker -> drawResults focusWithin).
+      if (!left && focusInView()) wantHeadFocus.current = true;
       setRapidLeft(left);
       if (!left) clearInterval(tick);
     }, 200);
@@ -486,7 +500,12 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   if (!ready || !game) return <div className="learn learn--loading" aria-busy="true" />;
 
   if (isOver) {
-    return <Results game={game} total={total} onAgain={() => { void restart(); }} onAgainMissed={(ids) => { void startWithIds(ids); }} onHub={() => { setActive(null); navigate('/learn', { replace: true }); }} />;
+    const takeFocus = () => {
+      const want = wantHeadFocus.current || focusInView();
+      wantHeadFocus.current = false;
+      return want;
+    };
+    return <Results game={game} total={total} takeFocus={takeFocus} onAgain={() => { void restart(); }} onAgainMissed={(ids) => { void startWithIds(ids); }} onHub={() => { setActive(null); navigate('/learn', { replace: true }); }} />;
   }
 
   const q = current!;
