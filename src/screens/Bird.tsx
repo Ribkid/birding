@@ -3,7 +3,7 @@
 // the photo (src/lib/look.ts), with the Photos / 3D model / Card switch and the back and search buttons floating
 // over it; the content is a sheet that slides up over its foot; a slim Log bar rises once the main Log button has
 // scrolled away. species.css styles it all under .bird.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, type Species } from '../lib/data';
 import { mediaSettled, useMedia, useSightings } from '../lib/hooks';
@@ -20,6 +20,7 @@ import { learnReady, masteryOf } from '../core/learn.js';
 import { topLayer } from '../lib/layers';
 import { Icon } from '../components/Icon';
 import { MinePhoto } from '../components/MinePhoto';
+import { PhotoViewer, type ViewerPhoto } from '../components/PhotoViewer';
 import { Band, Pips, SpeciesImage } from '../components/SpeciesImage';
 import { CallsSection, PauseIcon, PlayIcon, hasCalls, useCallPlayer } from './BirdCalls';
 import { CardOverlay, askMotion, shareCard, type CardInfo } from './BirdCard';
@@ -80,6 +81,11 @@ const author = (a?: string) => String(a || '').replace(/\s*\(?\bhttps?:\/\/[^\s)
 function Credit({ ph }: { ph: Photo }) {
   return <>Photo: {ph.page ? <a href={ph.page} target="_blank" rel="noopener">{author(ph.credit)}</a> : author(ph.credit)}{ph.license ? `, ${ph.license}` : ''}</>;
 }
+const creditText = (ph: Photo) => `Photo: ${author(ph.credit)}${ph.license ? `, ${ph.license}` : ''}`;
+// The hero's photos as the full-screen viewer shows them: the same addresses, with their credit.
+const forViewer = (photos: Photo[]): ViewerPhoto[] => photos.map((ph) => ({
+  src: ph.src, small: ph.small, credit: ph.credit ? <Credit ph={ph} /> : null, creditText: ph.credit ? creditText(ph) : '',
+}));
 const sourceLabel = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
 
 const ShareIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4M5 13v6h14v-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
@@ -107,6 +113,8 @@ function SpeciesPage({ sp }: { sp: Species }) {
   const [awake, setAwake] = useState<ReadonlySet<string>>(() => new Set());
   const [barOn, setBarOn] = useState(false);
   const [grown, setGrown] = useState(false);
+  // The photo open full screen, by its address (so a gallery drawn again keeps it), or none.
+  const [viewing, setViewing] = useState<string | null>(null);
   const galRef = useRef<HTMLDivElement>(null);
   const logRef = useRef<HTMLButtonElement>(null);
   const growRef = useRef<HTMLDivElement>(null);
@@ -243,9 +251,35 @@ function SpeciesPage({ sp }: { sp: Species }) {
     wake(i, i + 1);
     if (i !== slide) setSlide(i);
   };
+  // Tapping a photo (or Enter on the gallery) opens it full screen. The gallery follows the photo she moves to in
+  // the viewer, so closing it shrinks the photo back into its own slide.
+  const viewIndex = viewing ? photos.findIndex((p) => p.src === viewing) : -1;
+  const openPhoto = (i: number) => { if (hero === 'photo' && photos[i]) setViewing(photos[i].src); };
+  const slideAt = (i: number) => {
+    const g = galRef.current;
+    const el = g?.children[i] as HTMLElement | undefined;
+    if (!g || !el) return null;
+    const left = i * g.clientWidth;
+    if (Math.abs(g.scrollLeft - left) > 1) {
+      touched.current = true;
+      wake(i);
+      g.scrollTo({ left, behavior: 'instant' });
+    }
+    return el;
+  };
+  const onGalleryClick = (e: MouseEvent<HTMLDivElement>) => {
+    const g = galRef.current, fig = (e.target as Element).closest('.slide');
+    if (!g || !fig || !n) return;
+    openPhoto([...g.children].indexOf(fig));
+  };
   const onGalleryKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const g = galRef.current;
-    if (!g || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
+    if (g && n && (e.key === 'Enter' || e.key === ' ') && e.target === g) {
+      e.preventDefault();
+      openPhoto(slide);
+      return;
+    }
+    if (!g || n < 2 || (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft')) return;
     e.preventDefault();
     touched.current = true;
     const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
@@ -292,9 +326,10 @@ function SpeciesPage({ sp }: { sp: Species }) {
             ref={galRef}
             tabIndex={0}
             role="group"
-            aria-label={`Photos of the ${sp.name}${n > 1 ? '. Swipe for more.' : ''}`}
+            aria-label={`Photos of the ${sp.name}${n > 1 ? '. Swipe for more.' : ''}${n ? ' Open a photo to see it whole.' : ''}`}
             onScroll={n > 1 ? onGalleryScroll : undefined}
-            onKeyDown={n > 1 ? onGalleryKey : undefined}
+            onKeyDown={n ? onGalleryKey : undefined}
+            onClick={n ? onGalleryClick : undefined}
             onPointerDown={n > 1 ? touch : undefined}
             onTouchStart={n > 1 ? touch : undefined}
             onWheel={n > 1 ? touch : undefined}
@@ -491,6 +526,17 @@ function SpeciesPage({ sp }: { sp: Species }) {
       </div>
 
       {carding && <CardOverlay sp={sp} info={cardInfo} onClose={() => setCarding(false)} />}
+      {viewIndex >= 0 && (
+        <PhotoViewer
+          photos={forViewer(photos)}
+          index={viewIndex}
+          name={sp.name}
+          onIndex={(i) => { if (photos[i]) setViewing(photos[i].src); }}
+          onClose={() => setViewing(null)}
+          origin={slideAt}
+          returnTo={galRef.current}
+        />
+      )}
     </article>
   );
 }
