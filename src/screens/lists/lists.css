@@ -88,3 +88,65 @@
   @starting-style { .tally-chooser, .tally-chooser button { opacity: 0; scale: none; translate: none; } }
   .tally-chooser button:active { scale: none; }
 }
+
+/* ---------- live outing mode ---------- */
+/* Screen on and Sun share one glass rail at the top right of a live outing's header, level with the back button and
+   stacked, like the map's own controls, so the title keeps most of the line and still breaks between words at 320 px. */
+.outing-tools {
+  flex: none; display: grid; gap: 2px; margin-left: auto; padding: 3px; border-radius: 25px;
+  margin-top: calc((clamp(2rem, 8vw, 2.5rem) * 1.04 - var(--tap)) / 2 - 3px);
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), 0 10px 24px -12px rgba(12, 18, 27, .45);
+}
+.outing-tools .tool-tog:not([aria-pressed="true"]) { background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .outing-tools { background: var(--glass-strong); } }
+@media (prefers-reduced-transparency: reduce) { .outing-tools { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+:root[data-theme="outdoor"] .outing-tools { box-shadow: inset 0 0 0 2px var(--line-strong); }
+:root[data-theme="outdoor"] .outing-tools .tool-tog:not([aria-pressed="true"]) { box-shadow: none; }
+/* A toast on a live outing (a badge, a count that didn't save) sits above the Discard and Finish row, not over it. */
+body:has(.tally-foot--live) .toast { bottom: calc(var(--chrome-bottom) + 84px); }
+
+/* A species new for her dex on this outing wears a gold New band on its photo, like a leg band on the bird: a
+   button that opens its new-for-your-dex card. The photo keeps to the top of the row, so the band sits on it however
+   the name wraps. */
+.tally-row--new { position: relative; }
+.tally-row--new .tally-sp .row-thumb { align-self: flex-start; }
+.tally-sp .lifer { justify-self: start; border-radius: 6px; transform-origin: 0 50%; }
+.lifer-band {
+  position: absolute; z-index: 1; left: 26px; top: 40px; translate: -50% 0;
+  height: 20px; min-width: 38px; padding: 0 7px; border: 0; border-radius: 6px; cursor: pointer;
+  display: grid; place-items: center;
+  font: 800 .8rem/1 var(--stamp); letter-spacing: .05em; font-variant-numeric: tabular-nums;
+  background: var(--sun); color: #2A2000;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), inset 0 -1px 0 rgba(0, 0, 0, .18), 0 0 0 1.5px rgba(255, 255, 255, .9), 0 4px 10px -4px rgba(0, 0, 0, .5);
+  touch-action: manipulation; -webkit-user-select: none; user-select: none;
+}
+/* A 50 by 44 px target round the band. */
+.lifer-band::before { content: ''; position: absolute; inset: -12px -6px; }
+.lifer-band:active { scale: .92; }
+:root[data-theme="outdoor"] .lifer-band { box-shadow: 0 0 0 2px #05080C; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="outdoor"]) .lifer-band { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 0 0 1.5px var(--surface), 0 4px 10px -4px rgba(0, 0, 0, .8); }
+}
+:root[data-theme="dark"] .lifer-band { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 0 0 1.5px var(--surface), 0 4px 10px -4px rgba(0, 0, 0, .8); }
+
+/* The Finish sheet: the outing's new species as a row of photos. */
+.finish-lifers { margin: 4px 0 14px; }
+.finish-lifers-h { margin: 0 0 8px; font-weight: 700; color: var(--ink); }
+.finish-lifers-h b { font: 800 1.35rem/1 var(--stamp); font-variant-numeric: tabular-nums; color: var(--sun-ink); }
+.finish-lifers-row {
+  list-style: none; margin: 0 -16px; padding: 2px 16px 6px; display: flex; gap: 10px;
+  overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+}
+.finish-lifers-row::-webkit-scrollbar { display: none; }
+.finish-lifers-row li { flex: none; width: 76px; display: grid; gap: 5px; justify-items: center; }
+.finish-lifer-ph {
+  position: relative; width: 76px; height: 76px; border-radius: 18px; overflow: hidden; background: var(--surface-2);
+  box-shadow: 0 0 0 2px var(--sun), 0 8px 18px -10px rgba(12, 18, 27, .5);
+}
+.finish-lifer-ph img { width: 100%; height: 100%; object-fit: cover; }
+.finish-lifer-name {
+  width: 100%; font-size: var(--fs-1); font-weight: 600; line-height: 1.25; text-align: center; color: var(--ink-2);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) { .lifer-band:active { scale: none; } }

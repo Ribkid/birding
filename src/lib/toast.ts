@@ -28,8 +28,9 @@ export function announce(msg: string) {
 
 let toastEl: HTMLElement | null = null;
 let toastT = 0;
-export function toast(msg: string) {
-  announce(msg);
+/** Shows `msg` for about 4.5 s; screen readers hear `say` (the same words unless a fuller line is given). */
+export function toast(msg: string, say = msg) {
+  announce(say);
   clearTimeout(toastT);
   toastEl?.remove();
   const t = toastEl = document.createElement('div');

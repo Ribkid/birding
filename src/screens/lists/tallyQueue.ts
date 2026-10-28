@@ -21,7 +21,7 @@ import type { OutingRow, SightingInput, SightingRow } from './shared';
 
 /** How the queue writes. useTally.ts passes the app's saveSighting, db.put, deleteSighting, kv and toast. */
 export interface TallyIO {
-  /** Saves a new sighting and resolves to its id (saveSighting: it also celebrates a first sighting). */
+  /** Saves a new sighting and resolves to its id (saveSighting, quietly: a first sighting gets no card). */
   create: (rec: SightingInput) => Promise<number>;
   /** Stores an existing sighting again (db.put, which gives it a new updatedAt and an outbox entry). */
   update: (rec: SightingRow) => Promise<unknown>;
