@@ -117,10 +117,11 @@ export function TabBar() {
       <nav className="tabbar" aria-label="Main">
         {TABS.map((tab) => {
           if (tab.plus) {
+            // v1 index.html: a link to #/add that opens the Add sheet in place (js/app.js:3092), styled by `.tabbar a`.
             return (
-              <button key={tab.to} type="button" className="tab-plus" aria-label={tab.label} onClick={() => setPlusOpen(true)}>
+              <a key={tab.to} href="#/add" id="plus" className="tab-plus" aria-label={tab.label} onClick={(e) => { e.preventDefault(); setPlusOpen(true); }}>
                 <svg viewBox="0 0 24 24" aria-hidden="true">{tab.icon}</svg>
-              </button>
+              </a>
             );
           }
           const active = current === tab.key;

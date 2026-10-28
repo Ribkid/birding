@@ -1,6 +1,6 @@
 // "Ready for the field": what works on this phone with no signal (v1 js/app.js:2574-2700).
-import { SPECIES } from '../../lib/data';
-import { cachedIndex, callPackStatus, downloadAll, photoFor, saveCallPack, sized } from '../../core/media.js';
+import { KINDS, SPECIES, byId } from '../../lib/data';
+import { cachedIndex, callPackStatus, downloadAll, loadCallPack, photoFor, saveCallPack, sized } from '../../core/media.js';
 import { galleryFor } from '../../core/gallery.js';
 
 export type FieldKey = 'app' | 'photos' | 'calls' | 'maps' | 'listen' | 'scan';
@@ -63,7 +63,20 @@ const photoBytes = (all = false) =>
     + (all || photoFor(sp.id) ? PHOTO_WIKI : 0)
     + Math.min(4, galleryFor(sp.id).length) * PHOTO_GALLERY, 0);
 
-export async function checkField(key: FieldKey): Promise<FieldResult> {
+// Who the saved clips are of, e.g. '178 birds and 27 frogs' (v1 renderSettings, js/app.js:2467-2469).
+export async function callWho(): Promise<string> {
+  const pack = ((await loadCallPack()) || {}) as Record<string, unknown>;
+  const kinds: Record<string, number> = {};
+  for (const id of Object.keys(pack)) {
+    const k = byId.get(Number(id))?.kind || 'bird';
+    kinds[k] = (kinds[k] || 0) + 1;
+  }
+  return Object.entries(kinds)
+    .map(([k, n]) => `${n} ${n === 1 ? KINDS[k]?.one ?? k : (KINDS[k]?.label ?? k).toLowerCase()}`)
+    .join(' and ');
+}
+
+export async function checkField(key: FieldKey, who = ''): Promise<FieldResult> {
   if (key === 'app') {
     if (!('serviceWorker' in navigator)) return { ok: false, text: "This browser can't keep the app for offline use." };
     const status = await askWorker('shell-status');
@@ -91,7 +104,7 @@ export async function checkField(key: FieldKey): Promise<FieldResult> {
     const status = await callPackStatus();
     if (!status.total) return { ok: false, text: "Couldn't check the call clips. Open Settings again with signal." };
     return status.saved >= status.total
-      ? { ok: true, text: `Saved: ${status.total} short clips.` }
+      ? { ok: true, text: `Saved: ${status.total} short clips${who ? ` of ${who}` : ''}.` }
       : { ok: false, text: `${status.saved} of ${status.total} clips saved. About ${mbText(status.bytes - status.savedBytes)}.`, get: true };
   }
   if (key === 'maps') {

@@ -16,6 +16,11 @@ if (typeof window !== 'undefined') {
     held = e as InstallPrompt;
     notify();
   });
+  // Once the app is installed the offer is spent, so every Install button goes.
+  window.addEventListener('appinstalled', () => {
+    held = null;
+    notify();
+  });
 }
 
 export const canInstall = () => !!held;
@@ -24,6 +29,10 @@ export function onInstallChange(fn: () => void) {
   return () => { subs.delete(fn); };
 }
 export const useCanInstall = () => useSyncExternalStore(onInstallChange, canInstall, () => false);
+/** Running from the home screen (v1 renderSettings: matchMedia display-mode standalone). */
+export const isInstalled = () => {
+  try { return matchMedia('(display-mode: standalone)').matches; } catch { return false; }
+};
 
 export async function promptInstall() {
   const p = held;
