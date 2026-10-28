@@ -56,6 +56,11 @@
 .shell-ghost { visibility: hidden; }
 [data-shell] .dex-sheet { min-height: 40vh; }
 .dex-cap-ring { --kc: var(--seen); width: 34px; height: 34px; }
+/* The capsule's quiet second line (photographed, heard only) fits beside the 34px ring, so the capsule keeps the
+   static shell's height whether or not the line is there and the wordmark above it never moves. */
+.dex-cap-txt { display: grid; align-content: center; min-height: 34px; }
+.dex-cap-txt > span:first-child { line-height: 1; }
+.dex-cap-sub { margin-top: 1px; font-size: var(--fs-1); font-weight: 600; line-height: 1; color: var(--ink-2); white-space: nowrap; }
 
 /* Rings: a track and an arc in the kind colour, filled from empty on the first draw of a session. */
 .ring { flex: none; transform: rotate(-90deg); }
@@ -200,6 +205,13 @@
 .row-mark--ear { color: var(--seen); box-shadow: inset 0 0 0 1.5px var(--seen); }
 .row-mark--photo { color: var(--ink-2); }
 .row-mark--photo svg { width: 16px; height: 16px; }
+/* The Heard only and No photo yet chips carry the same glyphs as the marks they filter for, and their count. Each
+   chip holds its screen-reader comma itself (position: relative), so a chip scrolled out of the row can't widen the
+   page. */
+.chip--tier { position: relative; gap: 5px; padding-left: 12px; }
+.chip--tier > svg { width: 16px; height: 16px; flex: none; }
+.chip-n { font-variant-numeric: tabular-nums; opacity: .8; }
+.chip--on .chip-n { opacity: .9; }
 
 /* Groups further down skip layout and paint until they come near the screen; their height is estimated inline. */
 .dex-group--later { content-visibility: auto; }

@@ -11,7 +11,7 @@ import {
   pluralFor, type Species,
 } from '../lib/data';
 import { useDexReady, useKindCounts, useLastSeen, useMedia, useSeen } from '../lib/hooks';
-import { tierNote, useTiers } from '../lib/tiers';
+import { countIn, tierNote, useTiers } from '../lib/tiers';
 import { seqSettled } from '../lib/seq';
 import { keepFocus } from '../lib/layers';
 import { countUp, flip, motionOK } from '../lib/motion';
@@ -36,7 +36,9 @@ import { landingScroll } from '../components/RouteMotion';
 import { drawFirst, groupKey, rememberLeaving, rememberedBox, rememberedContent } from './dexMemory';
 import { announce } from '../lib/toast';
 
-type Show = 'all' | 'seen' | 'unseen';
+// Heard only and No photo yet sit with the show filters: species she has only heard, and ones she has logged
+// without a photo of her own (lib/tiers.ts).
+type Show = 'all' | 'seen' | 'unseen' | 'heard' | 'nophoto';
 type Sort = 'dex' | 'name' | 'rarity' | 'recent';
 type Layout = 'grid' | 'list';
 interface DexFilters {
@@ -275,7 +277,11 @@ const TodayRail = memo(function TodayRail({ kind, day }: { kind: string; day: Da
  * Today's pick full-bleed with the wordmark and her count. It follows the photo index on its own (useMedia), so a
  * better photo arriving redraws the hero, not the dex.
  */
-const DexHero = memo(function DexHero({ day, got, n, kind }: { day: DayPick | null; got: number; n: number; kind: string }) {
+const DexHero = memo(function DexHero({ day, got, n, kind, photo, heard }: {
+  day: DayPick | null; got: number; n: number; kind: string;
+  /** Photographed and heard-only species in the kind tab; heard is null for plants, which can't be heard. */
+  photo: number; heard: number | null;
+}) {
   useMedia();
   const heroRef = useRef<HTMLElement>(null);
   // The hero takes its colour from the pick's photo where the host allows it to be read. A new pick starts plain; a
@@ -312,7 +318,16 @@ const DexHero = memo(function DexHero({ day, got, n, kind }: { day: DayPick | nu
         <h1 className="wordmark">Sarah's BirdyDex<small>South East Queensland</small></h1>
         <p className="dex-cap glass">
           <Ring p={got / n} cls="dex-cap-ring" />
-          <span><b data-capn={got} style={digits(got)}>{got}</b> of {n} {scopeNoun(kind, n)} {kind === 'plant' ? 'found' : 'seen'}</span>
+          <span className="dex-cap-txt">
+            <span><b data-capn={got} style={digits(got)}>{got}</b> of {n} {scopeNoun(kind, n)} {kind === 'plant' ? 'found' : 'seen'}</span>
+            {/* A quiet second line once she has logged something here: how many have her photo, how many are only heard. */}
+            {got ? (
+              <span className="dex-cap-sub" data-cap-tiers>
+                <span className="sr-only">, </span>{photo} photographed
+                {heard != null ? <><span aria-hidden="true"> · </span><span className="sr-only">, </span>{heard} heard only</> : null}
+              </span>
+            ) : null}
+          </span>
         </p>
       </div>
     </header>
@@ -460,13 +475,26 @@ export default function Dex() {
 
   const list = useMemo(() => {
     const q = f.q.trim().toLowerCase();
+    const shows = (id: number) => (f.show === 'all' ? true
+      : f.show === 'seen' ? seen.has(id)
+        : f.show === 'unseen' ? !seen.has(id)
+          : f.show === 'heard' ? seen.has(id) && tiers.heardOnly.has(id)
+            : seen.has(id) && !tiers.photographed.has(id));
     return scopeAll.filter((s) =>
       (!q || `${s.name} ${s.sci} ${dexCode(s.id)} ${GROUPS[s.group]} ${KINDS[s.kind].label} ${KINDS[s.kind].one}`.toLowerCase().includes(q)) &&
-      (f.show === 'all' || (f.show === 'seen') === seen.has(s.id)) &&
+      shows(s.id) &&
       (!f.group || s.group === f.group) && (!f.habitat || s.habitats.includes(f.habitat)) &&
       (!f.rarity || s.rarity === Number(f.rarity)) &&
       (!f.season || (relRate(s.id, month) ?? (inSeason(s, month) ? 1 : 0)) >= 0.35));
-  }, [scopeAll, f.q, f.show, f.group, f.habitat, f.rarity, f.season, seen, month, seqData]);
+  }, [scopeAll, f.q, f.show, f.group, f.habitat, f.rarity, f.season, seen, tiers, month, seqData]);
+
+  // The tiers in this kind tab, for the hero's second line and the Heard only and No photo yet chips. Plants can't
+  // be heard (the log sheet never stores it for them), so their tab has no Heard only.
+  const canHear = f.kind !== 'plant';
+  const inKind = (id: number) => { const s = byId.get(id); return !!s && inScope(s, f.kind); };
+  const heardN = countIn(tiers.heardOnly, (id) => seen.has(id) && inKind(id));
+  const photoN = countIn(tiers.photographed, (id) => seen.has(id) && inKind(id));
+  const noPhotoN = Math.max(0, seenIn(f.kind, kindCounts) - photoN);
 
   // The pick is ranked by the regional reporting rates, so (as v1 drew the dex once they were in) it waits for them as
   // well as her sightings; otherwise the hero would show one species and then swap to another a moment later. If the
@@ -609,11 +637,30 @@ export default function Dex() {
           <div className="row-center"><button type="button" className="btn btn--primary" data-search onClick={() => openSearch(q)}>Search everything</button>{clear}</div>
         </div>
       );
-    } else if (f.show === 'seen' && !seenIn(f.kind, kindCounts)) {
+    } else if ((f.show === 'seen' || f.show === 'heard' || f.show === 'nophoto') && !seenIn(f.kind, kindCounts)) {
       body = (
         <div className="empty">
           <p className="empty-h">No {noun2} logged yet.</p>
           <p className="small">Press and hold any tile to log it, or tap the + button.</p>
+          <div className="row-center"><button type="button" className="btn btn--primary" data-show="all" onClick={() => redraw({ show: 'all' })}>Show all {noun2}</button></div>
+        </div>
+      );
+    } else if ((f.show === 'heard' && !heardN) || (f.show === 'nophoto' && !noPhotoN)) {
+      // Nothing is waiting on this list: say so plainly, and how a species gets onto it.
+      const one = scopeNoun(f.kind, 1);
+      body = (
+        <div className="empty">
+          {f.show === 'heard' ? (
+            <>
+              <p className="empty-h">No {noun2} heard only.</p>
+              <p className="small">Tick Heard only when you log one you couldn't see. It waits here until you see it.</p>
+            </>
+          ) : (
+            <>
+              <p className="empty-h">You have a photo of every {one} you've logged.</p>
+              <p className="small">Add a photo when you log a sighting to keep it that way.</p>
+            </>
+          )}
           <div className="row-center"><button type="button" className="btn btn--primary" data-show="all" onClick={() => redraw({ show: 'all' })}>Show all {noun2}</button></div>
         </div>
       );
@@ -699,7 +746,7 @@ export default function Dex() {
 
   return (
     <>
-      <DexHero day={day} got={seenIn(f.kind, kindCounts)} n={scopeAll.length} kind={f.kind} />
+      <DexHero day={day} got={seenIn(f.kind, kindCounts)} n={scopeAll.length} kind={f.kind} photo={photoN} heard={canHear ? heardN : null} />
       <div className="dex-sheet">
         {kindRail}
         <TodayRail kind={f.kind} day={day} />
@@ -731,6 +778,14 @@ export default function Dex() {
           {([['all', 'All'], ['seen', 'Seen'], ['unseen', 'Not seen']] as [Show, string][]).map(([v, l]) => (
             <button key={v} type="button" className={`chip ${f.show === v ? 'chip--on' : ''}`} data-show={v} aria-pressed={f.show === v} onClick={() => redraw({ show: v })}>{l}</button>
           ))}
+          {/* Her two to-do lists: birds to go and see properly, and ones to photograph. The count is for the kind tab. */}
+          {([['heard', 'Heard only', heardN, ICON.ear], ['nophoto', 'No photo yet', noPhotoN, ICON.camera]] as [Show, string, number, ReactNode][])
+            .filter(([v]) => v !== 'heard' || canHear || f.show === 'heard')
+            .map(([v, l, n, ic]) => (
+              <button key={v} type="button" className={`chip chip--tier ${f.show === v ? 'chip--on' : ''}`} data-show={v} aria-pressed={f.show === v} onClick={() => redraw({ show: v })}>
+                {ic}{l}<span className="chip-n"><span aria-hidden="true">·</span><span className="sr-only">,</span> <span data-tier-n>{n}</span></span>
+              </button>
+            ))}
           <button type="button" className={`chip ${f.season ? 'chip--on' : ''}`} data-season aria-pressed={f.season} onClick={() => redraw({ season: !f.season })}>In season now</button>
           <select className={`chip chip--select ${f.sort !== 'dex' ? 'chip--on' : ''}`} data-sort aria-label="Sort" value={f.sort} onChange={(e) => redraw({ sort: e.target.value as Sort })}>
             {([['dex', 'Dex order'], ['name', 'Name A–Z'], ['rarity', 'Rarest first'], ['recent', 'Recently seen']] as [Sort, string][]).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
