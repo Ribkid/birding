@@ -8,12 +8,14 @@ import {
 import { db } from '../../core/db.js';
 import { sized } from '../../core/media.js';
 import { likelihood, loadSeq, monthRates, seq } from '../../core/seqdata.js';
-import { MONTHS, targets } from '../../core/stats.js';
+import { MONTHS, badges, targets } from '../../core/stats.js';
 import { byId, dexCode, SPECIES, type Species } from '../../lib/data';
 import { useMedia, useOutings, useSeen, useSightings, type Outing, type Sighting } from '../../lib/hooks';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { nudgeAfterSave } from '../me/nudge';
+import { celebrate } from '../../components/Celebrate';
+import { toast } from '../../lib/toast';
 import { Band } from '../../components/SpeciesImage';
 import './lists.css';
 
@@ -181,12 +183,28 @@ export function suggestTargets(args: TargetArgs): Species[] {
   return (targets as unknown as (value: TargetArgs) => Species[])(args);
 }
 
+type BadgeRow = { id: string; name: string; done: boolean };
+const doneBadges = (sightings: unknown[], outings: unknown[]) =>
+  (badges(sightings, outings) as BadgeRow[]).filter((b) => b.done);
+
+// Whether the last save added a species new for the dex (v1 state.lastSaveNew): the celebration then stands in for
+// the "saved" toast.
+let lastNew = false;
+export const lastSaveNew = () => lastNew;
+
+/**
+ * v1 saveSighting: write the record, then celebrate a species new for the dex (or toast a badge it earned) and offer
+ * the sign-up nudge.
+ */
 export async function saveSighting(rec: SightingInput): Promise<number> {
   try {
     void navigator.storage?.persist?.();
   } catch {
     /* storage persistence is best effort */
   }
+  const [before, outings] = (await Promise.all([db.all('sightings'), db.all('outings')])) as [SightingRow[], unknown[]];
+  const seenBefore = new Set(before.map((s) => s.speciesId));
+  const badgesBefore = new Set(doneBadges(before, outings).map((b) => b.id));
   let id: number;
   if (rec.id != null) {
     await db.put('sightings', rec);
@@ -196,8 +214,13 @@ export async function saveSighting(rec: SightingInput): Promise<number> {
     id = Number(await db.add('sightings', rec));
     rec.id = id;
   }
-  const total = ((await db.all('sightings')) as unknown[]).length;
-  void nudgeAfterSave(total);
+  const after = (await db.all('sightings')) as SightingRow[];
+  const newBadges = doneBadges(after, outings).filter((b) => !badgesBefore.has(b.id));
+  const sp = byId.get(rec.speciesId);
+  lastNew = !seenBefore.has(rec.speciesId);
+  if (lastNew && sp) celebrate(sp, newBadges, after);
+  else if (newBadges.length) toast(`Badge earned: ${newBadges.map((b) => b.name).join(', ')}`);
+  void nudgeAfterSave(after.length);
   return id;
 }
 

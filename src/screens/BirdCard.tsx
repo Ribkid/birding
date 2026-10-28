@@ -93,7 +93,7 @@ export function enableTilt(card: HTMLElement, { phone = !reducedMotion() } = {})
 
 // The card is a layer: Escape, Close, a tap outside or a route change (Android Back) close it, which stops the
 // tilt loop and the motion listener. Focus goes back to whatever opened it.
-export function CardOverlay({ sp, info, onClose }: { sp: Species; info: CardInfo; onClose: () => void }) {
+export function CardOverlay({ sp, info, onClose, returnTo }: { sp: Species; info: CardInfo; onClose: () => void; returnTo?: Element | null }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
@@ -105,7 +105,8 @@ export function CardOverlay({ sp, info, onClose }: { sp: Species; info: CardInfo
     if (!wrap || !card) return;
     const hash = location.hash;
     const stop = enableTilt(card);
-    const layer: Layer = openLayer(wrap, { label: `${sp.name} card`, close: () => closeRef.current() });
+    // Opened from the celebration, focus goes back to what opened that, as v1 openCard({ returnTo }) did.
+    const layer: Layer = openLayer(wrap, { label: `${sp.name} card`, close: () => closeRef.current(), ...(returnTo ? { returnTo } : {}) });
     // Escape and Tab come from the one layer-key listener in lib/layers.ts.
     closeBtn.current?.focus({ preventScroll: true });
     return () => {

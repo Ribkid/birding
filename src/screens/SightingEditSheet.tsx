@@ -17,6 +17,7 @@ import {
   draftFromSighting,
   emptyDraft,
   getPosition,
+  lastSaveNew,
   saveSighting,
   useObjectUrl,
   type SightingDraft,
@@ -104,9 +105,9 @@ export function SightingEditSheet({ sighting, speciesId, onClose }: { sighting?:
       // The old photo goes only once the record no longer points at it.
       if (oldPhotoId != null && rec.photoId !== oldPhotoId) await db.del('photos', oldPhotoId).catch(() => {});
       onClose();
-      // v1's words. v1 shows its new-for-the-dex celebration instead of the toast for a first sighting; this app has
-      // no celebration, so the toast says it was saved either way.
-      toast(existing ? 'Changes saved' : `${byId.get(rec.speciesId as number)?.name ?? 'Sighting'} saved`);
+      // v1's words. For a species new to the dex, the celebration saveSighting opens stands in for 'saved'.
+      if (existing) toast('Changes saved');
+      else if (!lastSaveNew()) toast(`${byId.get(rec.speciesId as number)?.name ?? 'Sighting'} saved`);
     } catch {
       if (addedPhotoId != null) await db.del('photos', addedPhotoId).catch(() => {});
       setError(existing ? 'The change could not be saved. Try again.' : 'The sighting could not be saved. Try again.');
