@@ -337,6 +337,17 @@ describe('the photo viewer', () => {
     expect(missing?.getAttribute('aria-label')).toBe('Photo 1 of 4, Crested Pigeon');
   });
 
+  it('keeps the soft copy under the photo while the photo fades in over it, then lets it go', async () => {
+    setup(0);
+    const soft = () => document.querySelector('.pv-slide.is-current img.pv-img--soft');
+    expect(soft()).not.toBeNull();
+    fireEvent.load(document.querySelector('.pv-slide.is-current img.pv-img:not(.pv-img--soft)')!);
+    expect(document.querySelector('.pv-slide.is-current img.is-wait')).toBeNull();
+    expect(soft()).not.toBeNull();
+    await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+    expect(soft()).toBeNull();
+  });
+
   it('keeps the copy the page was showing under the photo while it loads, and with no signal', () => {
     // Photo 2 has no small copy of its own; the page's frame was showing a smaller one of it.
     const frame = pageFrame('https://example.test/b-shown.jpg');

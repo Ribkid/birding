@@ -9,7 +9,7 @@
 // same viewer can show her own photos or Scan's reference photos later. Only the photo on show and its neighbours
 // are drawn, from the addresses the page already uses. Reduced motion: a 120 ms fade instead of the flight; pinch
 // and drag still follow her fingers. Geometry and gesture rules are in photoViewerMath.ts.
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { closeLayer, openLayer, type Layer } from '../lib/layers';
 import { motionOK, settle } from '../lib/motion';
@@ -143,20 +143,30 @@ type Look = 'wait' | 'in' | 'small' | 'missing';
  */
 function ViewerImage({ ph, alt, standIn }: { ph: ViewerPhoto; alt: string; standIn?: string | null }) {
   const [look, setLook] = useState<Look>(() => (shownPhotos.has(ph.src) ? 'in' : 'wait'));
+  // The soft copy stays under the photo while it fades in over it, so the stage never dips to dark in between.
+  const [under, setUnder] = useState(false);
   const ref = useRef<HTMLImageElement>(null);
+  const small = [ph.small, standIn].find((s) => s && s !== ph.src) || null;
+  const arrived = () => {
+    // The page's own frame for this photo then draws it at once rather than fading it in again.
+    shownPhotos.add(ph.src);
+    setLook('in');
+    if (small) setUnder(true);
+  };
   useLayoutEffect(() => {
     const el = ref.current;
-    if (look === 'wait' && el?.complete && el.naturalWidth) {
-      shownPhotos.add(ph.src);
-      setLook('in');
-    }
-  }, [look, ph.src]);
+    if (look === 'wait' && el?.complete && el.naturalWidth) arrived();
+  });
+  useEffect(() => {
+    if (!under) return;
+    const t = setTimeout(() => setUnder(false), 400);
+    return () => clearTimeout(t);
+  }, [under]);
   if (look === 'missing') return <span className="pv-missing img-missing" role="img" aria-label={alt} />;
-  const small = [ph.small, standIn].find((s) => s && s !== ph.src) || null;
   return (
     <>
       {look === 'wait' ? <span className="pv-loading" aria-hidden="true" /> : null}
-      {small && look === 'wait' ? <img className="pv-img pv-img--soft" src={small} alt="" aria-hidden="true" decoding="async" draggable={false} /> : null}
+      {small && (look === 'wait' || under) ? <img className="pv-img pv-img--soft" src={small} alt="" aria-hidden="true" decoding="async" draggable={false} /> : null}
       <img
         ref={ref}
         className={`pv-img${look === 'wait' ? ' is-wait' : ''}`}
@@ -164,13 +174,7 @@ function ViewerImage({ ph, alt, standIn }: { ph: ViewerPhoto; alt: string; stand
         alt={alt}
         decoding="async"
         draggable={false}
-        onLoad={() => {
-          if (look === 'wait') {
-            // The page's own frame for this photo then draws it at once rather than fading it in again.
-            shownPhotos.add(ph.src);
-            setLook('in');
-          }
-        }}
+        onLoad={() => { if (look === 'wait') arrived(); }}
         onError={() => setLook((l) => (l === 'wait' && small ? 'small' : 'missing'))}
       />
     </>
