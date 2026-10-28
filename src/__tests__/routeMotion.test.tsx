@@ -103,7 +103,7 @@ describe('Back and Forward', () => {
     }) as typeof window.scrollTo);
     Object.defineProperty(window, 'scrollY', { configurable: true, get: () => y });
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-      const r = at[this.getAttribute('data-tile') || ''];
+      const r = at[this.getAttribute('data-tile') || this.textContent || ''];
       return (r ? { top: r[0], bottom: r[1], left: 0, right: 100, width: 100, height: r[1] - r[0], x: 0, y: r[0] }
         : { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0 }) as DOMRect;
     });
@@ -193,6 +193,17 @@ describe('Back and Forward', () => {
     expect(document.activeElement?.textContent).toBe('Dex');
     // That return also brought the tile she opened into sight.
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
+  });
+
+  it('leaves focus to the screen when she left it by a plain text link, not a photo tile or card', async () => {
+    app();
+    at = { 'Row 2': [300, 360] };
+    click('Row 2');
+    await frame();
+    await back();
+    await frame();
+    expect(h1()).toBe('Lists');
+    expect(document.activeElement?.textContent).toBe('Lists');
   });
 
   it('holds the return to the tile that was at the top of the screen', async () => {

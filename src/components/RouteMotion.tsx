@@ -177,14 +177,21 @@ function onPress(e: MouseEvent) {
 const onPointer = () => { keys = false; };
 const onKey = (e: KeyboardEvent) => { if (!e.metaKey && !e.ctrlKey && !e.altKey) keys = true; };
 
-/** Where she is on the screen she is leaving, and the control she is leaving it by (pressed just now, or focused). */
+/**
+ * The controls a return gives focus back to: a photo tile, row or card that opens a species page, her way through a
+ * long list. Other screens put focus where they want it themselves (a Learn round resumed gives it to its verdict).
+ */
+const opensFromList = (el: Element) => el.matches('[data-tile]')
+  || (el.matches('a[href^="#/bird/"]') && (el.matches(THUMB) || !!el.querySelector(THUMB)));
+
+/** Where she is on the screen she is leaving, and the tile she is leaving it by (pressed just now, or focused). */
 function placeHere(): Place {
   const view = viewEl();
   const a = document.activeElement;
   const by = pressed && performance.now() - pressed.at < 1000 && view?.contains(pressed.el) ? pressed.el
-    : a && a !== view && view?.contains(a) && !a.matches('h1') ? a : null;
+    : a && a !== view && view?.contains(a) ? a : null;
   pressed = null;
-  return { y: scrollY, anchor: view ? anchorOf(view) : null, focus: focusKey(by) };
+  return { y: scrollY, anchor: view ? anchorOf(view) : null, focus: by && opensFromList(by) ? focusKey(by) : null };
 }
 
 // The browser makes an entry of its own, with no state, for a plain hash link (a species link in a map popup), a hash
