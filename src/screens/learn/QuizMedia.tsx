@@ -20,14 +20,16 @@ export const QI = {
 
 const credit = (p?: PhotoRef | null) => (p ? `Photo: ${String(p.credit || 'Unknown').slice(0, 50)}${p.license ? `, ${p.license}` : ''}` : '');
 
-/** A quiz photo with the same fall-back chain as v1: if a host fails, try the next picture, then say why not. */
-export function PhotoBox({ photos, alt = '', cls = 'lq-photo', missing = '', style }: {
-  photos?: PhotoRef[] | null; alt?: string; cls?: string; missing?: ReactNode; style?: CSSProperties;
+/** A quiz photo with the same fall-back chain as v1: if a host fails, try the next picture, then say why not.
+ * onShow hears which picture is on screen (null when none is), so the answer's glass can be tinted from it. */
+export function PhotoBox({ photos, alt = '', cls = 'lq-photo', missing = '', style, onShow }: {
+  photos?: PhotoRef[] | null; alt?: string; cls?: string; missing?: ReactNode; style?: CSSProperties; onShow?: (src: string | null) => void;
 }) {
   const list = photos || [];
   const [i, setI] = useState(0);
   useEffect(() => { setI(0); }, [photos?.[0]?.src]);
   const p = list[i];
+  useEffect(() => { onShow?.(p?.src || null); }, [p?.src]);
   if (!p) return <figure className={`${cls} is-missing`}><span className="lq-nophoto">{missing || 'No photo saved on this phone.'}</span></figure>;
   return (
     <figure className={cls} style={style}>
@@ -202,6 +204,20 @@ export function usePlayButtons() {
     a.play().then(() => { if (audio.current === a) setOn({ key, state: 'playing' }); }).catch(fail);
   };
   return { on, toggle, stop: halt };
+}
+
+/** A play button as a round chip in the answer dock: the icon swaps to pause while it plays, and a small tick or cross
+ * says whose call it is (the right answer's, or the one she picked), matching the marks on the answers. */
+export function PlayChip({ on, which, label, tone, onPlay, style }: {
+  on: PlayButtonState; which: string; label: string; tone: 'right' | 'wrong' | 'plain'; onPlay: (which: string) => void; style?: CSSProperties;
+}) {
+  const st = on?.key === which ? on.state : null;
+  return (
+    <button type="button" className={`lq-chip lq-chip--${tone}${st === 'playing' ? ' is-playing' : st === 'loading' ? ' is-loading' : ''}`} data-play={which} aria-label={label} title={label} style={style} onClick={() => onPlay(which)}>
+      <svg viewBox="0 0 24 24" aria-hidden="true">{st === 'playing' ? QI.pause : QI.play}</svg>
+      {tone !== 'plain' && <span className="lq-chip-tag" aria-hidden="true"><svg viewBox="0 0 24 24">{tone === 'right' ? QI.tick : QI.cross}</svg></span>}
+    </button>
+  );
 }
 
 /** One of the answer's play buttons, drawn as v1's: the icon swaps to pause while it plays. */
