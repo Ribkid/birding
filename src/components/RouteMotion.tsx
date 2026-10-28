@@ -1,19 +1,23 @@
 // v1's onRouteChange (birding-refresh js/app.js:996-1043): every change of address runs in one view transition,
 // whether it came from a tab, a link, Back, Forward or a hash typed into the address bar. How deep each screen sits
 // picks the motion: deeper is 'forward' (the new page rises), shallower is 'back', level (the four tabs) is a 'swap'
-// cross-fade. Going back to a shallower screen returns to where she was on it, a photo tapped on its way to a species
-// page grows into that page's hero, and going back from it shrinks the hero into the photo it came from. Open layers
-// close and sheets still sliding away go before the new screen draws. Reduced motion, a hidden tab or a browser
-// without view transitions get the plain change (lib/motion.ts vt()).
+// cross-fade. A photo tapped on its way to a species page grows into that page's hero, and going back from it shrinks
+// the hero into the photo it came from. Open layers close and sheets still sliding away go before the new screen
+// draws. Reduced motion, a hidden tab or a browser without view transitions get the plain change (lib/motion.ts vt()).
+//
+// Going back puts her where she was. Back and Forward return to the place she left that history entry at, and going
+// back up to a shallower screen returns to where she was on it (as v1 did). The place is the scroll, held to the
+// photo tile that was at the top of the screen, and the control she left by, which takes focus again (RouteFocus).
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { Router, UNSAFE_createHashHistory as createHashHistory, type Location } from 'react-router-dom';
 import { clearNames, motionOK, nameFor, settle, transitioning, vt } from '../lib/motion';
-import { closeAllLayers } from '../lib/layers';
+import { closeAllLayers, findByKey, focusKey, FOCUSABLE } from '../lib/layers';
 import { flushClosingSheets } from './Sheet';
 
 type Nav = 'forward' | 'back' | 'swap';
-type Action = ReturnType<typeof createHashHistory>['action'];
+type History = ReturnType<typeof createHashHistory>;
+type Action = History['action'];
 
 // How deep each screen sits (v1 DEPTH). A screen not listed is one level down.
 const DEPTH: Record<string, number> = {
@@ -26,13 +30,63 @@ export function navKind(from: string, to: string): Nav {
   return b > a ? 'forward' : b < a ? 'back' : 'swap';
 }
 
-// Where she was on each address, for going back to it.
-const scrollMem = new Map<string, number>();
-// Where the screen being drawn scrolls to, and the tile to keep in sight on going back from its species page.
-let pending: { key: string; y: number; tile: number | null } | null = null;
+// ---------- where she was ----------
+type FocusKey = NonNullable<ReturnType<typeof focusKey>>;
+/** A photo tile and how far from the top of the screen it sat. */
+export interface Anchor { tile: string; top: number }
+/** Where she was on a screen as she left it: its scroll, the first tile wholly on screen, and the control she left by. */
+export interface Place { y: number; anchor: Anchor | null; focus: FocusKey | null }
+// By address (going back up to a shallower screen) and by history entry (Back and Forward), for the session.
+const byPath = new Map<string, Place>();
+const byEntry = new Map<string, Place>();
+
+/**
+ * The first photo tile wholly on screen, found by looking down the middle of the screen (so a tile under the sticky
+ * search bar or the tab bar doesn't count), and where it sits. Groups further down the dex only have an estimated
+ * height until they are drawn, so a return lands on this tile rather than on a number of pixels alone.
+ */
+export function anchorOf(view: ParentNode): Anchor | null {
+  if (typeof document.elementFromPoint !== 'function') return null;
+  const x = innerWidth / 2;
+  for (let y = 8; y < innerHeight; y += 16) {
+    const t = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-tile]');
+    if (!t || !view.contains(t)) continue;
+    const r = t.getBoundingClientRect();
+    if (r.top >= 0 && r.bottom <= innerHeight) return { tile: t.dataset.tile!, top: Math.round(r.top) };
+    y = Math.max(y, r.bottom);
+  }
+  return null;
+}
+
+// The control she pressed last on the page (a tile, a row, a link), so going back can give focus back to it, and
+// whether she is using keys (focus rings show) or touch.
+let pressed: { el: Element; at: number } | null = null;
+let keys = false;
+/** True when her last input was a key, so a focus moved for her shows its ring. */
+export const keyboardLast = () => keys;
+
+// Where the screen being drawn lands: its scroll and tile, the tile to keep in sight on going back from its species
+// page, and the control to give focus back to.
+let pending: { key: string; y: number; anchor: Anchor | null; tile: number | null; focus: FocusKey | null } | null = null;
+// The history entry whose screen is on show (where she is on it is worth keeping when she leaves).
+let drawnKey: string | null = null;
+// After a return: the control she left the screen by, until RouteFocus asks for it.
+let returning: { key: string; focus: FocusKey } | null = null;
+
 /** While the screen for history entry `key` is being drawn: the scroll it will land on. The Dex draws the groups
  *  around that place first when it is where she left it (screens/Dex.tsx). */
 export const landingScroll = (key: string) => (pending && pending.key === key ? pending.y : null);
+
+/**
+ * After going back to the screen for history entry `key`: the control she left it by (the tile she opened), if it is
+ * on screen in `view`. Asked once, by RouteFocus.
+ */
+export function returnFocus(key: string, view: ParentNode): HTMLElement | null {
+  if (!returning || returning.key !== key) return null;
+  const el = findByKey(returning.focus, view);
+  returning = null;
+  return el && inView(el) ? el : null;
+}
 
 const THUMB = '.tile-img, .row-thumb, .botd-img, .cmp-img';
 // A photo just tapped on its way to a species page, and which kind of photo opened each species page (a tile, Bird of
@@ -60,10 +114,14 @@ function reveal(el: Element) {
 }
 const unreveal = () => { for (const a of revealed.splice(0)) a.style.removeProperty('content-visibility'); };
 
-// Tapping a photo that links to a species names it, so the view transition grows it into that page's hero.
-function nameTappedPhoto(e: MouseEvent) {
+// Tapping a photo that links to a species names it, so the view transition grows it into that page's hero. Any press
+// on a control is kept as the control she may leave the screen by.
+function onPress(e: MouseEvent) {
+  const target = e.target as Element | null;
+  const control = target?.closest?.(FOCUSABLE);
+  pressed = control ? { el: control, at: performance.now() } : null;
   if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !motionOK()) return;
-  const a = (e.target as Element | null)?.closest?.('a[href^="#/bird/"]');
+  const a = target?.closest?.('a[href^="#/bird/"]');
   if (!a || a.getAttribute('href') === location.hash) return;
   const thumb = a.matches(THUMB) ? a : a.querySelector(THUMB);
   if (!thumb) return;
@@ -73,13 +131,31 @@ function nameTappedPhoto(e: MouseEvent) {
   // If no navigation follows (a long press, a cancelled tap), take the name off again.
   setTimeout(() => { if (morph === m) { morph = null; if (!document.documentElement.dataset.nav) el.style.viewTransitionName = ''; } }, 700);
 }
+const onPointer = () => { keys = false; };
+const onKey = (e: KeyboardEvent) => { if (!e.metaKey && !e.ctrlKey && !e.altKey) keys = true; };
+
+/** Where she is on the screen she is leaving, and the control she is leaving it by (pressed just now, or focused). */
+function placeHere(): Place {
+  const view = viewEl();
+  const a = document.activeElement;
+  const by = pressed && performance.now() - pressed.at < 1000 && view?.contains(pressed.el) ? pressed.el
+    : a && a !== view && view?.contains(a) && !a.matches('h1') ? a : null;
+  pressed = null;
+  return { y: scrollY, anchor: view ? anchorOf(view) : null, focus: focusKey(by) };
+}
 
 function onRouteChange(prev: Location, next: Location, action: Action, apply: () => void) {
   const from = prev.pathname + prev.search, to = next.pathname + next.search;
   // Only the history state changed (the same screen), or the first draw's redirect from an empty address.
   if (from === to || prev.pathname === '/') { apply(); return; }
-  scrollMem.set(from, scrollY);
+  // Leaving the screen on show (not one a quick second tap is already replacing): keep where she was on it.
+  if (prev.key === drawnKey) {
+    const here = placeHere();
+    byPath.set(from, here);
+    byEntry.set(prev.key, here);
+  }
   const nav = navKind(prev.pathname, next.pathname);
+  const goingBack = nav === 'back' || action === 'POP';
   const toId = birdId(next.pathname), fromId = birdId(prev.pathname);
   const tapped = morph && morph.id === toId ? morph : null;
   morph = null;
@@ -87,11 +163,20 @@ function onRouteChange(prev: Location, next: Location, action: Action, apply: ()
   // Going back from a species page, up to a shallower screen or with Back to a list beside it (not to another species
   // page): its hero shrinks back into the photo it came from, if that is on screen.
   let shrinkTo: number | null = null;
-  const goingBack = nav === 'back' || action === 'POP';
   const hero = !tapped && fromId && !toId && goingBack && motionOK() ? viewEl()?.querySelector<HTMLElement>('[data-hero-frame]') : null;
   if (hero && inView(hero)) { nameFor(hero, 'sp-hero'); shrinkTo = fromId; }
-  // A new screen starts at the top, except going back, which returns to where she was.
-  pending = { key: next.key, y: nav === 'back' ? scrollMem.get(to) || 0 : 0, tile: fromId && nav === 'back' && !shrinkTo ? fromId : null };
+  // Where the new screen lands. Back and Forward: where she left that history entry (or, for an entry from before
+  // this session, going back up as below). Going back up to a shallower screen: where she was on it. Anything else
+  // starts at the top.
+  const back = action === 'POP' ? byEntry.get(next.key) ?? (nav === 'back' ? byPath.get(to) : undefined)
+    : nav === 'back' ? byPath.get(to) : undefined;
+  pending = {
+    key: next.key,
+    y: back?.y ?? 0,
+    anchor: back?.anchor ?? null,
+    tile: fromId && goingBack && !shrinkTo ? fromId : null,
+    focus: back?.focus ?? null,
+  };
   const draw = () => { closeAllLayers('nav'); flushClosingSheets(); apply(); };
   // vt() would draw at once here. The change may come from a screen's effect (a redirect), where React can't draw
   // synchronously, so it is handed to React as it is.
@@ -140,10 +225,10 @@ function onRouteChange(prev: Location, next: Location, action: Action, apply: ()
 
 /**
  * The app's router: react-router's HashRouter, with every change of address drawn through onRouteChange. Scroll is
- * remembered per screen by the app (going back returns to it), not restored by the browser mid-transition.
+ * remembered by the app (going back returns to it), not restored by the browser mid-transition.
  */
 export function MotionHashRouter({ children }: { children: ReactNode }) {
-  const historyRef = useRef<ReturnType<typeof createHashHistory> | null>(null);
+  const historyRef = useRef<History | null>(null);
   historyRef.current ??= createHashHistory({ v5Compat: true });
   const history = historyRef.current;
   const [state, setState] = useState(() => ({ action: history.action, location: history.location }));
@@ -151,24 +236,39 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
 
   useLayoutEffect(() => {
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
-    document.addEventListener('click', nameTappedPhoto, true);
+    document.addEventListener('click', onPress, true);
+    document.addEventListener('pointerdown', onPointer, true);
+    document.addEventListener('keydown', onKey, true);
     const off = history.listen(({ action, location: next }) => {
       const prev = shown.current;
       shown.current = next;
       onRouteChange(prev, next, action, () => setState({ action, location: next }));
     });
-    return () => { off(); document.removeEventListener('click', nameTappedPhoto, true); };
+    return () => {
+      off();
+      document.removeEventListener('click', onPress, true);
+      document.removeEventListener('pointerdown', onPointer, true);
+      document.removeEventListener('keydown', onKey, true);
+    };
   }, [history]);
 
   useLayoutEffect(() => {
+    drawnKey = state.location.key;
     if (!pending || pending.key !== state.location.key) return;
-    const { y, tile } = pending;
+    const { y, anchor, tile, focus } = pending;
     pending = null;
     window.scrollTo(0, y);
-    // The remembered scroll can land a little off if the page drew differently: make sure the tile she opened is in
-    // sight.
-    const t = tile ? viewEl()?.querySelector(`[data-tile="${tile}"]`) : null;
+    const view = viewEl();
+    // Held to the tile that was at the top of the screen, in case the screen above it drew a little differently.
+    const a = anchor && view?.querySelector(`[data-tile="${anchor.tile}"]`);
+    if (a) {
+      const off = a.getBoundingClientRect().top - anchor!.top;
+      if (Math.abs(off) >= 1) window.scrollTo(0, scrollY + off);
+    }
+    // Make sure the tile she opened is in sight.
+    const t = tile ? view?.querySelector(`[data-tile="${tile}"]`) : null;
     if (t && !inView(t)) t.scrollIntoView({ block: 'center' });
+    returning = focus ? { key: state.location.key, focus } : null;
   }, [state.location]);
 
   return (
@@ -176,4 +276,15 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
       {children}
     </Router>
   );
+}
+
+/** Forget every place (tests). */
+export function forgetPlaces() {
+  byPath.clear();
+  byEntry.clear();
+  cameFrom.clear();
+  pending = null;
+  returning = null;
+  pressed = null;
+  drawnKey = null;
 }

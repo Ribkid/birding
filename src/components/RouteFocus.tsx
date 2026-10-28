@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { topLayer } from '../lib/layers';
+import { keyboardLast, returnFocus } from './RouteMotion';
 
 const lost = () => {
   const a = document.activeElement;
@@ -26,10 +27,16 @@ const SETTLE_MS = 3000;
  * to the new one, and focus left on the screen itself because it had no heading yet moves to the heading once it
  * is drawn (v1 stayed on the screen in that case). As soon as focus goes anywhere else (she tabs or taps, a sheet
  * opens, the screen focuses something itself) the screen is hers again and this stops watching.
+ *
+ * Going back to a screen gives focus back to the control she left it by, when it is on screen (the dex tile she
+ * opened, a row on Lists), so a keyboard or screen-reader user carries on from there instead of from the top of 291
+ * tiles. Its ring shows only if she is using keys.
  */
 export function RouteFocus() {
-  const { pathname } = useLocation();
+  const { pathname, key } = useLocation();
   const last = useRef(pathname);
+  const entry = useRef(key);
+  entry.current = key;
   useEffect(() => {
     if (last.current === pathname) return;
     last.current = pathname;
@@ -37,7 +44,15 @@ export function RouteFocus() {
     if (!view) return;
     // The element this put focus on: the heading, or the screen while it had no heading.
     let mine: HTMLElement | null = null;
+    // The control she left this screen by, on going back to it (asked once).
+    let back: HTMLElement | null | undefined;
     const take = () => {
+      back ??= returnFocus(entry.current, view);
+      if (back?.isConnected) {
+        mine = back;
+        mine.focus({ preventScroll: true, focusVisible: keyboardLast() } as FocusOptions);
+        return;
+      }
       mine = headOf(view);
       mine.focus({ preventScroll: true });
     };
