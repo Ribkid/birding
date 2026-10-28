@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { closeLayer, focusFirst, openLayer, type Layer } from '../lib/layers';
 import { motionOK } from '../lib/motion';
 
+const STARTING_STYLE = typeof window !== 'undefined' && 'CSSStartingStyleRule' in window;
 const ms = (t: string) => { const v = parseFloat(t); return Number.isFinite(v) ? (/ms$/.test(t.trim()) ? v : v * 1000) : 0; };
 
 /**
@@ -10,10 +11,17 @@ const ms = (t: string) => { const v = parseFloat(t); return Number.isFinite(v) ?
  * under reduced motion fades where it is. React has already taken the closed sheet out of the page, so its last
  * frame is put back, inert and marked data-closing, and plays out to motion.css's closing styles.
  */
-function playOut(wrap: HTMLElement, scrollTop: number) {
+function playOut(wrap: HTMLElement, scrollTop: number, reason?: string) {
   const sheet = wrap.querySelector<HTMLElement>('.sheet');
   const scrim = wrap.querySelector<HTMLElement>('.sheet-scrim');
   if (!sheet || typeof sheet.animate !== 'function' || !wrap.classList.contains('open')) return;
+  // v1 exitSheet: hand over from wherever a drag left the sheet (under reduced motion it fades where it is).
+  const from = sheet.style.transform || 'none';
+  const scrimFrom = scrim?.style.opacity || '1';
+  sheet.style.transition = '';
+  sheet.style.transform = '';
+  if (scrim) scrim.style.opacity = '';
+  wrap.classList.remove('sheet-wrap--drag');
   wrap.setAttribute('data-closing', '');
   wrap.inert = true;
   // A sheet opening as this one leaves may use the same ids.
@@ -25,13 +33,118 @@ function playOut(wrap: HTMLElement, scrollTop: number) {
     // The first of each list; a timing function such as cubic-bezier(.5, 0, .75, 0) has commas of its own.
     const easing = /^\s*([a-z-]+(\([^)]*\))?)/i.exec(to.transitionTimingFunction)?.[1] || 'ease-in';
     const timing = { duration: ms(to.transitionDuration.split(',')[0]) || 200, easing };
-    const anims = [sheet.animate([{ transform: 'none', opacity: 1 }, { transform: to.transform, opacity: to.opacity }], timing)];
-    if (scrim) anims.push(scrim.animate([{ opacity: 1 }, { opacity: getComputedStyle(scrim).opacity }], timing));
+    const end = reason === 'drag' && !motionOK() ? from : to.transform;
+    const anims = [sheet.animate([{ transform: from, opacity: 1 }, { transform: end, opacity: to.opacity }], timing)];
+    if (scrim) anims.push(scrim.animate([{ opacity: scrimFrom }, { opacity: getComputedStyle(scrim).opacity }], timing));
     void Promise.race([Promise.allSettled(anims.map((a) => a.finished)), new Promise((r) => setTimeout(r, 450))]).then(() => wrap.remove());
   } catch {
     wrap.remove();
   }
 }
+
+/**
+ * v1 wireSheetDrag: drag a sheet down to dismiss it, from the grip and the top 56px, or from anywhere once it is
+ * scrolled to the top. It follows the finger 1:1, resists upward, and closes past 30% of its height or on a quick
+ * flick; a shorter drag springs back. Returns the cleanup.
+ */
+function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void) {
+  const scrim = wrap.querySelector<HTMLElement>('.sheet-scrim');
+  const rubber = (d: number) => 56 * (1 - 1 / (d / 140 + 1));
+  type Grab = { id: number; x: number; y: number; h: number; handle: boolean; on: boolean; dy: number; pts: [number, number][] };
+  let g: Grab | null = null;
+  let settleT = 0;
+  // Moves are followed on the window, so a mouse that leaves the sheet (dragging up past its top) still counts.
+  const move = (e: PointerEvent) => {
+    if (!g || e.pointerId !== g.id) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!g.on) {
+      if (Math.hypot(dx, dy) < 8) return;
+      // Sideways is a chip row scrolling; upward in the body is ordinary scrolling.
+      if (Math.abs(dx) > Math.abs(dy) || (!g.handle && (dy < 0 || sheet.scrollTop > 0))) { stop(); return; }
+      g.on = true;
+      sheet.style.transition = 'none';
+      wrap.classList.add('sheet-wrap--drag');
+    }
+    g.dy = dy;
+    sheet.style.transform = `translateY(${dy >= 0 ? dy : -rubber(-dy)}px)`;
+    if (scrim) scrim.style.opacity = String(1 - Math.min(1, Math.max(0, dy) / g.h) * 0.8);
+    g.pts.push([e.timeStamp, e.clientY]);
+    if (g.pts.length > 8) g.pts.shift();
+  };
+  const end = (e: PointerEvent) => {
+    if (!g || e.pointerId !== g.id) return;
+    const s = g;
+    stop();
+    if (!s.on) return;
+    // The tap that ends a drag is not a click on whatever is under the finger.
+    const swallow = (ev: Event) => { ev.stopPropagation(); ev.preventDefault(); };
+    window.addEventListener('click', swallow, true);
+    setTimeout(() => window.removeEventListener('click', swallow, true), 0);
+    const [t0, y0] = s.pts.find(([t]) => e.timeStamp - t <= 100) || s.pts[0];
+    const v = (e.clientY - y0) / Math.max(1, e.timeStamp - t0);
+    if (e.type === 'pointerup' && (s.dy > s.h * 0.3 || v > 0.5)) {
+      close();
+      // A sheet whose owner keeps it open (Edit profile's species list goes back a step) settles where it belongs.
+      settleT = window.setTimeout(() => { if (wrap.isConnected && !wrap.hasAttribute('data-closing')) springBack(); }, 100);
+      return;
+    }
+    springBack();
+  };
+  const springBack = () => {
+    wrap.classList.remove('sheet-wrap--drag');
+    // A step sliding in (Edit profile back from its species list) is left to finish without a second motion.
+    const stepping = typeof sheet.getAnimations === 'function' && sheet.getAnimations().length > 0;
+    sheet.style.transition = motionOK() && !stepping ? 'transform var(--dur-3) var(--ease-spring)' : 'none';
+    sheet.style.transform = '';
+    if (scrim) scrim.style.opacity = '';
+    clearTimeout(settleT);
+    settleT = window.setTimeout(() => { if (!g) sheet.style.transition = ''; }, 400);
+  };
+  const stop = () => {
+    g = null;
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+  };
+  const down = (e: PointerEvent) => {
+    if (g || e.button > 0 || wrap.hasAttribute('data-closing')) return;
+    const target = e.target as Element;
+    if (target.closest('input, textarea, select, [contenteditable], .leaflet-container')) return;
+    const r = sheet.getBoundingClientRect();
+    const handle = e.clientY - r.top < 56;
+    if (!handle && sheet.scrollTop > 0) return;
+    // A list scrolled inside the sheet (the avatar picker) scrolls back up rather than dragging the sheet away.
+    for (let n: Element | null = target; n && n !== sheet; n = n.parentElement) if (n.scrollTop > 0 && n.scrollHeight > n.clientHeight) return;
+    g = { id: e.pointerId, x: e.clientX, y: e.clientY, h: r.height, handle, on: false, dy: 0, pts: [[e.timeStamp, e.clientY]] };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  };
+  // On touch, once the sheet is being dragged the page must not scroll or pull to refresh underneath.
+  const touchmove = (e: TouchEvent) => { if (g?.on && e.cancelable) e.preventDefault(); };
+  sheet.addEventListener('pointerdown', down);
+  sheet.addEventListener('touchmove', touchmove, { passive: false });
+  return () => {
+    const dragged = !!g?.on || !!sheet.style.transform;
+    stop();
+    clearTimeout(settleT);
+    sheet.removeEventListener('pointerdown', down);
+    sheet.removeEventListener('touchmove', touchmove);
+    // Still on screen (the sheet is wired again): don't leave it where a drag had it. A closed sheet keeps its
+    // place for playOut to carry on from.
+    if (dragged && wrap.isConnected && !wrap.hasAttribute('data-closing')) {
+      wrap.classList.remove('sheet-wrap--drag');
+      sheet.style.transition = sheet.style.transform = '';
+      if (scrim) scrim.style.opacity = '';
+    }
+  };
+}
+
+// v1 openSheet: a sheet that opens as another closes replaces it. The old one goes at once rather than sliding away
+// over the new one, and the new one keeps the scrim up (sheet-wrap--swap) so the page behind doesn't flash. A sheet
+// closed in a commit is noted here; one opened in the same commit takes its place.
+let leaving: HTMLElement | null = null;
+const replaced = new WeakSet<HTMLElement>();
 
 /** A route change doesn't wait for a sheet that is still sliding away (v1 flushClosingSheets). */
 export function flushClosingSheets() {
@@ -62,6 +175,8 @@ export function Sheet({ open, onClose, children, label, labelledBy, wide = false
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   // 'open' is part of the rendered class, so a sheet that changes its cls (the Add sheet's outing step) keeps it.
+  // Where @starting-style works the sheet is drawn open at once and the CSS gives its entry (from further down for the
+  // + sheet), as v1's openSheet did; elsewhere the class arrives a frame later.
   const [shown, setShown] = useState(false);
   // How the layer stack last closed it ('escape', 'nav'...), and how far its content was scrolled.
   const reason = useRef<string | undefined>(undefined);
@@ -72,17 +187,13 @@ export function Sheet({ open, onClose, children, label, labelledBy, wide = false
     const wrap = wrapRef.current;
     const card = cardRef.current;
     if (!wrap || !card) return;
-    const layer: Layer = openLayer(wrap, {
-      dialog: card,
-      label,
-      labelledBy,
-      modal,
-      lock,
-      close: (why) => { reason.current = why; closeRef.current(why); },
-    });
+    const close = (why?: string) => { reason.current = why; closeRef.current(why); };
+    const layer: Layer = openLayer(wrap, { dialog: card, label, labelledBy, modal, lock, close });
     const raf = requestAnimationFrame(() => setShown(true));
+    const unwire = wireSheetDrag(wrap, card, () => close('drag'));
     return () => {
       cancelAnimationFrame(raf);
+      unwire();
       setShown(false);
       closeLayer(layer);
     };
@@ -95,12 +206,21 @@ export function Sheet({ open, onClose, children, label, labelledBy, wide = false
     const wrap = wrapRef.current;
     const hash = location.hash;
     reason.current = undefined;
+    if (wrap && leaving && leaving !== wrap) {
+      replaced.add(leaving);
+      leaving = null;
+      wrap.classList.add('sheet-wrap--swap');
+    }
     return () => {
       const why = reason.current;
       reason.current = undefined;
       if (!wrap || why === 'nav') return;
       const top = scrolled.current;
-      queueMicrotask(() => { if (!wrap.isConnected && location.hash === hash) playOut(wrap, top); });
+      leaving = wrap;
+      queueMicrotask(() => {
+        if (leaving === wrap) leaving = null;
+        if (!replaced.has(wrap) && !wrap.isConnected && location.hash === hash) playOut(wrap, top, why);
+      });
     };
   }, [open]);
 
@@ -129,7 +249,7 @@ export function Sheet({ open, onClose, children, label, labelledBy, wide = false
 
   if (!open) return null;
   return createPortal(
-    <div ref={wrapRef} className={`sheet-wrap ${cls}${shown ? ' open' : ''}`} data-closing={undefined}>
+    <div ref={wrapRef} className={`sheet-wrap ${cls}${shown || STARTING_STYLE ? ' open' : ''}`} data-closing={undefined}>
       <div className="sheet-scrim" data-close="" onClick={() => onClose('scrim')} />
       <div ref={cardRef} className={`sheet ${wide ? 'sheet--wide' : ''}`.trim()} onScroll={(e) => { scrolled.current = e.currentTarget.scrollTop; }}>
         <div className="sheet-grip" aria-hidden="true" />
