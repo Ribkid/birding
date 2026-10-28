@@ -166,7 +166,8 @@ export const emptyMessage = (mode, p, offline) => {
 };
 
 // Build a practice round. Offline: use only photos and calls saved on this phone.
-// Returns { game, error }: the screen shows the error when no round can be made.
+// Returns { game, error, notice }: the screen toasts the error and goes back to the hub when no round can be made, and
+// toasts the notice when the round had to change.
 export async function newPracticeRound(mode, { ids = null, testId = null, seen = new Set() } = {}) {
   const p = L.prefs, month = new Date().getMonth() + 1;
   const pack = Q.PACK_BY[mode] || null;
@@ -186,7 +187,8 @@ export async function newPracticeRound(mode, { ids = null, testId = null, seen =
   }
   const game = { mode, pack: pack?.key || null, kind: pack ? pack.kind : p.kind, qs, i: 0, score: 0, prefs: pack ? { ...p, difficulty: 'normal' } : { ...p }, practice: !!ids, testId, route: currentRoute() };
   if (mode === 'rapid') Object.assign(game, { endsAt: Date.now() + RAPID_MS, streak: 0, top: 0 });
-  return { game, error: '' };
+  // v1 startRound told her (a toast) when no saved photos turned a photo round into field notes.
+  return { game, error: '', notice: playMode !== mode ? 'No photos saved on this phone yet, so this round uses field notes.' : '' };
 }
 
 export function newDailyRound() {

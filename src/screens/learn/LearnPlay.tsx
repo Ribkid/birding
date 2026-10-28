@@ -16,6 +16,7 @@ import {
 import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, usePlayButtons, PlayButton, type CallClip, type PlayButtonState } from './QuizMedia';
 import { FadeImage } from '../../components/SpeciesImage';
 import { lookAfterDraw } from '../../lib/look';
+import { toast } from '../../lib/toast';
 import './learn.css';
 
 const SIDES: Record<number, string[]> = {
@@ -295,7 +296,6 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const [game, setGame] = useState<RoundState | null>(null);
   // True from coming back to a saved round until she next answers or moves on.
   const [resumed, setResumed] = useState(false);
-  const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const [deckMode, setDeckMode] = useState<'overview' | 'card' | 'done'>('overview');
   const [deckGame, setDeckGame] = useState<RoundState | null>(null);
@@ -313,9 +313,16 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const isDeck = pack === 'deck';
   const isDaily = pack === 'daily';
 
+  // v1 startRound/renderDaily: when no round can be made, say why in a toast and go back to the hub (toHub replaces
+  // the route), where the choice that caused it can be changed.
+  const toHub = (msg: string) => {
+    toast(msg);
+    setActive(null);
+    navigate('/learn', { replace: true });
+  };
+
   useEffect(() => {
     let alive = true;
-    setError('');
     setGame(null);
     setResumed(false);
     setReady(false);
@@ -336,7 +343,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       if (isDaily) {
         const r = newDailyRound();
         if (!alive) return;
-        if (r.error) { setError(r.error); return; }
+        if (r.error) { toHub(r.error); return; }
         // A new round takes focus for its heading only after in-app navigation (the route's focus is in the screen).
         wantHeadFocus.current = focusInView();
         setGame(r.game);
@@ -354,7 +361,8 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         ? await newPracticeRound('quick', { ids: testSet(testId), testId, seen: seenNow } as any)
         : await newPracticeRound(pack, { seen: seenNow } as any);
       if (!alive) return;
-      if (r.error) { setError(r.error); return; }
+      if (r.error) { toHub(r.error); return; }
+      if (r.notice) toast(r.notice);
       wantHeadFocus.current = focusInView();
       setGame(r.game);
       setActive(r.game);
@@ -420,7 +428,6 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     stopCalls();
     setActive(null);
     setGame(null);
-    setError('');
     stopInline();
     await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
     const testId = pack === 'test' ? Number(params.id) : null;
@@ -434,9 +441,10 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         seen: new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId)),
       } as any);
     if (r.error) {
-      setError(r.error);
+      toHub(r.error);
       return;
     }
+    if ('notice' in r && r.notice) toast(r.notice);
     setGame(r.game);
     setActive(r.game);
     if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
@@ -453,12 +461,12 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       seen: new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId)),
     } as any);
     if (r.error) {
-      setError(r.error);
+      toHub(r.error);
       return;
     }
+    if (r.notice) toast(r.notice);
     setGame(r.game);
     setActive(r.game);
-    setError('');
     if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
   };
   const next = () => {
@@ -495,18 +503,10 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     buttons.toggle(which, clip);
   };
 
-  useLookAfterDraw([ready, game, game?.i, isOver, error]);
+  useLookAfterDraw([ready, game, game?.i, isOver]);
 
   if (isDeck) return <Deck onBack={() => navigate('/learn')} />;
 
-  if (error) {
-    return (
-      <div className="lr">
-        <header className="page-head page-head--back"><Link className="iconbtn" to="/learn" aria-label="Back to Learn"><svg viewBox="0 0 24 24">{QI.back}</svg></Link><h1 className="lh-title">Learn</h1></header>
-        <div className="learn"><p className="lh-empty" role="status">{error}</p><Link className="btn btn--primary btn--block" to="/learn">Back to Learn</Link></div>
-      </div>
-    );
-  }
   if (!ready || !game) return <div className="learn learn--loading" aria-busy="true" />;
 
   if (isOver) {
