@@ -154,14 +154,19 @@ export default function Learn() {
         ) : null}
         {!navigator.onLine && <p className="lh-offline" role="status">No signal. Questions use the photos and calls saved on this phone, plus field notes.</p>}
 
+        {/* The {' '} keep v1's spaces between the card's parts (its markup has a line break between each), so its text
+            reads "28 October Today's challenge…" rather than running together; grid and flex do not draw them. */}
         <Link ref={tintRef} className={`lh-daily${doneToday ? ' is-done' : ''}${hero ? ` kind--${hero.sp.kind}` : ''}`} to="/learn/daily">
           {hero ? <span className="lh-daily-photo" aria-hidden="true">{hero.src ? <FadeImage key={hero.sp.id} src={hero.src} /> : null}</span>
             : !(photosIn && seqIn) ? <span className="lh-daily-photo" aria-hidden="true"><Waiting /></span> : null}
+          {' '}
           <span className="lh-daily-top">
-            <span className="lh-date" aria-hidden="true"><b>{date.getDate()}</b><span>{monthName(date)}</span></span>
+            {' '}<span className="lh-date" aria-hidden="true"><b>{date.getDate()}</b><span>{monthName(date)}</span></span>{' '}
             {streak > 0 && <span className="lh-streak"><b>{streak}</b><span>{streak === 1 ? 'day' : 'days'} in a row</span></span>}
           </span>
+          {' '}
           <span className="lh-daily-main"><strong>Today's challenge</strong><span>{dailyLine}</span></span>
+          {' '}
           <span className="lh-daily-foot">
             <span className="lh-pips" aria-hidden="true">
               {Array.from({ length: 5 }, (_, i) => {
