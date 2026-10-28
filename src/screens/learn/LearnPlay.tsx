@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { HABITATS, KINDS, byId, type QuizQuestion, type RoundState } from '../../lib/data';
 import { useMedia, useSightings } from '../../lib/hooks';
-import { countUp, motionOK } from '../../lib/motion';
+import { countUp, flip, motionOK } from '../../lib/motion';
 import * as Q from '../../core/quiz.js';
 import { db } from '../../core/db.js';
 import { loadSeq } from '../../core/seqdata.js';
@@ -13,7 +14,8 @@ import {
   roundNote, testSet, allCards, dueCards, boxes, nextDue, addCards, gradeCard, dayStr, monthName,
   packBy, ROUND, RAPID_MS, kindLabel, emptyMessage, startOfDay, getLearn, getActive, setActive, activeFor,
 } from '../../core/learn.js';
-import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, usePlayButtons, PlayButton, type CallClip, type PlayButtonState } from './QuizMedia';
+import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, usePlayButtons, PlayChip, type CallClip, type PlayButtonState } from './QuizMedia';
+import { answerLayout, dockActions, foldKeys, nextLabel, trailOf, trailText, verdictOf, type AnswerLayout, type Verdict } from './answerDock';
 import { FadeImage } from '../../components/SpeciesImage';
 import { lookAfterDraw } from '../../lib/look';
 import { toast } from '../../lib/toast';
@@ -71,16 +73,16 @@ function promptFor(q: QuizQuestion) {
   return q.prompt;
 }
 
-function Media({ q, still = false }: { q: QuizQuestion; still?: boolean }) {
+function Media({ q, still = false, onShow }: { q: QuizQuestion; still?: boolean; onShow?: (src: string | null) => void }) {
   const [showHint, setShowHint] = useState(false);
   const sp = byId.get(q.focus);
   if (!sp) return null;
   const missing = <>This photo needs a connection. Here are its field notes instead: {cleanClue(Q.blankNotes(sp, q.wrong || []))}</>;
-  if (q.type === 'photo') return <PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}`} missing={missing} />;
+  if (q.type === 'photo') return <PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}`} missing={missing} onShow={onShow} />;
   if (q.type === 'silhouette') {
-    return <><SilhouetteFilter /><PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, shown as a silhouette`} cls={`lq-photo lq-photo--sil${q.picked != null ? ' is-revealed' : ''}${still ? ' no-anim' : ''}`} missing={missing} /></>;
+    return <><SilhouetteFilter /><PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, shown as a silhouette`} cls={`lq-photo lq-photo--sil${q.picked != null ? ' is-revealed' : ''}${still ? ' no-anim' : ''}`} missing={missing} onShow={onShow} /></>;
   }
-  if (q.type === 'zoom') return <PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, close up`} cls={`lq-photo lq-photo--zoom${q.picked != null ? ' is-revealed' : ''}${still ? ' no-anim' : ''}`} style={{ '--zx': `${q.zoom?.x ?? 50}%`, '--zy': `${q.zoom?.y ?? 50}%`, '--zs': q.zoom?.scale ?? 2 } as React.CSSProperties} missing={missing} />;
+  if (q.type === 'zoom') return <PhotoBox photos={q.photos} alt={`Mystery ${KINDS[sp.kind]?.one || 'species'}, close up`} cls={`lq-photo lq-photo--zoom${q.picked != null ? ' is-revealed' : ''}${still ? ' no-anim' : ''}`} style={{ '--zx': `${q.zoom?.x ?? 50}%`, '--zy': `${q.zoom?.y ?? 50}%`, '--zs': q.zoom?.scale ?? 2 } as React.CSSProperties} missing={missing} onShow={onShow} />;
   if (q.type === 'call') return (
     <>
       <CallPlayer call={q.call as CallClip} seed={q.call?.src || sp.id} onFail={() => setShowHint(true)} />
@@ -88,18 +90,22 @@ function Media({ q, still = false }: { q: QuizQuestion; still?: boolean }) {
     </>
   );
   if (q.type === 'whoami') return <blockquote className="lq-clue">{cleanClue(q.clue || '')}</blockquote>;
-  if (q.type === 'fact' && q.photos?.length) return <PhotoBox photos={q.photos} alt={speciesName(q.img)} cls="lq-photo lq-photo--small" />;
+  if (q.type === 'fact' && q.photos?.length) return <PhotoBox photos={q.photos} alt={speciesName(q.img)} cls="lq-photo lq-photo--small" onShow={onShow} />;
   return null;
 }
 
-function Options({ q, picked, onPick, rapid, round, still = false }: { q: QuizQuestion; picked: string | null; onPick: (key: string) => void; rapid: boolean; round: number; still?: boolean }) {
+function Options({ q, picked, onPick, rapid, round, still = false, folded }: {
+  q: QuizQuestion; picked: string | null; onPick: (key: string) => void; rapid: boolean; round: number; still?: boolean; folded?: Set<string>;
+}) {
   const disabled = picked != null;
   // A restored answer is drawn without replaying the pop and shake (v1 showAnswer restore adds no-anim).
   const calm = disabled && still ? ' no-anim' : '';
   if (q.options[0]?.photos) {
     const n = q.options.length;
+    // Once she has answered, the photos settle to fit between the question head and the dock (learn.css), so the
+    // dock never covers her pick or the right one on a short screen.
     return (
-      <div className={`lq-duel${n > 2 ? ' lq-duel--four' : ''}`}>
+      <div className={`lq-duel${n > 2 ? ' lq-duel--four' : ''}${disabled && !rapid ? ' is-answered' : ''}`}>
         {q.options.map((o, i) => {
           const cls = disabled ? (o.key === q.answer ? ' is-right' : o.key === picked ? ' is-wrong' : ' is-dim') : '';
           const named = q.named || disabled;
@@ -121,67 +127,318 @@ function Options({ q, picked, onPick, rapid, round, still = false }: { q: QuizQu
       {q.options.map((o) => {
         const cls = disabled ? (o.key === q.answer ? ' is-right' : o.key === picked ? ' is-wrong' : ' is-dim') : '';
         const suffix = disabled ? (o.key === q.answer ? ' (right answer)' : o.key === picked ? ' (your answer)' : '') : '';
+        // Each answer sits in a wrapper that carries the move (flip) when the others fold away under a photo, so the
+        // answer's own pop or shake still plays on the button inside.
         return (
-          <button key={o.key} type="button" className={`lq-opt${cls}${calm}`} data-pick={o.key} aria-disabled={disabled || undefined} onClick={() => onPick(o.key)}>
-            <span className={`lq-opt-label${q.italic ? ' is-sci' : ''}`}>{o.label}</span>
-            <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.cross}</svg> : null}</span>
-            <span className="sr-only">{suffix}</span>
-          </button>
+          <div key={o.key} className={`lq-opt-wrap${folded?.has(o.key) ? ' is-folded' : ''}`} data-flip={`opt-${o.key}`}>
+            <button type="button" className={`lq-opt${cls}${calm}`} data-pick={o.key} aria-disabled={disabled || undefined} onClick={() => onPick(o.key)}>
+              <span className={`lq-opt-label${q.italic ? ' is-sci' : ''}`}>{o.label}</span>
+              <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.cross}</svg> : null}</span>
+              <span className="sr-only">{suffix}</span>
+            </button>
+          </div>
         );
       })}
     </div>
   );
 }
 
-function Feedback({ q, right, game, onNext, onPlay, playing, restore = false }: {
-  q: QuizQuestion; right: boolean; game: RoundState; onNext: () => void;
-  onPlay: (which: string) => void; playing: PlayButtonState; restore?: boolean;
+// ---------- the answer (Learn answer dock) ----------
+// A photo question's verdict is a glass footer that grows out of the bottom of the mystery photo, in the same card,
+// so the bird stays on screen while the field mark explains it. Its glass is tinted by a soft blur of the photo above
+// it (solid in the outdoor theme). Focus moves to it (role=status), so the verdict is read out.
+function PhotoVerdict({ v, glow, vRef }: { v: Verdict; glow: string | null; vRef: RefObject<HTMLElement | null> }) {
+  const [glowOk, setGlowOk] = useState(true);
+  return (
+    <div ref={vRef as RefObject<HTMLDivElement>} className={`lq-verdictbar ${v.right ? 'is-right' : 'is-wrong'}`} role="status" tabIndex={-1} data-fb>
+      {glow && glowOk ? <img className="lq-glow" src={glow} alt="" aria-hidden="true" decoding="async" onError={() => setGlowOk(false)} /> : null}
+      <span className="lq-vb-mark" aria-hidden="true"><svg viewBox="0 0 24 24">{v.right ? QI.tick : QI.cross}</svg></span>
+      <p className="lq-vb-text">
+        <strong>{v.lead}</strong>{v.rest || v.name ? ' ' : ''}{v.rest}
+        {v.name && v.nameId ? <Link to={`/bird/${v.nameId}`}>{v.name}</Link> : null}{v.tail}
+      </p>
+      {v.line && <p className="lq-vb-line">{v.line}</p>}
+      {v.mark && <p className="lq-vb-line">{v.mark}</p>}
+    </div>
+  );
+}
+
+function Source({ q }: { q: QuizQuestion }) {
+  if (q.type !== 'fact' || !q.source?.title) return null;
+  return <p className="lq-source">Source: {q.source.url ? <a href={q.source.url} target="_blank" rel="noopener">{q.source.title}</a> : q.source.title}</p>;
+}
+function Safety({ text }: { text?: string }) {
+  return text ? <p className="lq-safety"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.warn}</svg><span>{text}</span></p> : null;
+}
+
+// The rest of a photo question's feedback (how to tell them apart, the snake rule, the source) stays as a card below
+// the two answers, where she can scroll to it.
+function MoreCard({ q, v }: { q: QuizQuestion; v: Verdict }) {
+  if (!v.tell && !q.safety && !(q.type === 'fact' && q.source?.title)) return null;
+  return (
+    <div className="lq-more">
+      {v.tell && <p className="lq-tell"><strong>How to tell them apart.</strong> {v.tell}</p>}
+      <Safety text={q.safety} />
+      <Source q={q} />
+    </div>
+  );
+}
+
+// Who am I?, call and fact questions without a photo keep v1's feedback card under the answers (focused and brought
+// into view, clear of the dock). Duels and odd one out keep it for the rest, with their verdict line in the dock.
+// Next and the play and Compare buttons live in the dock.
+function AnswerCard({ q, v, layout, restore = false, vRef }: {
+  q: QuizQuestion; v: Verdict; layout: AnswerLayout; restore?: boolean; vRef: RefObject<HTMLElement | null>;
 }) {
   const ans = byId.get(q.focus);
-  if (!ans) return null;
-  const pickedOpt = q.options.find((o) => o.key === q.picked);
-  const pickedSp = pickedOpt?.sp ? byId.get(pickedOpt.sp) : null;
-  const ansLabel = q.options.find((o) => o.key === q.answer)?.label || '';
-  const speciesQ = q.type !== 'fact' || q.ttype === 'Calls';
-  const verdictText = right ? 'Correct.' : q.miss ? String(q.miss)
-    : q.type === 'duel' ? `Not quite. That one is the ${pickedSp?.name}.`
-    : speciesQ ? `Not quite. It's the ${ans.name}.`
-    : q.options.find((o) => o.key === q.answer)?.sp ? `Not quite. It's the ${ansLabel}.`
-    : `Not quite. It's ${ansLabel}.`;
-  const tell = q.type === 'duel' ? q.tell : !right && pickedSp ? Q.tellFor(ans.id, pickedSp.id) : null;
-  const cw = q.type === 'call' ? Q.callWords(ans) : null;
-  const line = q.explain || (cw ? cw.sentence : Q.fieldMark(ans));
-  const mark = q.type === 'odd' ? Q.fieldMark(ans) : '';
-  const last = game.i + 1 >= game.qs.length;
-  const fbRef = useRef<HTMLDivElement>(null);
+  const fbRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const el = fbRef.current;
     // Coming back to an answered question (v1 showAnswer restore) neither moves focus nor scrolls.
-    if (!el || restore) return;
+    if (!el || restore || layout !== 'card') return;
     el.focus({ preventScroll: true });
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     requestAnimationFrame(() => el.scrollIntoView({ block: 'nearest', behavior: reduced ? 'auto' : 'smooth' }));
   }, []);
+  if (!ans) return null;
+  const setRef = (el: HTMLDivElement | null) => {
+    fbRef.current = el;
+    if (layout === 'card') vRef.current = el;
+  };
   return (
-    <div ref={fbRef} className={`lq-fb ${right ? 'is-right' : 'is-wrong'}${restore ? ' no-anim' : ''}`} data-fb tabIndex={-1}>
-      <p className="lq-verdict"><svg viewBox="0 0 24 24" aria-hidden="true">{right ? QI.tick : QI.cross}</svg><span>{verdictText}</span></p>
-      {speciesQ && <p className="lq-name"><Link to={`/bird/${ans.id}`}>{ans.name}</Link> <span className="lq-sci">{ans.sci}</span></p>}
+    <div ref={setRef} className={`lq-fb ${v.right ? 'is-right' : 'is-wrong'}${restore ? ' no-anim' : ''}${layout === 'dock' ? ' lq-fb--rest' : ''}`} data-fb tabIndex={-1}>
+      {layout === 'card' && <p className="lq-verdict"><svg viewBox="0 0 24 24" aria-hidden="true">{v.right ? QI.tick : QI.cross}</svg><span>{v.right ? 'Correct.' : v.text}</span></p>}
+      {v.speciesQ && <p className="lq-name"><Link to={`/bird/${ans.id}`}>{ans.name}</Link> <span className="lq-sci">{ans.sci}</span></p>}
       {(q.type === 'call' || q.type === 'whoami') && q.photos?.length ? <PhotoBox photos={q.photos} alt={ans.name} cls="lq-photo lq-photo--answer" /> : null}
-      {line && <p className="lq-line">{line}</p>}
-      {mark && <p className="lq-line">{mark}</p>}
-      {tell && <p className="lq-tell"><strong>How to tell them apart.</strong> {tell}</p>}
-      {q.safety && <p className="lq-safety"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.warn}</svg><span>{q.safety}</span></p>}
-      {q.type === 'fact' && q.source?.title && (
-        <p className="lq-source">Source: {q.source.url ? <a href={q.source.url} target="_blank" rel="noopener">{q.source.title}</a> : q.source.title}</p>
-      )}
-      <div className="lq-actions">
-        {Q.hasCall(ans.id) && q.type !== 'fact' && <PlayButton on={playing} which={q.type === 'call' ? 'answer' : String(ans.id)} label={q.type === 'call' ? 'Hear it again' : 'Hear its call'} onPlay={onPlay} />}
-        {!right && pickedSp && Q.hasCall(pickedSp.id) && q.type !== 'fact' && <PlayButton on={playing} which={String(pickedSp.id)} label="Hear the one you picked" onPlay={onPlay} />}
-        {!right && pickedSp && pickedSp.kind === ans.kind && <Link className="btn lq-act" to={`/compare/${ans.id}/${pickedSp.id}`}><svg viewBox="0 0 24 24" aria-hidden="true">{QI.compare}</svg><span>Compare the two</span></Link>}
-      </div>
-      <button type="button" className="btn btn--primary btn--block lq-next" onClick={onNext}>{last ? (game.daily ? "See today's result" : 'See how you went') : 'Next question'}</button>
+      {v.line && <p className="lq-line">{v.line}</p>}
+      {v.mark && <p className="lq-line">{v.mark}</p>}
+      {v.tell && <p className="lq-tell"><strong>How to tell them apart.</strong> {v.tell}</p>}
+      <Safety text={q.safety} />
+      <Source q={q} />
     </div>
   );
+}
+
+/** What the dock shows: the last answered question, kept while the dock slides away after Next. */
+interface DockSnap { q: QuizQuestion; v: Verdict; i: number; n: number; layout: AnswerLayout }
+
+// One glass dock for the whole round, just above the tab bar (and the outing bar when one shows). It rises when she
+// answers and slips away on Next. Next is always in the same place, at its right; to its left, round chips for Hear
+// its call, Hear the one you picked and Compare. Duels and odd one out add their verdict line on top. The page keeps
+// room for it at its foot, and toasts sit above it (--lq-dock-h on <body>). A duel's photos fit between the question
+// head and the dock once she answers (--lq-head-h, learn.css).
+function measureChrome(dock: HTMLElement) {
+  const s = document.body.style;
+  const set = (name: string, px: number) => { const v = `${Math.ceil(px)}px`; if (s.getPropertyValue(name) !== v) s.setProperty(name, v); };
+  set('--lq-dock-h', dock.offsetHeight);
+  const head = dock.parentElement?.querySelector<HTMLElement>('.lq-head');
+  if (head) set('--lq-head-h', head.offsetHeight);
+}
+function Dock({ snap, up, still, onNext, onPlay, playing, vRef }: {
+  snap: DockSnap | null; up: boolean; still: boolean; onNext: () => void; onPlay: (which: string) => void;
+  playing: PlayButtonState; vRef: RefObject<HTMLElement | null>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const set = () => measureChrome(el);
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(set) : null;
+    ro?.observe(el);
+    const head = el.parentElement?.querySelector('.lq-head');
+    if (head) ro?.observe(head);
+    return () => { ro?.disconnect(); document.body.style.removeProperty('--lq-dock-h'); document.body.style.removeProperty('--lq-head-h'); };
+  }, []);
+  // Also on every draw, before the answer's layout is measured (pick draws with flushSync): the observer only reports
+  // after layout, too late for the first measure of a dock that has just grown a verdict line.
+  useLayoutEffect(() => { if (ref.current) measureChrome(ref.current); });
+  const actions = snap ? dockActions(snap.q) : [];
+  const withVerdict = !!snap && snap.layout === 'dock';
+  return (
+    <div ref={ref} className={`lq-dock glass${up ? ' is-up' : ''}${still ? ' no-anim' : ''}${withVerdict ? ' lq-dock--verdict' : ''}`} inert={!up} data-dock>
+      {withVerdict && snap && (
+        <p ref={vRef as RefObject<HTMLParagraphElement>} className={`lq-dock-verdict ${snap.v.right ? 'is-right' : 'is-wrong'}`} role="status" tabIndex={-1}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">{snap.v.right ? QI.tick : QI.cross}</svg><span>{snap.v.right ? 'Correct.' : snap.v.text}</span>
+        </p>
+      )}
+      <div className="lq-dock-row">
+        {actions.length > 0 && (
+          <div className="lq-chips">
+            {actions.map((a, j) => (a.kind === 'play'
+              ? <PlayChip key={a.key} on={playing} which={a.which!} label={a.label} tone={a.tone} onPlay={onPlay} style={{ '--j': j } as CSSProperties} />
+              : <Link key={a.key} className="lq-chip lq-chip--plain" to={a.to!} aria-label={a.label} title={a.label} style={{ '--j': j } as CSSProperties}><svg viewBox="0 0 24 24" aria-hidden="true">{QI.compare}</svg></Link>))}
+          </div>
+        )}
+        <button type="button" className="btn btn--primary lq-next" onClick={onNext}>{snap ? nextLabel(snap.i, snap.n) : 'Next'}</button>
+      </div>
+    </div>
+  );
+}
+
+// The header's trail: one segment per question, filled green for right and red for wrong, the current one marked.
+// Answers already given when it was drawn (a resumed round) show as they are; an answer given now fills in.
+const roundIds = new WeakMap<object, number>();
+let roundSeq = 0;
+const roundKey = (g: object) => { let k = roundIds.get(g); if (!k) { k = ++roundSeq; roundIds.set(g, k); } return k; };
+function Trail({ game }: { game: RoundState }) {
+  const segs = trailOf(game.qs, game.i);
+  const [settled] = useState(() => new Set(segs.flatMap((s, n) => (s === 'right' || s === 'wrong' ? [n] : []))));
+  const n = game.qs.length;
+  return (
+    <span className="lq-trail" role="progressbar" aria-label="Your round" aria-valuemin={1} aria-valuemax={n} aria-valuenow={Math.min(game.i + 1, n)} aria-valuetext={trailText(game.qs, game.i)} style={{ '--n': n } as CSSProperties}>
+      {segs.map((s, k) => <i key={k} className={`is-${s}${(s === 'right' || s === 'wrong') && !settled.has(k) ? ' is-new' : ''}`} />)}
+    </span>
+  );
+}
+
+// ---------- answer motion ----------
+// A gentle spring (about 2% overshoot) for the footer's height; plain ease-out for opacity and the leaving answers.
+const SPRING_SOFT = 'linear(0, 0.017 2.5%, 0.062 5%, 0.125 7.5%, 0.2 10%, 0.282 12.5%, 0.366 15%, 0.527 20%, 0.667 25%, 0.781 30%, 0.868 35%, 0.93 40%, 0.986 47.5%, 1.012 55%, 1.02 65%, 1.016 75%, 1.008 87.5%, 1)';
+// The app's spring (--ease-spring): a small overshoot for the verdict's tick or cross.
+const SPRING = 'linear(0, .009, .035 2.1%, .141 4.4%, .723 12.9%, .938 16.7%, 1.017 19.4%, 1.067 22.5%, 1.077 25.1%, 1.07 28.1%, 1.017 34.2%, .995 38.7%, .988 43.3%, 1.002 56.5%, 1)';
+const EASE_OUT = 'cubic-bezier(.2, .8, .2, 1)';
+const canAnimate = () => motionOK() && !document.hidden && typeof Element.prototype.animate === 'function';
+function animateSafe(el: Element, kf: Keyframe[], opts: KeyframeAnimationOptions) {
+  // An engine without linear() easing throws on it: fall back to ease-out rather than skip the motion.
+  try { return el.animate(kf, opts); } catch { try { return el.animate(kf, { ...opts, easing: EASE_OUT }); } catch { return null; } }
+}
+// The answers that fold away leave as quick fading copies where they were, under the page, while the two that stay
+// slide together over them.
+function ghostsOf(keys: string[]) {
+  return keys.flatMap((k) => {
+    const el = document.querySelector<HTMLElement>(`.lq .lq-opt-wrap[data-flip="opt-${k}"]`);
+    if (!el) return [];
+    const r = el.getBoundingClientRect();
+    if (!r.width || r.bottom < 0 || r.top > innerHeight) return [];
+    return [{ el: el.cloneNode(true) as HTMLElement, r }];
+  });
+}
+function playGhosts(list: { el: HTMLElement; r: DOMRect }[]) {
+  if (!list.length) return;
+  const layer = document.createElement('div');
+  layer.className = 'lq-ghosts';
+  layer.setAttribute('aria-hidden', 'true');
+  layer.inert = true;
+  for (const { el, r } of list) {
+    el.className = 'lq-ghost';
+    el.removeAttribute('data-flip');
+    el.querySelectorAll('[data-pick]').forEach((b) => { b.removeAttribute('data-pick'); b.setAttribute('aria-disabled', 'true'); });
+    Object.assign(el.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+    layer.append(el);
+  }
+  document.body.append(layer);
+  const anims = [...layer.children].map((g) => animateSafe(g, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.95)' }], { duration: 180, easing: EASE_OUT, fill: 'forwards' }));
+  const clear = () => layer.remove();
+  void Promise.allSettled(anims.map((a) => a?.finished)).then(clear);
+  window.setTimeout(clear, 800);
+}
+/**
+ * Answer a photo question with motion: the other answers fold away (flip() slides the two that stay together), and
+ * the verdict footer grows out of the photo with a height and opacity spring. Returns how much the footer has still
+ * to grow, so keepInView can allow for it. Reduced motion, a hidden tab or no WAAPI: the final layout at once.
+ */
+function answerUnderPhoto(commit: () => void, q: QuizQuestion, key: string, footRef: RefObject<HTMLDivElement | null>) {
+  if (!canAnimate()) { commit(); return 0; }
+  const ghosts = ghostsOf(q.options.filter((o) => o.key !== key && o.key !== q.answer).map((o) => o.key));
+  flip(() => {
+    commit();
+    // Measure the moves with the footer still shut: its own growth then carries the answers the rest of the way.
+    const f = footRef.current;
+    if (f) { f.style.height = '0px'; f.style.overflow = 'hidden'; }
+  }, { selector: '.lq [data-flip]', key: (el) => el.dataset.flip });
+  playGhosts(ghosts);
+  const f = footRef.current;
+  if (!f) return 0;
+  const h = f.scrollHeight;
+  // While the footer grows, the screen keeps the room it will take at its foot, so the page is never shorter than
+  // its final length and a scroll to keep the answers in view is not cut short.
+  const screen = f.closest<HTMLElement>('.lq-screen');
+  screen?.style.setProperty('--lq-grow', `${h}px`);
+  const grow = animateSafe(f, [{ height: '0px' }, { height: `${h}px` }], { duration: 480, easing: SPRING_SOFT });
+  f.style.height = '';
+  const bar = f.firstElementChild;
+  if (bar) animateSafe(bar, [{ opacity: 0, transform: 'translateY(-10px)' }, { opacity: 1, transform: 'none' }], { duration: 320, delay: 60, easing: EASE_OUT, fill: 'backwards' });
+  // The rest of the feedback settles in below once the two answers have slid into place.
+  const more = document.querySelector('.lq .lq-more');
+  if (more) animateSafe(more, [{ opacity: 0, transform: 'translateY(12px)' }, { opacity: 1, transform: 'none' }], { duration: 300, delay: 200, easing: EASE_OUT, fill: 'backwards' });
+  const mark = f.querySelector('.lq-vb-mark');
+  if (mark) animateSafe(mark, [{ opacity: 0, transform: 'scale(.3) rotate(-30deg)' }, { opacity: 1, transform: 'none' }], { duration: 560, delay: 120, easing: SPRING, fill: 'backwards' });
+  const done = () => { f.style.overflow = ''; screen?.style.removeProperty('--lq-grow'); };
+  if (grow) grow.finished.then(done, done); else done();
+  return grow ? h : 0;
+}
+/**
+ * Answer a duel or odd one out: on a short screen the photos settle to fit between the question head and the dock
+ * (.lq-duel.is-answered in learn.css). With motion they ease down to that size rather than jump. Returns the motion,
+ * to start once keepInView has measured the final layout; null when nothing changes size or motion is off.
+ */
+function answerTiles(commit: () => void) {
+  const grid = document.querySelector<HTMLElement>('.lq .lq-duel');
+  const h0 = grid?.getBoundingClientRect().height ?? 0;
+  commit();
+  if (!grid?.isConnected || !canAnimate()) return null;
+  const h1 = grid.getBoundingClientRect().height;
+  if (h0 - h1 < 2) return null;
+  return () => { animateSafe(grid, [{ maxHeight: `${h0}px` }, { maxHeight: `${h1}px` }], { duration: 480, easing: SPRING_SOFT }); };
+}
+/**
+ * Nothing is left peeking out of the slit above the floating question head (a cut-off line of the kicker or the
+ * question): of the stops between lo and hi, take the nearest one to `by` where each line above the photo is wholly
+ * behind or below the head's top edge, or wholly scrolled away. Unchanged when no stop is clean.
+ */
+function tidyStop(by: number, lo: number, hi: number, headTop: number) {
+  const lines = [...document.querySelectorAll('.lq-screen > .lq-kicker, .lq > :is(.lq-prompt, .lq-sub, .lq-safety)')]
+    .map((e) => e.getBoundingClientRect()).filter((r) => r.height > 0);
+  const clean = (s: number) => lines.every((r) => r.bottom - s <= 0.5 || r.top - s >= headTop - 0.5);
+  if (clean(by)) return by;
+  const stops = lines.flatMap((r) => [r.bottom, r.top - headTop]).filter((s) => s >= lo && s <= hi && clean(s));
+  return stops.length ? stops.reduce((a, s) => (Math.abs(s - by) < Math.abs(a - by) ? s : a)) : by;
+}
+/**
+ * Only when the dock would hide her pick or the right answer (a short screen, or the outing bar showing): scroll to
+ * show them above it. When that leaves the whole photo in view, the photo settles just under the question head,
+ * rather than stopping with the question half under it. Never so far that the verdict leaves the screen. On a
+ * 390x844 phone without an outing, nothing moves. If she had scrolled down to answer and her pick or the right one
+ * (or the verdict) is now under the head, the page comes back down far enough to show it, as long as the dock still
+ * clears the answers.
+ */
+function keepInView(layout: AnswerLayout, grow: number) {
+  const dock = document.querySelector<HTMLElement>('.lq-dock');
+  if (!dock) return;
+  const dockTop = innerHeight - (parseFloat(getComputedStyle(dock).bottom) || 0) - dock.offsetHeight;
+  const head = document.querySelector('.lq-head')?.getBoundingClientRect();
+  const headTop = head?.top ?? 0, headBottom = head?.bottom ?? 0;
+  let bottom = 0, top = 0;
+  if (layout === 'photo') {
+    const opts = document.querySelector('.lq .lq-options');
+    const foot = document.querySelector('.lq .lq-foot');
+    if (!opts || !foot) return;
+    bottom = opts.getBoundingClientRect().bottom + grow;
+    top = foot.getBoundingClientRect().top;
+  } else {
+    const pair = [...document.querySelectorAll('.lq .lq-side.is-right, .lq .lq-side.is-wrong')].map((e) => e.getBoundingClientRect());
+    if (!pair.length) return;
+    bottom = Math.max(...pair.map((r) => r.bottom));
+    top = Math.min(...pair.map((r) => r.top));
+  }
+  // Scroll by at least `need` (the dock clears her pick and the right one) and at most `cap` (the verdict, or the
+  // answers in a duel, stay under the head).
+  const need = bottom + 10 - dockTop;
+  const cap = top - headBottom - 8;
+  const mediaTop = document.querySelector('.lq .lq-card, .lq .lq-duel')?.getBoundingClientRect().top ?? headBottom;
+  let by = 0, hi = cap;
+  if (need > 1) {
+    by = Math.min(Math.max(need, mediaTop - headBottom - 10), cap);
+    // A tidy stop may go a little short of that, keeping the whole photo under the head, or past it only where `by`
+    // already puts the photo under the head (a short screen), and then at most to the head's bottom edge.
+    hi = Math.min(cap + 8, Math.max(by, mediaTop - headBottom));
+  } else if (cap < -1) {
+    by = Math.max(cap, need);
+    hi = by;
+  }
+  if (Math.abs(by) <= 1) return;
+  by = tidyStop(by, Math.min(need, by), hi, headTop);
+  if (Math.abs(by) > 1) window.scrollBy({ top: by, behavior: motionOK() ? 'smooth' : 'auto' });
 }
 
 // v1 scoreHTML/playScore: the score sits inside a ring that fills to the share she got right, in the big stamp
@@ -307,6 +564,13 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const startRef = useRef(0);
   const promptRef = useRef<HTMLHeadingElement>(null);
   const wantHeadFocus = useRef(false);
+  // The answered question's verdict (the photo's footer, the dock's verdict line or the feedback card), which takes
+  // focus when she answers and when she comes back to an answered question.
+  const verdictRef = useRef<HTMLElement | null>(null);
+  const footRef = useRef<HTMLDivElement | null>(null);
+  const dockSnap = useRef<DockSnap | null>(null);
+  // The photo on screen, to tint the verdict footer's glass.
+  const [glow, setGlow] = useState<string | null>(null);
 
   const stopInline = buttons.stop;
 
@@ -417,8 +681,20 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   useEffect(() => {
     if (!resumed || !game) return;
     window.scrollTo(0, scrollOf.get(game) || 0);
-    // v1 focuses the screen's heading after a route change (the results heading focuses itself).
-    promptRef.current?.focus({ preventScroll: true });
+    // v1 focuses the screen's heading after a route change (the results heading focuses itself). Back on an answered
+    // question, focus goes to its verdict instead, drawn as it was left with nothing replayed. The route's own focus
+    // (RouteFocus) takes the heading in its next frame, so the verdict takes it back after that, unless she has
+    // moved on meanwhile.
+    const cur = game.qs[game.i];
+    const verdict = cur?.picked != null && game.mode !== 'rapid' ? verdictRef.current : null;
+    if (!verdict) { promptRef.current?.focus({ preventScroll: true }); return; }
+    verdict.focus({ preventScroll: true });
+    const id = requestAnimationFrame(() => {
+      const a = document.activeElement;
+      const idle = !a || a === document.body || a === promptRef.current || a === document.getElementById('view');
+      if (idle && verdict.isConnected) verdict.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(id);
   }, [resumed, game]);
 
   // These must be declared before any early return: the results screen calls them.
@@ -470,7 +746,9 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
   };
   const next = () => {
-    if (!game) return;
+    // Next stays in the dock for the whole round: only an answered question moves on (two clicks in one go, or a
+    // click while the dock is on its way down, never skip a question).
+    if (!game || game.qs[game.i]?.picked == null) return;
     wantHeadFocus.current = true;
     setResumed(false);
     stopCalls();
@@ -482,8 +760,24 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const pick = (key: string) => {
     if (!game || !current || current.picked != null) return;
     const q = current;
-    const ok = recordAnswer(game, q, key);
-    setResumed(false);
+    const layout = answerLayout(q, game.mode);
+    let ok = false;
+    // Answer and draw at once (flushSync), so the motion below starts from the answered layout.
+    const commit = () => {
+      ok = recordAnswer(game, q, key);
+      flushSync(() => { setResumed(false); force(); });
+    };
+    let grow = 0;
+    let settle: (() => void) | null = null;
+    if (layout === 'photo') grow = answerUnderPhoto(commit, q, key, footRef);
+    else if (layout === 'dock') settle = answerTiles(commit);
+    else commit();
+    // The verdict takes focus, so it is read out (the feedback card focuses itself, as v1's did).
+    if (layout === 'photo' || layout === 'dock') {
+      verdictRef.current?.focus({ preventScroll: true });
+      keepInView(layout, grow);
+    }
+    settle?.();
     navigator.vibrate?.(ok ? 30 : [40, 60, 40]);
     if (game.mode === 'rapid') {
       const g = game;
@@ -491,7 +785,6 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         if (g.qs[g.i] === q) { wantHeadFocus.current = true; setResumed(false); stopInline(); g.i += 1; setRevealed(false); force(); }
       }, ok ? 450 : 1100);
     }
-    force();
   };
   const play = (which: string) => {
     if (!current) return;
@@ -521,6 +814,10 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const q = current!;
   const picked = q.picked ?? null;
   const right = picked != null && picked === q.answer;
+  const layout = answerLayout(q, game.mode);
+  const v = picked != null && layout !== 'rapid' ? verdictOf(q) : null;
+  if (v) dockSnap.current = { q, v, i: game.i, n: game.qs.length, layout };
+  const folded = new Set(foldKeys(q, game.mode));
   const roundName = game.daily ? "Today's challenge" : game.testId ? 'Test me' : game.pack ? packBy[game.pack]?.name : MODE_INFO[game.mode] || '';
   const safety = q.safety || (game.pack && packBy[game.pack]?.safety ? Q.SNAKE_RULE : '');
   const sub = q.type === 'duel' ? 'Tap the photo you think it is.' : q.type === 'odd' ? 'Tap the odd one out.' : q.sub || '';
@@ -533,11 +830,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         </button>
         {game.mode === 'rapid' ? (
           <span className="lq-bar lq-bar--time" aria-hidden="true"><span style={{ transform: `scaleX(${(rapidLeft / RAPID_MS).toFixed(3)})` }} /></span>
-        ) : (
-          <span className="lq-bar" role="progressbar" aria-label={`Question ${game.i + 1} of ${game.qs.length}`} aria-valuemin={1} aria-valuemax={game.qs.length} aria-valuenow={game.i + 1}>
-            <span style={{ transform: `scaleX(${((picked != null ? game.i + 1 : game.i) / game.qs.length).toFixed(3)})` }} />
-          </span>
-        )}
+        ) : <Trail key={roundKey(game)} game={game} />}
         {game.mode === 'rapid'
           ? <span className="lq-count" data-secs aria-label="Seconds left">{Math.ceil(rapidLeft / 1000)}<span>s</span></span>
           : <span className="lq-count" aria-hidden="true">{game.i + 1}<span>/{game.qs.length}</span></span>}
@@ -550,11 +843,19 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         <h1 ref={promptRef} className="lq-prompt" tabIndex={-1}>{promptFor(q)}</h1>
         {sub && <p className="lq-sub">{sub}</p>}
         {safety && <p className="lq-safety"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.warn}</svg><span>{safety}</span></p>}
-        <Media key={game.i} q={q} still={resumed} />
-        <Options q={q} picked={picked} onPick={pick} rapid={game.mode === 'rapid'} round={game.i} still={resumed} />
-        {picked != null && game.mode !== 'rapid' && <Feedback q={q} right={right} game={game} onNext={next} onPlay={play} playing={buttons.on} restore={resumed} />}
+        {layout === 'photo' ? (
+          // The mystery photo and, once she answers, its verdict footer, in one rounded card.
+          <div className={`lq-card${v ? ` is-answered ${v.right ? 'is-right' : 'is-wrong'}` : ''}`}>
+            <Media key={game.i} q={q} still={resumed} onShow={setGlow} />
+            {v && <div ref={footRef} className="lq-foot"><PhotoVerdict v={v} glow={glow} vRef={verdictRef} /></div>}
+          </div>
+        ) : <Media key={game.i} q={q} still={resumed} />}
+        <Options q={q} picked={picked} onPick={pick} rapid={game.mode === 'rapid'} round={game.i} still={resumed} folded={folded} />
+        {v && layout === 'photo' && <MoreCard q={q} v={v} />}
+        {v && (layout === 'card' || layout === 'dock') && <AnswerCard key={`fb-${game.i}`} q={q} v={v} layout={layout} restore={resumed} vRef={verdictRef} />}
         {picked != null && game.mode === 'rapid' && <p className={`lq-verdict lq-fb ${right ? 'is-right' : 'is-wrong'} lq-fb--brief${resumed ? ' no-anim' : ''}`}><svg viewBox="0 0 24 24" aria-hidden="true">{right ? QI.tick : QI.cross}</svg><span>{right ? 'Correct.' : `Not quite. It's the ${speciesName(q.focus)}.`}</span></p>}
       </div>
+      {game.mode !== 'rapid' && <Dock snap={dockSnap.current} up={!!v} still={resumed} onNext={next} onPlay={play} playing={buttons.on} vRef={verdictRef} />}
     </div>
   );
 }

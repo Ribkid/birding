@@ -1,0 +1,92 @@
+/* The full-screen photo viewer (components/PhotoViewer.tsx). The photo alone on dark paper, with the hero's glass
+   controls in the same places: Close where Back was, the count where the Photos switch was, and the credit in a
+   glass pill at the foot. The stage owns every touch (touch-action: none), so the page behind never scrolls or
+   zooms; the photo's motion is set from script, frame by frame or with the Web Animations API. */
+
+.pv {
+  position: fixed; inset: 0; z-index: 88; overflow: hidden; overscroll-behavior: contain;
+  touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  /* Closed by a change of address: its picture fades over the next screen's transition. */
+  view-transition-name: photo-viewer;
+}
+::view-transition-old(photo-viewer):only-child { animation: 120ms linear both vt-fade-out; }
+.pv--closing { pointer-events: none; }
+
+.pv-backdrop { position: absolute; inset: 0; background: #0B0E12; opacity: .96; }
+
+.pv-stage { position: absolute; inset: 0; touch-action: none; cursor: zoom-in; }
+.pv.is-zoomed .pv-stage { cursor: grab; }
+.pv.is-zoomed .pv-stage:active, .pv--dragging .pv-stage { cursor: grabbing; }
+.pv-track { position: absolute; inset: 0; }
+.pv-slide { position: absolute; top: 0; width: 100%; height: 100%; overflow: hidden; }
+.pv-zoom { position: absolute; inset: 0; transform-origin: 50% 50%; }
+.pv-slide.is-current .pv-zoom { will-change: transform; }
+.pv-img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+  pointer-events: none; -webkit-user-drag: none;
+  transition: opacity var(--dur-2) var(--ease-out);
+}
+.pv-img.is-wait { opacity: 0; }
+.pv-img--soft { filter: blur(6px); }
+/* A photo still on its way: a quiet ring in the middle, shown only if it takes a moment (a small copy, once in,
+   draws over it). */
+.pv-loading {
+  position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .22); border-top-color: rgba(255, 255, 255, .85);
+  opacity: 0; animation: pv-in var(--dur-2) linear 300ms forwards, pv-spin .9s linear infinite;
+}
+@keyframes pv-in { to { opacity: 1; } }
+@keyframes pv-spin { to { rotate: 1turn; } }
+.pv-missing {
+  position: absolute; left: 50%; top: 50%; translate: -50% -50%;
+  width: min(100% - 32px, 560px); aspect-ratio: 4 / 3; border-radius: var(--r-card);
+}
+
+/* The photo in flight between its frame on the page and the stage. */
+.pv-fly { position: fixed; left: 0; top: 0; z-index: 1; max-width: none; transform-origin: 0 0; pointer-events: none; will-change: transform, clip-path; }
+.pv--flying .pv-slide.is-current { visibility: hidden; }
+
+/* ---------- glass controls (the hero's material) ---------- */
+.pv-top {
+  position: absolute; z-index: 2; top: calc(10px + env(safe-area-inset-top)); left: 12px; right: 12px;
+  display: flex; align-items: center; justify-content: center; height: var(--tap);
+  pointer-events: none; opacity: var(--pv-ui, 1);
+}
+.pv-close, .pv-count, .pv-credit {
+  color: var(--ink);
+  background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+}
+.pv-close {
+  position: absolute; left: 0; top: 0; display: grid; place-items: center; width: var(--tap); height: var(--tap);
+  padding: 0; border: 0; border-radius: 50%; cursor: pointer; pointer-events: auto;
+  transition: scale var(--dur-1) var(--ease-out);
+}
+.pv-close svg { width: 20px; height: 20px; }
+.pv-close:active { scale: .92; }
+.pv-count {
+  margin: 0; padding: 8px 14px 7px; border-radius: var(--r-pill);
+  font: 600 var(--fs-2)/1 var(--stamp); letter-spacing: .05em; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.pv-count b { font-weight: 800; }
+/* The credit always shows in full: a long one wraps to a second line rather than being cut off. */
+.pv-credit {
+  position: absolute; z-index: 2; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); translate: -50% 0;
+  width: max-content; max-width: calc(100% - 24px); margin: 0; padding: 10px 16px; border-radius: 18px;
+  font-size: var(--fs-1); line-height: 1.4; text-align: center; text-wrap: balance; overflow-wrap: anywhere;
+  opacity: var(--pv-ui, 1);
+}
+/* Padded so the link is a full-height target; inline, so it wraps with the rest of the line. */
+.pv-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; padding: 12px 0; }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .pv-close, .pv-count, .pv-credit { background: var(--glass-strong); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .pv-close, .pv-count, .pv-credit { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pv-loading { animation: pv-in var(--dur-2) linear 300ms forwards; }
+  .pv-img, .pv-close { transition: none; }
+  .pv-close:active { scale: none; }
+}
