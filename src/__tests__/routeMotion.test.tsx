@@ -86,6 +86,12 @@ describe('MotionHashRouter', () => {
   });
 });
 
+// Stop in a Learn round: her tap replaces the round's address with the screen's she goes back to.
+function Stop({ to }: { to: string }) {
+  const navigate = useNavigate();
+  return <a href={`#${to}`} onClick={(e) => { e.preventDefault(); void navigate(to, { replace: true }); }}>{`Stop to ${to}`}</a>;
+}
+
 describe('Back and Forward', () => {
   let y = 0;
   // Where each tile sits on screen: [top, bottom], or nothing for a tile off screen.
@@ -124,8 +130,11 @@ describe('Back and Forward', () => {
       <main id="view">
         <Routes>
           <Route path="/dex" element={<><h1>Dex</h1>{[1, 2, 3].map((id) => <Link key={id} to={`/bird/${id}`} data-tile={id}>{`Tile ${id}`}</Link>)}</>} />
-          <Route path="/lists" element={<><h1>Lists</h1><Link to="/bird/2">Row 2</Link><Link to="/bird/3" className="tcard"><span className="tile-img" />Card 3</Link></>} />
+          <Route path="/lists" element={<><h1>Lists</h1><Link to="/bird/2">Row 2</Link><Link to="/bird/3" className="tcard"><span className="tile-img" />Card 3</Link><Link to="/round/none">No round</Link><Link to="/round/on">Round</Link></>} />
           <Route path="/bird/:id" element={<><h1>Bird</h1><Link to="/dex">Dex</Link></>} />
+          {/* A round that can't be made goes back to the screen it was chosen on; Stop in a round does the same. */}
+          <Route path="/round/none" element={<Navigate to="/lists" replace />} />
+          <Route path="/round/on" element={<><h1>Round</h1><Stop to="/lists" /><Stop to="/dex" /></>} />
         </Routes>
       </main>
     </MotionHashRouter>,
@@ -221,6 +230,41 @@ describe('Back and Forward', () => {
     expect(h1()).toBe('Lists');
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
     expect(document.activeElement?.textContent).toBe('Card 3');
+  });
+
+  it('lands a replace that goes back to the screen under it where she left that screen', async () => {
+    app();
+    y = 900;
+    click('No round');
+    await settle();
+    expect(h1()).toBe('Lists');
+    expect(window.location.hash).toBe('#/lists');
+    expect(y).toBe(900);
+    click('Round');
+    expect(h1()).toBe('Round');
+    expect(y).toBe(0);
+    click('Stop to /lists');
+    await settle();
+    expect(h1()).toBe('Lists');
+    expect(y).toBe(900);
+    // A replace to a screen that isn't the one under it starts at the top, as any new screen does.
+    click('Round');
+    y = 200;
+    click('Stop to /dex');
+    await settle();
+    expect(h1()).toBe('Dex');
+    expect(y).toBe(0);
+  });
+
+  it('finds the tile at the top of a dex of two columns, whose middle is the gap between them', () => {
+    window.location.hash = '#/dex';
+    app();
+    at = { 1: [96, 216], 2: [96, 216, 200] };
+    // Down the middle of a 320 px screen there is only the grid; each half has a tile.
+    (document as { elementFromPoint?: unknown }).elementFromPoint = (px: number, py: number) =>
+      (py < 96 || py > 216 || Math.abs(px - innerWidth / 2) < 8 ? document.getElementById('view')
+        : document.querySelector(`[data-tile="${px < innerWidth / 2 ? 1 : 2}"]`));
+    expect(anchorOf(document.getElementById('view')!)).toEqual({ tile: '1', top: 96 });
   });
 
   it('holds the return to the tile that was at the top of the screen', async () => {

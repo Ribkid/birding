@@ -6,8 +6,9 @@
 // draws. Reduced motion, a hidden tab or a browser without view transitions get the plain change (lib/motion.ts vt()).
 //
 // Going back puts her where she was. Back and Forward return to the place she left that history entry at, going back
-// up to a shallower screen returns to where she was on it (as v1 did), and so does going back to a tab's own screen
-// through the tab bar. The place is the scroll, held to the photo tile that was at the top of the screen, and the
+// up to a shallower screen returns to where she was on it (as v1 did), and so do going back to a tab's own screen
+// through the tab bar and a replace that goes back to the screen under it (Stop in a Learn round, or a round that
+// can't be made, goes back to the hub where she chose it). The place is the scroll, held to the photo tile that was at the top of the screen, and the
 // control she left by, which takes focus again (RouteFocus). Tapping the tab she is on, on its own screen, glides to
 // the top.
 //
@@ -64,19 +65,24 @@ const byPath = new Map<string, Place>();
 const byEntry = new Map<string, Place>();
 
 /**
- * The first photo tile wholly on screen, found by looking down the middle of the screen (so a tile under the sticky
- * search bar or the tab bar doesn't count), and where it sits. Groups further down the dex only have an estimated
- * height until they are drawn, so a return lands on this tile rather than on a number of pixels alone.
+ * The first photo tile wholly on screen, found by looking down the screen (so a tile under the sticky search bar or
+ * the tab bar doesn't count), and where it sits. Groups further down the dex only have an estimated height until
+ * they are drawn, so a return lands on this tile rather than on a number of pixels alone. It looks down the middle
+ * and down each half: on a phone of 360 px or less the dex has two columns, and the middle is the gap between them.
  */
 export function anchorOf(view: ParentNode): Anchor | null {
   if (typeof document.elementFromPoint !== 'function') return null;
-  const x = innerWidth / 2;
+  const xs = [innerWidth / 2, innerWidth / 4, (innerWidth * 3) / 4];
   for (let y = 8; y < innerHeight; y += 16) {
-    const t = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-tile]');
-    if (!t || !view.contains(t)) continue;
-    const r = t.getBoundingClientRect();
-    if (r.top >= 0 && r.bottom <= innerHeight) return { tile: t.dataset.tile!, top: Math.round(r.top) };
-    y = Math.max(y, r.bottom);
+    let past = y;
+    for (const x of xs) {
+      const t = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-tile]');
+      if (!t || !view.contains(t)) continue;
+      const r = t.getBoundingClientRect();
+      if (r.top >= 0 && r.bottom <= innerHeight) return { tile: t.dataset.tile!, top: Math.round(r.top) };
+      past = Math.max(past, r.bottom);
+    }
+    y = past;
   }
   return null;
 }
@@ -209,6 +215,9 @@ function keyBrowserEntry() {
 // The address the app opened at keeps the key 'default' (screens read it as "opened from outside the app"), so it is
 // remembered by its address only.
 const entryKey = (key: string) => (key === 'default' ? null : key);
+// Each history entry's key and address this session, by its place in the count, so a replace that goes back to the
+// screen under it can land where she left that screen.
+const entryAt = new Map<number, { key: string; path: string }>();
 
 /**
  * `delta` is how far a popstate moved through history: -1 for Back, 1 for Forward, and null if the entry has no place
@@ -243,11 +252,14 @@ function onRouteChange(prev: Location, next: Location, action: Action, delta: nu
   const hero = !plain && !tapped && fromId && !toId && goingBack ? viewEl()?.querySelector<HTMLElement>('[data-hero-frame]') : null;
   if (hero && inView(hero)) { nameFor(hero, 'sp-hero'); shrinkTo = fromId; }
   // Where the new screen lands. Back and Forward: where she left that history entry (or, for an entry without its
-  // own key or from before this session, where she was last at that address, going back). Going back up to a
-  // shallower screen, or to a tab's own screen through the tab bar: where she was on it. Anything else starts at the
-  // top.
+  // own key or from before this session, where she was last at that address, going back). A replace that goes back
+  // to the screen under it in history (a round that can't be made going back to Learn, Stop in a round): where she
+  // left that screen, as Back would. Going back up to a shallower screen, or to a tab's own screen through the tab
+  // bar: where she was on it. Anything else starts at the top.
   const k = entryKey(next.key);
+  const under = action === 'REPLACE' ? entryAt.get(atIdx - 1) : undefined;
   const back = traverse ? (k && byEntry.get(k)) || (delta <= 0 || nav === 'back' ? byPath.get(to) : undefined)
+    : under && under.path === to ? (entryKey(under.key) && byEntry.get(under.key)) || byPath.get(to)
     : nav === 'back' || (viaTab && TAB_ROOTS.includes(to)) ? byPath.get(to) : undefined;
   pending = {
     key: next.key,
@@ -365,8 +377,10 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
     // Before the router's own popstate listener (added by listen below), so it reads the key given here.
     window.addEventListener('popstate', keyBrowserEntry, true);
     atIdx = window.history.state?.idx ?? 0;
+    entryAt.set(atIdx, { key: history.location.key, path: history.location.pathname + history.location.search });
     const off = history.listen(({ action, location: next, delta }) => {
       atIdx = window.history.state?.idx ?? atIdx;
+      entryAt.set(atIdx, { key: next.key, path: next.pathname + next.search });
       const prev = shown.current;
       shown.current = next;
       latest.current = { action, location: next };
@@ -374,6 +388,7 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
     });
     return () => {
       off();
+      stopLanding();
       window.removeEventListener('popstate', keyBrowserEntry, true);
       document.removeEventListener('click', onPress, true);
       document.removeEventListener('pointerdown', onPointer, true);
@@ -411,6 +426,7 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
 export function forgetPlaces() {
   byPath.clear();
   byEntry.clear();
+  entryAt.clear();
   cameFrom.clear();
   pending = null;
   returning = null;
