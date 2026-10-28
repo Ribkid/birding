@@ -6,14 +6,15 @@ import {
   type ReactNode,
 } from 'react';
 import { db } from '../../core/db.js';
+import { sized } from '../../core/media.js';
 import { likelihood, loadSeq, monthRates, seq } from '../../core/seqdata.js';
 import { MONTHS, targets } from '../../core/stats.js';
 import { byId, dexCode, SPECIES, type Species } from '../../lib/data';
-import { useOutings, useSeen, useSightings, type Outing, type Sighting } from '../../lib/hooks';
+import { useMedia, useOutings, useSeen, useSightings, type Outing, type Sighting } from '../../lib/hooks';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { nudgeAfterSave } from '../me/nudge';
-import { Band, SpeciesImage } from '../../components/SpeciesImage';
+import { Band } from '../../components/SpeciesImage';
 import './lists.css';
 
 export const MONTH_NAMES = MONTHS as string[];
@@ -315,24 +316,52 @@ interface SpeciesPickerProps {
   label?: string;
 }
 
-export function SpeciesPicker({ value, onChange, label = 'Species' }: SpeciesPickerProps) {
+export function SpeciesPicker({ value, onChange, label = 'What did you see?' }: SpeciesPickerProps) {
   const seen = useSeen();
+  useMedia();
   const [query, setQuery] = useState('');
   const resultsRef = useRef<HTMLUListElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const changeRef = useRef<HTMLButtonElement>(null);
   const sp = value != null ? (byId.get(value) ?? null) : null;
+  // Change takes her to the search field, as v1's did. Picking one leaves her on the card's Change button rather
+  // than on the page (v1's focus fell to the page there, as the result she picked is gone).
+  const focusNext = useRef<'search' | 'change' | null>(null);
+  useEffect(() => {
+    if (focusNext.current === 'search' && !sp) inputRef.current?.focus();
+    if (focusNext.current === 'change' && sp) changeRef.current?.focus();
+    focusNext.current = null;
+  }, [sp]);
 
   if (sp) {
+    // The chosen species shows as a photo card, so she can see at a glance she picked the right one (v1
+    // pickerChosen). The name is written on the card, so the photo has no alt of its own.
+    const url = sized(sp.id, 'large') as string | null;
     return (
       <div className="picker">
-        <div className="chosen">
-          <SpeciesImage sp={sp} className="chosen-img" />
-          <div>
-            <strong>{sp.name}</strong>
-            <em>{sp.sci}</em>
+        <div className="picker-chosen">
+          <div className={`chosen kind--${sp.kind}`}>
+            {url ? (
+              <img
+                className="chosen-img"
+                src={url}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                onError={(e) => e.currentTarget.classList.add('img-missing')}
+              />
+            ) : (
+              <span className="chosen-img img-missing" aria-hidden="true" />
+            )}
+            <div className="chosen-txt">
+              <Band sp={sp} seen={seen.has(sp.id)} />
+              <strong>{sp.name}</strong>
+              <em>{sp.sci}</em>
+            </div>
+            <button type="button" className="btn btn--small chosen-change" aria-label="Change species" ref={changeRef} onClick={() => { focusNext.current = 'search'; onChange(null); }}>
+              Change
+            </button>
           </div>
-          <button type="button" className="btn btn--small" onClick={() => onChange(null)}>
-            Change
-          </button>
         </div>
       </div>
     );
@@ -346,6 +375,7 @@ export function SpeciesPicker({ value, onChange, label = 'Species' }: SpeciesPic
         <label className="field">
           <span>{label}</span>
           <input
+            ref={inputRef}
             type="search"
             placeholder="Type a name, e.g. kookaburra"
             autoComplete="off"
@@ -370,6 +400,7 @@ export function SpeciesPicker({ value, onChange, label = 'Species' }: SpeciesPic
                 <button
                   type="button"
                   onClick={() => {
+                    focusNext.current = 'change';
                     onChange(item);
                     setQuery('');
                   }}
@@ -380,7 +411,7 @@ export function SpeciesPicker({ value, onChange, label = 'Species' }: SpeciesPic
               </li>
             ))}
             {results.length === 0 && (
-              <li className="muted pad">No species by that name in the dex.</li>
+              <li className="muted pad">Nothing by that name in the dex.</li>
             )}
           </ul>
         )}
