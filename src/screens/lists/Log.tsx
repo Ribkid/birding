@@ -83,7 +83,8 @@ export default function Log() {
                   return (
                     <li key={s.id}>
                       <button type="button" className="row row--sp" data-edit={s.id} onClick={() => openSightingSheet({ sighting: s })}>
-                        <span className="row-thumb">
+                        {/* The name is written beside the photo, so the photo isn't read out too. */}
+                        <span className="row-thumb" aria-hidden="true">
                           {s.photoId != null ? <OwnPhoto photoId={s.photoId} /> : sp ? <SpeciesImage sp={sp} /> : <span className="img-missing" aria-hidden="true" />}
                         </span>
                         <span className="row-main">
