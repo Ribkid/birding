@@ -180,7 +180,15 @@ function placeHere(): Place {
   return { y: scrollY, anchor: view ? anchorOf(view) : null, focus: focusKey(by) };
 }
 
-function onRouteChange(prev: Location, next: Location, action: Action, apply: () => void) {
+// A history entry the app made carries its own key; one made by typing a hash (or the address the app opened at) is
+// 'default', which isn't one entry, so it is remembered by its address only.
+const entryKey = (key: string) => (key === 'default' ? null : key);
+
+/**
+ * `delta` is how far a popstate moved through history: -1 for Back, 1 for Forward, 0 for Back from a typed hash
+ * (which has no place in the count), and null for the typed hash itself, a new entry like a tap's.
+ */
+function onRouteChange(prev: Location, next: Location, action: Action, delta: number | null, apply: () => void) {
   const from = prev.pathname + prev.search, to = next.pathname + next.search;
   const viaTab = tabTap;
   tabTap = false;
@@ -190,10 +198,13 @@ function onRouteChange(prev: Location, next: Location, action: Action, apply: ()
   if (prev.key === drawnKey) {
     const here = placeHere();
     byPath.set(from, here);
-    byEntry.set(prev.key, here);
+    const k = entryKey(prev.key);
+    if (k) byEntry.set(k, here);
   }
   const nav = navKind(prev.pathname, next.pathname);
-  const goingBack = nav === 'back' || action === 'POP';
+  // Back or Forward through entries (not a typed hash).
+  const traverse = action === 'POP' && delta != null;
+  const goingBack = nav === 'back' || (traverse && delta <= 0);
   const toId = birdId(next.pathname), fromId = birdId(prev.pathname);
   const tapped = morph && morph.id === toId ? morph : null;
   morph = null;
@@ -205,10 +216,12 @@ function onRouteChange(prev: Location, next: Location, action: Action, apply: ()
   let shrinkTo: number | null = null;
   const hero = !plain && !tapped && fromId && !toId && goingBack ? viewEl()?.querySelector<HTMLElement>('[data-hero-frame]') : null;
   if (hero && inView(hero)) { nameFor(hero, 'sp-hero'); shrinkTo = fromId; }
-  // Where the new screen lands. Back and Forward: where she left that history entry (or, for an entry from before
-  // this session, going back up as below). Going back up to a shallower screen, or to a tab's own screen through the
-  // tab bar: where she was on it. Anything else starts at the top.
-  const back = action === 'POP' ? byEntry.get(next.key) ?? (nav === 'back' ? byPath.get(to) : undefined)
+  // Where the new screen lands. Back and Forward: where she left that history entry (or, for an entry without its
+  // own key or from before this session, where she was last at that address, going back). Going back up to a
+  // shallower screen, or to a tab's own screen through the tab bar: where she was on it. Anything else starts at the
+  // top.
+  const k = entryKey(next.key);
+  const back = traverse ? (k && byEntry.get(k)) || (delta <= 0 || nav === 'back' ? byPath.get(to) : undefined)
     : nav === 'back' || (viaTab && TAB_ROOTS.includes(to)) ? byPath.get(to) : undefined;
   pending = {
     key: next.key,
@@ -282,11 +295,11 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
     document.addEventListener('click', onPress, true);
     document.addEventListener('pointerdown', onPointer, true);
     document.addEventListener('keydown', onKey, true);
-    const off = history.listen(({ action, location: next }) => {
+    const off = history.listen(({ action, location: next, delta }) => {
       const prev = shown.current;
       shown.current = next;
       latest.current = { action, location: next };
-      onRouteChange(prev, next, action, () => setState(latest.current));
+      onRouteChange(prev, next, action, delta, () => setState(latest.current));
     });
     return () => {
       off();

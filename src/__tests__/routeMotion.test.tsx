@@ -151,6 +151,19 @@ describe('Back and Forward', () => {
     expect(y).toBe(300);
   });
 
+  it('starts a hash typed into the address bar at the top, though it has no key of its own', async () => {
+    app();
+    y = 900;
+    // The address the app opened at and a typed hash share the key 'default': neither may take the other's place.
+    await act(async () => { window.location.hash = '#/bird/2'; });
+    await settle();
+    expect(h1()).toBe('Bird');
+    expect(y).toBe(0);
+    await back();
+    expect(h1()).toBe('Lists');
+    expect(y).toBe(900);
+  });
+
   it('gives focus back to the tile she opened when it is on screen, and to the heading when it is not', async () => {
     window.location.hash = '#/dex';
     app();
