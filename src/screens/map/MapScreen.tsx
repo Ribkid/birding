@@ -976,8 +976,8 @@ function MapView() {
     setSearchStatus('searching');
     setSearchMsg('');
     try {
-      // The shared place search (lib/places, v1 searchAddress): one request a second across the app, and offline
-      // it says that searching places needs a connection, as the location picker does.
+      // The shared place search (lib/places, v1 searchAddress): one request a second across the app. Offline it says
+      // that searching places needs a connection, as the location picker does; online, that the search failed.
       const remote = await searchAddress(text);
       if (controller.signal.aborted || seq !== seqRef.current) return;
       const local = localResultsRef.current(text);

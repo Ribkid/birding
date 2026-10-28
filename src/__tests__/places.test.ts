@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { knownPlace, localPlaceMatches, myPlaces, nearestPlaceName, outingPlaceChips, recentPlaces } from '../lib/places';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { knownPlace, localPlaceMatches, myPlaces, nearestPlaceName, outingPlaceChips, recentPlaces, searchAddress } from '../lib/places';
 
 const patches = [{ name: 'Home patch', lat: -27.47, lng: 153.02, radiusKm: 2 }];
 const sightings = [
@@ -35,5 +35,28 @@ describe('places (v1 start-an-outing form)', () => {
     expect(localPlaceMatches('creek oxley', patches, mine).map(p => p.name)).toEqual(['Oxley Creek Common']);
     expect(localPlaceMatches('home', patches, mine).map(p => p.kind)).toEqual(['Your patch', 'Your place']);
     expect(localPlaceMatches('  ', patches, mine)).toEqual([]);
+  });
+});
+
+describe('place search failures', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const failWith = (onLine: boolean) => {
+    vi.stubGlobal('navigator', { onLine });
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))));
+  };
+
+  it('says it needs a connection only when the phone is offline', async () => {
+    failWith(false);
+    await expect(searchAddress('Wynnum Rd')).rejects.toThrow('Searching places needs a connection. Move the map instead.');
+  });
+
+  it('online, says the search could not be reached instead of blaming the connection', async () => {
+    failWith(true);
+    await expect(searchAddress('Wynnum Rd')).rejects.toThrow("Place search couldn't be reached. Try again, or move the map instead.");
+  });
+
+  it("keeps v1's busy message for an error answer", async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('busy', { status: 503 })));
+    await expect(searchAddress('Wynnum Rd')).rejects.toThrow('Place search is busy. Try again in a moment.');
   });
 });
