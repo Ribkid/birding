@@ -4,7 +4,7 @@ import { KINDS, kindsPresent } from '../../lib/data';
 import { mediaSettled, useMedia, useSightings } from '../../lib/hooks';
 import { useSeqReady } from '../../lib/seq';
 import { stagger } from '../../lib/look';
-import { CountUp } from '../../components/Motion';
+import { countUp, motionOK } from '../../lib/motion';
 import { useTint } from '../../components/Motion';
 import { FadeImage } from '../../components/SpeciesImage';
 import { faceSrc, heroFace, modeFaces, packCovers, tintable } from './hubPhotos';
@@ -50,6 +50,22 @@ const PACKS_SHOWN = 6;
 // A card's photo before the photos are known: an empty frame that shimmers (learn.css) until the photo is picked.
 const Waiting = () => <img className="fade" alt="" />;
 const HUB_ITEMS = '.lh-stats > li, .lh-daily, .lh-packs > li:not([hidden]), .lh-modes[data-modes] > li';
+
+// v1 renderHub: the first time the hub is drawn this session, its numbers count up and its rings, box bars and meters
+// fill as they come into view (data-grow, growOnView); the daily card's pips for answers given since the hub was last
+// drawn pop in one after another (heroPips).
+let hubOnce = false;
+let pipsSeen = { date: '', n: 0 };
+const GROW_KEYS = ['lh-packs', 'lh-deck', 'lh-prog'];
+
+/** v1's at-a-glance number: <b data-count> in the stamp numerals, counting up only on the hub's first draw. */
+function Stat({ n, count }: { n: number; count: boolean }) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (count && n > 0) void countUp(ref.current, 0, n, { delay: 160 });
+  }, []);
+  return <b ref={ref} data-count={n}>{n}</b>;
+}
 
 export default function Learn() {
   const [, force] = useReducer((x: number) => x + 1, 0);
@@ -131,6 +147,32 @@ export default function Learn() {
     shownAll.current = allPacks;
   }, [drawn, allPacks]);
 
+  // Settled once, when this visit first draws the hub (v1 decided both as it drew it).
+  const once = useRef<{ first: boolean; pipsFrom: number } | null>(null);
+  if (drawn && !once.current) once.current = { first: !hubOnce && motionOK(), pipsFrom: pipsSeen.date === today ? pipsSeen.n : 0 };
+  const first = !!once.current?.first;
+  useEffect(() => {
+    if (!drawn) return;
+    hubOnce = true;
+    pipsSeen = { date: today, n: picks.length };
+  }, [drawn]);
+  // v1 growOnView: each grown block gets is-in once 40% of it is on screen.
+  const [grownIn, setGrownIn] = useState<string[]>([]);
+  useEffect(() => {
+    if (!drawn || !first) return;
+    const els = [...(hubRef.current?.querySelectorAll('[data-grow]') || [])];
+    const keyOf = (el: Element) => GROW_KEYS.find((k) => el.classList.contains(k)) || '';
+    const show = (el: Element) => setGrownIn((v) => (v.includes(keyOf(el)) ? v : [...v, keyOf(el)]));
+    if (typeof IntersectionObserver !== 'function') { els.forEach(show); return; }
+    const io = new IntersectionObserver((ens) => {
+      for (const en of ens) if (en.isIntersecting) { show(en.target); io.unobserve(en.target); }
+    }, { threshold: 0.4 });
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [drawn, first]);
+  const growAttr = first ? { 'data-grow': '' } : {};
+  const isIn = (key: string) => (grownIn.includes(key) ? ' is-in' : '');
+
   // The heading is there from the start, so the route's focus lands on it while the hub waits for its data.
   const head = <header className="page-head lh-head"><h1 className="lh-title">Learn</h1><p className="lh-lede">Quizzes on the birds, wildlife and plants of South East Queensland.</p></header>;
   if (!drawn) return <>{head}<div className="learn learn--loading" aria-busy="true" /></>;
@@ -147,9 +189,9 @@ export default function Learn() {
       <div className="learn" ref={hubRef}>
         {(streak || packsDone || mastered) ? (
           <ul className="lh-stats" aria-label="How you're going at a glance">
-            <li><CountUp value={streak} /><span>day streak</span></li>
-            <li><CountUp value={packsDone} /><span>of {packN} packs done</span></li>
-            <li><CountUp value={mastered} /><span>species mastered</span></li>
+            <li><Stat n={streak} count={first} /><span>day streak</span></li>
+            <li><Stat n={packsDone} count={first} /><span>of {packN} packs done</span></li>
+            <li><Stat n={mastered} count={first} /><span>species mastered</span></li>
           </ul>
         ) : null}
         {!navigator.onLine && <p className="lh-offline" role="status">No signal. Questions use the photos and calls saved on this phone, plus field notes.</p>}
@@ -171,7 +213,9 @@ export default function Learn() {
             <span className="lh-pips" aria-hidden="true">
               {Array.from({ length: 5 }, (_, i) => {
                 const p = picks[i];
-                return <i key={i} className={p ? (p.right ? 'is-right' : 'is-wrong') : ''}>{p ? (p.right ? <svg viewBox="0 0 24 24">{TICK}</svg> : <svg viewBox="0 0 24 24">{CROSS}</svg>) : null}</i>;
+                const from = once.current?.pipsFrom ?? 0;
+                const cls = p ? `${p.right ? 'is-right' : 'is-wrong'}${motionOK() && i >= from ? ' is-new' : ''}` : '';
+                return <i key={i} className={cls} style={{ '--j': Math.max(0, i - from) } as React.CSSProperties}>{p ? (p.right ? <svg viewBox="0 0 24 24">{TICK}</svg> : <svg viewBox="0 0 24 24">{CROSS}</svg>) : null}</i>;
               })}
             </span>
             <span className="lh-go">{doneToday ? 'See how you went' : picks.length ? 'Carry on' : 'Start'}</span>
@@ -182,7 +226,7 @@ export default function Learn() {
           <div className="lh-sec-h"><h2 id="lh-packs-h">Quiz packs</h2></div>
           {packN ? (
             <>
-              <ul className="lh-modes lh-packs">
+              <ul className={`lh-modes lh-packs${isIn('lh-packs')}`} {...growAttr}>
                 {packs.map((p: any, i: number) => {
                   // Every pack is drawn, as in v1, the ones past the first six hidden until "Show all", so their
                   // covers are loaded by then.
@@ -250,7 +294,7 @@ export default function Learn() {
         <section className="lh-sec" aria-labelledby="lh-deck-h">
           <div className="lh-sec-h"><h2 id="lh-deck-h">Review deck</h2><Link to="/learn/deck">{cards.length ? 'Open' : 'Set up'}</Link></div>
           {cards.length ? (
-            <Link className={`lh-deck${due ? ' is-due' : ''}`} to="/learn/deck" aria-label={`${due} ${due === 1 ? 'card' : 'cards'} due. Open the review deck`}>
+            <Link className={`lh-deck${due ? ' is-due' : ''}${isIn('lh-deck')}`} to="/learn/deck" aria-label={`${due} ${due === 1 ? 'card' : 'cards'} due. Open the review deck`} {...growAttr}>
               <span className="lh-boxes" aria-hidden="true">
                 {boxN.map((n, i) => {
                   const max = Math.max(1, ...boxN);
@@ -264,21 +308,21 @@ export default function Learn() {
 
         <section className="lh-sec" aria-labelledby="lh-prog-h">
           <div className="lh-sec-h"><h2 id="lh-prog-h">How you're going</h2></div>
-          <Progress />
+          <Progress grow={first} isIn={grownIn.includes('lh-prog')} />
         </section>
       </div>
     </>
   );
 }
 
-function Progress() {
+function Progress({ grow, isIn }: { grow: boolean; isIn: boolean }) {
   const rows = accuracyForKinds() as { k: string; all: number; mastered: number; acc: { n: number; pct: number } | null }[];
   const active = rows.filter((r) => r.acc || r.mastered);
   const idle = rows.filter((r) => !r.acc && !r.mastered);
   if (!active.length) return <p className="small muted lh-empty">Answer a few questions and your accuracy, and how many species you have mastered, show here for each kind.</p>;
   return (
     <>
-      <ul className="lh-prog">
+      <ul className={`lh-prog${isIn ? ' is-in' : ''}`} {...(grow ? { 'data-grow': '' } : {})}>
         {active.map(({ k, all, mastered, acc }, i) => (
           <li key={k} className={`kind--${k}`}>
             <span className="lh-dot" aria-hidden="true" />
