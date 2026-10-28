@@ -395,7 +395,10 @@ function MapView() {
 
   // Text summary of everything shown in popups.
   const [notes, setNotes] = useState<Note[]>([]);
+  // Locate feedback, as v1: the fab dims while it waits, an error shows as a toast.
+  const [locating, setLocating] = useState(false);
   const [locationNote, setLocationNote] = useState('');
+  const [toast, setToast] = useState<{ msg: string; out: boolean } | null>(null);
 
   const mapElRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -406,7 +409,9 @@ function MapView() {
   const hotspotMarkersRef = useRef<{ h: Hotspot; mk: L.CircleMarker }[]>([]);
   const tempMarkerRef = useRef<L.Marker | null>(null);
   const previewRef = useRef<L.Circle | null>(null);
-  const settingsRef = useRef<Settings>({});
+  // Set once Sarah taps Map or Satellite. Her choice then wins over the stored layer, even
+  // when the first settings read is slow and lands after the tap.
+  const layerPickedRef = useRef(false);
 
   const focusFittedRef = useRef(false);
   const sightingsFittedRef = useRef(false);
@@ -422,7 +427,9 @@ function MapView() {
 
   const focus = speciesId != null ? byId.get(speciesId) : undefined;
   const hasAt = atLat != null && atLng != null;
-  const hotOn = focus ? hotFocus : hot;
+  // Hotspot records are eBird birding sites: birds only, so a frog or a gum gets no Hotspots chip (v1).
+  const noHot = focus != null && focus.kind !== 'bird';
+  const hotOn = !noHot && (focus ? hotFocus : hot);
 
   // -- derived data --------------------------------------------------------
 
@@ -539,25 +546,6 @@ function MapView() {
     });
   }, []);
 
-  // Load a place description into the text summary. Map popups are not keyboard
-  // reachable (Leaflet paths are not focusable), so the same copy is offered here.
-  const readPlace = useCallback(
-    (placeLat: number, placeLng: number, key: string, hotspot?: Hotspot) => {
-      const options = hotspot ? { hotspot, seen: seenRef.current } : { seen: seenRef.current };
-      void describe(placeLat, placeLng, options)
-        .then((html) => addNote(key, String(html), placeLat, placeLng))
-        .catch(() =>
-          addNote(
-            key,
-            '<p class="pop-desc">Couldn\u2019t look this spot up. Check the internet connection.</p>',
-            placeLat,
-            placeLng,
-          ),
-        );
-    },
-    [addNote],
-  );
-
   // -- the Leaflet instance ------------------------------------------------
 
   useEffect(() => {
@@ -602,10 +590,8 @@ function MapView() {
     let alive = true;
     void Promise.resolve(db.kvGet('settings'))
       .then((stored: unknown) => {
-        if (!alive) return;
-        settingsRef.current =
-          stored && typeof stored === 'object' ? (stored as Settings) : ({} as Settings);
-        if (settingsRef.current.mapLayer === 'sat') setLayer('sat');
+        if (!alive || layerPickedRef.current) return;
+        if ((stored as Settings | null)?.mapLayer === 'sat') setLayer('sat');
       })
       .catch(() => {});
 
@@ -1096,17 +1082,35 @@ function MapView() {
 
   // -- locate --------------------------------------------------------------
 
+  // v1 toast(): shown for 4.5 s (or until tapped), then fades out.
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(
+      () => setToast(toast.out ? null : { ...toast, out: true }),
+      toast.out ? 260 : 4500,
+    );
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
+  const showToast = (msg: string) => {
+    setLocationNote(msg);
+    setToast({ msg, out: false });
+  };
+
+  // v1 getPosition() and the map's [data-locate] handler, with v1's copy.
   const locate = () => {
     if (!navigator.geolocation) {
-      setLocationNote('This browser cannot share your location.');
+      showToast('This browser cannot share location');
       return;
     }
+    setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        setLocating(false);
         const map = mapRef.current;
         const me = meRef.current;
         if (!map || !me) return;
-        setLocationNote('Showing your location.');
+        setLocationNote('Showing where you are.');
         map.setView([position.coords.latitude, position.coords.longitude], 15);
         me.clearLayers();
         L.circleMarker([position.coords.latitude, position.coords.longitude], {
@@ -1117,22 +1121,25 @@ function MapView() {
           fillOpacity: 1,
         }).addTo(me);
       },
-      () => {
-        // Quietly stay on SEQ: no dialog, just a line of text.
-        setLocationNote('Location is off, so the map is showing South East Queensland.');
+      (error) => {
+        setLocating(false);
+        showToast(
+          error.code === 1
+            ? 'Location permission was denied. Allow it in your browser settings.'
+            : 'Could not get your location. Try again outside or near a window.',
+        );
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
     );
   };
 
   const pickLayer = (next: Layer) => {
+    layerPickedRef.current = true;
     setLayer(next);
     void (async () => {
       // Read first: a tap before the initial settings load must not replace the whole object.
       const current = ((await db.kvGet('settings')) as Settings | null) || {};
-      const merged = { ...current, mapLayer: next };
-      settingsRef.current = merged;
-      await db.kvSet('settings', merged);
+      await db.kvSet('settings', { ...current, mapLayer: next });
     })().catch(() => {});
   };
 
@@ -1178,7 +1185,7 @@ function MapView() {
               ref={inputRef}
               type="search"
               value={q}
-              placeholder="Search species, hotspots, suburbs, parks"
+              placeholder="Search species and places"
               aria-label="Search the map"
               aria-controls="map-search-results"
               autoComplete="off"
@@ -1250,7 +1257,7 @@ function MapView() {
           </p>
         </div>
 
-        <div className="map-ctl chips" role="group" aria-label="Map filters">
+        <div className="map-ctl chips" role="group" aria-label="What the map shows">
           {focus && (
             <Link
               className="chip chip--on"
@@ -1260,21 +1267,26 @@ function MapView() {
               {focus.name} <span aria-hidden="true">✕</span>
             </Link>
           )}
-          <button
-            type="button"
-            className={`chip ${hotOn ? 'chip--on' : ''}`}
-            aria-pressed={hotOn}
-            onClick={() => {
-              if (focus) setHotFocus((value) => !value);
-              else setHot((value) => !value);
-            }}
-          >
-            Hotspots
-          </button>
+          {/* data-hot/data-need/data-mshow draw each chip's map colour (rest.css), as in v1. */}
+          {!noHot && (
+            <button
+              type="button"
+              className={`chip ${hotOn ? 'chip--on' : ''}`}
+              data-hot=""
+              aria-pressed={hotOn}
+              onClick={() => {
+                if (focus) setHotFocus((value) => !value);
+                else setHot((value) => !value);
+              }}
+            >
+              Hotspots
+            </button>
+          )}
           {!focus && (
             <button
               type="button"
               className={`chip ${need ? 'chip--on' : ''}`}
+              data-need=""
               aria-pressed={need}
               onClick={() => setNeed((value) => !value)}
             >
@@ -1292,6 +1304,7 @@ function MapView() {
               key={value}
               type="button"
               className={`chip ${show === value ? 'chip--on' : ''}`}
+              data-mshow={value}
               aria-pressed={show === value}
               onClick={() => setShow(value)}
             >
@@ -1304,8 +1317,23 @@ function MapView() {
           <span className="map-patch-ring" aria-hidden="true" />New patch here
         </button>
 
-        <button type="button" className="map-fab" aria-label="Go to where I am" onClick={locate}>
-          <Icon name="pin" />
+        <button
+          type="button"
+          className={`map-fab${locating ? ' map-fab--busy' : ''}`}
+          aria-label="Go to where I am"
+          onClick={locate}
+        >
+          {/* v1's crosshair (js/app.js renderMap) */}
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" strokeWidth="2" />
+            <circle cx="12" cy="12" r="2.4" fill="currentColor" />
+            <path
+              d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
         </button>
 
         <div className="layer-toggle" role="group" aria-label="Map style">
@@ -1327,11 +1355,9 @@ function MapView() {
 
         <div className={`map-cross ${patchOpen ? '' : 'hidden'}`} aria-hidden="true" />
 
-        {locationNote && (
-          <p className="map-location-note small" role="status" aria-live="polite">
-            {locationNote}
-          </p>
-        )}
+        <p className="map-sr" role="status" aria-live="polite">
+          {locationNote}
+        </p>
       </div>
 
       {patchOpen && (
@@ -1405,192 +1431,188 @@ function MapView() {
         </div>
       )}
 
-      <section className="map-summary pad" aria-labelledby="map-summary-title">
-        <h2 className="h2" id="map-summary-title">
-          Map details
-        </h2>
-        <p className="small muted">
-          The same information as the map popups, as text. {groups.length} sighting places and{' '}
-          {hotspotView.length} hotspots are shown.
-        </p>
+      {toast && (
+        <div
+          className={`toast${toast.out ? ' toast--out' : ''}`}
+          aria-hidden="true"
+          onClick={() => setToast({ ...toast, out: true })}
+        >
+          {toast.msg}
+        </div>
+      )}
 
-        {focus ? (
-          <section aria-labelledby="map-focus-title">
-            <h3 id="map-focus-title">Reported here: {focus.name}</h3>
-            {focusPoints.length ? (
-              <>
-                <p className="small muted">
-                  {focusPoints.length} one-kilometre squares across SEQ, most records first.
-                </p>
-                <ul className="map-summary-list">
-                  {focusPoints.map(([pointLat, pointLng, count]) => (
-                    <li key={`${pointLat},${pointLng}`}>
-                      <strong>{count.toLocaleString('en-AU')} records</strong>{' '}
-                      <span className="muted small">
-                        in the 1 km square at {pointLat.toFixed(3)}, {pointLng.toFixed(3)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <p className="muted small">No report points for this species yet.</p>
-            )}
-            <p>
-              <Link className="btn" to={`/bird/${focus.id}`}>
-                Open {focus.name} in the dex
-              </Link>
-            </p>
-          </section>
-        ) : speciesId != null ? (
-          <section>
-            <p>That species isn&apos;t in the dex.</p>
-            <Link className="btn" to="/dex">
-              Back to the dex
-            </Link>
-          </section>
-        ) : null}
+      <MapSummary
+        focus={focus}
+        unknownSpecies={speciesId != null && !focus}
+        focusPoints={focusPoints}
+        patches={patches}
+        groups={groups}
+        show={show}
+        hotOn={hotOn}
+        hotspotView={hotspotView}
+        notes={notes}
+      />
+    </div>
+  );
+}
 
-        <section aria-labelledby="map-patches-title">
-          <h3 id="map-patches-title">Your patches ({patches.length})</h3>
-          {patches.length ? (
-            <ul className="map-summary-list">
-              {patches.map((patch) => (
-                <li key={patch.id}>
-                  <strong>{patch.name}</strong>{' '}
-                  <span className="muted small">{patch.radiusKm} km radius</span>{' '}
-                  <Link to={`/patch/${patch.id}`}>Open patch list</Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted small">
-              No patches yet. Use “New patch here” to save one around the map centre.
-            </p>
-          )}
-        </section>
+// ---------------------------------------------------------------------------
+// Screen-reader summary
+// ---------------------------------------------------------------------------
 
-        <section aria-labelledby="map-sightings-title">
-          <h3 id="map-sightings-title">Your sightings on the map ({groups.length})</h3>
-          {show === 'none' ? (
-            <p className="muted small">Sightings are hidden.</p>
-          ) : groups.length ? (
-            <ul className="map-summary-list">
-              {groups.map((group) => (
-                <li key={group.key}>
-                  <strong>{group.items[0].place || 'Sighting'}</strong>
-                  <div className="small">
-                    {group.names.slice(0, 12).map((sp, index) => (
-                      <span key={sp.id}>
-                        {index > 0 && ', '}
-                        <Link to={`/bird/${sp.id}`}>{sp.name}</Link>
-                      </span>
-                    ))}
-                    {group.names.length > 12 ? ` and ${group.names.length - 12} more` : ''}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted small">
-              {show === 'photos'
-                ? 'No sightings with photos are on the map yet.'
-                : 'No sightings with a location yet.'}
-            </p>
-          )}
-        </section>
+/**
+ * Popup HTML as plain lines of text, one per top-level block (title, subtitle, paragraphs).
+ * The summary is visually hidden, so it must not hold links: a keyboard user would Tab into
+ * text they cannot see.
+ */
+export function noteLines(html: string): string[] {
+  if (typeof DOMParser === 'undefined') {
+    const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    return text ? [text] : [];
+  }
+  const root = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html').body.firstElementChild;
+  const lines: string[] = [];
+  root?.childNodes.forEach((node) => {
+    const text = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+    if (text) lines.push(text);
+  });
+  return lines;
+}
 
-        <section aria-labelledby="map-hotspots-title">
-          <h3 id="map-hotspots-title">Birding hotspots</h3>
-          {!hotOn ? (
-            <p className="muted small">Hotspots are hidden.</p>
-          ) : hotspotView.length ? (
-            <details className="map-summary-details">
-              <summary>Hotspots shown ({hotspotView.length})</summary>
-              <ul className="map-summary-list">
-                {hotspotView.map((view) => (
-                  <li key={view.h.name}>
-                    <strong>{view.h.name}</strong>
-                    <div className="small">
-                      {view.h.rich} dex species recorded here. You have seen {view.got}.
-                    </div>
-                    {view.needAll.length > 0 && (
-                      <div className="small">
-                        Still to find ({view.needAll.length}):{' '}
-                        {view.need.map((sp, index) => (
-                          <span key={sp.id}>
-                            {index > 0 && ', '}
-                            <Link to={`/bird/${sp.id}`}>{sp.name}</Link>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <a
-                      className="small"
-                      href={directionsUrl(view.h.lat, view.h.lng)}
-                      target="_blank"
-                      rel="noopener"
-                    >
-                      Directions
-                    </a>
-                    <div>
-                      <button
-                        type="button"
-                        className="btn btn--quiet small"
-                        aria-label={`Read about ${view.h.name}`}
-                        onClick={() =>
-                          readPlace(
-                            view.h.lat,
-                            view.h.lng,
-                            `hotspot:${view.h.name}`,
-                            view.h,
-                          )
-                        }
-                      >
-                        Read about this place
-                      </button>
-                    </div>
+const nameList = (names: Species[]): string => names.map((sp) => sp.name).join(', ');
+
+interface MapSummaryProps {
+  focus?: Species;
+  unknownSpecies: boolean;
+  focusPoints: [number, number, number][];
+  patches: Patch[];
+  groups: SightingGroup[];
+  show: Show;
+  hotOn: boolean;
+  hotspotView: HotspotView[];
+  notes: Note[];
+}
+
+/**
+ * What the map shows, as text for screen readers. v1 has no such list; it is kept because
+ * Leaflet's markers and popups cannot be reached without a pointer. It is visually hidden
+ * and holds only text (no links, buttons or disclosure widgets), so Tab goes from the map
+ * controls straight to the tab bar, as in v1.
+ */
+export function MapSummary({
+  focus,
+  unknownSpecies,
+  focusPoints,
+  patches,
+  groups,
+  show,
+  hotOn,
+  hotspotView,
+  notes,
+}: MapSummaryProps) {
+  return (
+    <section className="map-summary" aria-labelledby="map-summary-title">
+      <h2 id="map-summary-title">Map details</h2>
+      <p>
+        The same information as the map popups, as text. {groups.length} sighting places and{' '}
+        {hotspotView.length} hotspots are shown.
+      </p>
+
+      {focus ? (
+        <section aria-labelledby="map-focus-title">
+          <h3 id="map-focus-title">Reported here: {focus.name}</h3>
+          {focusPoints.length ? (
+            <>
+              <p>{focusPoints.length} one-kilometre squares across SEQ, most records first.</p>
+              <ul>
+                {focusPoints.map(([pointLat, pointLng, count]) => (
+                  <li key={`${pointLat},${pointLng}`}>
+                    {count.toLocaleString('en-AU')} records in the 1 km square at{' '}
+                    {pointLat.toFixed(3)}, {pointLng.toFixed(3)}
                   </li>
                 ))}
               </ul>
-            </details>
+            </>
           ) : (
-            <p className="muted small">
-              {focus
-                ? `No SEQ hotspots record ${focus.name}.`
-                : 'No hotspots to show.'}
-            </p>
+            <p>No report points for this species yet.</p>
           )}
         </section>
+      ) : unknownSpecies ? (
+        <p>That species isn&apos;t in the dex.</p>
+      ) : null}
 
-        <section aria-labelledby="map-notes-title">
-          <h3 id="map-notes-title">Place details</h3>
-          <div className="map-notes" aria-live="polite">
-            {notes.length ? (
-              notes.map((note) => (
-                <div className="map-note" key={note.key}>
-                  <div dangerouslySetInnerHTML={{ __html: note.html }} />
-                  {note.lat != null && note.lng != null && (
-                    <p className="small">
-                      <a
-                        href={directionsUrl(note.lat, note.lng)}
-                        target="_blank"
-                        rel="noopener"
-                      >
-                        Directions
-                      </a>
-                    </p>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="muted small">
-                Tap the map, a hotspot, or a “reported here” point to read about a place.
-              </p>
-            )}
-          </div>
-        </section>
+      <section aria-labelledby="map-patches-title">
+        <h3 id="map-patches-title">Your patches ({patches.length})</h3>
+        {patches.length ? (
+          <ul>
+            {patches.map((patch) => (
+              <li key={patch.id}>
+                {patch.name}, {patch.radiusKm} km radius
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>No patches yet. Use “New patch here” to save one around the map centre.</p>
+        )}
       </section>
-    </div>
+
+      <section aria-labelledby="map-sightings-title">
+        <h3 id="map-sightings-title">Your sightings on the map ({groups.length})</h3>
+        {show === 'none' ? (
+          <p>Sightings are hidden.</p>
+        ) : groups.length ? (
+          <ul>
+            {groups.map((group) => (
+              <li key={group.key}>
+                {group.items[0].place || 'Sighting'}: {nameList(group.names.slice(0, 12))}
+                {group.names.length > 12 ? ` and ${group.names.length - 12} more` : ''}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>
+            {show === 'photos'
+              ? 'No sightings with photos are on the map yet.'
+              : 'No sightings with a location yet.'}
+          </p>
+        )}
+      </section>
+
+      <section aria-labelledby="map-hotspots-title">
+        <h3 id="map-hotspots-title">Birding hotspots ({hotspotView.length})</h3>
+        {!hotOn ? (
+          <p>Hotspots are hidden.</p>
+        ) : hotspotView.length ? (
+          <ul>
+            {hotspotView.map((view) => (
+              <li key={view.h.name}>
+                {view.h.name}: {view.h.rich} dex species recorded here. You have seen {view.got}.
+                {view.needAll.length > 0 &&
+                  ` Still to find (${view.needAll.length}): ${nameList(view.need)}.`}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>{focus ? `No SEQ hotspots record ${focus.name}.` : 'No hotspots to show.'}</p>
+        )}
+      </section>
+
+      <section aria-labelledby="map-notes-title">
+        <h3 id="map-notes-title">Place details</h3>
+        <div aria-live="polite">
+          {notes.length ? (
+            notes.map((note) => (
+              <div key={note.key}>
+                {noteLines(note.html).map((line, index) => (
+                  <p key={index}>{line}</p>
+                ))}
+              </div>
+            ))
+          ) : (
+            <p>Tap the map, a hotspot, or a “reported here” point to read about a place.</p>
+          )}
+        </div>
+      </section>
+    </section>
   );
 }

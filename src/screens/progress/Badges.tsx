@@ -41,6 +41,20 @@ const EMBLEM: Record<string, string> = {
 const emblemMask = (kind: string) =>
   `url('data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">${EMBLEM[kind]}</svg>`)}')`;
 
+// v1 account.js leaderboardLink(): the trophy on the Leaderboard link.
+const Trophy = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5v1.5A3.5 3.5 0 0 0 8.5 11M16 6h3v1.5a3.5 3.5 0 0 1-3.5 3.5M12 13v4M8.5 20h7M10 17h4v3h-4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+  </svg>
+);
+
+// v1 icon.learn (js/app.js:170): the card stack on the Learn link.
+const LearnIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const Ring = ({ p }: { p: number }) => (
   <svg className={`ring${p > 0 ? '' : ' ring--zero'}`} viewBox="0 0 36 36" aria-hidden="true">
     <circle className="ring-track" cx="18" cy="18" r="15.5" />
@@ -51,13 +65,14 @@ const Ring = ({ p }: { p: number }) => (
 export default function Badges() {
   const sightings = useSightings();
   const outings = useOutings();
-  const [, tick] = useReducer((n: number) => n + 1, 0);
+  // Bumped when learning progress has loaded, so the memo below recomputes (v1 redraws).
+  const [learnTick, learnLoaded] = useReducer((n: number) => n + 1, 0);
   const [shelfIn, setShelfIn] = useState(false);
   const [ringsIn, setRingsIn] = useState(true);
 
   useEffect(() => {
     let alive = true;
-    learnReady().then(() => { if (alive) tick(); }).catch(() => {});
+    learnReady().then(() => { if (alive) learnLoaded(); }).catch(() => {});
     const shelf = window.setTimeout(() => setShelfIn(true), 80);
     const rings = window.setTimeout(() => setRingsIn(false), 1400);
     return () => {
@@ -71,7 +86,7 @@ export default function Badges() {
     let learning: Record<string, number> = {};
     try { learning = (learnStats() || {}) as Record<string, number>; } catch { /* not loaded yet */ }
     return badges(sightings, outings, learning) as Badge[];
-  }, [sightings, outings, tick]);
+  }, [sightings, outings, learnTick]);
 
   const earned = list.filter((b) => b.done).length;
   const next = list.filter((b) => !b.done).sort((x, y) => y.have / y.need - x.have / x.need || x.need - y.need)[0];
@@ -103,9 +118,9 @@ export default function Badges() {
           </div>
         </div>
         <div className="trophy-links">
-          <Link className="btn" to="/learn"><Icon name="grid" /> Learn</Link>
+          <Link className="btn" to="/learn"><LearnIcon /> Learn</Link>
           <Link className="btn" to="/stats"><Icon name="chart" /> Stats</Link>
-          {configured && <Link className="btn" to="/leaderboard">Leaderboard</Link>}
+          {configured && <Link className="btn" to="/leaderboard"><Trophy /> Leaderboard</Link>}
         </div>
       </section>
 

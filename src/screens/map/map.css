@@ -1,28 +1,32 @@
 /*
- * Map slice styles. Everything that already exists in v1 lives in src/styles/app.css; these
- * rules only make room for the accessible text summary below the map and keep the fixed
- * v1 map layout inside the scrolling page.
+ * Map slice styles. Everything that already exists in v1 lives in src/styles/app.css,
+ * rest.css and look.css; these rules only pin the map to v1's geometry and hide the
+ * screen-reader summary.
  */
 
 .map-screen {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - var(--tabbar-h) - env(safe-area-inset-bottom));
 }
 
-/* v1's map fills the viewport above the tab bar. Two classes beat the shared .mapwrap rule. */
-.map-screen { min-height: 0; }
+/*
+ * v1's map fills the whole viewport, under the floating tab bar: app.css puts .mapwrap above
+ * the tab bar and look.css then sets bottom:0 (also with an outing bar). The controls and
+ * Leaflet's bottom corner are lifted clear of the tab bar by look.css/rest.css
+ * (--chrome-bottom). Two classes beat the shared .mapwrap rules.
+ */
 .mapwrap.mapwrap--page {
   position: fixed;
-  inset: 0 0 calc(var(--tabbar-h) + env(safe-area-inset-bottom)) 0;
+  inset: 0;
   height: auto;
   min-height: 0;
   z-index: 0;
   isolation: isolate;
 }
 
-/* The same information stays available to screen readers, as v1 has no visible list. */
+/*
+ * The same information as the popups, for screen readers only (v1 has no visible list).
+ * It holds text only, so nothing in it can take keyboard focus.
+ */
 .map-summary {
   position: absolute;
   width: 1px;
@@ -36,20 +40,6 @@
   border: 0;
 }
 
-.map-location-note {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 68px;
-  z-index: 500;
-  margin: 0;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
-}
-
 /* Marker for a place picked from search. */
 .map-temp-pin span {
   display: block;
@@ -59,55 +49,6 @@
   border: 3px solid #fff;
   background: var(--lori);
   box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);
-}
-
-/* Text summary below the map. */
-.map-summary {
-  padding-bottom: 32px;
-}
-
-.map-summary h3 {
-  margin: 22px 0 8px;
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.map-summary-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 8px;
-}
-
-.map-summary-list > li {
-  padding: 0 0 8px;
-  border-bottom: 1px solid var(--line);
-}
-
-.map-summary-list > li:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
-.map-summary-details {
-  margin: 4px 0 0;
-}
-
-.map-summary-details > summary {
-  cursor: pointer;
-  padding: 8px 0;
-  font-weight: 700;
-}
-
-.map-note {
-  margin: 10px 0;
-  padding-left: 12px;
-  border-left: 3px solid var(--line);
-}
-
-.map-note p {
-  margin: 4px 0;
 }
 
 /* Visually hidden but readable by assistive technology. */
