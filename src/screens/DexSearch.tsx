@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { GROUPS, HABITATS, KINDS, SPECIES, byId, dexCode, kindsPresent } from '../lib/data';
 import { useMedia, useSightings } from '../lib/hooks';
-import { closeLayer, openLayer, topLayer, type Layer } from '../lib/layers';
+import { closeLayer, openLayer, type Layer } from '../lib/layers';
 import { db } from '../core/db.js';
 import { hotspots } from '../core/seqdata.js';
 import { Band } from '../components/SpeciesImage';
@@ -56,10 +56,12 @@ export function SearchHost() {
 
   useEffect(() => {
     opener = (q) => setInitial((open) => open ?? q);
-    // '/' opens it from any screen, as in v1, but not while she types in a field, and not over a sheet or the
-    // welcome card (v1 would stack it on top of them).
+    // '/' opens it from any screen, as in v1, over a sheet or the welcome card too (Escape then closes search first),
+    // but not while she types in a field. Unlike v1, Ctrl, Alt and Cmd with '/' are left to the browser, the system
+    // and screen readers; a '/' typed with AltGr (Brazilian ABNT2, for one) still opens it.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '/' || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || topLayer()) return;
+      if (e.key !== '/' || e.defaultPrevented) return;
+      if (e.metaKey || ((e.ctrlKey || e.altKey) && !e.getModifierState?.('AltGraph'))) return;
       if ((e.target as Element | null)?.closest?.('input, textarea, select, [contenteditable]')) return;
       e.preventDefault();
       setInitial((open) => open ?? '');
