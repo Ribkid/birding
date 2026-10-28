@@ -18,7 +18,7 @@ import { MONTHS } from '../core/stats.js';
 import { learnReady, masteryOf } from '../core/learn.js';
 import { topLayer } from '../lib/layers';
 import { Icon } from '../components/Icon';
-import { Band, Pips } from '../components/SpeciesImage';
+import { Band, Pips, SpeciesImage, shownPhotos } from '../components/SpeciesImage';
 import { CallsSection, PauseIcon, PlayIcon, hasCalls, useCallPlayer } from './BirdCalls';
 import { CardOverlay, askMotion, shareCard, type CardInfo } from './BirdCard';
 import { DexSearch } from './DexSearch';
@@ -88,8 +88,9 @@ const ShareIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12
 const LearnIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7.5h11a1.5 1.5 0 0 1 1.5 1.5v10a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 19V9A1.5 1.5 0 0 1 7 7.5zM8.5 4.5h10A1.5 1.5 0 0 1 20 6v10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 const TickIcon = () => <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 
-// Photos fade in the first time they arrive; ones already shown this session come back at full strength.
-const shown = new Set<string>();
+// Photos fade in the first time they arrive; ones already shown this session (anywhere in the app) come back at
+// full strength.
+const shown = shownPhotos;
 function FadeImg({ src, alt, className = '', eager = false, hidden = false, onMissing }: {
   src?: string; alt: string; className?: string; eager?: boolean; hidden?: boolean; onMissing?: (img: HTMLImageElement) => void;
 }) {
@@ -107,12 +108,6 @@ function FadeImg({ src, alt, className = '', eager = false, hidden = false, onMi
       onError={(e) => onMissing?.(e.currentTarget)}
     />
   );
-}
-// A species photo: alt '' where the name is written next to it (cards, chips), so it isn't read twice.
-function BirdImg({ sp, size = 'small', alt = sp.name }: { sp: Species; size?: 'small' | 'large'; alt?: string }) {
-  const url = sized(sp.id, size) as string | null;
-  if (!url) return <span className="img-missing" {...(alt ? { role: 'img', 'aria-label': alt } : { 'aria-hidden': true })} />;
-  return <FadeImg key={url} src={url} alt={alt} onMissing={(img) => img.classList.add('img-missing')} />;
 }
 // The whole photo (no cropping) over a soft blurred copy. A slide not yet woken has no src.
 function WholeImg({ src, alt, className = '', eager = false }: { src?: string; alt: string; className?: string; eager?: boolean }) {
@@ -437,7 +432,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
                 {confuse.map(({ s, tell }) => (
                   <li className={`lk-card kind--${s.kind}`} key={s.id}>
                     <Link className="lk-sp" to={`/bird/${s.id}`}>
-                      <span className="lk-photo cmp-img"><BirdImg sp={s} alt="" /></span>
+                      <span className="lk-photo cmp-img"><SpeciesImage sp={s} alt="" /></span>
                       <strong className="lk-name">{s.name}</strong>
                     </Link>
                     <p className={`lk-tell${tell ? '' : ' muted'}`}>{tell || cap(s.sizeText || '')}</p>
@@ -553,7 +548,7 @@ function PrevNext({ s, dir }: { s: Species; dir: 'prev' | 'next' }) {
   return (
     <Link className={`pn pn--${dir} kind--${s.kind}`} to={`/bird/${s.id}`}>
       <Icon name="back" />
-      <span className="pn-ph"><BirdImg sp={s} alt="" /></span>
+      <span className="pn-ph"><SpeciesImage sp={s} alt="" /></span>
       <span className="pn-txt"><span className="sr-only">{dir === 'prev' ? 'Previous' : 'Next'}: </span><span className="pn-no">{dexNo(s.id)}</span><strong>{s.name}</strong></span>
     </Link>
   );

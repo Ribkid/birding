@@ -1,59 +1,16 @@
 // Small pieces shared by the dex home and its search overlay.
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { sized } from '../core/media.js';
+import type { CSSProperties, ReactNode } from 'react';
+import { SpeciesImage } from '../components/SpeciesImage';
 import type { Species } from '../lib/data';
 
 /**
  * A species photo with an empty alt, for places where the name is written right beside it (v1 birdImg with
- * alt ''), so a screen reader doesn't read the name twice. Callers re-render on media readiness (useMedia).
- * When a better photo arrives (v1 patchSpeciesImages), a photo already on screen stays until its replacement is
- * decoded, so the tile never blanks; one not yet loaded switches at once.
+ * alt ''), so a screen reader doesn't read the name twice. The loading look (shimmer, one fade-in, a better photo
+ * swapped in without blanking) is the shared SpeciesImage's.
  */
-type PhotoProps = { sp: Species; size?: 'small' | 'large'; eager?: boolean };
-// A different species (the pick changing with the kind tab) starts afresh rather than waiting on the old photo.
-export const Photo = (props: PhotoProps) => <SpeciesPhoto key={props.sp.id} {...props} />;
-// Photos fade in the first time they arrive (img.fade, app.css) and shimmer while they load (look.css). Ones already
-// shown this session come back at full strength, so a redraw (a filter, a kind tab) doesn't make the grid blink.
-const shown = new Set<string>();
-function SpeciesPhoto({ sp, size = 'small', eager = false }: PhotoProps) {
-  const url = sized(sp.id, size) as string | null;
-  const [src, setSrc] = useState(url);
-  const [look, setLook] = useState<'' | 'in' | 'missing'>(() => (url && shown.has(url) ? 'in' : ''));
-  const ref = useRef<HTMLImageElement>(null);
-  useEffect(() => {
-    if (!url || url === src) return;
-    const el = ref.current;
-    if (!el || !el.complete || !el.naturalWidth) {
-      setSrc(url);
-      setLook((was) => (shown.has(url) ? 'in' : was === 'missing' ? '' : was));
-      return;
-    }
-    let alive = true;
-    const next = new Image();
-    next.src = url;
-    next.decode().then(() => { if (alive) { shown.add(url); setSrc(url); } }, () => {});
-    return () => { alive = false; };
-  }, [url, src]);
-  // A photo already in the memory cache shows at once, with no fade (v1 settleImages).
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (src && el?.complete && el.naturalWidth) { shown.add(src); setLook('in'); }
-  }, [src]);
-  if (!src) return <span className="img-missing" aria-hidden="true" />;
-  return (
-    <img
-      ref={ref}
-      className={`fade${look === 'in' ? ' in' : look === 'missing' ? ' img-missing' : ''}`}
-      src={src}
-      alt=""
-      loading={eager ? 'eager' : 'lazy'}
-      fetchPriority={eager ? 'high' : undefined}
-      decoding="async"
-      onLoad={() => { shown.add(src); setLook('in'); }}
-      onError={() => setLook('missing')}
-    />
-  );
-}
+export const Photo = ({ sp, size, eager }: { sp: Species; size?: 'small' | 'large'; eager?: boolean }) => (
+  <SpeciesImage sp={sp} size={size} eager={eager} alt="" />
+);
 
 /** A progress ring (0-1). Its arc fills from empty the first time the dex is drawn in a session (.rings-in). */
 export function Ring({ p, cls = '' }: { p: number; cls?: string }) {

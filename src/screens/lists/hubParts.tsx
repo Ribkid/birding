@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { db } from '../../core/db.js';
-import { sized } from '../../core/media.js';
 import type { Species } from '../../lib/data';
-import { normaliseSighting, useMedia } from '../../lib/hooks';
+import { normaliseSighting } from '../../lib/hooks';
+import { SpeciesImage } from '../../components/SpeciesImage';
 import { countUp } from '../../lib/motion';
 
 /**
@@ -56,22 +56,9 @@ export function HubIcon({ name }: { name: keyof typeof PATHS }) {
 
 /**
  * v1 birdImg(sp, 'small', '', { alt: '' }): a photo whose name is already written beside it, so it is not read
- * twice. With no photo it leaves an empty, hidden placeholder.
+ * twice. With no photo it leaves an empty, hidden placeholder. Loading look: the shared SpeciesImage's.
  */
-export function QuietImage({ sp }: { sp: Species }) {
-  useMedia();
-  const url = sized(sp.id, 'small') as string | null;
-  if (!url) return <span className="img-missing" aria-hidden="true" />;
-  return (
-    <img
-      src={url}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      onError={(e) => e.currentTarget.classList.add('img-missing')}
-    />
-  );
-}
+export const QuietImage = ({ sp }: { sp: Species }) => <SpeciesImage sp={sp} alt="" />;
 
 // v1 js/app.js:1828-1840. How likely each target is this month, against the most likely one on the list (0..1),
 // with words for it so the bar never carries the meaning alone. Without the SEQ records, rarer species score lower.
