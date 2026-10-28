@@ -1,16 +1,16 @@
 // The dex home (v1 js/app.js renderDex): today's pick full-bleed with the wordmark and her count, then a sheet with
 // the kind rail (the tally), the Today rail, the sticky search tools and the grid.
 import {
-  useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState,
-  type MouseEvent, type PointerEvent, type ReactNode,
+  memo, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState,
+  type CSSProperties, type MouseEvent, type PointerEvent, type ReactNode,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   ANIMALS, ANIMAL_KINDS, GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, inSeason, kindsPresent, ofKind,
   pluralFor, type Species,
 } from '../lib/data';
-import { useDexReady, useMedia, useSightings, type Sighting } from '../lib/hooks';
+import { useDexReady, useKindCounts, useLastSeen, useMedia, useSeen } from '../lib/hooks';
 import { seqSettled } from '../lib/seq';
 import { keepFocus } from '../lib/layers';
 import { countUp, flip, motionOK } from '../lib/motion';
@@ -187,6 +187,13 @@ function AccountChip() {
 
 /** v1 learnTeaser: today's challenge, the streak and cards due, from what learnReady() has loaded. */
 function LearnTeaser() {
+  // It draws again when Learn's data arrives, on its own, so the dex around it does not.
+  const [, force] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    let alive = true;
+    void learnReady().then(() => { if (alive) force(); }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const L = getLearn();
   const D = getDaily();
   if (!L || !D) {
@@ -214,14 +221,155 @@ function LearnTeaser() {
   );
 }
 
-export default function Dex() {
+
+/** The Today rail's Scan card: its line says what photo ID covers once photoid.json has been read (on its own). */
+function ScanCard({ kind }: { kind: string }) {
   const [, force] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    if (photoKinds) return;
+    let alive = true;
+    void photoIdInfo().then((info: { kinds: string[] }) => {
+      if (!info.kinds.length) return;
+      photoKinds = info.kinds;
+      if (alive) force();
+    });
+    return () => { alive = false; };
+  }, []);
+  return <Link className="today-card today-tool" to="/scan">{todayTool(<Icon name="scan" />, 'Scan a photo', scanSub(kind))}</Link>;
+}
+const todayTool = (ic: ReactNode, title: string, sub: string) => (
+  <><span className="today-ic">{ic}</span><span className="today-t"><strong>{title}</strong><span>{sub}</span></span></>
+);
+
+/** Today: one snapping row of cards. Install, Listen and Scan, Learn, and the pick of the day (photo-backed). */
+const TodayRail = memo(function TodayRail({ kind, day }: { kind: string; day: DayPick | null }) {
+  const install = useCanInstall();
+  const single = kind !== 'animals' && kind !== 'all';
+  const [lt, ls] = single && kind !== 'bird' ? ['Listen (birds)', kind === 'frog' ? 'Frog calls to compare' : 'Birds by call'] : ['Listen', 'Birds by call'];
+  return (
+    <section className="today" aria-label="Today">
+      {install ? <button type="button" className="today-card today-tool" onClick={() => void promptInstall()}>{todayTool(ICON.install, 'Install', 'Add to your home screen')}</button> : null}
+      <Link className="today-card today-tool" to="/listen">{todayTool(<Icon name="mic" />, lt, ls)}</Link>
+      <ScanCard kind={kind} />
+      <LearnTeaser />
+      {day ? (
+        <Link className={`today-card today-day kind--${day.sp.kind}`} to={`/bird/${day.sp.id}`}>
+          <span className="botd-img"><Photo sp={day.sp} /></span>{' '}
+          <span className="today-day-txt">
+            <span className="today-day-k">{day.why}</span>
+            <strong>{day.sp.name}</strong>
+            <span>{day.where}</span>
+            <span className="sr-only">, {day.label.toLowerCase()}</span>
+          </span>
+        </Link>
+      ) : null}
+    </section>
+  );
+});
+
+/**
+ * Today's pick full-bleed with the wordmark and her count. It follows the photo index on its own (useMedia), so a
+ * better photo arriving redraws the hero, not the dex.
+ */
+const DexHero = memo(function DexHero({ day, got, n, kind }: { day: DayPick | null; got: number; n: number; kind: string }) {
   useMedia();
-  const sightings = useSightings();
-  // Her records come from the shared store, already in when the dex first draws (lib/store.ts); `loaded` is false
+  const heroRef = useRef<HTMLElement>(null);
+  // The hero takes its colour from the pick's photo where the host allows it to be read. A new pick starts plain; a
+  // better photo of the same pick arriving keeps the colour it has until the new photo has been read (in v1 the
+  // swapped-in photo kept the first tint), and a pick that has since changed never takes an older pick's colour.
+  const heroSrc = day ? (sized(day.sp.id, 'large') as string | null) || '' : '';
+  const heroId = day ? day.sp.id : null;
+  const tintedFor = useRef<number | null>(null);
+  useEffect(() => {
+    const hero = heroRef.current;
+    if (!hero) return;
+    if (tintedFor.current !== heroId) {
+      for (const k of ['--tint', '--tint-deep', '--tint-soft', '--tint-soft-dark', '--tint-ink-dark']) hero.style.removeProperty(k);
+      hero.classList.remove('tinted');
+      tintedFor.current = heroId;
+    }
+    if (!heroSrc) return;
+    let alive = true;
+    void tintFrom(heroSrc).then(() => { if (alive) void applyTint(hero, heroSrc); });
+    return () => { alive = false; };
+  }, [heroSrc, heroId]);
+  return (
+    <header ref={heroRef} className={`dex-hero kind--${day ? day.sp.kind : 'bird'}`}>
+      <div className="dex-hero-photo" aria-hidden="true">{day && <Photo sp={day.sp} size="large" eager />}</div>
+      <div className="dex-hero-top">
+        {day ? <Link className="dex-hero-pick" to={`/bird/${day.sp.id}`}><span>{day.label}</span><strong>{day.sp.name}</strong></Link> : <span />}
+        <div className="dex-hero-actions">
+          <AccountChip />
+          <button type="button" className="hero-btn glass" data-search aria-label="Search everything" onClick={() => openSearch('')}>{ICON.search}</button>
+          <Link className="hero-btn glass" to="/settings" aria-label="Settings">{ICON.gear}</Link>
+        </div>
+      </div>
+      <div className="dex-hero-foot">
+        <h1 className="wordmark">Sarah's BirdyDex<small>South East Queensland</small></h1>
+        <p className="dex-cap glass">
+          <Ring p={got / n} cls="dex-cap-ring" />
+          <span><b data-capn={got} style={digits(got)}>{got}</b> of {n} {scopeNoun(kind, n)} {kind === 'plant' ? 'found' : 'seen'}</span>
+        </p>
+      </div>
+    </header>
+  );
+});
+
+// One tile or row per species, drawn again only when what it shows changes: whether she has seen it, and for a row,
+// which second line it carries. Photos follow the photo index on their own (SpeciesImage). The link is a plain one:
+// a tap is handled once for the whole dex (Dex's onClick), and Ctrl, Cmd, Shift or a middle click open a new tab.
+// The spaces between the parts are v1's, so the link reads '028 Tawny Frogmouth, not seen' as text too.
+const seenNote = (seen: boolean) => <span className="sr-only">, {seen ? 'seen' : 'not seen'}</span>;
+const TileItem = memo(function TileItem({ id, seen }: { id: number; seen: boolean }) {
+  const s = byId.get(id)!;
+  return (
+    <li>
+      <a className={`tile kind--${s.kind} ${seen ? 'tile--seen' : ''}`} href={`#/bird/${id}`} data-tile={id}>
+        <span className="tile-img"><Photo sp={s} /></span>{' '}
+        <Band sp={s} seen={seen} />{' '}
+        <span className="tile-name">{s.name}{seenNote(seen)}</span>
+      </a>
+    </li>
+  );
+});
+// Under a group heading the group name would repeat on every row, so rows show the scientific name instead.
+const RowItem = memo(function RowItem({ id, seen, sci }: { id: number; seen: boolean; sci: boolean }) {
+  const s = byId.get(id)!;
+  return (
+    <li>
+      <a className={`row row--sp kind--${s.kind}`} href={`#/bird/${id}`} data-tile={id}>
+        <span className={`row-thumb ${seen ? 'row-thumb--seen' : ''}`}><Photo sp={s} /></span>{' '}
+        <span className="row-main">
+          <strong>{s.name}{seenNote(seen)}</strong>
+          <span className="muted small">{sci ? <i>{s.sci}</i> : GROUPS[s.group]}</span>
+        </span>
+        <Pips rarity={s.rarity} /> <Band sp={s} seen={seen} />
+      </a>
+    </li>
+  );
+});
+
+/** A counted number's final width in digits, so the words after it hold still while it counts (screens.css). */
+const digits = (n: number) => ({ '--digits': String(n).length }) as CSSProperties;
+
+/** Seen species in a kind tab's scope, from the store's per-kind counts. */
+function seenIn(scope: string, counts: Map<string, number>) {
+  if (scope === 'all' || scope === 'animals') {
+    let n = 0;
+    for (const [k, c] of counts) if (scope === 'all' || k !== 'plant') n += c;
+    return n;
+  }
+  return counts.get(scope) ?? 0;
+}
+
+export default function Dex() {
+  // Her records come from the shared store, already in when the dex first draws (lib/store.ts); `ready` is false
   // only while a cold start is still waiting for them (or gave up after a moment).
-  const loaded = useDexReady();
-  const seen = useMemo(() => new Set(sightings.map((s) => s.speciesId)), [sightings]);
+  const ready = useDexReady();
+  const seen = useSeen();
+  const kindCounts = useKindCounts();
+  const lastSeen = useLastSeen();
+  const navigate = useNavigate();
 
   const location = useLocation();
   const [f, setF] = useState<DexFilters>(() => {
@@ -233,12 +381,10 @@ export default function Dex() {
     return { ...saved };
   });
   const [colourUnseen, setColourUnseen] = useState(false);
-  const install = useCanInstall();
   const sayT = useRef(0);
   const countRef = useRef({ n: 0, kind: 'animals' });
   const suppressClick = useRef(false);
   const press = useRef<{ timer: number; x: number; y: number }>({ timer: 0, x: 0, y: 0 });
-  const heroRef = useRef<HTMLElement>(null);
   const railRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef<HTMLDivElement>(null);
   const toolsRef = useRef<HTMLDivElement>(null);
@@ -259,31 +405,14 @@ export default function Dex() {
       (!f.season || (relRate(s.id, month) ?? (inSeason(s, month) ? 1 : 0)) >= 0.35));
   }, [scopeAll, f.q, f.show, f.group, f.habitat, f.rarity, f.season, seen, month, seqData]);
 
-  const lastSeen = useMemo(() => {
-    const m = new Map<number, string>();
-    for (const s of sightings as (Sighting & { time?: string })[]) {
-      const key = s.date + (s.time || '');
-      if (key > (m.get(s.speciesId) || '')) m.set(s.speciesId, key);
-    }
-    return m;
-  }, [sightings]);
-
   // The pick is ranked by the regional reporting rates, so (as v1 drew the dex once they were in) it waits for them as
   // well as her sightings; otherwise the hero would show one species and then swap to another a moment later. If the
   // regional data never answers, it goes ahead once the app has waited for it (lib/seq.ts).
-  const day = loaded && (seqData || seqSettled()) ? dayPick(seen, f.kind) : null;
+  const day = ready && (seqData || seqSettled()) ? dayPick(seen, f.kind) : null;
 
   // ---------- effects ----------
   useEffect(() => {
     let alive = true;
-    void learnReady().then(() => { if (alive) force(); }).catch(() => {});
-    if (!photoKinds) {
-      void photoIdInfo().then((info: { kinds: string[] }) => {
-        if (!info.kinds.length) return;
-        photoKinds = info.kinds;
-        if (alive) force();
-      });
-    }
     const readSettings = () => {
       void db.kvGet('settings').then((s: { colourUnseen?: boolean } | undefined) => { if (alive) setColourUnseen(!!s?.colourUnseen); }).catch(() => {});
     };
@@ -308,12 +437,11 @@ export default function Dex() {
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // Rings and counts, once her sightings are in.
-  const countsKey = loaded ? `${f.kind}|${sightings.length}|${seen.size}` : '';
+  // Rings and counts, once her sightings are in, and again when what she has seen changes.
   useLayoutEffect(() => {
     const view = document.getElementById('view');
-    if (countsKey && view) countKindTabs(view);
-  }, [countsKey]);
+    if (ready && view) countKindTabs(view);
+  }, [ready, f.kind, seen]);
 
   // The chosen kind tab is kept in sight.
   useLayoutEffect(() => {
@@ -322,26 +450,6 @@ export default function Dex() {
       rail.scrollLeft = on.offsetLeft - (rail.clientWidth - on.offsetWidth) / 2;
     }
   }, [f.kind]);
-
-  // The hero takes its colour from the pick's photo where the host allows it to be read. A new pick starts plain; a
-  // better photo of the same pick arriving keeps the colour it has until the new photo has been read (in v1 the
-  // swapped-in photo kept the first tint), and a pick that has since changed never takes an older pick's colour.
-  const heroSrc = day ? (sized(day.sp.id, 'large') as string | null) || '' : '';
-  const heroId = day ? day.sp.id : null;
-  const tintedFor = useRef<number | null>(null);
-  useEffect(() => {
-    const hero = heroRef.current;
-    if (!hero) return;
-    if (tintedFor.current !== heroId) {
-      for (const k of ['--tint', '--tint-deep', '--tint-soft', '--tint-soft-dark', '--tint-ink-dark']) hero.style.removeProperty(k);
-      hero.classList.remove('tinted');
-      tintedFor.current = heroId;
-    }
-    if (!heroSrc) return;
-    let alive = true;
-    void tintFrom(heroSrc).then(() => { if (alive) void applyTint(hero, heroSrc); });
-    return () => { alive = false; };
-  }, [heroSrc, heroId]);
 
   // ---------- actions ----------
   // v1 sayDexCount: the count goes out through the shared #announce region (lib/toast.ts).
@@ -387,34 +495,21 @@ export default function Dex() {
   const onClickCapture = (e: MouseEvent) => {
     if (suppressClick.current && (e.target as Element).closest('[data-tile]')) { suppressClick.current = false; e.preventDefault(); }
   };
+  // One handler for every tile and row: a plain tap (or Enter) opens the species page in the app, as a router Link
+  // would. A click that was already handled (the long press above), a modified click or any button but the main one
+  // is left to the browser, which opens the address in a new tab or window.
+  const onClick = (e: MouseEvent) => {
+    const a = (e.target as Element).closest<HTMLAnchorElement>('a[data-tile]');
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    navigate(`/bird/${a.dataset.tile}`);
+  };
 
   // ---------- pieces ----------
-  const isSeen = (s: Species) => seen.has(s.id);
-  const hidden = (s: Species) => <span className="sr-only">, {isSeen(s) ? 'seen' : 'not seen'}</span>;
-  // The spaces between the parts are v1's, so the link reads '028 Tawny Frogmouth, not seen' as text too.
-  const tile = (s: Species) => (
-    <li key={s.id}>
-      <Link className={`tile kind--${s.kind} ${isSeen(s) ? 'tile--seen' : ''}`} to={`/bird/${s.id}`} data-tile={s.id}>
-        <span className="tile-img"><Photo sp={s} /></span>{' '}
-        <Band sp={s} seen={isSeen(s)} />{' '}
-        <span className="tile-name">{s.name}{hidden(s)}</span>
-      </Link>
-    </li>
-  );
-  // Under a group heading the group name would repeat on every row, so rows show the scientific name instead.
-  const row = (s: Species) => (
-    <li key={s.id}>
-      <Link className={`row row--sp kind--${s.kind}`} to={`/bird/${s.id}`} data-tile={s.id}>
-        <span className={`row-thumb ${isSeen(s) ? 'row-thumb--seen' : ''}`}><Photo sp={s} /></span>{' '}
-        <span className="row-main">
-          <strong>{s.name}{hidden(s)}</strong>
-          <span className="muted small">{f.sort === 'dex' ? <i>{s.sci}</i> : GROUPS[s.group]}</span>
-        </span>
-        <Pips rarity={s.rarity} /> <Band sp={s} seen={isSeen(s)} />
-      </Link>
-    </li>
-  );
-  const block = (items: Species[]) => (f.layout === 'list' ? <ul className="rows pad-x">{items.map(row)}</ul> : <ul className="dex-grid">{items.map(tile)}</ul>);
+  const sci = f.sort === 'dex';
+  const block = (items: Species[]) => (f.layout === 'list'
+    ? <ul className="rows pad-x">{items.map((s) => <RowItem key={s.id} id={s.id} seen={seen.has(s.id)} sci={sci} />)}</ul>
+    : <ul className="dex-grid">{items.map((s) => <TileItem key={s.id} id={s.id} seen={seen.has(s.id)} />)}</ul>);
 
   const noun2 = scopeNoun(f.kind, 2);
   let body: ReactNode;
@@ -429,7 +524,7 @@ export default function Dex() {
           <div className="row-center"><button type="button" className="btn btn--primary" data-search onClick={() => openSearch(q)}>Search everything</button>{clear}</div>
         </div>
       );
-    } else if (f.show === 'seen' && !SPECIES.some((s) => inScope(s, f.kind) && seen.has(s.id))) {
+    } else if (f.show === 'seen' && !seenIn(f.kind, kindCounts)) {
       body = (
         <div className="empty">
           <p className="empty-h">No {noun2} logged yet.</p>
@@ -452,7 +547,7 @@ export default function Dex() {
     body = Object.keys(GROUPS).filter((g) => byGroup[g]).map((g, i) => {
       const k = SPECIES.find((s) => s.group === g)?.kind || 'bird';
       const all = SPECIES.filter((s) => s.group === g);
-      const got = all.filter(isSeen).length;
+      const got = all.filter((s) => seen.has(s.id)).length;
       const later = i ? { containIntrinsicSize: `auto ${Math.round(groupSize(byGroup[g].length, f.layout))}px` } : undefined;
       return (
         <section key={g} className={`dex-group kind--${k}${i ? ' dex-group--later' : ''}`} style={later}>
@@ -474,32 +569,9 @@ export default function Dex() {
   // The count read out after a change: the latest render's, not the one the timer was set in.
   countRef.current = { n: list.length, kind: f.kind };
 
-  // The hero
-  const got = scopeAll.filter(isSeen).length, n = scopeAll.length;
-  const hero = (
-    <header ref={heroRef} className={`dex-hero kind--${day ? day.sp.kind : 'bird'}`}>
-      <div className="dex-hero-photo" aria-hidden="true">{day && <Photo sp={day.sp} size="large" eager />}</div>
-      <div className="dex-hero-top">
-        {day ? <Link className="dex-hero-pick" to={`/bird/${day.sp.id}`}><span>{day.label}</span><strong>{day.sp.name}</strong></Link> : <span />}
-        <div className="dex-hero-actions">
-          <AccountChip />
-          <button type="button" className="hero-btn glass" data-search aria-label="Search everything" onClick={() => openSearch('')}>{ICON.search}</button>
-          <Link className="hero-btn glass" to="/settings" aria-label="Settings">{ICON.gear}</Link>
-        </div>
-      </div>
-      <div className="dex-hero-foot">
-        <h1 className="wordmark">Sarah's BirdyDex<small>South East Queensland</small></h1>
-        <p className="dex-cap glass">
-          <Ring p={got / n} cls="dex-cap-ring" />
-          <span><b data-capn={got}>{got}</b> of {n} {scopeNoun(f.kind, n)} {f.kind === 'plant' ? 'found' : 'seen'}</span>
-        </p>
-      </div>
-    </header>
-  );
-
   // The kind rail is the tally: each pill carries a small ring, its label and seen/total.
   const kindTab = (k: string, label: string, all: Species[], cls = '') => {
-    const g = all.filter(isSeen).length, of = all.length;
+    const g = seenIn(k, kindCounts), of = all.length;
     return (
       <button
         key={k}
@@ -513,7 +585,7 @@ export default function Dex() {
         <Ring p={g / Math.max(1, of)} cls="kind-ring" />{' '}
         <span className="kind-tab-txt">
           <span className="kind-tab-l">{label}</span>{' '}
-          <span className="kind-tab-n" aria-hidden="true"><b data-kn={g} data-of={of}>{g}</b>/{of}</span>
+          <span className="kind-tab-n" aria-hidden="true"><b data-kn={g} data-of={of} style={digits(g)}>{g}</b>/{of}</span>
         </span>{' '}
         <span className="sr-only">, {g} of {of} {k === 'plant' ? 'found' : 'seen'}</span>
       </button>
@@ -527,38 +599,12 @@ export default function Dex() {
     </div>
   );
 
-  // Today: one snapping row of cards. Listen and Scan, Learn, and the pick of the day (photo-backed).
-  const single = f.kind !== 'animals' && f.kind !== 'all';
-  const [lt, ls] = single && f.kind !== 'bird' ? ['Listen (birds)', f.kind === 'frog' ? 'Frog calls to compare' : 'Birds by call'] : ['Listen', 'Birds by call'];
-  const tool = (ic: ReactNode, title: string, sub: string) => (
-    <><span className="today-ic">{ic}</span><span className="today-t"><strong>{title}</strong><span>{sub}</span></span></>
-  );
-  const todayRail = (
-    <section className="today" aria-label="Today">
-      {install ? <button type="button" className="today-card today-tool" onClick={() => void promptInstall()}>{tool(ICON.install, 'Install', 'Add to your home screen')}</button> : null}
-      <Link className="today-card today-tool" to="/listen">{tool(<Icon name="mic" />, lt, ls)}</Link>
-      <Link className="today-card today-tool" to="/scan">{tool(<Icon name="scan" />, 'Scan a photo', scanSub(f.kind))}</Link>
-      <LearnTeaser />
-      {day ? (
-        <Link className={`today-card today-day kind--${day.sp.kind}`} to={`/bird/${day.sp.id}`}>
-          <span className="botd-img"><Photo sp={day.sp} /></span>{' '}
-          <span className="today-day-txt">
-            <span className="today-day-k">{day.why}</span>
-            <strong>{day.sp.name}</strong>
-            <span>{day.where}</span>
-            <span className="sr-only">, {day.label.toLowerCase()}</span>
-          </span>
-        </Link>
-      ) : null}
-    </section>
-  );
-
   return (
     <>
-      {hero}
+      <DexHero day={day} got={seenIn(f.kind, kindCounts)} n={scopeAll.length} kind={f.kind} />
       <div className="dex-sheet">
         {kindRail}
-        {todayRail}
+        <TodayRail kind={f.kind} day={day} />
         <div className="dex-stick" aria-hidden="true" ref={stickRef} />
         <div className="dex-tools" ref={toolsRef}>
           <div className="searchbox searchbox--dex">
@@ -613,6 +659,7 @@ export default function Dex() {
           onPointerUp={cancelPress}
           onPointerCancel={cancelPress}
           onClickCapture={onClickCapture}
+          onClick={onClick}
           onContextMenu={(e) => { if ((e.target as Element).closest('[data-tile]')) e.preventDefault(); }}
         >
           {body}
