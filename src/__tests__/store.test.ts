@@ -211,6 +211,22 @@ describe('keeping fresh', () => {
     expect(store.storeState().sightings).toHaveLength(0);
   });
 
+  it("reads again when the first sign-in's merge ends, which can give her records new uids silently", async () => {
+    fake.stores.sightings = fake.stores.sightings.map((r) => ({ ...r, uid: `cloud-${r.id}` }));
+    for (const fn of fake.status) fn({ state: 'migrating' });
+    await settle(store.SETTLE_MS);
+    expect(store.storeState().sightings.map((r) => r.uid)).toEqual([undefined, undefined]);
+    for (const fn of fake.status) fn({ state: 'saved' });
+    await settle(store.SETTLE_MS);
+    expect(store.storeState().sightings.map((r) => r.uid)).toEqual(['cloud-1', 'cloud-2']);
+    // An ordinary sync that ends does not read everything again.
+    const reads = fake.reads.sightings;
+    for (const fn of fake.status) fn({ state: 'syncing' });
+    for (const fn of fake.status) fn({ state: 'saved' });
+    await settle(store.SETTLE_MS);
+    expect(fake.reads.sightings).toBe(reads);
+  });
+
   it('ignores changes to stores it does not hold', async () => {
     const reads = { ...fake.reads };
     fake.emit('photos');

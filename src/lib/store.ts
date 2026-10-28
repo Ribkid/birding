@@ -4,8 +4,9 @@
 // read them again from IndexedDB each time a screen opened, and drew an empty dex first.
 //
 // db.js stays the only writer: this reads through db.all and db.kvGet, and reads again when db.onChange names a
-// store it holds, when a sync pull has written rows (sync.js onRemoteChange) and when sync stops (a sign-out that
-// cleared the phone writes without db.onChange). A change is read at once, and changes that come while a read is
+// store it holds, when a sync pull has written rows (sync.js onRemoteChange), when sync stops (a sign-out that
+// cleared the phone writes without db.onChange) and when the first sign-in's merge ends (it can rewrite uids without
+// either). A change is read at once, and changes that come while a read is
 // running are read together straight after it, so a tap on the outing tally shows as fast as before. A burst (more
 // than a few changes during one read: a restore, a sync) is read once it has paused for 150 ms, so a restore of
 // hundreds of records costs a handful of reads, not hundreds.
@@ -193,7 +194,17 @@ export function bootStore(): Promise<void> {
     });
   } catch { /* no change events: the first read still lands */ }
   try { onRemoteChange(() => mark(KEYS)); } catch { /* sync not loaded */ }
-  try { onStatus((st: { state: string }) => { if (st.state === 'off') mark(KEYS); }); } catch { /* sync not loaded */ }
+  // Sync stopping (a sign-out that cleared the phone), and the end of the first sign-in's merge, which can give her
+  // records new uids with no change event and no pull to report it (sync.js migrate). A row kept with its old uid
+  // would be written back with it by an edit, and reach her account as a second copy.
+  let syncWas = '';
+  try {
+    onStatus((st: { state: string }) => {
+      const was = syncWas;
+      syncWas = st.state;
+      if (st.state === 'off' || (was === 'migrating' && st.state !== 'migrating')) mark(KEYS);
+    });
+  } catch { /* sync not loaded */ }
   KEYS.forEach((k) => dirty.add(k));
   const first = new Promise<void>((resolve) => {
     flush();
