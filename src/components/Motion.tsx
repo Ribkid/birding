@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react';
-import { flushSync } from 'react-dom';
 import { useNavigate, type NavigateOptions, type To } from 'react-router-dom';
-import { countUp, vt } from '../lib/motion';
+import { countUp } from '../lib/motion';
 import { applyTint, stagger } from '../lib/look';
 
 /** A number that counts up once, with the stamp. Reduced motion shows the final value. */
@@ -40,14 +39,14 @@ export function useTint<T extends HTMLElement>(url: string | null, fallback: str
 }
 
 /**
- * Navigate inside a same-document view transition. Falls back to a plain navigate when the browser has no
- * startViewTransition or the person prefers reduced motion.
+ * Navigate. The router (components/RouteMotion.tsx) runs every change of address in a view transition and picks its
+ * motion from where the screens sit, as v1 did, so this is a plain navigate; nav is no longer used.
  */
 export function useViewTransitionNavigate() {
   const navigate = useNavigate();
   return useCallback((to: To, options?: NavigateOptions & { nav?: 'forward' | 'back' | 'swap' }) => {
-    const { nav = 'forward', ...rest } = options ?? {};
-    void vt(() => flushSync(() => navigate(to, rest)), { nav });
+    const { nav: _nav, ...rest } = options ?? {};
+    void navigate(to, rest);
   }, [navigate]);
 }
 

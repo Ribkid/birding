@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { HashRouter } from 'react-router-dom';
+// Every change of address runs in a view transition, as v1's hashchange handler did (components/RouteMotion.tsx).
+import { MotionHashRouter } from './components/RouteMotion';
 // v1's stylesheet order (birding-refresh index.html): globals first, then screens.
 import './styles/app.css';
 import './screens/field/field.css';
@@ -26,9 +27,9 @@ if (!root) throw new Error('#root missing from index.html');
 
 createRoot(root).render(
   <StrictMode>
-    <HashRouter useTransitions={false}>
+    <MotionHashRouter>
       <App />
-    </HashRouter>
+    </MotionHashRouter>
   </StrictMode>,
 );
 

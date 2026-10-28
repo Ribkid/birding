@@ -1,0 +1,152 @@
+// v1's onRouteChange (birding-refresh js/app.js:996-1043): every change of address runs in one view transition,
+// whether it came from a tab, a link, Back, Forward or a hash typed into the address bar. How deep each screen sits
+// picks the motion: deeper is 'forward' (the new page rises), shallower is 'back', level (the four tabs) is a 'swap'
+// cross-fade. Going back to a shallower screen returns to where she was on it, a photo tapped on its way to a species
+// page grows into that page's hero, and going back from it shrinks the hero into the photo it came from. Open layers
+// close and sheets still sliding away go before the new screen draws. Reduced motion, a hidden tab or a browser
+// without view transitions get the plain change (lib/motion.ts vt()).
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
+import { Router, UNSAFE_createHashHistory as createHashHistory, type Location } from 'react-router-dom';
+import { clearNames, motionOK, nameFor, settle, transitioning, vt } from '../lib/motion';
+import { closeAllLayers } from '../lib/layers';
+import { flushClosingSheets } from './Sheet';
+
+type Nav = 'forward' | 'back' | 'swap';
+
+// How deep each screen sits (v1 DEPTH). A screen not listed is one level down.
+const DEPTH: Record<string, number> = {
+  dex: 0, learn: 0, map: 0, me: 0, lists: 1, badges: 1, bird: 1, list: 2, patch: 2, targets: 2, stats: 1, log: 2,
+  listen: 1, scan: 1, settings: 1, quiz: 1, leaderboard: 1, u: 2, compare: 2, outing: 2,
+};
+const depthOf = (path: string) => DEPTH[path.split('/')[1] || 'dex'] ?? 1;
+export function navKind(from: string, to: string): Nav {
+  const a = depthOf(from), b = depthOf(to);
+  return b > a ? 'forward' : b < a ? 'back' : 'swap';
+}
+
+// Where she was on each address, for going back to it.
+const scrollMem = new Map<string, number>();
+// What the next draw scrolls to, and the tile to keep in sight on going back from its species page.
+let pendingScroll: number | null = null;
+let pendingTile: number | null = null;
+
+const THUMB = '.tile-img, .row-thumb, .botd-img, .cmp-img';
+// A photo just tapped on its way to a species page, and which kind of photo opened each species page (a tile, Bird of
+// the day, a row), so going back shrinks into that one.
+let morph: { id: number; url: string; kind: string } | null = null;
+const cameFrom = new Map<string, string>();
+const thumbKind = (thumb: Element) => THUMB.split(', ').find((s) => thumb.matches(s)) || '';
+// The photo itself flies, not its frame: the seen ring and tick stay behind and fade with the page.
+const pic = (thumb: Element) => thumb.querySelector<HTMLElement>(':scope > img, :scope > .whole') || (thumb as HTMLElement);
+const inView = (el: Element) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.bottom > 56 && r.top < innerHeight - 64; };
+const birdId = (path: string) => Number(/^\/bird\/(\d+)$/.exec(path)?.[1]) || null;
+const viewEl = () => document.getElementById('view');
+
+// Tapping a photo that links to a species names it, so the view transition grows it into that page's hero.
+function nameTappedPhoto(e: MouseEvent) {
+  if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !motionOK()) return;
+  const a = (e.target as Element | null)?.closest?.('a[href^="#/bird/"]');
+  if (!a || a.getAttribute('href') === location.hash) return;
+  const thumb = a.matches(THUMB) ? a : a.querySelector(THUMB);
+  if (!thumb) return;
+  const el = pic(thumb);
+  const m = morph = { id: Number(a.getAttribute('href')!.split('/')[2]), url: thumb.querySelector('img')?.currentSrc || '', kind: thumbKind(thumb) };
+  nameFor(el, 'sp-hero');
+  // If no navigation follows (a long press, a cancelled tap), take the name off again.
+  setTimeout(() => { if (morph === m) { morph = null; if (!document.documentElement.dataset.nav) el.style.viewTransitionName = ''; } }, 700);
+}
+
+function onRouteChange(prev: Location, next: Location, apply: () => void) {
+  const from = prev.pathname + prev.search, to = next.pathname + next.search;
+  // Only the history state changed (the same screen), or the first draw's redirect from an empty address.
+  if (from === to || prev.pathname === '/') { apply(); return; }
+  scrollMem.set(from, scrollY);
+  const nav = navKind(prev.pathname, next.pathname);
+  const toId = birdId(next.pathname), fromId = birdId(prev.pathname);
+  const tapped = morph && morph.id === toId ? morph : null;
+  morph = null;
+  if (tapped) cameFrom.set(to, tapped.kind);
+  // Going back from a species page: its hero shrinks back into the photo it came from, if that is on screen.
+  let shrinkTo: number | null = null;
+  const hero = !tapped && fromId && nav === 'back' && motionOK() ? viewEl()?.querySelector<HTMLElement>('[data-hero-frame]') : null;
+  if (hero && inView(hero)) { nameFor(hero, 'sp-hero'); shrinkTo = fromId; }
+  // A new screen starts at the top, except going back, which returns to where she was.
+  pendingScroll = nav === 'back' ? scrollMem.get(to) || 0 : 0;
+  pendingTile = fromId && nav === 'back' && !shrinkTo ? fromId : null;
+  const draw = () => { closeAllLayers('nav'); flushClosingSheets(); apply(); };
+  // vt() would draw at once here. The change may come from a screen's effect (a redirect), where React can't draw
+  // synchronously, so it is handed to React as it is.
+  if (!transitioning() && (typeof (document as any).startViewTransition !== 'function' || document.hidden || !motionOK())) {
+    draw();
+    clearNames();
+    return;
+  }
+  void vt(() => {
+    flushSync(draw);
+    const view = viewEl();
+    const waits: unknown[] = [];
+    if (view && tapped) {
+      const frame = view.querySelector<HTMLElement>('[data-hero-frame]');
+      if (frame) {
+        // The small photo is already decoded, so the hero shows it while the large one loads.
+        const box = frame.querySelector<HTMLElement>('.whole, .img-missing') || frame;
+        if (tapped.url) Object.assign(box.style, { backgroundImage: `url("${tapped.url.replace(/"/g, '%22')}")`, backgroundSize: 'cover', backgroundPosition: '50% 30%' });
+        nameFor(frame, 'sp-hero');
+      }
+    }
+    if (view && shrinkTo) {
+      // Back never scrolls the page to find a target: the photo shrinks into a copy of it that is already on screen,
+      // preferring the kind she tapped, or the page simply fades back.
+      const kind = cameFrom.get(from);
+      const on = [...view.querySelectorAll<HTMLElement>(`[data-tile="${shrinkTo}"] :is(.tile-img, .row-thumb), a[href="#/bird/${shrinkTo}"] :is(${THUMB}), a[href="#/bird/${shrinkTo}"]:is(${THUMB})`)].filter(inView);
+      const t = (kind && on.find((el) => el.matches(kind))) || on[0];
+      if (t) {
+        nameFor(pic(t), 'sp-hero');
+        const img = t.querySelector('img');
+        if (img?.decode) waits.push(img.decode());
+      }
+    }
+    return settle(Promise.all(waits), 150);
+  }, { nav });
+}
+
+/**
+ * The app's router: react-router's HashRouter, with every change of address drawn through onRouteChange. Scroll is
+ * remembered per screen by the app (going back returns to it), not restored by the browser mid-transition.
+ */
+export function MotionHashRouter({ children }: { children: ReactNode }) {
+  const historyRef = useRef<ReturnType<typeof createHashHistory> | null>(null);
+  historyRef.current ??= createHashHistory({ v5Compat: true });
+  const history = historyRef.current;
+  const [state, setState] = useState(() => ({ action: history.action, location: history.location }));
+  const shown = useRef(state.location);
+
+  useLayoutEffect(() => {
+    if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+    document.addEventListener('click', nameTappedPhoto, true);
+    const off = history.listen(({ action, location: next }) => {
+      const prev = shown.current;
+      shown.current = next;
+      onRouteChange(prev, next, () => setState({ action, location: next }));
+    });
+    return () => { off(); document.removeEventListener('click', nameTappedPhoto, true); };
+  }, [history]);
+
+  useLayoutEffect(() => {
+    if (pendingScroll == null) return;
+    const y = pendingScroll, tile = pendingTile;
+    pendingScroll = pendingTile = null;
+    window.scrollTo(0, y);
+    // The remembered scroll can land a little off if the page drew differently: make sure the tile she opened is in
+    // sight.
+    const t = tile ? viewEl()?.querySelector(`[data-tile="${tile}"]`) : null;
+    if (t && !inView(t)) t.scrollIntoView({ block: 'center' });
+  }, [state.location]);
+
+  return (
+    <Router location={state.location} navigationType={state.action} navigator={history} useTransitions={false}>
+      {children}
+    </Router>
+  );
+}

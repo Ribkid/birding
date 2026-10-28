@@ -31,24 +31,11 @@ import { SearchHost } from './screens/DexSearch';
 import { SightingSheetHost } from './components/SightingSheet';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
-import { closeAllLayers } from './lib/layers';
-import { flushClosingSheets } from './components/Sheet';
 import { syncTitle, watchTitle } from './lib/title';
 import { initProfile } from './core/profile.js';
 import { initAccount, onStatus, syncStatus } from './core/account.js';
 import { applySavedTheme } from './screens/progress/theme';
 import { useState } from 'react';
-
-/** v1 scrolled to the top on navigation unless you were moving between dex pages. */
-function ScrollReset() {
-  const { pathname } = useLocation();
-  useEffect(() => {
-    window.scrollTo(0, 0);
-    closeAllLayers('nav');
-    flushClosingSheets();
-  }, [pathname]);
-  return null;
-}
 
 /**
  * The frosted bar takes its title and back control from whatever the screen just drew. The page title follows the
@@ -90,7 +77,6 @@ export default function App() {
   }, []);
   return (
     <>
-      <ScrollReset />
       <RouteFocus />
       <TopBar />
       <SyncBanner />
