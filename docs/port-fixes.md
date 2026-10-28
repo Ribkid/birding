@@ -837,6 +837,16 @@ Twelve branches, each forked from `fd537c7`, were merged into `port-fixes` with 
   - `68b20a2`: `/` opens search over a sheet, as in v1. Escape closes search first and gives focus back to the sheet. Modal and confirm sheets are named by their heading (`aria-labelledby`), and each Ready row carries v1's `data-field`.
   - Kept on purpose: Ctrl, Alt and Cmd with `/` stay the browser's and screen readers' (AltGr's `/` still counts), spaced accessible names on Me's medals, `type="button"` on buttons, `row.is_me` for the public profile's back link, and the not-found page (item 71).
   - Environment, not code: the storage figure under Backup, the species carousel count and credit, Me's fan photos, and the "Photo index failed" warning (v1 logs it too) depend on what Wikipedia and the ALA return.
+- Third comparison with v1, checked in the browser on both apps:
+  - `167ad2c`: the + link carries `aria-current="false"`, as v1's drawRoute marks every tab link.
+  - Kept on purpose, because React does what v1's own code meant to do:
+    - Restore backup clears the file input after each pick, so the same file can be chosen again after a bad pick or a cancelled confirm. In v1 nothing happens until a reload.
+    - Sign up free and Sign in put focus on Continue with Google as they open. v1's openSheet means to do this too, but it picks the first control before the form is drawn, so focus stays on the page.
+    - Closing a search opened with `/` from the page lands on the screen's heading, without scrolling. v1's layers.js has the same fallback, but it removes the overlay after restoring focus, so focus falls to the page.
+    - Clear and Clear search in the dex move focus to the All chip; in v1 it falls to the page.
+    - Browser Back returns to where she was on the page, with no jump (the species page after its Group link, for one). v1 decides by screen depth, so Back to a deeper screen starts at the top.
+  - Not a difference: both apps log the same four "GPU stall due to ReadPixels" WebGL warnings while the 3D model draws. The storage figure under Backup varies from run to run in both.
+  - Left to `left-log-sheet`, which rebuilds them: All sightings' card rows, counts and row text, and the species page's Log a sighting sheet (current outing, Choose on map, recent places, Notes, "Change species", the photo card).
 
 ### Partial
 
