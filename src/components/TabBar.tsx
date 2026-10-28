@@ -6,6 +6,7 @@ import { onAuth } from '../core/cloud.js';
 import { configured, getMyCloud, getProfile, initProfile, myName, signedIn, avatarUrl } from '../core/profile.js';
 import { SpeciesImage } from './SpeciesImage';
 import { PlusSheet } from './PlusSheet';
+import { toTop, viaTabBar } from './RouteMotion';
 
 const TABS = [
   {
@@ -134,6 +135,15 @@ export function TabBar() {
               id={tab.key === 'me' ? 'me-tab' : undefined}
               aria-label={tab.key === 'me' && dot ? 'Me, not signed in' : undefined}
               aria-current={active ? 'page' : 'false'}
+              onClick={(e) => {
+                if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                // The tab she is on, on its own screen: back to the top. Any other tab: to its screen, where she was
+                // on it (components/RouteMotion.tsx).
+                if (location.pathname === tab.to && !location.search) {
+                  e.preventDefault();
+                  toTop(tab.to);
+                } else viaTabBar();
+              }}
             >
               {tab.key === 'me' ? (
                 <MeTabIcon dot={dot} />
