@@ -61,3 +61,37 @@ describe('one clip at a time', () => {
     expect(big().className).not.toContain('is-playing');
   });
 });
+
+describe('a clip that will not play', () => {
+  it('toasts v1\'s message once from the answer\'s play buttons, and not for a clip stopped on purpose', async () => {
+    const proto = window.HTMLMediaElement.prototype as any;
+    const ok = proto.play;
+    document.querySelectorAll('.toast').forEach((t) => t.remove());
+    try {
+      proto.play = function () {
+        // The error event and the rejected play() both report the one failure.
+        queueMicrotask(() => this.dispatchEvent(new Event('error')));
+        return Promise.reject(new Error('NotSupportedError'));
+      };
+      render(<Harness />);
+      await act(async () => { fireEvent.click(again()); });
+      const toasts = [...document.querySelectorAll('.toast')];
+      expect(toasts.length).toBe(1);
+      expect(toasts[0].textContent).toBe('That recording would not play.');
+      expect(again().className).not.toContain('is-playing');
+      expect(again().className).not.toContain('is-loading');
+      toasts[0].remove();
+
+      // Stopped by a new question while it was still loading, then the load fails: no toast.
+      let last: HTMLAudioElement | null = null;
+      proto.play = function () { last = this; return new Promise(() => {}); };
+      await act(async () => { fireEvent.click(again()); });
+      expect(again().className).toContain('is-loading');
+      await act(async () => { stopCalls(); });
+      await act(async () => { last!.dispatchEvent(new Event('error')); });
+      expect(document.querySelectorAll('.toast').length).toBe(0);
+    } finally {
+      proto.play = ok;
+    }
+  });
+});
