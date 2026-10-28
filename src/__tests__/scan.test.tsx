@@ -109,6 +109,27 @@ describe('Scan', () => {
     expect(S.result).toBeNull();
   });
 
+  it('keeps focus on Identify while busy: aria-disabled only, as v1, and a second tap starts no second run', async () => {
+    let finish!: (value: typeof LIKELY) => void;
+    vi.mocked(scan.identifyScan).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    mount();
+    const go = identifyButton();
+    expect(go.hasAttribute('aria-disabled')).toBe(false);
+    go.focus();
+    fireEvent.click(go);
+    await waitFor(() => expect(scan.identifyScan).toHaveBeenCalledTimes(1));
+    const busy = screen.getByText('Identifying…').closest('button') as HTMLButtonElement;
+    expect(busy.disabled).toBe(false);
+    expect(busy.getAttribute('aria-disabled')).toBe('true');
+    expect(document.activeElement).toBe(busy);
+    fireEvent.click(busy);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(scan.identifyScan).toHaveBeenCalledTimes(1);
+    finish(LIKELY);
+    await screen.findByRole('heading', { level: 2 });
+    expect(identifyButton().hasAttribute('aria-disabled')).toBe(false);
+  });
+
   it('focuses the stage without scrolling after a photo is picked (new 8)', async () => {
     const focus = vi.spyOn(HTMLElement.prototype, 'focus');
     mount();

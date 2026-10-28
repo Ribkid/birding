@@ -437,7 +437,8 @@ export default function Scan() {
                   {covered.map((k) => <button key={k} type="button" className={`scan-chip kind--${k}`} aria-pressed={kind === k} onClick={() => setKind(k)}><i aria-hidden="true" />{KINDS[k].label}</button>)}
                 </div>
               )}
-              <button type="button" className="scan-go" disabled={busy} onClick={() => void identify()} aria-disabled={busy}><span className="scan-go-ico"><Icon name="scan" /></span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
+              {/* Busy is aria-disabled only, as in v1: a disabled button would drop focus to the page. identify() ignores taps while busy. */}
+              <button type="button" className="scan-go" onClick={() => void identify()} aria-disabled={busy || undefined}><span className="scan-go-ico"><Icon name="scan" /></span><span>{busy ? 'Identifying…' : 'Identify'}</span></button>
             </>
           )}
           <div ref={workRef} className="scan-work">
