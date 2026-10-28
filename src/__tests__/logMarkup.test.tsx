@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { CountKey } from '../screens/lists/hubParts';
+import { ConfirmDialog } from '../screens/lists/shared';
 import { Sheet } from '../components/Sheet';
 import { getLastPos, setLastPos } from '../lib/lastPos';
 
@@ -16,6 +17,12 @@ describe("v1's hooks in the markup", () => {
   it("gives a sheet's scrim v1's data-close", () => {
     render(<Sheet open onClose={() => {}} label="Test"><p>Hi</p></Sheet>);
     expect(document.querySelector('.sheet-scrim')?.hasAttribute('data-close')).toBe(true);
+  });
+
+  it("gives a confirm sheet's buttons v1's data-no and data-yes (confirmSheet)", () => {
+    render(<ConfirmDialog title="Delete Home patch?" body="Your sightings stay." confirmLabel="Delete patch" danger onConfirm={() => {}} onCancel={() => {}} />);
+    expect(document.querySelector('[data-no]')?.textContent).toBe('Cancel');
+    expect(document.querySelector('.btn--danger[data-yes]')?.textContent).toBe('Delete patch');
   });
 });
 

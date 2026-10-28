@@ -126,7 +126,7 @@ function FinishOuting({
       <Sheet open onClose={onClose} cls="sheet-wrap--outing" labelledBy="outing-finish-h">
         <h2 className="sheet-title" id="outing-finish-h">{outing.endedAt ? 'Outing details' : 'Finish outing'}</h2>
         <p className="muted">{plural(sightingCount, 'species', 'species')} so far.</p>
-        <form className="form" onSubmit={save} noValidate>
+        <form className="form" data-form="" onSubmit={save} noValidate>
           <label className="field">
             <span>Place name</span>
             <input
@@ -137,10 +137,10 @@ function FinishOuting({
             />
           </label>
           <div className="loc-row">
-            <button type="button" className="btn btn--small" onClick={() => setPicking(true)}>
+            <button type="button" className="btn btn--small" data-pickmap="" onClick={() => setPicking(true)}>
               <Icon name="search" /> {loc.lat != null ? 'Move on map' : 'Choose on map'}
             </button>
-            <span className="small muted">
+            <span className="small muted" data-gps-status="">
               {loc.lat != null && loc.lng != null ? `${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}` : 'No location yet'}
             </span>
           </div>
@@ -213,7 +213,7 @@ function FinishOuting({
             </p>
           )}
           <div className="row-end">
-            <button type="button" className="btn" onClick={onClose}>
+            <button type="button" className="btn" data-close="" onClick={onClose}>
               {outing.endedAt ? 'Cancel' : 'Keep going'}
             </button>
             <button type="submit" className="btn btn--primary" aria-disabled={saving || undefined}>
@@ -498,7 +498,8 @@ export default function Outing() {
 
       <div className={`tally-foot ${live ? 'tally-foot--live' : ''}`}>
         {/* Keyed so the Finish outing button stays the same element as it becomes Edit details: closing the sheet
-            hands focus back to it, as v1's restoreFocus found [data-finish] again. */}
+            hands focus back to it. v1's restoreFocus did too, but the redraw after Finish then left focus on the
+            page; keeping it on the button is deliberate. */}
         <button
           key="cancel"
           type="button"

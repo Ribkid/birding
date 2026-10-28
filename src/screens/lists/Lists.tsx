@@ -175,7 +175,7 @@ export default function Lists() {
             ) : (
               <p className="empty-inline">You have seen every likely bird for this month. Impressive.</p>
             )}
-            <Link className="btn btn--block near-btn" to="/targets?near=1">
+            <Link className="btn btn--block near-btn" to="/targets?near=1" data-near="">
               <Icon name="pin" /> Find targets near me
             </Link>
           </section>

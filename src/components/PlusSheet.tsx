@@ -138,7 +138,7 @@ export function PlusSheet({ open, onClose }: { open: boolean; onClose: () => voi
 
   return (
     <>
-    <Sheet open={open} onClose={onClose} labelledBy="plus-sheet-h" cls={mode === 'menu' ? 'sheet-wrap--plus' : 'sheet-wrap--outing'} step={mode}>
+    <Sheet open={open} onClose={onClose} labelledBy="plus-sheet-h" cls={mode === 'menu' ? 'sheet-wrap--plus' : 'sheet-wrap--outing sheet-wrap--swap'} step={mode}>
       {mode === 'menu' ? (
         <>
           <h2 className="sheet-title" id="plus-sheet-h">Add a sighting</h2>
@@ -173,28 +173,29 @@ export function PlusSheet({ open, onClose }: { open: boolean; onClose: () => voi
       ) : (
         <>
           <h2 className="sheet-title" id="plus-sheet-h">Start or add an outing</h2>
-          <form className="form" onSubmit={startOuting} noValidate>
+          <form className="form" data-form="" onSubmit={startOuting} noValidate>
             <div className="grid2">
-              <label className="field"><span>Date</span><input type="date" value={date} max={todayStr()} onChange={(e) => setDate(e.target.value)} /></label>
-              <label className="field"><span>Start time</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>
+              <label className="field"><span>Date</span><input type="date" name="date" value={date} max={todayStr()} onChange={(e) => setDate(e.target.value)} /></label>
+              <label className="field"><span>Start time</span><input type="time" name="time" value={time} onChange={(e) => setTime(e.target.value)} /></label>
             </div>
             <p className="small muted">For an outing earlier today or on another day, change the date and start time.</p>
             <fieldset className="loc">
               <legend>Where</legend>
               <div className="loc-row">
-                <button type="button" className="btn" onClick={() => void locate()}><Icon name="pin" /> Use my location</button>
-                <button type="button" className="btn" onClick={() => setPicking(true)}><Icon name="search" /> Choose on map</button>
+                <button type="button" className="btn" data-gps="" onClick={() => void locate()}><Icon name="pin" /> Use my location</button>
+                <button type="button" className="btn" data-pickmap="" onClick={() => setPicking(true)}><Icon name="search" /> Choose on map</button>
               </div>
-              <span className="muted small" role="status">{status}</span>
+              <span className="muted small" data-gps-status="" role="status">{status}</span>
               <label className="field"><span>Place name</span><input name="place" value={place} placeholder="e.g. Sandy Camp Road Wetlands" autoComplete="off" onChange={(e) => setPlace(e.target.value)} /></label>
               <div className="chips chips--scroll">
-                {chips.map((name) => <button key={name} type="button" className="chip" onClick={() => pickChip(name)}>{name}</button>)}
+                {chips.map((name) => <button key={name} type="button" className="chip" data-place={name} onClick={() => pickChip(name)}>{name}</button>)}
               </div>
             </fieldset>
-            {error && <p className="form-error" role="alert">{error}</p>}
+            {/* Always there, as v1's was, so a message that appears is read out from a live region already on the page. */}
+            <p className="form-error" data-error="" role="alert">{error}</p>
             <div className="row-end">
-              <button type="button" className="btn" onClick={onClose}>Cancel</button>
-              <button type="submit" className="btn btn--primary" disabled={busy}>{busy ? 'Starting…' : isPast ? 'Add outing' : 'Start outing'}</button>
+              <button type="button" className="btn" data-close="" onClick={onClose}>Cancel</button>
+              <button type="submit" className="btn btn--primary" data-go="" disabled={busy}>{busy ? 'Starting…' : isPast ? 'Add outing' : 'Start outing'}</button>
             </div>
           </form>
         </>
