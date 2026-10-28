@@ -9,6 +9,7 @@ import { onAuth } from '../../core/cloud.js';
 import { authSettled } from '../../core/account.js';
 import { applyTint, stagger } from '../../lib/look';
 import { AccountAvatar, AccountCta } from './accountBits';
+import { onAccountSheetClosed, openEditProfile } from './AccountSheets';
 import './me.css';
 
 const back = <path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />;
@@ -53,6 +54,8 @@ export default function PublicProfile() {
 
   const isMe = !!row?.is_me;
   const backHref = isMe ? '/me' : '/leaderboard';
+  // v1 rerenderMine: your own profile is fetched again once Edit profile closes over it.
+  useEffect(() => onAccountSheetClosed((kind) => { if (kind === 'edit' && isMe) setAuthTick((n) => n + 1); }), [isMe]);
   useEffect(() => {
     if (!row) return;
     const hero = document.querySelector('.me-hero') as HTMLElement | null;
@@ -124,7 +127,7 @@ export default function PublicProfile() {
           </ul>
           <dl className="me-stats"><div><dt>Species</dt><dd><CountUp value={row.species || 0} /></dd></div><div><dt>Badges</dt><dd><CountUp value={row.badges || 0} /></dd></div><div><dt>Outings</dt><dd><CountUp value={row.outings || 0} /></dd></div></dl>
         </section>
-        {isMe && <div className="me-acts me-acts--one"><Link className="me-act me-act--primary" to="/me/edit">{edit}<span>Edit profile</span></Link></div>}
+        {isMe && <div className="me-acts me-acts--one"><button type="button" className="me-act me-act--primary" data-edit onClick={openEditProfile}>{edit}<span>Edit profile</span></button></div>}
         <section className="me-sec" aria-labelledby="me-found-h">
           <div className="me-sec-h"><h2 id="me-found-h">{isMe ? "Species you've found" : `Species ${first} has found`}</h2></div>
           {dex.length ? (

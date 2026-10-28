@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { byId } from '../lib/data';
 import { db } from '../core/db.js';
 import { onAuth } from '../core/cloud.js';
-import { configured, getMyCloud, getProfile, myName, signedIn, avatarUrl } from '../core/profile.js';
+import { configured, getMyCloud, getProfile, initProfile, myName, signedIn, avatarUrl } from '../core/profile.js';
 import { SpeciesImage } from './SpeciesImage';
 import { useViewTransitionNavigate } from './Motion';
 import { PlusSheet } from './PlusSheet';
@@ -105,7 +105,9 @@ export function TabBar() {
     read();
     const offDb = db.onChange((name: string) => { if (name === 'kv:me:notnow') read(); });
     const offAuth = onAuth(() => { if (alive) force(); });
-    return () => { alive = false; offDb(); offAuth(); };
+    // v1 paintTab: the avatar follows Edit profile's changes, which happen in a sheet with no route change.
+    const offProfile = initProfile(() => { if (alive) force(); });
+    return () => { alive = false; offDb(); offAuth(); offProfile(); };
   }, []);
 
   const segment = location.pathname.split('/')[1] || 'dex';

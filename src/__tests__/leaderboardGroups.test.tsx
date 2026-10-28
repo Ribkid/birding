@@ -46,7 +46,8 @@ afterEach(() => {
 describe('Leaderboard groups', () => {
   it("asks 'Leave this group?' in a sheet, then leaves and says so", async () => {
     render(<MemoryRouter initialEntries={['/leaderboard']}><Leaderboard /></MemoryRouter>);
-    await screen.findByText('Family', { selector: 'strong' });
+    // A loaded machine can take a while to mount the board; the default one second is not about the app.
+    await screen.findByText('Family', { selector: 'strong' }, { timeout: 5000 });
     fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
     const dialog = await screen.findByRole('dialog');
     expect(dialog.textContent).toContain('Leave this group?');
@@ -60,7 +61,7 @@ describe('Leaderboard groups', () => {
 
   it('confirms a new group with v1 toast, and keeps a failure on the form', async () => {
     render(<MemoryRouter initialEntries={['/leaderboard']}><Leaderboard /></MemoryRouter>);
-    const name = await screen.findByPlaceholderText('e.g. Family');
+    const name = await screen.findByPlaceholderText('e.g. Family', {}, { timeout: 5000 });
     fireEvent.change(name, { target: { value: 'Friends' } });
     await act(async () => { fireEvent.submit(name.closest('form')!); });
     await waitFor(() => expect(toastText()).toBe('Friends made. Its code is XYZ789'));

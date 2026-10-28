@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { KINDS, kindsPresent } from '../../lib/data';
 import {
   client,
@@ -57,18 +57,29 @@ function friendly(error: unknown, offline = 'The leaderboard needs a connection.
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
+// v1 openGroups, the Me tab's Groups button: the leaderboard, scrolled to its Groups section once the groups have
+// loaded (or failed to, or there is no connection to ask).
+let toGroups = false;
+export function openGroups(go: (to: string) => void) {
+  toGroups = true;
+  go('/leaderboard');
+}
+
 export default function Leaderboard() {
-  const location = useLocation();
   const groupsRef = useRef<HTMLElement>(null);
   const [authReady, setAuthReady] = useState(!configured);
   const [accountUser, setAccountUser] = useState<AccountUser | null>(null);
   const [online, setOnline] = useState(() => navigator.onLine);
+  const [groupsTried, setGroupsTried] = useState(false);
 
   useEffect(() => {
-    if (!new URLSearchParams(location.search).has('groups')) return;
-    const timer = window.setTimeout(() => groupsRef.current?.scrollIntoView({ block: 'start' }), 120);
-    return () => window.clearTimeout(timer);
-  }, [location.search]);
+    if (!toGroups || !authReady || !accountUser || (online && !groupsTried)) return;
+    const id = requestAnimationFrame(() => {
+      toGroups = false;
+      groupsRef.current?.scrollIntoView({ block: 'start' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [authReady, accountUser, online, groupsTried]);
 
   const [period, setPeriod] = useState<Period>('life');
   const [kind, setKind] = useState('');
@@ -181,6 +192,8 @@ export default function Leaderboard() {
         setGroup((current) => (current && !list.some((g) => g.id === current) ? '' : current));
       } catch {
         /* groups are secondary; the board still works */
+      } finally {
+        if (alive) setGroupsTried(true);
       }
     })();
     return () => {
