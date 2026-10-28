@@ -132,6 +132,7 @@ export function TabBar() {
             <Link
               key={tab.to}
               to={tab.to}
+              data-tab={tab.key}
               id={tab.key === 'me' ? 'me-tab' : undefined}
               aria-label={tab.key === 'me' && dot ? 'Me, not signed in' : undefined}
               aria-current={active ? 'page' : 'false'}
