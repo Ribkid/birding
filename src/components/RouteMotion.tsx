@@ -139,7 +139,10 @@ const cameFrom = new Map<string, string>();
 const thumbKind = (thumb: Element) => THUMB.split(', ').find((s) => thumb.matches(s)) || '';
 // The photo itself flies, not its frame: the seen ring and tick stay behind and fade with the page.
 const pic = (thumb: Element) => thumb.querySelector<HTMLElement>(':scope > img, :scope > .whole') || (thumb as HTMLElement);
-const inView = (el: Element) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.bottom > 56 && r.top < innerHeight - 64; };
+const inView = (el: Element) => {
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.bottom > 56 && r.top < innerHeight - 64 && r.right > 0 && r.left < innerWidth;
+};
 const birdId = (path: string) => Number(/^\/bird\/(\d+)$/.exec(path)?.[1]) || null;
 const viewEl = () => document.getElementById('view');
 
@@ -389,6 +392,11 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
     // Make sure the tile she opened is in sight.
     const t = tile ? view?.querySelector(`[data-tile="${tile}"]`) : null;
     if (t && !inView(t)) t.scrollIntoView({ block: 'center' });
+    // A card she opened from a sideways rail (Lists' targets) comes back into sight in its rail, which is drawn again
+    // from its start; the page itself stays where it landed.
+    const card = focus && view ? findByKey(focus, view) : null;
+    const r = card?.getBoundingClientRect();
+    if (card && r!.width && (r!.left < 0 || r!.right > innerWidth)) card.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     returning = focus ? { key: state.location.key, focus } : null;
   }, [state.location]);
 

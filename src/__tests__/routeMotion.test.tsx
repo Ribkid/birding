@@ -89,7 +89,8 @@ describe('MotionHashRouter', () => {
 describe('Back and Forward', () => {
   let y = 0;
   // Where each tile sits on screen: [top, bottom], or nothing for a tile off screen.
-  let at: Record<string, [number, number]> = {};
+  // Where each tile sits on screen: [top, bottom] (and left, for a card in a sideways rail), or nothing off screen.
+  let at: Record<string, [number, number, number?]> = {};
   beforeEach(() => {
     forgetPlaces();
     // jsdom has no CSS.escape (layers.ts findByKey uses it); the keys here need no escaping.
@@ -104,7 +105,8 @@ describe('Back and Forward', () => {
     Object.defineProperty(window, 'scrollY', { configurable: true, get: () => y });
     vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
       const r = at[this.getAttribute('data-tile') || this.textContent || ''];
-      return (r ? { top: r[0], bottom: r[1], left: 0, right: 100, width: 100, height: r[1] - r[0], x: 0, y: r[0] }
+      const left = r?.[2] ?? 0;
+      return (r ? { top: r[0], bottom: r[1], left, right: left + 100, width: 100, height: r[1] - r[0], x: left, y: r[0] }
         : { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0 }) as DOMRect;
     });
   });
@@ -122,7 +124,7 @@ describe('Back and Forward', () => {
       <main id="view">
         <Routes>
           <Route path="/dex" element={<><h1>Dex</h1>{[1, 2, 3].map((id) => <Link key={id} to={`/bird/${id}`} data-tile={id}>{`Tile ${id}`}</Link>)}</>} />
-          <Route path="/lists" element={<><h1>Lists</h1><Link to="/bird/2">Row 2</Link></>} />
+          <Route path="/lists" element={<><h1>Lists</h1><Link to="/bird/2">Row 2</Link><Link to="/bird/3" className="tcard"><span className="tile-img" />Card 3</Link></>} />
           <Route path="/bird/:id" element={<><h1>Bird</h1><Link to="/dex">Dex</Link></>} />
         </Routes>
       </main>
@@ -204,6 +206,21 @@ describe('Back and Forward', () => {
     await frame();
     expect(h1()).toBe('Lists');
     expect(document.activeElement?.textContent).toBe('Lists');
+  });
+
+  it('brings a card she opened from a sideways rail back into sight in its rail, and gives it focus', async () => {
+    app();
+    at = { 'Card 3': [300, 420, 200] };
+    click('Card 3');
+    await frame();
+    // The rail is drawn again from its start: the card is off to the right.
+    at = { 'Card 3': [300, 420, innerWidth + 40] };
+    (Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mockImplementation(function (this: Element) { at['Card 3'] = [300, 420, 200]; });
+    await back();
+    await frame();
+    expect(h1()).toBe('Lists');
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+    expect(document.activeElement?.textContent).toBe('Card 3');
   });
 
   it('holds the return to the tile that was at the top of the screen', async () => {
