@@ -5,8 +5,9 @@ import { useSeen } from '../../lib/hooks';
 import { Icon } from '../../components/Icon';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { loadListenModel, setLocation, startListening, stopListening } from '../../core/listen.js';
+import { openSightingSheet } from '../../components/SightingSheet';
 import { setLastPos } from '../../lib/lastPos';
-import { errorText, logSighting } from './sighting';
+import { errorText } from './sighting';
 import './field.css';
 import './calls.css';
 
@@ -50,8 +51,6 @@ export default function Listen() {
   const [error, setError] = useState('');
   const [hits, setHits] = useState<Hit[]>([]);
   const [announce, setAnnounce] = useState('');
-  const [savingId, setSavingId] = useState<number | null>(null);
-  const [logged, setLogged] = useState<Record<number, 'saved' | 'error'>>({});
   const [locPhase, setLocPhase] = useState<LocPhase>('idle');
   const [locText, setLocText] = useState(
     'South East Queensland by default. Use your location only if you want the filter narrowed to where you are.',
@@ -309,30 +308,10 @@ export default function Listen() {
     );
   };
 
-  const logDetected = async (hit: Hit) => {
-    const sp: Species | undefined = hit.dexId !== null ? byId.get(hit.dexId) : undefined;
-    if (!sp || savingId !== null) return;
-    setSavingId(sp.id);
-    setError('');
-    try {
-      const loc = locRef.current;
-      await logSighting({
-        speciesId: sp.id,
-        notes: 'Identified by call with BirdNET.',
-        lat: loc?.lat ?? null,
-        lng: loc?.lng ?? null,
-      });
-      if (!mountedRef.current) return;
-      setLogged((prev) => ({ ...prev, [sp.id]: 'saved' }));
-      setStatus(`${sp.name} added to your dex.`);
-      navigator.vibrate?.(30);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setLogged((prev) => ({ ...prev, [sp.id]: 'error' }));
-      setError(`Could not save that sighting: ${errorText(err)}`);
-    } finally {
-      if (mountedRef.current) setSavingId(null);
-    }
+  // v1's Log it: the Log a sighting sheet over this page, finding her and noting how the bird was identified, so she
+  // checks the count and the place before it is saved.
+  const logDetected = (sp: Species) => {
+    openSightingSheet({ speciesId: sp.id, autoGps: true, notes: 'Identified by call with BirdNET.' });
   };
 
   const clearHits = () => {
@@ -480,14 +459,14 @@ export default function Listen() {
               const sp = h.dexId !== null ? byId.get(h.dexId) : undefined;
               const score = Math.round(h.best * 100);
               const live = Date.now() - h.last < 4000;
-              const state = sp ? logged[sp.id] : undefined;
+              const nameId = `hit-${h.index}-name`;
               return (
                 <li className={`hit ${live ? 'hit--live' : ''}`} key={h.index}>
                   <span className="row-thumb">
                     {sp ? <SpeciesImage sp={sp} /> : <span className="img-missing" />}
                   </span>
                   <span className="row-main">
-                    <strong>{sp ? sp.name : h.name}</strong>
+                    <strong id={nameId}>{sp ? sp.name : h.name}</strong>
                     <span className="small muted">
                       {score}% sure, {agoText(h.last)}
                       {sp ? (seen.has(sp.id) ? '' : '. New for your dex!') : '. Not in the dex'}
@@ -496,16 +475,10 @@ export default function Listen() {
                       <span />
                     </span>
                   </span>
+                  {/* The species name goes with the button as its description, so each Log it is told apart. */}
                   {sp && (
-                    <button
-                      className="btn btn--small"
-                      onClick={() => void logDetected(h)}
-                      disabled={state === 'saved' || savingId !== null}
-                      aria-label={
-                        state === 'saved' ? `${sp.name} added to your dex` : `Add ${sp.name} to your dex`
-                      }
-                    >
-                      {state === 'saved' ? 'Added' : savingId === sp.id ? 'Saving…' : 'Add to dex'}
+                    <button type="button" className="btn btn--small hit-log" data-loghit={sp.id} aria-describedby={nameId} onClick={() => logDetected(sp)}>
+                      Log it
                     </button>
                   )}
                 </li>
