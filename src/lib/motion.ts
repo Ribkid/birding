@@ -86,10 +86,16 @@ export function flip(update: () => unknown, { selector = '[data-tile]', key = (e
 }
 
 // ---------- stamped numbers ----------
+// v1 draws a count once; a React screen can draw it again while it is still counting (Targets' "to find" goes
+// 177 then 180 when the regional data arrives). The newest count on an element wins: an older one stops writing,
+// so the number never ends on the value it was first drawn with.
+const counting = new WeakMap<HTMLElement, number>();
 export function countUp(el: HTMLElement | null, from: number, to: number, { delay = 0, duration, format = (n: number) => String(n) }: {
   delay?: number; duration?: number; format?: (n: number) => string;
 } = {}) {
   if (!el) return Promise.resolve();
+  const run = (counting.get(el) || 0) + 1;
+  counting.set(el, run);
   from = Number(from) || 0; to = Number(to) || 0;
   if (!motionOK() || document.hidden || from === to) { el.textContent = format(to); return Promise.resolve(); }
   const dur = duration ?? Math.min(900, 240 + Math.abs(to - from) * 40);
@@ -97,6 +103,7 @@ export function countUp(el: HTMLElement | null, from: number, to: number, { dela
   return new Promise<void>(resolve => {
     let start: number | null = null;
     const step = (now: number) => {
+      if (counting.get(el) !== run) { resolve(); return; }
       start ??= now + delay;
       const t = Math.min(1, Math.max(0, (now - start) / dur));
       el.textContent = format(Math.round(from + (to - from) * (1 - (1 - t) ** 3)));
