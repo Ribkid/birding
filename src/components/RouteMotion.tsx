@@ -67,20 +67,24 @@ const byEntry = new Map<string, Place>();
 /**
  * The first photo tile wholly on screen, found by looking down the screen (so a tile under the sticky search bar or
  * the tab bar doesn't count), and where it sits. Groups further down the dex only have an estimated height until
- * they are drawn, so a return lands on this tile rather than on a number of pixels alone. It looks down the middle
- * and down each half: on a phone of 360 px or less the dex has two columns, and the middle is the gap between them.
+ * they are drawn, so a return lands on this tile rather than on a number of pixels alone. It looks down the middle,
+ * and down each half where the middle falls between tiles: on a phone of 360 px or less the dex has two columns,
+ * and the middle is the gap between them.
  */
 export function anchorOf(view: ParentNode): Anchor | null {
-  if (typeof document.elementFromPoint !== 'function') return null;
+  // A screen with no tiles (a species page, Learn, the map) isn't looked down at all, so leaving it stays quick.
+  if (typeof document.elementFromPoint !== 'function' || !view.querySelector('[data-tile]')) return null;
   const xs = [innerWidth / 2, innerWidth / 4, (innerWidth * 3) / 4];
   for (let y = 8; y < innerHeight; y += 16) {
     let past = y;
     for (const x of xs) {
-      const t = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-tile]');
-      if (!t || !view.contains(t)) continue;
-      const r = t.getBoundingClientRect();
-      if (r.top >= 0 && r.bottom <= innerHeight) return { tile: t.dataset.tile!, top: Math.round(r.top) };
-      past = Math.max(past, r.bottom);
+      const hit = document.elementFromPoint(x, y);
+      const t = hit?.closest<HTMLElement>('[data-tile]');
+      if (t && view.contains(t)) {
+        const r = t.getBoundingClientRect();
+        if (r.top >= 0 && r.bottom <= innerHeight) return { tile: t.dataset.tile!, top: Math.round(r.top) };
+        past = Math.max(past, r.bottom);
+      } else if (!hit?.querySelector('[data-tile]')) break; // a heading, the search bar: no tile beside it either
     }
     y = past;
   }
