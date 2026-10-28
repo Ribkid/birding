@@ -15,6 +15,8 @@ import {
 } from '../../core/learn.js';
 import { PhotoBox, CallPlayer, SilhouetteFilter, QI, stopCalls, usePlayButtons, PlayButton, type CallClip, type PlayButtonState } from './QuizMedia';
 import { FadeImage } from '../../components/SpeciesImage';
+import { lookAfterDraw } from '../../lib/look';
+import { toast } from '../../lib/toast';
 import './learn.css';
 
 const SIDES: Record<number, string[]> = {
@@ -39,6 +41,21 @@ function speciesName(id?: number | null) { return byId.get(Number(id))?.name || 
 // Compare and pressing Back puts her back where she was, as v1 does. This remembers how far down the page she was.
 const scrollOf = new WeakMap<object, number>();
 const hereNow = () => window.location.hash;
+
+// v1 focusWithin (js/learn.js:273): a screen drawn here only takes focus for its heading when she was already in the
+// screen, or the route's focus has parked on it while it loaded. A cold load leaves focus where the browser put it.
+const focusInView = () => {
+  const view = document.getElementById('view');
+  const a = document.activeElement;
+  return !!view && !!a && a !== document.body && a.isConnected && view.contains(a);
+};
+// v1 drawn() runs lookAfterDraw after every question, card and result, so the frosted top bar follows the screen on
+// it (its back control is the screen's [data-quit] or page-head back link), not the loading shell the route began with.
+function useLookAfterDraw(deps: unknown[]) {
+  useEffect(() => {
+    lookAfterDraw(document.getElementById('view'));
+  }, deps);
+}
 function useRememberScroll(round: object | null) {
   useEffect(() => {
     if (!round) return;
@@ -91,7 +108,7 @@ function Options({ q, picked, onPick, rapid, round, still = false }: { q: QuizQu
             <button key={o.key} type="button" className={`lq-side${cls}${calm}`} data-pick={o.key} aria-disabled={disabled || undefined} aria-label={named ? `${o.label}${suffix}` : SIDES[n]?.[i] || `Photo ${i + 1}`} onClick={() => onPick(o.key)}>
               <PhotoBox key={`${round}-${o.key}`} photos={o.photos} alt="" cls="lq-photo lq-photo--duel" missing="Photo not saved on this phone" />
               <span className="lq-side-name" data-name>{named ? o.label : ''}</span>
-              <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24">{QI.cross}</svg> : null}</span>
+              <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.cross}</svg> : null}</span>
               <span className="sr-only">{suffix}</span>
             </button>
           );
@@ -107,7 +124,7 @@ function Options({ q, picked, onPick, rapid, round, still = false }: { q: QuizQu
         return (
           <button key={o.key} type="button" className={`lq-opt${cls}${calm}`} data-pick={o.key} aria-disabled={disabled || undefined} onClick={() => onPick(o.key)}>
             <span className={`lq-opt-label${q.italic ? ' is-sci' : ''}`}>{o.label}</span>
-            <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24">{QI.cross}</svg> : null}</span>
+            <span className="lq-opt-mark" aria-hidden="true">{disabled && o.key === q.answer ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.tick}</svg> : disabled && o.key === picked ? <svg viewBox="0 0 24 24" aria-hidden="true">{QI.cross}</svg> : null}</span>
             <span className="sr-only">{suffix}</span>
           </button>
         );
@@ -147,20 +164,20 @@ function Feedback({ q, right, game, onNext, onPlay, playing, restore = false }: 
   }, []);
   return (
     <div ref={fbRef} className={`lq-fb ${right ? 'is-right' : 'is-wrong'}${restore ? ' no-anim' : ''}`} data-fb tabIndex={-1}>
-      <p className="lq-verdict"><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{verdictText}</span></p>
+      <p className="lq-verdict"><svg viewBox="0 0 24 24" aria-hidden="true">{right ? QI.tick : QI.cross}</svg><span>{verdictText}</span></p>
       {speciesQ && <p className="lq-name"><Link to={`/bird/${ans.id}`}>{ans.name}</Link> <span className="lq-sci">{ans.sci}</span></p>}
       {(q.type === 'call' || q.type === 'whoami') && q.photos?.length ? <PhotoBox photos={q.photos} alt={ans.name} cls="lq-photo lq-photo--answer" /> : null}
       {line && <p className="lq-line">{line}</p>}
       {mark && <p className="lq-line">{mark}</p>}
       {tell && <p className="lq-tell"><strong>How to tell them apart.</strong> {tell}</p>}
-      {q.safety && <p className="lq-safety"><svg viewBox="0 0 24 24">{QI.warn}</svg><span>{q.safety}</span></p>}
+      {q.safety && <p className="lq-safety"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.warn}</svg><span>{q.safety}</span></p>}
       {q.type === 'fact' && q.source?.title && (
         <p className="lq-source">Source: {q.source.url ? <a href={q.source.url} target="_blank" rel="noopener">{q.source.title}</a> : q.source.title}</p>
       )}
       <div className="lq-actions">
         {Q.hasCall(ans.id) && q.type !== 'fact' && <PlayButton on={playing} which={q.type === 'call' ? 'answer' : String(ans.id)} label={q.type === 'call' ? 'Hear it again' : 'Hear its call'} onPlay={onPlay} />}
         {!right && pickedSp && Q.hasCall(pickedSp.id) && q.type !== 'fact' && <PlayButton on={playing} which={String(pickedSp.id)} label="Hear the one you picked" onPlay={onPlay} />}
-        {!right && pickedSp && pickedSp.kind === ans.kind && <Link className="btn lq-act" to={`/compare/${ans.id}/${pickedSp.id}`}><svg viewBox="0 0 24 24">{QI.compare}</svg><span>Compare the two</span></Link>}
+        {!right && pickedSp && pickedSp.kind === ans.kind && <Link className="btn lq-act" to={`/compare/${ans.id}/${pickedSp.id}`}><svg viewBox="0 0 24 24" aria-hidden="true">{QI.compare}</svg><span>Compare the two</span></Link>}
       </div>
       <button type="button" className="btn btn--primary btn--block lq-next" onClick={onNext}>{last ? (game.daily ? "See today's result" : 'See how you went') : 'Next question'}</button>
     </div>
@@ -196,8 +213,9 @@ function ScoreHero({ round, big, of, frac, note }: { round: RoundState; big: num
   );
 }
 
-function Results({ game, total, onAgain, onAgainMissed, onHub }: {
+function Results({ game, total, onAgain, onAgainMissed, onHub, takeFocus }: {
   game: RoundState; total: number; onAgain: () => void; onAgainMissed: (ids: number[]) => void; onHub: () => void;
+  takeFocus: () => boolean;
 }) {
   const asked = game.qs.filter((q) => q.picked != null);
   const missed = asked.filter((q) => q.picked !== q.answer);
@@ -209,7 +227,9 @@ function Results({ game, total, onAgain, onAgainMissed, onHub }: {
   const wrongs = game.mode === 'rapid' ? missed.slice(0, 15) : missed;
   const roundName = game.daily ? "Today's challenge" : game.testId ? 'Test me' : game.pack ? packBy[game.pack]?.name : MODE_INFO[game.mode] || '';
   const headRef = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { headRef.current?.focus({ preventScroll: true }); }, [game]);
+  // v1 drawResults focuses its heading only if she was in the screen (See how you went, the clock running out while
+  // she answered); a cold load of a finished daily leaves focus alone, and the route's own focus covers arriving here.
+  useEffect(() => { if (takeFocus()) headRef.current?.focus({ preventScroll: true }); }, [game]);
   return (
     <div className="lr">
       <header className="page-head"><h1 ref={headRef} className="lh-title" tabIndex={-1}>{roundName}</h1></header>
@@ -237,7 +257,7 @@ function Results({ game, total, onAgain, onAgainMissed, onHub }: {
                 <li key={i} className={`lr-card kind--${sp.kind}`}>
                   <Link to={`/bird/${sp.id}`}>
                     <span className="lr-card-img">{face ? <FadeImage key={sp.id} src={face} /> : null}</span>
-                    <span className="lr-mark"><svg viewBox="0 0 24 24">{QI.cross}</svg><span className="sr-only">Wrong:</span></span>
+                    <span className="lr-mark"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.cross}</svg><span className="sr-only">Wrong:</span></span>
                     <span className="lr-card-txt"><strong>{sp.name}</strong><span>{sub}</span></span>
                   </Link>
                 </li>
@@ -256,7 +276,7 @@ function Results({ game, total, onAgain, onAgainMissed, onHub }: {
               const title = q.type === 'fact' && q.ttype !== 'Calls' ? q.prompt : sp.name;
               return (
                 <li key={i} className="is-right">
-                  <span className="lr-mark"><svg viewBox="0 0 24 24">{QI.tick}</svg><span className="sr-only">Right</span></span>
+                  <span className="lr-mark"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.tick}</svg><span className="sr-only">Right</span></span>
                   <Link className="lr-main" to={`/bird/${sp.id}`}><strong>{title}</strong><span className="small muted">{q.type === 'fact' ? q.options.find((o) => o.key === q.answer)?.label : 'Got it'}</span></Link>
                 </li>
               );
@@ -276,7 +296,6 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const [game, setGame] = useState<RoundState | null>(null);
   // True from coming back to a saved round until she next answers or moves on.
   const [resumed, setResumed] = useState(false);
-  const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const [deckMode, setDeckMode] = useState<'overview' | 'card' | 'done'>('overview');
   const [deckGame, setDeckGame] = useState<RoundState | null>(null);
@@ -294,9 +313,16 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   const isDeck = pack === 'deck';
   const isDaily = pack === 'daily';
 
+  // v1 startRound/renderDaily: when no round can be made, say why in a toast and go back to the hub (toHub replaces
+  // the route), where the choice that caused it can be changed.
+  const toHub = (msg: string) => {
+    toast(msg);
+    setActive(null);
+    navigate('/learn', { replace: true });
+  };
+
   useEffect(() => {
     let alive = true;
-    setError('');
     setGame(null);
     setResumed(false);
     setReady(false);
@@ -314,12 +340,12 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         if (active.mode === 'rapid') setRapidLeft(Math.max(0, (active.endsAt || 0) - Date.now()));
         return;
       }
-      // v1 focuses the new screen's heading after a route change.
-      wantHeadFocus.current = true;
       if (isDaily) {
         const r = newDailyRound();
         if (!alive) return;
-        if (r.error) { setError(r.error); return; }
+        if (r.error) { toHub(r.error); return; }
+        // A new round takes focus for its heading only after in-app navigation (the route's focus is in the screen).
+        wantHeadFocus.current = focusInView();
         setGame(r.game);
         setActive(r.game);
         return;
@@ -335,7 +361,9 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         ? await newPracticeRound('quick', { ids: testSet(testId), testId, seen: seenNow } as any)
         : await newPracticeRound(pack, { seen: seenNow } as any);
       if (!alive) return;
-      if (r.error) { setError(r.error); return; }
+      if (r.error) { toHub(r.error); return; }
+      if (r.notice) toast(r.notice);
+      wantHeadFocus.current = focusInView();
       setGame(r.game);
       setActive(r.game);
       if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
@@ -347,6 +375,8 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     if (!game || game.mode !== 'rapid') return;
     const tick = setInterval(() => {
       const left = Math.max(0, (game.endsAt || 0) - Date.now());
+      // Time up: the results take focus for their heading if she was answering (v1 ticker -> drawResults focusWithin).
+      if (!left && focusInView()) wantHeadFocus.current = true;
       setRapidLeft(left);
       if (!left) clearInterval(tick);
     }, 200);
@@ -398,7 +428,6 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     stopCalls();
     setActive(null);
     setGame(null);
-    setError('');
     stopInline();
     await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
     const testId = pack === 'test' ? Number(params.id) : null;
@@ -412,9 +441,10 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
         seen: new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId)),
       } as any);
     if (r.error) {
-      setError(r.error);
+      toHub(r.error);
       return;
     }
+    if ('notice' in r && r.notice) toast(r.notice);
     setGame(r.game);
     setActive(r.game);
     if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
@@ -431,12 +461,12 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       seen: new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId)),
     } as any);
     if (r.error) {
-      setError(r.error);
+      toHub(r.error);
       return;
     }
+    if (r.notice) toast(r.notice);
     setGame(r.game);
     setActive(r.game);
-    setError('');
     if (r.game?.mode === 'rapid') setRapidLeft(RAPID_MS);
   };
   const next = () => {
@@ -473,20 +503,19 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     buttons.toggle(which, clip);
   };
 
+  useLookAfterDraw([ready, game, game?.i, isOver]);
+
   if (isDeck) return <Deck onBack={() => navigate('/learn')} />;
 
-  if (error) {
-    return (
-      <div className="lr">
-        <header className="page-head page-head--back"><Link className="iconbtn" to="/learn" aria-label="Back to Learn"><svg viewBox="0 0 24 24">{QI.back}</svg></Link><h1 className="lh-title">Learn</h1></header>
-        <div className="learn"><p className="lh-empty" role="status">{error}</p><Link className="btn btn--primary btn--block" to="/learn">Back to Learn</Link></div>
-      </div>
-    );
-  }
   if (!ready || !game) return <div className="learn learn--loading" aria-busy="true" />;
 
   if (isOver) {
-    return <Results game={game} total={total} onAgain={() => { void restart(); }} onAgainMissed={(ids) => { void startWithIds(ids); }} onHub={() => { setActive(null); navigate('/learn', { replace: true }); }} />;
+    const takeFocus = () => {
+      const want = wantHeadFocus.current || focusInView();
+      wantHeadFocus.current = false;
+      return want;
+    };
+    return <Results game={game} total={total} takeFocus={takeFocus} onAgain={() => { void restart(); }} onAgainMissed={(ids) => { void startWithIds(ids); }} onHub={() => { setActive(null); navigate('/learn', { replace: true }); }} />;
   }
 
   const q = current!;
@@ -499,8 +528,8 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
   return (
     <div className={`lq-screen lq-screen--${game.mode}${game.kind && game.kind !== 'animals' ? ` kind--${game.kind}` : ''}`} data-own-topbar>
       <header className="lq-head glass">
-        <button type="button" className="iconbtn" aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { setActive(null); if (!game.daily) setGame(null); navigate('/learn', { replace: true }); }}>
-          <svg viewBox="0 0 24 24">{game.daily ? QI.back : QI.close}</svg>
+        <button type="button" className="iconbtn" data-quit aria-label={game.daily ? 'Back to Learn. Your answers so far are saved' : 'Stop and go back to Learn'} onClick={() => { setActive(null); if (!game.daily) setGame(null); navigate('/learn', { replace: true }); }}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">{game.daily ? QI.back : QI.close}</svg>
         </button>
         {game.mode === 'rapid' ? (
           <span className="lq-bar lq-bar--time" aria-hidden="true"><span style={{ transform: `scaleX(${(rapidLeft / RAPID_MS).toFixed(3)})` }} /></span>
@@ -509,18 +538,22 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
             <span style={{ transform: `scaleX(${((picked != null ? game.i + 1 : game.i) / game.qs.length).toFixed(3)})` }} />
           </span>
         )}
-        <span className="lq-count" aria-hidden="true">{game.mode === 'rapid' ? <>{Math.ceil(rapidLeft / 1000)}<span>s</span></> : <>{game.i + 1}<span>/{game.qs.length}</span></>}</span>
+        {game.mode === 'rapid'
+          ? <span className="lq-count" data-secs aria-label="Seconds left">{Math.ceil(rapidLeft / 1000)}<span>s</span></span>
+          : <span className="lq-count" aria-hidden="true">{game.i + 1}<span>/{game.qs.length}</span></span>}
       </header>
-      {game.mode === 'rapid' && <p className="lq-hud" role="status"><span>In a row <b>{game.streak || 0}</b></span><span>Best this round <b>{game.top || 0}</b></span></p>}
-      <p className="lq-kicker">{roundName}{game.testId ? <span>{speciesName(game.testId)} and its look-alikes</span> : game.practice ? <span>The ones you missed</span> : game.pack ? <span>Quiz pack</span> : null}</p>
+      {/* v1 headHTML: rapid fire has its streak line where the other rounds have their kicker. */}
+      {game.mode === 'rapid'
+        ? <p className="lq-hud" role="status"><span>In a row <b>{game.streak || 0}</b></span><span>Best this round <b>{game.top || 0}</b></span></p>
+        : <p className="lq-kicker">{roundName}{game.testId ? <span>{speciesName(game.testId)} and its look-alikes</span> : game.practice ? <span>The ones you missed</span> : game.pack ? <span>Quiz pack</span> : null}</p>}
       <div className={`lq lq--${q.type}`}>
         <h1 ref={promptRef} className="lq-prompt" tabIndex={-1}>{promptFor(q)}</h1>
         {sub && <p className="lq-sub">{sub}</p>}
-        {safety && <p className="lq-safety"><svg viewBox="0 0 24 24">{QI.warn}</svg><span>{safety}</span></p>}
+        {safety && <p className="lq-safety"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.warn}</svg><span>{safety}</span></p>}
         <Media key={game.i} q={q} still={resumed} />
         <Options q={q} picked={picked} onPick={pick} rapid={game.mode === 'rapid'} round={game.i} still={resumed} />
         {picked != null && game.mode !== 'rapid' && <Feedback q={q} right={right} game={game} onNext={next} onPlay={play} playing={buttons.on} restore={resumed} />}
-        {picked != null && game.mode === 'rapid' && <p className={`lq-verdict lq-fb ${right ? 'is-right' : 'is-wrong'} lq-fb--brief${resumed ? ' no-anim' : ''}`}><svg viewBox="0 0 24 24">{right ? QI.tick : QI.cross}</svg><span>{right ? 'Correct.' : `Not quite. It's the ${speciesName(q.focus)}.`}</span></p>}
+        {picked != null && game.mode === 'rapid' && <p className={`lq-verdict lq-fb ${right ? 'is-right' : 'is-wrong'} lq-fb--brief${resumed ? ' no-anim' : ''}`}><svg viewBox="0 0 24 24" aria-hidden="true">{right ? QI.tick : QI.cross}</svg><span>{right ? 'Correct.' : `Not quite. It's the ${speciesName(q.focus)}.`}</span></p>}
       </div>
     </div>
   );
@@ -539,7 +572,6 @@ function Deck({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<'overview' | 'card' | 'done'>(saved?.mode || 'overview');
   const [game, setGame] = useState<RoundState | null>(saved?.game || null);
   const [revealed, setRevealed] = useState(saved?.revealed || false);
-  const [toast, setToast] = useState('');
   const backRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLHeadingElement>(null);
   const resuming = useRef(!!saved);
@@ -573,6 +605,7 @@ function Deck({ onBack }: { onBack: () => void }) {
   // Each card and the done screen start at the top (v1 drawn()); showing the answer does not. A card missed and put
   // back is a new queue entry, so it counts as a new card even when it is the only one left.
   useEffect(() => { if (!resuming.current) window.scrollTo(0, 0); }, [game?.queue?.[0], mode]);
+  useLookAfterDraw([ready, game, game?.queue?.[0], mode]);
   useEffect(() => {
     if (!ready || !resuming.current) return;
     resuming.current = false;
@@ -601,7 +634,8 @@ function Deck({ onBack }: { onBack: () => void }) {
     const cardsNow = getLearn()?.cards || {};
     list = list.filter((s: any) => !cardsNow[s.id]).slice(0, which === 'month' ? 10 : 30);
     const n = addCards(list, 'all');
-    setToast(n ? `Added ${n} ${n === 1 ? 'card' : 'cards'}.` : which === 'seen' ? (sightings.length ? 'Everything you have seen is already in the deck.' : 'Nothing logged yet. Log a sighting and it can go in the deck.') : 'Those are all in the deck already.');
+    // v1 renderDeck: what happened is a toast (read out through #announce), and the overview is drawn again.
+    toast(n ? `Added ${n} ${n === 1 ? 'card' : 'cards'}.` : which === 'seen' ? (sightings.length ? 'Everything you have seen is already in the deck.' : 'Nothing logged yet. Log a sighting and it can go in the deck.') : 'Those are all in the deck already.');
     force();
   };
 
@@ -629,7 +663,7 @@ function Deck({ onBack }: { onBack: () => void }) {
     return (
       <div className="lq-screen lq-screen--deck" data-own-topbar>
         <header className="lq-head glass">
-          <button type="button" className="iconbtn" aria-label="Stop reviewing" onClick={() => { setGame(null); setMode('overview'); }}><svg viewBox="0 0 24 24">{QI.close}</svg></button>
+          <button type="button" className="iconbtn" data-quit aria-label="Stop reviewing" onClick={() => { setGame(null); setMode('overview'); }}><svg viewBox="0 0 24 24" aria-hidden="true">{QI.close}</svg></button>
           <span className="lq-bar" role="progressbar" aria-label={`Card ${game.n! + 1} of ${game.total}`} aria-valuemin={1} aria-valuemax={game.total} aria-valuenow={game.n! + 1}><span style={{ transform: `scaleX(${(game.n! / Math.max(1, game.total!)).toFixed(3)})` }} /></span>
           <span className="lq-count" aria-hidden="true">{game.queue!.length}<span> left</span></span>
         </header>
@@ -650,9 +684,9 @@ function Deck({ onBack }: { onBack: () => void }) {
               </dl>
               {c.skill === 'call' && <PhotoBox photos={photos} alt={sp.name} cls="lq-photo lq-photo--answer" />}
               <div className="ld-grade" role="group" aria-label="How did you go?">
-                <button type="button" className="btn" onClick={() => grade('missed')}><svg viewBox="0 0 24 24">{QI.cross}</svg><span>Missed</span></button>
+                <button type="button" className="btn" onClick={() => grade('missed')}><svg viewBox="0 0 24 24" aria-hidden="true">{QI.cross}</svg><span>Missed</span></button>
                 <button type="button" className="btn" onClick={() => grade('unsure')}><span>Unsure</span></button>
-                <button type="button" className="btn btn--primary" onClick={() => grade('knew')}><svg viewBox="0 0 24 24">{QI.tick}</svg><span>Knew it</span></button>
+                <button type="button" className="btn btn--primary" onClick={() => grade('knew')}><svg viewBox="0 0 24 24" aria-hidden="true">{QI.tick}</svg><span>Knew it</span></button>
               </div>
             </div>
           )}
@@ -675,29 +709,45 @@ function Deck({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <header className="page-head page-head--back"><Link className="iconbtn" to="/learn" aria-label="Back to Learn"><svg viewBox="0 0 24 24">{QI.back}</svg></Link><h1 className="lh-title">Review deck</h1></header>
+      <header className="page-head page-head--back"><Link className="iconbtn" to="/learn" aria-label="Back to Learn"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.back}</svg></Link><h1 className="lh-title">Review deck</h1></header>
       <div className="learn">
-        <div className="ld-summary">
-          <span className="lh-boxes lh-boxes--big" aria-hidden="true">
-            {boxN.map((n, i) => {
-              const max = Math.max(1, ...boxN);
-              return <span className="lh-box" key={i}><b>{n}</b><span className="lh-box-bar"><i style={{ '--h': (n / max).toFixed(3), '--j': i } as React.CSSProperties} /></span><em>{i + 1}</em></span>;
-            })}
-          </span>
-          <p className="small muted">{cards.length ? `${cards.length} cards. ${boxN[3] + boxN[4]} in box 4 or 5, which count as mastered.` : 'No cards yet.'} Knew it moves a card along a box: it comes back after 1, 3, 7, then 21 days. Missed sends it back to box 1.</p>
-        </div>
+        <DeckSummary boxN={boxN} cards={cards.length} />
         {due.length ? <button type="button" className="btn btn--primary btn--block" onClick={startReview}>Review {due.length > 20 ? 20 : due.length} {due.length === 1 ? 'card' : 'cards'}</button>
           : <p className="ld-none" role="status">{cards.length ? `Nothing to review right now. ${nextTxt}` : 'Add a set to start. Species you miss in any round are added for you.'}</p>}
         <section className="lh-sec"><div className="lh-sec-h"><h2>Add cards</h2></div>
           <div className="ld-add">
-            <button type="button" className="btn btn--block" onClick={() => add('month')}><span className="ld-add-ic"><svg viewBox="0 0 24 24">{QI.deck}</svg></span><span>Add 10 {deckKind === 'animals' ? 'animals' : KINDS[deckKind]?.label.toLowerCase()} around in {monthName()}</span></button>
-            <button type="button" className="btn btn--block" onClick={() => add('seen')}><span className="ld-add-ic"><svg viewBox="0 0 24 24">{QI.deck}</svg></span><span>Add the ones I've seen</span></button>
+            <button type="button" className="btn btn--block" onClick={() => add('month')}><span className="ld-add-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.facts}</svg></span><span>Add 10 {deckKind === 'animals' ? 'animals' : KINDS[deckKind]?.label.toLowerCase()} around in {monthName()}</span></button>
+            <button type="button" className="btn btn--block" onClick={() => add('seen')}><span className="ld-add-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{QI.deck}</svg></span><span>Add the ones I've seen</span></button>
           </div>
           <p className="small muted">Birds and frogs with recordings get a call card as well as a photo card.</p>
         </section>
-        {toast && <p className="small muted" role="status">{toast}</p>}
       </div>
     </>
+  );
+}
+
+// v1 renderDeck: the boxes grow from nothing each time the overview is drawn, once it is 40% on screen (data-grow and
+// growOnView), unless motion is reduced.
+function DeckSummary({ boxN, cards }: { boxN: number[]; cards: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [grow] = useState(motionOK);
+  const [isIn, setIn] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!grow || !el) return;
+    if (typeof IntersectionObserver !== 'function') { setIn(true); return; }
+    const io = new IntersectionObserver(([en]) => { if (en.isIntersecting) { setIn(true); io.disconnect(); } }, { threshold: 0.4 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  const max = Math.max(1, ...boxN);
+  return (
+    <div ref={ref} className={`ld-summary${isIn ? ' is-in' : ''}`} {...(grow ? { 'data-grow': '' } : {})}>
+      <span className="lh-boxes lh-boxes--big" aria-hidden="true">
+        {boxN.map((n, i) => <span className="lh-box" key={i}><b>{n}</b><span className="lh-box-bar"><i style={{ '--h': (n / max).toFixed(3), '--j': i } as React.CSSProperties} /></span><em>{i + 1}</em></span>)}
+      </span>
+      <p className="small muted">{cards ? `${cards} cards. ${boxN[3] + boxN[4]} in box 4 or 5, which count as mastered.` : 'No cards yet.'} Knew it moves a card along a box: it comes back after 1, 3, 7, then 21 days. Missed sends it back to box 1.</p>
+    </div>
   );
 }
 
