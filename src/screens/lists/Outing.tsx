@@ -7,6 +7,7 @@ import { Sheet } from '../../components/Sheet';
 import { LocationPicker, type PickedPlace } from '../../components/LocationPicker';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { toast } from '../../lib/toast';
+import { countUp } from '../../lib/motion';
 import { CountKey } from './hubParts';
 import {
   ConfirmDialog,
@@ -249,6 +250,8 @@ export default function Outing() {
   // One tally change at a time. The buttons stay enabled (v1's do), so a tap never drops focus to <body>.
   const working = useRef(false);
   const refocus = useRef<Refocus | null>(null);
+  // The row count that changed, and what it was: v1 stamps the new number in (countUp, 60 ms).
+  const stamp = useRef<{ id: number; before: number; until: number } | null>(null);
 
   const recs = useMemo(
     () => sightings.filter((row) => row.outingId === outingId),
@@ -312,6 +315,18 @@ export default function Outing() {
     want.spare = spare;
   });
 
+  // v1: "The count stamps as it changes." Once the new count is drawn, it counts in from the old one.
+  useEffect(() => {
+    const s = stamp.current;
+    if (!s) return;
+    if (Date.now() > s.until) { stamp.current = null; return; }
+    const after = counts.get(s.id)?.count;
+    if (typeof after !== 'number' || after === s.before) return;
+    stamp.current = null;
+    const n = document.querySelector<HTMLElement>(`#view [data-n="${s.id}"]`);
+    if (n) void countUp(n, s.before, after, { duration: 60 });
+  });
+
   if (!outing) {
     return (
       <>
@@ -346,6 +361,7 @@ export default function Outing() {
     if (working.current) return;
     working.current = true;
     refocus.current = { id: sp.id, attr: delta > 0 ? 'data-inc' : 'data-dec', until: Date.now() + 1500, spare: null };
+    stamp.current = { id: sp.id, before: counts.get(sp.id)?.count ?? 0, until: Date.now() + 1500 };
     try {
       const current = counts.get(sp.id);
       if (current) {
