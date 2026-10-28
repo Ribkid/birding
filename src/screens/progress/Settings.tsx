@@ -180,36 +180,35 @@ function ReadyCard() {
   return (
     <section className="set-card set-ready" aria-labelledby="field-h">
       <div className="ready-head">
-        <span className={`ready-ring${summary && n === FIELD.length ? ' ready-ring--all' : ''}`} style={{ '--p': summary ? n / FIELD.length : 0 } as CSSProperties} aria-hidden="true">
+        <span className={`ready-ring${summary && n === FIELD.length ? ' ready-ring--all' : ''}`} data-field-ring style={{ '--p': summary ? n / FIELD.length : 0 } as CSSProperties} aria-hidden="true">
           <svg viewBox="0 0 48 48"><circle className="ready-ring-track" cx="24" cy="24" r="20" /><circle className="ready-ring-fill" cx="24" cy="24" r="20" pathLength={100} /></svg>
-          <b ref={num} />
+          <b ref={num} data-field-n />
         </span>
         <div className="ready-head-txt">
           <h2 className="set-title" id="field-h">Ready for the field</h2>
-          <p className="small muted">{summary?.text ?? 'What works on this phone with no signal.'}</p>
+          <p className="small muted" data-field-sum>{summary?.text ?? 'What works on this phone with no signal.'}</p>
         </div>
       </div>
-      <ul className="ready-list">
+      <ul className="ready-list" data-field-list>
         {FIELD.map(({ key, label }) => {
           const r = field[key];
           const cls = r?.busy ? ' ready-row--busy' : r ? (r.ok ? ' ready-row--ok' : ' ready-row--todo') : '';
           return (
             <li key={key} className={`ready-row${cls}`} data-field={key}>
               <strong className="ready-name">{label}</strong>
-              <div className="ready-act">
+              <div className="ready-act" data-field-act>
                 {!r ? <span className="ready-chip ready-chip--wait">Checking</span>
                   : r.busy ? <span className="ready-chip ready-chip--busy">Saving</span>
                     : r.ok ? <span className="ready-chip ready-chip--ok">{tick}Saved</span>
-                      : r.get ? <button type="button" className="ready-chip ready-chip--get" onClick={() => get(key)} aria-label={`Get it now: ${label}`}>Get it now</button>
+                      : r.get ? <button type="button" className="ready-chip ready-chip--get" data-field-get={key} onClick={() => get(key)} aria-label={`Get it now: ${label}`}>Get it now</button>
                         : r.link ? <Link className="ready-chip ready-chip--get" to={r.link.replace(/^#/, '')}>{r.linkText}</Link>
                           : <span className="ready-chip ready-chip--wait">Not yet</span>}
               </div>
               <span className="ready-text small muted" data-field-text tabIndex={-1} ref={(el) => { texts.current[key] = el; }}>{r?.text || 'Checking…'}</span>
-              {r?.busy && (
-                <div className="meter meter--thin" style={{ '--p': `${r.prog || 0}%` } as CSSProperties} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={r.prog || 0} aria-label={`${label}: saving`}>
-                  <span />
-                </div>
-              )}
+              {/* v1 keeps each row's meter in place, hidden until a download runs. */}
+              <div className={`meter meter--thin${r?.busy ? '' : ' hidden'}`} data-field-prog style={{ '--p': `${r?.prog || 0}%` } as CSSProperties} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={r?.prog || 0} aria-label={`${label}: saving`}>
+                <span />
+              </div>
             </li>
           );
         })}
@@ -483,28 +482,28 @@ export default function Settings() {
         <div className="set-list">
           <label className="set-row">
             <span className="set-row-l">Theme</span>
-            <select className="set-select" value={theme} onChange={(e) => void changeTheme(e.target.value as Theme)}>
+            <select className="set-select" data-theme value={theme} onChange={(e) => void changeTheme(e.target.value as Theme)}>
               {THEMES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </label>
           {canInstall ? (
-            <button type="button" className="set-row" onClick={() => void promptInstall()}><span className="set-row-l">Install app on this phone</span>{chev}</button>
+            <button type="button" className="set-row" data-install onClick={() => void promptInstall()}><span className="set-row-l">Install app on this phone</span>{chev}</button>
           ) : (
             <div className="set-row set-row--info"><span className="set-row-l">Install</span><span className="set-row-v">{installed ? 'Installed on this phone' : 'Open the browser menu, then Add to Home screen'}</span></div>
           )}
-          <button type="button" className="set-row" onClick={openWelcome}><span className="set-row-l">Show the welcome screen</span>{chev}</button>
+          <button type="button" className="set-row" data-welcome onClick={openWelcome}><span className="set-row-l">Show the welcome screen</span>{chev}</button>
         </div>
       </Card>
       <Card id="ebird-h" title="Send to eBird">
         <p className="set-note small muted">Download your bird sightings as an eBird Record Format file (eBird only takes birds, so other animals and plants are left out). On a computer, go to ebird.org, then Submit, then Import data, and choose "eBird Record Format (Extended)". eBird may ask you to confirm a few bird names and locations.</p>
-        <div className="set-list"><button type="button" className="set-row" onClick={() => void exportEbird()}><span className="set-row-l">Export for eBird</span>{chev}</button></div>
+        <div className="set-list"><button type="button" className="set-row" data-ebird onClick={() => void exportEbird()}><span className="set-row-l">Export for eBird</span>{chev}</button></div>
       </Card>
       <Card id="backup-h" title="Backup">
         <p className="set-note small muted">{`Your sightings and photos live only on this phone${persisted ? '' : ", and clearing the browser's site data would erase them"}. Save a backup now and then. ${usage}`}</p>
         <div className="set-list">
-          <button type="button" className="set-row" onClick={() => void saveBackup()}><span className="set-row-l">Save backup</span>{chev}</button>
-          <button type="button" className="set-row" onClick={() => fileRef.current?.click()}><span className="set-row-l">Restore backup</span>{chev}</button>
-          <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => void pickRestore(e)} />
+          <button type="button" className="set-row" data-backup onClick={() => void saveBackup()}><span className="set-row-l">Save backup</span>{chev}</button>
+          <button type="button" className="set-row" data-restore-pick onClick={() => fileRef.current?.click()}><span className="set-row-l">Restore backup</span>{chev}</button>
+          <input ref={fileRef} type="file" accept=".json,application/json" data-restore hidden onChange={(e) => void pickRestore(e)} />
         </div>
       </Card>
       <Card id="about-h" title="About">
@@ -513,7 +512,7 @@ export default function Settings() {
         <p className="small muted">Version 3.0</p>
       </Card>
       <Card id="over-h" title="Start over">
-        <div className="set-list"><button type="button" className="set-row set-row--danger" onClick={() => setWipeAsk(true)}><span className="set-row-l">Delete all my sightings</span></button></div>
+        <div className="set-list"><button type="button" className="set-row set-row--danger" data-wipe onClick={() => setWipeAsk(true)}><span className="set-row-l">Delete all my sightings</span></button></div>
       </Card>
       {restore && (
         <ConfirmDialog
