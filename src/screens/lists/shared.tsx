@@ -1,22 +1,18 @@
 import {
   useEffect,
-  useId,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { db } from '../../core/db.js';
-import { sized } from '../../core/media.js';
 import { likelihood, loadSeq, monthRates, seq } from '../../core/seqdata.js';
-import { MONTHS, badges, targets } from '../../core/stats.js';
+import { badges, MONTHS, targets } from '../../core/stats.js';
 import { byId, dexCode, SPECIES, type Species } from '../../lib/data';
-import { useMedia, useOutings, useSeen, useSightings, type Outing, type Sighting } from '../../lib/hooks';
+import { normaliseSighting, useOutings, useSightings, type Outing, type Sighting } from '../../lib/hooks';
+import { toast } from '../../lib/toast';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { nudgeAfterSave } from '../me/nudge';
-import { celebrate } from '../../components/Celebrate';
-import { toast } from '../../lib/toast';
-import { Band } from '../../components/SpeciesImage';
 import './lists.css';
 
 export const MONTH_NAMES = MONTHS as string[];
@@ -183,28 +179,82 @@ export function suggestTargets(args: TargetArgs): Species[] {
   return (targets as unknown as (value: TargetArgs) => Species[])(args);
 }
 
-type BadgeRow = { id: string; name: string; done: boolean };
-const doneBadges = (sightings: unknown[], outings: unknown[]) =>
-  (badges(sightings, outings) as BadgeRow[]).filter((b) => b.done);
-
-// Whether the last save added a species new for the dex (v1 state.lastSaveNew): the celebration then stands in for
-// the "saved" toast.
-let lastNew = false;
-export const lastSaveNew = () => lastNew;
+/** What the sighting sheet and the #/add page need to hand: her sightings, outings, patches and the active outing. */
+export interface LogData {
+  sightings: SightingRow[];
+  outings: OutingRow[];
+  patches: Patch[];
+  /** The `activeOuting` kv entry, or null. */
+  activeId: number | null;
+}
 
 /**
- * v1 saveSighting: write the record, then celebrate a species new for the dex (or toast a badge it earned) and offer
- * the sign-up nudge.
+ * Sightings, outings, patches and the active outing, kept fresh as the database changes, and null until the first
+ * read lands. v1 held these in memory from boot, so its sheet knew at once whether an outing was running.
  */
-export async function saveSighting(rec: SightingInput): Promise<number> {
-  try {
-    void navigator.storage?.persist?.();
-  } catch {
-    /* storage persistence is best effort */
-  }
-  const [before, outings] = (await Promise.all([db.all('sightings'), db.all('outings')])) as [SightingRow[], unknown[]];
+export function useLogData(): LogData | null {
+  const [data, setData] = useState<LogData | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const [sightings, outings, patches, active] = await Promise.all([
+          db.all('sightings'), db.all('outings'), db.all('patches'), db.kvGet('activeOuting'),
+        ]);
+        if (!alive) return;
+        setData({
+          sightings: (sightings as SightingRow[]).map(normaliseSighting),
+          outings: outings as OutingRow[],
+          patches: patches as Patch[],
+          activeId: active == null ? null : Number(active),
+        });
+      } catch {
+        if (alive) setData((prev) => prev ?? { sightings: [], outings: [], patches: [], activeId: null });
+      }
+    };
+    void load();
+    const off = db.onChange((name: string) => {
+      if (name === 'sightings' || name === 'outings' || name === 'patches' || name === 'kv:activeOuting') void load();
+    });
+    return () => {
+      alive = false;
+      off();
+    };
+  }, []);
+  return data;
+}
+
+/** v1 activeOuting(): the outing in the activeOuting kv entry, unless it has ended. */
+export const activeOutingOf = (data: LogData): OutingRow | null =>
+  data.activeId == null ? null : data.outings.find((o) => o.id === data.activeId && !o.endedAt) || null;
+
+export interface EarnedBadge {
+  id: string;
+  name: string;
+}
+
+/** What a save changed: whether the species is new for her dex and which badges it earned (v1 saveSighting). */
+export interface SaveOutcome {
+  id: number;
+  isNew: boolean;
+  newBadges: EarnedBadge[];
+  /** Every sighting after the save, for the celebration's counts. */
+  sightings: SightingRow[];
+}
+
+const doneBadges = (sightings: SightingRow[], outings: OutingRow[]) =>
+  (badges(sightings, outings) as (EarnedBadge & { done: boolean })[]).filter((b) => b.done);
+
+/**
+ * v1 saveSighting's write: store the record (a new one gets createdAt and its id), ask for persistent storage, and
+ * work out whether the species is new for the dex and which badges the save earned. It shows nothing; the caller
+ * closes its sheet first and then calls announceSaved, as v1 closed the sheet before saving.
+ */
+export async function writeSighting(rec: SightingInput): Promise<SaveOutcome> {
+  const [stored, outings] = await Promise.all([db.all('sightings'), db.all('outings')]);
+  const before = stored as SightingRow[];
   const seenBefore = new Set(before.map((s) => s.speciesId));
-  const badgesBefore = new Set(doneBadges(before, outings).map((b) => b.id));
+  const badgesBefore = new Set(doneBadges(before, outings as OutingRow[]).map((b) => b.id));
   let id: number;
   if (rec.id != null) {
     await db.put('sightings', rec);
@@ -214,14 +264,53 @@ export async function saveSighting(rec: SightingInput): Promise<number> {
     id = Number(await db.add('sightings', rec));
     rec.id = id;
   }
-  const after = (await db.all('sightings')) as SightingRow[];
-  const newBadges = doneBadges(after, outings).filter((b) => !badgesBefore.has(b.id));
-  const sp = byId.get(rec.speciesId);
-  lastNew = !seenBefore.has(rec.speciesId);
-  if (lastNew && sp) celebrate(sp, newBadges, after);
-  else if (newBadges.length) toast(`Badge earned: ${newBadges.map((b) => b.name).join(', ')}`);
-  void nudgeAfterSave(after.length);
-  return id;
+  try {
+    void navigator.storage?.persist?.();
+  } catch {
+    /* storage persistence is best effort */
+  }
+  const saved = rec as SightingRow;
+  const after = before.some((s) => s.id === id) ? before.map((s) => (s.id === id ? saved : s)) : [...before, saved];
+  const newBadges = doneBadges(after, outings as OutingRow[])
+    .filter((b) => !badgesBefore.has(b.id))
+    .map(({ id: badgeId, name }) => ({ id: badgeId, name }));
+  return { id, isNew: !seenBefore.has(saved.speciesId), newBadges, sightings: after };
+}
+
+/** A first sighting of a species, for the celebration (drawn by SightingSheetHost). */
+export interface Celebration {
+  speciesId: number;
+  newBadges: EarnedBadge[];
+  sightings: SightingRow[];
+  /** Wait for the route to change before showing it (the #/add page navigates away after saving). */
+  afterNav?: boolean;
+}
+const celebrators = new Set<(c: Celebration) => void>();
+export function onCelebrate(fn: (c: Celebration) => void): () => void {
+  celebrators.add(fn);
+  return () => {
+    celebrators.delete(fn);
+  };
+}
+
+/**
+ * The rest of v1 saveSighting: the new-for-the-dex celebration for a first sighting, otherwise a toast for any
+ * badge earned, then the one-time sign-up nudge.
+ */
+export function announceSaved(rec: SightingInput, outcome: SaveOutcome, { afterNav = false } = {}): void {
+  if (outcome.isNew && rec.speciesId != null) {
+    for (const fn of celebrators) fn({ speciesId: rec.speciesId, newBadges: outcome.newBadges, sightings: outcome.sightings, afterNav });
+  } else if (outcome.newBadges.length) {
+    toast(`Badge earned: ${outcome.newBadges.map((b) => b.name).join(', ')}`);
+  }
+  void nudgeAfterSave(outcome.sightings.length);
+}
+
+/** v1 saveSighting: write the record, then celebrate a new species or toast a badge. Resolves to the record's id. */
+export async function saveSighting(rec: SightingInput): Promise<number> {
+  const outcome = await writeSighting(rec);
+  announceSaved(rec, outcome);
+  return outcome.id;
 }
 
 export async function deleteSighting(rec: SightingRow): Promise<void> {
@@ -331,149 +420,41 @@ export function ConfirmDialog({
 }
 
 /* ------------------------------------------------------------------ */
-/* Species picker                                                      */
+/* The sighting record                                                 */
 /* ------------------------------------------------------------------ */
 
-interface SpeciesPickerProps {
-  value: number | null;
-  onChange: (sp: Species | null) => void;
-  label?: string;
-}
-
-export function SpeciesPicker({ value, onChange, label = 'What did you see?' }: SpeciesPickerProps) {
-  const seen = useSeen();
-  useMedia();
-  const [query, setQuery] = useState('');
-  const resultsRef = useRef<HTMLUListElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const changeRef = useRef<HTMLButtonElement>(null);
-  const sp = value != null ? (byId.get(value) ?? null) : null;
-  // Change takes her to the search field, as v1's did. Picking one leaves her on the card's Change button rather
-  // than on the page (v1's focus fell to the page there, as the result she picked is gone).
-  const focusNext = useRef<'search' | 'change' | null>(null);
-  useEffect(() => {
-    if (focusNext.current === 'search' && !sp) inputRef.current?.focus();
-    if (focusNext.current === 'change' && sp) changeRef.current?.focus();
-    focusNext.current = null;
-  }, [sp]);
-
-  if (sp) {
-    // The chosen species shows as a photo card, so she can see at a glance she picked the right one (v1
-    // pickerChosen). The name is written on the card, so the photo has no alt of its own.
-    const url = sized(sp.id, 'large') as string | null;
-    return (
-      <div className="picker">
-        <div className="picker-chosen">
-          <div className={`chosen kind--${sp.kind}`}>
-            {url ? (
-              <img
-                className="chosen-img"
-                src={url}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                onError={(e) => e.currentTarget.classList.add('img-missing')}
-              />
-            ) : (
-              <span className="chosen-img img-missing" aria-hidden="true" />
-            )}
-            <div className="chosen-txt">
-              <Band sp={sp} seen={seen.has(sp.id)} />
-              <strong>{sp.name}</strong>
-              <em>{sp.sci}</em>
-            </div>
-            <button type="button" className="btn btn--small chosen-change" aria-label="Change species" ref={changeRef} onClick={() => { focusNext.current = 'search'; onChange(null); }}>
-              Change
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const results = matchSpecies(query);
-
-  return (
-    <div className="picker">
-      <div className="picker-search">
-        <label className="field">
-          <span>{label}</span>
-          <input
-            ref={inputRef}
-            type="search"
-            placeholder="Type a name, e.g. kookaburra"
-            autoComplete="off"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'ArrowDown') {
-                event.preventDefault();
-                resultsRef.current?.querySelector('button')?.focus();
-              }
-              if (event.key === 'Escape' && query) {
-                event.stopPropagation();
-                setQuery('');
-              }
-            }}
-          />
-        </label>
-        {query.trim() !== '' && (
-          <ul className="picker-results" ref={resultsRef}>
-            {results.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    focusNext.current = 'change';
-                    onChange(item);
-                    setQuery('');
-                  }}
-                >
-                  <Band sp={item} seen={seen.has(item.id)} />
-                  <span>{item.name}</span>
-                </button>
-              </li>
-            ))}
-            {results.length === 0 && (
-              <li className="muted pad">Nothing by that name in the dex.</li>
-            )}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Sighting form                                                       */
-/* ------------------------------------------------------------------ */
-
+/** What the Log a sighting sheet holds while she fills it in (v1 openSightingSheet's `rec` and form fields). */
 export interface SightingDraft {
   speciesId: number | null;
+  /** The How many field as typed: '' saves no count, as v1's '?' placeholder did. */
   count: string;
   heard: boolean;
   date: string;
   time: string;
   place: string;
-  lat: string;
-  lng: string;
-  /** GPS accuracy in metres for lat/lng, or null when they were typed or are blank (v1 `acc`). */
+  lat: number | null;
+  lng: number | null;
+  /** GPS accuracy in metres for lat/lng, or null for a place chip or a map pick (v1 `acc`). */
   acc: number | null;
-  note: string;
+  /** True once Use my location, a place chip or Choose on map has set lat, lng and acc. */
+  moved: boolean;
+  notes: string;
 }
 
-export function emptyDraft(): SightingDraft {
+/** v1's new sighting: one of the species, now, nowhere yet. */
+export function emptyDraft(speciesId: number | null = null, notes = ''): SightingDraft {
   return {
-    speciesId: null,
+    speciesId,
     count: '1',
     heard: false,
     date: todayStr(),
     time: timeStr(),
     place: '',
-    lat: '',
-    lng: '',
+    lat: null,
+    lng: null,
     acc: null,
-    note: '',
+    moved: false,
+    notes,
   };
 }
 
@@ -485,17 +466,18 @@ export function draftFromSighting(s: SightingRow): SightingDraft {
     date: s.date ?? todayStr(),
     time: s.time ?? '',
     place: s.place ?? '',
-    lat: s.lat != null ? String(s.lat) : '',
-    lng: s.lng != null ? String(s.lng) : '',
+    lat: s.lat ?? null,
+    lng: s.lng ?? null,
     acc: s.acc ?? null,
-    note: s.notes ?? '',
+    moved: false,
+    notes: s.notes ?? '',
   };
 }
 
 /** Plants can't be heard, so v1 hides 'Heard only' for them and never stores it. */
-const canBeHeard = (speciesId: number | null) => byId.get(Number(speciesId))?.kind !== 'plant';
+export const canBeHeard = (speciesId: number | null) => byId.get(Number(speciesId))?.kind !== 'plant';
 
-// v1 app.js: the notes prompt follows the kind picked.
+// v1 app.js NOTES_HINT: the notes prompt follows the kind picked.
 const NOTES_HINT: Record<string, string> = {
   bird: 'Behaviour, plumage, who you were with…',
   mammal: 'Behaviour, tracks, who you were with…',
@@ -504,62 +486,58 @@ const NOTES_HINT: Record<string, string> = {
   butterfly: 'Feeding on, markings, behaviour…',
   plant: 'Flowering, fruit, where it grows…',
 };
-const notesHint = (speciesId: number | null) =>
+export const notesHint = (speciesId: number | null) =>
   NOTES_HINT[byId.get(Number(speciesId))?.kind ?? ''] ?? 'What it was doing, who you were with…';
 
+export interface BuildOptions {
+  /** The running outing, when 'Add to current outing' is ticked on a new sighting. */
+  outing?: Pick<OutingRow, 'id' | 'lat' | 'lng' | 'place'> | null;
+  /** The photo the record points at: a new photo's id, or null once she removed it. Left out, the record keeps its own. */
+  photoId?: number | null;
+}
+
 /**
- * The record v1's sighting sheet writes: speciesId, count, heard, date, time, lat, lng, acc, place, notes,
- * photoId and outingId, on top of whatever an edited record already holds (id, uid, createdAt, outingUid…).
- * The caller sets photoId when it stores a new photo.
+ * The record v1's sighting sheet writes (js/app.js openSightingSheet, its submit handler).
+ *
+ * A new sighting has exactly v1's fields, in v1's order: speciesId, count, heard, date, time, lat, lng, acc, place,
+ * notes, photoId and outingId (saving adds createdAt, and the database id, uid and updatedAt). An edit starts from the
+ * whole stored record, as v1's `{ ...existing }` did, so uid, createdAt, outingUid and anything else survive; it
+ * changes lat, lng and acc only when she located it again, and photoId only when the photo changed.
  */
 export function buildSighting(
   draft: SightingDraft,
   base: Partial<SightingRow> = {},
+  { outing = null, photoId }: BuildOptions = {},
 ): { rec?: SightingInput; error?: string } {
-  if (!draft.speciesId) return { error: 'Choose which species you saw.' };
+  if (!draft.speciesId) return { error: 'Choose what you saw.' };
   if (!draft.date) return { error: 'Add the date of the sighting.' };
 
-  const countText = draft.count.trim();
-  const count = countText ? Math.max(1, parseInt(countText, 10) || 1) : null;
-
-  const latText = draft.lat.trim();
-  const lngText = draft.lng.trim();
-  let lat: number | null = null;
-  let lng: number | null = null;
-
-  if (latText || lngText) {
-    const latValue = Number(latText);
-    const lngValue = Number(lngText);
-    if (!latText || !lngText || !Number.isFinite(latValue) || !Number.isFinite(lngValue)) {
-      return { error: 'Add both coordinates, or leave both blank.' };
-    }
-    if (latValue < -90 || latValue > 90 || lngValue < -180 || lngValue > 180) {
-      return { error: 'Those coordinates are outside the map.' };
-    }
-    lat = latValue;
-    lng = lngValue;
-  }
-
-  // A new record gets every v1 field. An edit, like v1's, keeps the stored record and only adds acc when the
-  // place changed, so an old record without these fields is not padded with nulls.
   const isNew = base.id == null;
-  const acc = lat != null ? (draft.acc ?? null) : null;
-  const moved = lat !== (base.lat ?? null) || lng !== (base.lng ?? null) || acc !== (base.acc ?? null);
-  const rec: SightingInput = {
-    ...base,
+  const rec: SightingInput = isNew
+    ? {
+        speciesId: draft.speciesId, count: 1, heard: false, date: draft.date, time: draft.time,
+        lat: null, lng: null, acc: null, place: '', notes: '', photoId: null, outingId: null, ...base,
+      }
+    : ({ ...base } as SightingInput);
+  // Where: Use my location, a place chip and Choose on map each set lat, lng and acc together.
+  if (isNew || draft.moved) {
+    Object.assign(rec, { lat: draft.lat, lng: draft.lng, acc: draft.lat != null ? draft.acc : null });
+  }
+  Object.assign(rec, {
     speciesId: draft.speciesId,
-    count,
+    count: draft.count ? Math.max(1, parseInt(draft.count, 10) || 1) : null,
     heard: canBeHeard(draft.speciesId) && !!draft.heard,
     date: draft.date,
     time: draft.time,
-    lat,
-    lng,
-    ...(isNew || moved || 'acc' in base ? { acc } : {}),
     place: draft.place.trim(),
-    notes: draft.note.trim(),
-    ...(isNew || 'photoId' in base ? { photoId: base.photoId ?? null } : {}),
-    ...(isNew || 'outingId' in base ? { outingId: base.outingId ?? null } : {}),
-  };
+    notes: draft.notes.trim(),
+  });
+  // 'Add to current outing': the sighting joins the outing and takes its place. Its coordinates are the outing's,
+  // so a GPS accuracy from earlier no longer describes them.
+  if (isNew && outing) {
+    Object.assign(rec, { outingId: outing.id, lat: outing.lat ?? null, lng: outing.lng ?? null, acc: null, place: outing.place ?? '' });
+  }
+  if (photoId !== undefined) rec.photoId = photoId;
   return { rec };
 }
 
@@ -585,19 +563,25 @@ interface PhotoFieldProps {
   onRemove: () => void;
 }
 
-/** v1's photo field: a 72 px thumbnail, Add photo or Replace photo, and Remove. */
+/**
+ * v1's photo field: a 72 px thumbnail, Add photo or Replace photo, and Remove (hidden while there is no photo), with
+ * v1's data-photo-* hooks. The picker is a real button, so it can be reached with Tab (v1's was a label around a
+ * hidden input), and Remove hands focus back to it instead of leaving it on a button that has just been hidden.
+ */
 export function PhotoField({ url, onPick, onRemove }: PhotoFieldProps) {
   const input = useRef<HTMLInputElement>(null);
+  const add = useRef<HTMLButtonElement>(null);
   return (
     <div className="photo-field">
-      <div className="photo-preview">{url ? <img src={url} alt="Your photo" /> : null}</div>
-      <button type="button" className="btn" onClick={() => input.current?.click()}>
-        <Icon name="cam" /> <span>{url ? 'Replace photo' : 'Add photo'}</span>
+      <div className="photo-preview" data-photo-preview="">{url ? <img src={url} alt="Your photo" /> : null}</div>
+      <button type="button" className="btn" ref={add} onClick={() => input.current?.click()}>
+        <Icon name="cam" /> <span data-photo-label="">{url ? 'Replace photo' : 'Add photo'}</span>
       </button>
       <input
         ref={input}
         type="file"
         accept="image/*"
+        data-photo-input=""
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -605,170 +589,17 @@ export function PhotoField({ url, onPick, onRemove }: PhotoFieldProps) {
           if (file) onPick(file);
         }}
       />
-      {url ? (
-        <button type="button" className="btn btn--quiet" onClick={onRemove}>
-          Remove
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className={`btn btn--quiet${url ? '' : ' hidden'}`}
+        data-photo-remove=""
+        onClick={() => {
+          onRemove();
+          add.current?.focus({ preventScroll: true });
+        }}
+      >
+        Remove
+      </button>
     </div>
-  );
-}
-
-interface SightingFieldsProps {
-  draft: SightingDraft;
-  onChange: (next: SightingDraft) => void;
-  status?: string;
-  onLocate?: () => void;
-  locating?: boolean;
-  error?: string;
-  /** The photo field, shown after Where as in v1's sheet. */
-  photo?: ReactNode;
-}
-
-/** The shared fields for adding or editing a sighting. */
-export function SightingFields({
-  draft,
-  onChange,
-  status,
-  onLocate,
-  locating = false,
-  error,
-  photo,
-}: SightingFieldsProps) {
-  const update = (patch: Partial<SightingDraft>) => onChange({ ...draft, ...patch });
-  const step = (delta: number) => {
-    const current = parseInt(draft.count, 10) || 1;
-    update({ count: String(Math.max(1, current + delta)) });
-  };
-
-  return (
-    <>
-      <SpeciesPicker
-        value={draft.speciesId}
-        onChange={(sp) =>
-          update({ speciesId: sp ? sp.id : null, heard: sp?.kind === 'plant' ? false : draft.heard })
-        }
-      />
-
-      {/* v1's order: How many beside Heard only, then Date beside Time. */}
-      <div className="grid2">
-        <label className="field">
-          <span>How many</span>
-          <div className="stepper">
-            <button type="button" onClick={() => step(-1)} aria-label="One fewer">
-              −
-            </button>
-            <input
-              name="count"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={draft.count}
-              placeholder="?"
-              aria-label="Count"
-              onChange={(event) => update({ count: event.target.value })}
-            />
-            <button type="button" onClick={() => step(1)} aria-label="One more">
-              +
-            </button>
-          </div>
-        </label>
-        {canBeHeard(draft.speciesId) && (
-          <label className="check">
-            <input
-              type="checkbox"
-              name="heard"
-              checked={!!draft.heard}
-              onChange={(event) => update({ heard: event.target.checked })}
-            />
-            <span>Heard only</span>
-          </label>
-        )}
-      </div>
-
-      <div className="grid2">
-        <label className="field">
-          <span>Date</span>
-          <input
-            type="date"
-            name="date"
-            value={draft.date}
-            max={todayStr()}
-            onChange={(event) => update({ date: event.target.value })}
-          />
-        </label>
-        <label className="field">
-          <span>Time</span>
-          <input
-            type="time"
-            name="time"
-            value={draft.time}
-            onChange={(event) => update({ time: event.target.value })}
-          />
-        </label>
-      </div>
-
-      <fieldset className="loc">
-        <legend>Where (optional)</legend>
-        <div className="loc-row">
-          {onLocate && (
-            <button type="button" className="btn" onClick={onLocate} disabled={locating}>
-              <Icon name="pin" />
-              {locating ? 'Finding you…' : 'Use my location'}
-            </button>
-          )}
-          <span className="muted small">{status ?? 'No location yet'}</span>
-        </div>
-        <label className="field">
-          <span>Place name</span>
-          <input
-            name="place"
-            value={draft.place}
-            placeholder="e.g. Oxley Creek Common"
-            autoComplete="off"
-            onChange={(event) => update({ place: event.target.value })}
-          />
-        </label>
-        {/* Typed coordinates have no GPS accuracy, so acc is cleared (v1 does the same for map and place picks). */}
-        <div className="grid2">
-          <label className="field">
-            <span>Latitude</span>
-            <input
-              name="lat"
-              inputMode="decimal"
-              value={draft.lat}
-              placeholder="e.g. -27.5210"
-              onChange={(event) => update({ lat: event.target.value, acc: null })}
-            />
-          </label>
-          <label className="field">
-            <span>Longitude</span>
-            <input
-              name="lng"
-              inputMode="decimal"
-              value={draft.lng}
-              placeholder="e.g. 153.0200"
-              onChange={(event) => update({ lng: event.target.value, acc: null })}
-            />
-          </label>
-        </div>
-      </fieldset>
-
-      {photo}
-
-      <label className="field">
-        <span>Note (optional)</span>
-        <textarea
-          name="note"
-          rows={2}
-          value={draft.note}
-          placeholder={notesHint(draft.speciesId)}
-          onChange={(event) => update({ note: event.target.value })}
-        />
-      </label>
-
-      <p className="form-error" role="alert">
-        {error ?? ''}
-      </p>
-    </>
   );
 }

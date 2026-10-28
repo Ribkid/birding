@@ -27,7 +27,8 @@ export async function nudgeAfterSave(n: number) {
     <p class="me-nudge-txt"><strong>Back up your sightings: sign up free</strong><span>So they're safe if something happens to this phone.</span></p>
     <div class="me-nudge-acts"><button type="button" class="btn btn--small btn--primary" data-nsign>Sign up</button><button type="button" class="btn btn--small btn--quiet" data-nno>Not now</button></div>`;
   document.body.append(banner);
-  // Through the live region that is always in the page: a region created together with its text is often missed.
+  // Said through the live region that is always in the page, as v1 did: one made together with its text is often
+  // missed.
   announce('Back up your sightings: sign up free. Sign up or Not now, above the tab bar.');
 
   const close = () => {

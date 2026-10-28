@@ -5,7 +5,7 @@ import {
   type MouseEvent, type PointerEvent, type ReactNode,
 } from 'react';
 import { flushSync } from 'react-dom';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   ANIMALS, ANIMAL_KINDS, GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, inSeason, kindsPresent, ofKind,
   pluralFor, type Species,
@@ -27,6 +27,7 @@ import { onStatus, syncStatus } from '../core/account.js';
 import { avatarUrl, getMyCloud, getProfile, myName, signedIn } from '../core/profile.js';
 import { currentStreak, dayStr, dueCards, getDaily, getLearn, learnReady, monthName } from '../core/learn.js';
 import { openSearch } from './DexSearch';
+import { openSightingSheet } from '../components/SightingSheet';
 import { ICON, Photo, Ring } from './dexParts';
 import { promptInstall, useCanInstall } from '../lib/install';
 import { announce } from '../lib/toast';
@@ -125,6 +126,39 @@ function countKindTabs(view: HTMLElement) {
   dexCounts = now;
 }
 
+/**
+ * After a long press has opened the Log a sighting sheet, the click that lifting that finger (or mouse button) makes is
+ * dropped wherever it lands, with the mousedown a touch sends before it, which would move focus. The sheet slides up
+ * under the finger, so otherwise that click can tick Heard only or press Change. v1 only dropped it on the tile.
+ */
+function dropReleaseClick(pointerId: number) {
+  const opts = { capture: true } as const;
+  let stop = 0;
+  let released = false;
+  const off = () => {
+    clearTimeout(stop);
+    document.removeEventListener('click', drop, opts);
+    document.removeEventListener('mousedown', press, opts);
+    document.removeEventListener('pointerup', up, opts);
+    document.removeEventListener('pointercancel', up, opts);
+  };
+  const drop = (e: globalThis.MouseEvent) => { e.preventDefault(); e.stopPropagation(); off(); };
+  const press = (e: globalThis.MouseEvent) => { if (released) { e.preventDefault(); e.stopPropagation(); } };
+  const up = (e: globalThis.PointerEvent) => {
+    if (e.pointerId !== pointerId) return;
+    if (e.type === 'pointercancel') { off(); return; }
+    // The click follows the release at once; a release that makes none leaves nothing waiting.
+    released = true;
+    clearTimeout(stop);
+    stop = window.setTimeout(off, 400);
+  };
+  document.addEventListener('click', drop, opts);
+  document.addEventListener('mousedown', press, opts);
+  document.addEventListener('pointerup', up, opts);
+  document.addEventListener('pointercancel', up, opts);
+  stop = window.setTimeout(off, 10000);
+}
+
 /** v1 accountChip: her avatar and sync dot, linking to Me, once she is signed in. */
 function AccountChip() {
   const [, force] = useReducer((n: number) => n + 1, 0);
@@ -180,7 +214,6 @@ function LearnTeaser() {
 }
 
 export default function Dex() {
-  const navigate = useNavigate();
   const [, force] = useReducer((n: number) => n + 1, 0);
   useMedia();
   const sightings = useSightings();
@@ -333,19 +366,21 @@ export default function Dex() {
   };
   const reset = () => redraw({ q: '', show: 'all', group: '', habitat: '', rarity: '', season: false });
 
-  // Press and hold a tile to log it fast.
+  // Press and hold a tile to log it fast: v1's Log a sighting sheet opens over the dex and finds her (GPS).
   const cancelPress = () => { clearTimeout(press.current.timer); press.current.timer = 0; };
   const onPointerDown = (e: PointerEvent) => {
     const t = (e.target as Element).closest<HTMLElement>('[data-tile]');
     if (!t) return;
     press.current.x = e.clientX; press.current.y = e.clientY;
+    const pointerId = e.pointerId;
     clearTimeout(press.current.timer);
     press.current.timer = window.setTimeout(() => {
       press.current.timer = 0;
       suppressClick.current = true;
       setTimeout(() => { suppressClick.current = false; }, 800);
+      dropReleaseClick(pointerId);
       if ((navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation?.hasBeenActive) navigator.vibrate?.(25);
-      navigate(`/add?species=${t.dataset.tile}`);
+      openSightingSheet({ speciesId: Number(t.dataset.tile), autoGps: true });
     }, 520);
   };
   const onPointerMove = (e: PointerEvent) => {

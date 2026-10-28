@@ -27,8 +27,8 @@ import { TabBar } from './components/TabBar';
 import { ScreenBoundary } from './components/ErrorBoundary';
 import { Welcome } from './components/Welcome';
 import { OutingBar } from './components/OutingBar';
-import { Celebrations } from './components/Celebrate';
 import { SearchHost } from './screens/DexSearch';
+import { SightingSheetHost } from './components/SightingSheet';
 import { useSeqReady } from './lib/seq';
 import { initLook, lookAfterDraw } from './lib/look';
 import { closeAllLayers } from './lib/layers';
@@ -143,9 +143,9 @@ export default function App() {
       </main>
       <OutingBar />
       <TabBar />
+      <SightingSheetHost />
       <SearchHost />
       <AccountSheets />
-      <Celebrations />
     </>
   );
 }

@@ -3,7 +3,8 @@ import { db } from '../core/db.js';
 
 /**
  * Her own photo from a sighting, read from the photos store. As in v1 (hydratePhotos), it loads only as it comes
- * within 400px of the screen, so a long strip or log doesn't decode every full-size photo at once.
+ * within 400px of the screen, so a long strip or log doesn't decode every full-size photo at once. data-photo is v1's
+ * hook for which photo it is.
  */
 export function MinePhoto({ photoId }: { photoId: number }) {
   const imgRef = useRef<HTMLImageElement>(null);
@@ -26,5 +27,5 @@ export function MinePhoto({ photoId }: { photoId: number }) {
     }).catch(() => {});
     return () => { alive = false; if (made) URL.revokeObjectURL(made); };
   }, [near, photoId]);
-  return <img ref={imgRef} src={url || undefined} alt="" loading="lazy" decoding="async" />;
+  return <img ref={imgRef} src={url || undefined} alt="" loading="lazy" decoding="async" data-photo={photoId} />;
 }

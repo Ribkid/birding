@@ -4,6 +4,7 @@ import { db } from '../core/db.js';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
 import { LocationPicker, type PickedPlace } from './LocationPicker';
+import { openSightingSheet } from './SightingSheet';
 import { knownPlace, myPlaces, nearestPlaceName, outingPlaceChips, reverseGeocode } from '../lib/places';
 import { toast } from '../lib/toast';
 import {
@@ -142,26 +143,27 @@ export function PlusSheet({ open, onClose }: { open: boolean; onClose: () => voi
         <>
           <h2 className="sheet-title" id="plus-sheet-h">Add a sighting</h2>
           <div className="plus-grid">
-            <button type="button" className="plus-tile plus-tile--main" onClick={() => closeAnd('/add')}>
+            {/* v1: the Log a sighting sheet replaces this one, over the current screen. */}
+            <button type="button" className="plus-tile plus-tile--main" data-one="" onClick={() => { onClose(); openSightingSheet(); }}>
               <span className="plus-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{pencil}</svg></span>
               <strong>Log one sighting</strong><span>With photo, place and notes</span>
             </button>
             {active ? (
-              <button type="button" className="plus-tile" onClick={() => closeAnd(`/outing/${active.id}`)}>
+              <button type="button" className="plus-tile" data-resume="" onClick={() => closeAnd(`/outing/${active.id}`)}>
                 <span className="plus-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{outingIco}</svg></span>
                 <strong>Back to your outing</strong><span>{active.place || 'Current outing'}, started {active.time}</span>
               </button>
             ) : (
-              <button type="button" className="plus-tile" onClick={() => setMode('outing')}>
+              <button type="button" className="plus-tile" data-outing="" onClick={() => setMode('outing')}>
                 <span className="plus-ic"><svg viewBox="0 0 24 24" aria-hidden="true">{clipboard}</svg></span>
                 <strong>Start an outing</strong><span>Tally everything at one place, like an eBird checklist</span>
               </button>
             )}
-            <Link className="plus-tile" to="/listen" onClick={onClose}>
+            <Link className="plus-tile" to="/listen" data-close="" onClick={onClose}>
               <span className="plus-ic"><Icon name="mic" /></span>
               <strong>Listen</strong><span>Name birds by their calls</span>
             </Link>
-            <Link className="plus-tile" to="/scan" onClick={onClose}>
+            <Link className="plus-tile" to="/scan" data-close="" onClick={onClose}>
               <span className="plus-ic"><Icon name="scan" /></span>
               <strong>Scan a photo</strong><span>Name an animal or plant from a photo</span>
             </Link>

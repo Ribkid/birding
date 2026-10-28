@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { periodFilter } from '../../core/stats.js';
 import { nearbyTargets } from '../../core/seqdata.js';
 import { HABITATS, KINDS, RARITY, byId, kindsPresent, type Species } from '../../lib/data';
+import { getLastPos, setLastPos, type Fix } from '../../lib/lastPos';
 import { Icon } from '../../components/Icon';
 import { Pips, SpeciesImage } from '../../components/SpeciesImage';
 import {
@@ -37,14 +38,14 @@ interface NearResult {
   list: { id: number; best: { h: Hotspot; d: number } }[];
 }
 
-type Fix = { lat: number; lng: number; acc: number; at: number };
-
 // v1 kept the target filters and the last position in app state, so they hold for the session (state.targetF,
-// state.lastPos). A position is reused for two minutes.
+// state.lastPos, shared with the map picker). A position is reused for two minutes.
 let saved: Filters | null = null;
-let lastPos: Fix | null = null;
 const POS_MS = 120000;
-const freshPos = () => (lastPos && Date.now() - lastPos.at <= POS_MS ? lastPos : null);
+const freshPos = () => {
+  const p = getLastPos();
+  return p && Date.now() - p.at <= POS_MS ? p : null;
+};
 
 /** One target row (v1 rowSpecies): the thumb, the name and its line, then the rarity pips. */
 function TargetRow({ sp, seen, sub, extra }: { sp: Species; seen: boolean; sub: string; extra?: ReactNode }) {
@@ -125,8 +126,8 @@ export default function Targets() {
     setPosError(null);
     getPosition().then(
       (p) => {
-        lastPos = { ...p, at: Date.now() };
-        if (alive) setPos(lastPos);
+        const fix = setLastPos(p);
+        if (alive) setPos(fix);
       },
       (err: unknown) => {
         if (alive) setPosError(err instanceof Error ? err.message : 'Could not get your location. Try again outside or near a window.');

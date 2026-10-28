@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../core/db.js';
+import { getLastPos } from '../lib/lastPos';
 import { closeLayer, openLayer, type Layer } from '../lib/layers';
 import { localPlaceMatches, myPlaces, nearestPlaceName, reverseGeocode, searchAddress, type PlaceHit } from '../lib/places';
 import { ensureSeq } from '../lib/seq';
@@ -67,8 +68,11 @@ export function LocationPicker({ init, onDone }: { init: { lat?: number | null; 
     layerRef.current = l;
     ov.focus({ preventScroll: true });
     ensureSeq();
-    const start: L.LatLngTuple = init.lat != null && init.lng != null ? [init.lat, init.lng] : [-27.47, 153.02];
-    const map = L.map(el, { zoomControl: false }).setView(start, init.lat != null ? 15 : 10);
+    // With no spot yet, it starts where she last was found (Targets' Near me, Listen), as v1's state.lastPos did.
+    const had = init.lat != null && init.lng != null;
+    const last = had ? null : getLastPos();
+    const start: L.LatLngTuple = had ? [init.lat as number, init.lng as number] : last ? [last.lat, last.lng] : [-27.47, 153.02];
+    const map = L.map(el, { zoomControl: false }).setView(start, had || last ? 15 : 10);
     mapRef.current = map;
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     const t = window.setTimeout(() => map.invalidateSize(), 50);
@@ -174,15 +178,15 @@ export function LocationPicker({ init, onDone }: { init: { lat?: number | null; 
       <div className="locpick-top">
         <div className="search-bar search-bar--map">
           <Icon name="search" />
-          <input ref={qRef} type="search" placeholder="Search a park, suburb or address" aria-label="Search for a place" autoComplete="off" value={q}
+          <input ref={qRef} type="search" placeholder="Search a park, suburb or address" aria-label="Search for a place" autoComplete="off" data-lq="" value={q}
             onChange={(e) => onQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer.current); seq.current++; void run(q.trim()); } }} />
-          <button type="button" className="iconbtn" aria-label="Cancel" onClick={() => finish(null)}><svg viewBox="0 0 24 24" aria-hidden="true">{close}</svg></button>
+          <button type="button" className="iconbtn" data-lclose="" aria-label="Cancel" onClick={() => finish(null)}><svg viewBox="0 0 24 24" aria-hidden="true">{close}</svg></button>
         </div>
-        <ul className={`rows locpick-res${open ? '' : ' hidden'}`}>
+        <ul className={`rows locpick-res${open ? '' : ' hidden'}`} data-lres="">
           {found.map((p, i) => (
             <li key={`${p.name}-${i}`}>
-              <button type="button" className="row" onClick={() => choose(p)}>
+              <button type="button" className="row" data-placeidx={i} onClick={() => choose(p)}>
                 <span className="row-main"><strong>{p.name}</strong><span className="small muted">{p.kind}</span></span>
               </button>
             </li>
@@ -191,22 +195,22 @@ export function LocationPicker({ init, onDone }: { init: { lat?: number | null; 
         </ul>
       </div>
       <div className="locpick-mapwrap">
-        <div ref={mapEl} className="locpick-map" />
+        <div ref={mapEl} className="locpick-map" data-lmap="" />
         <div className="locpick-dot" aria-hidden="true" />
         <div className={`locpick-pin${lift ? ' locpick-pin--lift' : ''}`} aria-hidden="true"><Icon name="pin" /></div>
         <div className="layer-toggle" role="group" aria-label="Map style">
-          <button type="button" aria-pressed={layer === 'map'} onClick={() => pickLayer('map')}>Map</button>
-          <button type="button" aria-pressed={layer === 'sat'} onClick={() => pickLayer('sat')}>Satellite</button>
+          <button type="button" data-layer="map" aria-pressed={layer === 'map'} onClick={() => pickLayer('map')}>Map</button>
+          <button type="button" data-layer="sat" aria-pressed={layer === 'sat'} onClick={() => pickLayer('sat')}>Satellite</button>
         </div>
       </div>
       <div className="locpick-bottom">
         <p className="small muted">Move the map so the pin sits on the spot, or search above.</p>
         <label className="field"><span>Place name</span>
-          <input value={name} placeholder="e.g. Oxley Creek Common" autoComplete="off" onChange={(e) => { setName(e.target.value); setNameTouched(true); }} />
+          <input data-lname="" value={name} placeholder="e.g. Oxley Creek Common" autoComplete="off" onChange={(e) => { setName(e.target.value); setNameTouched(true); }} />
         </label>
         <div className="row-end">
-          <button type="button" className="btn" onClick={() => finish(null)}>Cancel</button>
-          <button type="button" className="btn btn--primary" onClick={() => void use()}>Use this place</button>
+          <button type="button" className="btn" data-lclose="" onClick={() => finish(null)}>Cancel</button>
+          <button type="button" className="btn btn--primary" data-luse="" onClick={() => void use()}>Use this place</button>
         </div>
       </div>
     </div>,
