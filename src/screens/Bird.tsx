@@ -254,6 +254,9 @@ function SpeciesPage({ sp }: { sp: Species }) {
   // Tapping a photo (or Enter on the gallery) opens it full screen. The gallery follows the photo she moves to in
   // the viewer, so closing it shrinks the photo back into its own slide.
   const viewIndex = viewing ? photos.findIndex((p) => p.src === viewing) : -1;
+  // A photo that has left the hero's list (the page drawn again) takes the viewer with it, and it stays shut rather
+  // than opening again by itself if that photo comes back.
+  useEffect(() => { if (viewing && viewIndex < 0) setViewing(null); }, [viewing, viewIndex]);
   const openPhoto = (i: number) => { if (hero === 'photo' && photos[i]) setViewing(photos[i].src); };
   const slideAt = (i: number) => {
     const g = galRef.current;
