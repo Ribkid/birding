@@ -418,7 +418,7 @@ export default function Outing() {
                 >
                   −
                 </button>
-                <span className="tally-n" data-n={sp.id} aria-live="polite">
+                <span className="tally-n" data-n={sp.id}>
                   {rec.count ?? 'X'}
                 </span>
               </>
