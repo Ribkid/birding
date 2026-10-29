@@ -66,7 +66,7 @@ import { announceSaved, onCelebrate, type SaveOutcome } from '../screens/lists/s
 import { refreshStore } from '../lib/store';
 import { forgetTally } from '../screens/lists/useTally';
 import { byId } from '../lib/data';
-import { clearOf } from '../lib/toast';
+import { clearOf, toast } from '../lib/toast';
 
 // layers.ts finds the control to give focus back to with CSS.escape, which jsdom lacks.
 const g = globalThis as { CSS?: { escape?: (s: string) => string } };
@@ -349,6 +349,32 @@ describe('"Outing finished"', () => {
     await waitFor(() => expect(document.querySelector('.toast')?.textContent).toBe('Outing finished'));
     expect(document.querySelector('[data-finish]')?.textContent).toBe('Edit details');
     expect(document.querySelectorAll('.toast')).toHaveLength(1);
+  });
+
+  it('steps clear of the buttons again when the sign-up nudge comes up under it and lifts it onto them', async () => {
+    // jsdom lays nothing out: the toast's places come from these rules, its height and the buttons' box are given.
+    const css = document.head.appendChild(document.createElement('style'));
+    css.textContent = '.toast { bottom: 100px; } body.has-nudge .toast { bottom: 250px; }';
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight');
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get() { return this.classList.contains('toast') ? 48 : 0; } });
+    const foot = document.body.appendChild(document.createElement('div'));
+    foot.getBoundingClientRect = () => ({ top: innerHeight - 300, bottom: innerHeight - 220 }) as DOMRect;
+    try {
+      const down = toast('Outing finished', undefined, { clear: foot });
+      const t = document.querySelector<HTMLElement>('.toast')!;
+      expect(t.style.bottom).toBe(''); // its usual place, under the buttons, is clear of them
+      document.body.classList.add('has-nudge'); // lifted to 250 px up: onto the buttons
+      await act(() => new Promise((r) => setTimeout(r, 0)));
+      expect(t.style.bottom).toBe('310px'); // just above them instead
+      document.body.classList.remove('has-nudge');
+      await act(() => new Promise((r) => setTimeout(r, 0)));
+      expect(t.style.bottom).toBe('');
+      down(true);
+    } finally {
+      if (height) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', height);
+      css.remove();
+      foot.remove();
+    }
   });
 });
 

@@ -54,8 +54,10 @@ export function toast(msg: string, say = msg, { clear }: { clear?: Element | nul
   t.className = 'toast';
   t.textContent = msg;
   t.setAttribute('aria-hidden', 'true');
+  let stopPlacing = () => {};
   const hide = (now = false) => {
     if (toastEl === t) toastEl = null;
+    stopPlacing();
     if (now) {
       t.classList.add('toast--out');
       t.remove();
@@ -68,10 +70,21 @@ export function toast(msg: string, say = msg, { clear }: { clear?: Element | nul
   t.addEventListener('click', () => hide());
   document.body.append(t);
   if (clear?.isConnected) {
-    // Its resting place comes from its bottom offset and height, not its box, which the rise-in animation moves.
-    const restBottom = innerHeight - (parseFloat(getComputedStyle(t).bottom) || 0);
-    const at = clearOf({ top: restBottom - t.offsetHeight, bottom: restBottom }, clear.getBoundingClientRect(), innerHeight);
-    if (at != null) t.style.bottom = `${at}px`;
+    const place = () => {
+      if (!t.isConnected || !clear.isConnected) return;
+      t.style.bottom = '';
+      // Its resting place comes from its bottom offset and height, not its box, which the rise-in animation moves.
+      const restBottom = innerHeight - (parseFloat(getComputedStyle(t).bottom) || 0);
+      const at = clearOf({ top: restBottom - t.offsetHeight, bottom: restBottom }, clear.getBoundingClientRect(), innerHeight);
+      if (at != null) t.style.bottom = `${at}px`;
+    };
+    place();
+    // The sign-up nudge coming up after it lifts toasts above itself (body.has-nudge, and its height in --nudge-h),
+    // which can put this one on the element after all (at 320 px, on the finished outing's Delete outing): it is
+    // placed again whenever the body's class or style changes while it is up.
+    const mo = new MutationObserver(place);
+    mo.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
+    stopPlacing = () => mo.disconnect();
   }
   toastT = window.setTimeout(() => hide(), 4500);
   return hide;
