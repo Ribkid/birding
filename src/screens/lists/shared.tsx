@@ -249,23 +249,45 @@ export function onCelebrate(fn: (c: Celebration) => void): () => void {
   };
 }
 
+/** Opens the new-for-your-dex card for a species she already has (the outing row's New chip). */
+export function celebrate(c: Celebration): void {
+  for (const fn of celebrators) fn(c);
+}
+
+export interface AnnounceOptions {
+  /** Wait for the route to change before showing the card (the #/add page). */
+  afterNav?: boolean;
+  /**
+   * The outing tally: no card. The row has already had its moment as she tapped (Outing.tsx), so a lifer only says
+   * the badges it earned, in a toast that leaves the page usable.
+   */
+  quiet?: boolean;
+}
+
 /**
  * The rest of v1 saveSighting: the new-for-the-dex celebration for a first sighting, otherwise a toast for any
  * badge earned, then the one-time sign-up nudge.
  */
-export function announceSaved(rec: SightingInput, outcome: SaveOutcome, { afterNav = false } = {}): void {
-  if (outcome.isNew && rec.speciesId != null) {
-    for (const fn of celebrators) fn({ speciesId: rec.speciesId, newBadges: outcome.newBadges, sightings: outcome.sightings, afterNav });
-  } else if (outcome.newBadges.length) {
-    toast(`Badge earned: ${outcome.newBadges.map((b) => b.name).join(', ')}`);
+export function announceSaved(rec: SightingInput, outcome: SaveOutcome, { afterNav = false, quiet = false }: AnnounceOptions = {}): void {
+  const badges = outcome.newBadges.map((b) => b.name).join(', ');
+  if (outcome.isNew && rec.speciesId != null && quiet) {
+    // One message for screen readers: a second one straight after the row's "new for your dex" would cut it off.
+    if (badges) toast(`Badge earned: ${badges}`, `${byId.get(rec.speciesId)?.name ?? 'New species'}, new for your dex. Badge earned: ${badges}`);
+  } else if (outcome.isNew && rec.speciesId != null) {
+    celebrate({ speciesId: rec.speciesId, newBadges: outcome.newBadges, sightings: outcome.sightings, afterNav });
+  } else if (badges) {
+    toast(`Badge earned: ${badges}`);
   }
   void nudgeAfterSave(outcome.sightings.length);
 }
 
-/** v1 saveSighting: write the record, then celebrate a new species or toast a badge. Resolves to the record's id. */
-export async function saveSighting(rec: SightingInput): Promise<number> {
+/**
+ * v1 saveSighting: write the record, then celebrate a new species or toast a badge. Resolves to the record's id.
+ * `quiet` (the outing tally) shows no card.
+ */
+export async function saveSighting(rec: SightingInput, opts: AnnounceOptions = {}): Promise<number> {
   const outcome = await writeSighting(rec);
-  announceSaved(rec, outcome);
+  announceSaved(rec, outcome, opts);
   return outcome.id;
 }
 

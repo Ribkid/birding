@@ -6,13 +6,16 @@ import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { LocationPicker, type PickedPlace } from '../../components/LocationPicker';
 import { SpeciesImage } from '../../components/SpeciesImage';
+import { SunToggle } from '../../components/SunToggle';
 import { announce, toast } from '../../lib/toast';
-import { countOnTo, countUp, stamp } from '../../lib/motion';
+import { countOnTo, countUp, motionOK, stamp } from '../../lib/motion';
+import { useScreenWake } from '../../lib/wakeLock';
 import { CountKey } from './hubParts';
 import { FlockChooser, useHold } from './FlockChooser';
 import { buzz, forgetTally, useTally } from './useTally';
 import {
   ConfirmDialog,
+  celebrate,
   deleteSighting,
   fmtDate,
   matchSpecies,
@@ -40,16 +43,41 @@ const minutesSinceStart = (outing: OutingRow): number | null => {
   return Math.max(0, Math.round((Date.now() - start) / 60000));
 };
 
+/** The species new for her dex on this outing, as a row of their photos at the top of the Finish sheet. */
+function OutingLifers({ lifers, live }: { lifers: Species[]; live: boolean }) {
+  if (!lifers.length) return null;
+  return (
+    <section className="finish-lifers" aria-labelledby="finish-lifers-h">
+      <p className="finish-lifers-h" id="finish-lifers-h">
+        New for your dex {live ? 'today' : 'on this outing'}: <b>{lifers.length}</b>
+      </p>
+      <ul className="finish-lifers-row">
+        {lifers.map((sp) => (
+          <li key={sp.id} className={`kind--${sp.kind}`}>
+            <span className="finish-lifer-ph">
+              <SpeciesImage sp={sp} alt="" />
+            </span>
+            <span className="finish-lifer-name">{sp.name}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** v1 openFinishOuting (js/app.js:848): the Finish outing / Outing details sheet. */
 function FinishOuting({
   outing,
   sightingCount,
+  lifers,
   flush,
   onClose,
   onSaved,
 }: {
   outing: OutingRow;
   sightingCount: number;
+  /** The species this outing added to her dex. */
+  lifers: Species[];
   /** Stores the tally's last taps first, so the outing's birds below are all of them. */
   flush: () => Promise<void>;
   onClose: () => void;
@@ -130,6 +158,7 @@ function FinishOuting({
       <Sheet open onClose={onClose} cls="sheet-wrap--outing" labelledBy="outing-finish-h">
         <h2 className="sheet-title" id="outing-finish-h">{outing.endedAt ? 'Outing details' : 'Finish outing'}</h2>
         <p className="muted">{plural(sightingCount, 'species', 'species')} so far.</p>
+        <OutingLifers lifers={lifers} live={!outing.endedAt} />
         <form className="form" data-form="" onSubmit={save} noValidate>
           <label className="field">
             <span>Place name</span>
@@ -234,6 +263,32 @@ function FinishOuting({
 /** Where focus should land after a + or −, as v1's keepFocus(..., { fallback: '[data-tq], #view h1' }) did. */
 type Refocus = { id: number; attr: 'data-inc' | 'data-dec'; until: number; spare: HTMLElement | null };
 
+// The lifer moment on a tally row, instead of the card that made the page inert: the gold New band clamps onto the
+// photo (the celebration card's leg-band clamp) and the "New for your dex" label glows gold once, 500 ms. --sun is
+// the same yellow in every theme. Under reduced motion both are simply there.
+const CLAMP: Keyframe[] = [
+  { transform: 'translateY(-22px) scaleX(1.5)', opacity: 0 },
+  { transform: 'translateY(0) scaleX(.9)', opacity: 1, offset: 0.6 },
+  { transform: 'none', opacity: 1 },
+];
+const GLOW: Keyframe[] = [
+  { backgroundColor: 'rgba(245, 197, 24, 0)', boxShadow: '0 0 0 4px rgba(245, 197, 24, 0)', transform: 'none' },
+  { backgroundColor: 'rgba(245, 197, 24, .62)', boxShadow: '0 0 0 4px rgba(245, 197, 24, .62)', color: '#2A2000', transform: 'scale(1.06)', offset: 0.2 },
+  { backgroundColor: 'rgba(245, 197, 24, 0)', boxShadow: '0 0 0 4px rgba(245, 197, 24, 0)', transform: 'none' },
+];
+function liferMoment(row: HTMLElement) {
+  if (!motionOK() || typeof row.animate !== 'function') return;
+  row.querySelector<HTMLElement>('.lifer-band')?.animate(CLAMP, { duration: 500, easing: 'cubic-bezier(.2, 1.4, .4, 1)' });
+  row.querySelector<HTMLElement>('.lifer')?.animate(GLOW, { duration: 500, easing: 'cubic-bezier(.2, .8, .2, 1)' });
+}
+
+const PhoneIcon = () => (
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="7.5" y="3" width="9" height="18" rx="2.4" />
+    <path d="M11 17.6h2M4 9.5v5M20 9.5v5" />
+  </svg>
+);
+
 /** v1 renderOuting (js/app.js:2046): an outing's tally, live or finished. */
 export default function Outing() {
   const { id } = useParams();
@@ -260,6 +315,9 @@ export default function Outing() {
   // The hold chooser, keyed so a late close of an older one leaves a newer one open.
   const [flock, setFlock] = useState<{ key: number; sp: Species; anchor: HTMLButtonElement } | null>(null);
   const flockKey = useRef(0);
+  // Species a + has just made new for her dex, and until when: their rows play the lifer moment once drawn.
+  const moments = useRef(new Map<number, number>());
+  const wake = useScreenWake(!!outing && !outing.endedAt);
 
   const recs = useMemo(
     () => sightings.filter((row) => row.outingId === outingId),
@@ -354,6 +412,17 @@ export default function Outing() {
     drawn.current = now;
   });
 
+  useLayoutEffect(() => {
+    if (!moments.current.size) return;
+    const view = document.getElementById('view');
+    for (const [id, until] of [...moments.current]) {
+      const row = view?.querySelector<HTMLElement>(`.tally-list:not(.tally-list--found) [data-sp="${id}"]`);
+      if (!row && Date.now() < until) continue;
+      moments.current.delete(id);
+      if (row) liferMoment(row);
+    }
+  });
+
   if (!outing) {
     return (
       <>
@@ -387,27 +456,42 @@ export default function Outing() {
   // A tap counts at once and is never dropped: the row shows it straight away and useTally's writer stores the
   // taps in turn (one write per species for however many came in meanwhile). The stamp, a short buzz and focus
   // staying on the button she pressed answer each one.
-  const change = (sp: Species, delta: number) => {
+  // A species that isn't on the tally and that she has never logged anywhere else: this + makes it new for her dex.
+  // It gets its moment on the row as she taps (the save after it is quiet: no card), so the taps after it all count.
+  const change = (sp: Species, delta: number): boolean => {
     refocus.current = { id: sp.id, attr: delta > 0 ? 'data-inc' : 'data-dec', until: Date.now() + 1500, spare: null };
     const cur = tallied.get(sp.id);
+    const lifer = delta > 0 && !cur && !seenOutside.has(sp.id);
     stamps.current.push({ id: sp.id, from: cur ? cur.count : 0 });
     tallied.tap(sp.id, delta);
-    buzz(8);
+    if (lifer) moments.current.set(sp.id, Date.now() + 1500);
+    buzz(lifer ? [20, 30, 40] : 8);
     if (delta > 0 && query) setQuery('');
+    return lifer;
+  };
+
+  const add = (sp: Species) => {
+    if (change(sp, 1)) announce(`${sp.name}, new for your dex`);
   };
 
   // A flock from the hold chooser: the count runs up to the new total and is read out once.
   const addFlock = (sp: Species, n: number) => {
     const was = tallied.get(sp.id)?.count;
-    change(sp, n);
-    announce(`${n} more ${sp.name}, ${(was ?? 0) + n} in all.`);
+    const lifer = change(sp, n);
+    announce(`${lifer ? `${sp.name}, new for your dex. ` : ''}${n} more ${sp.name}, ${(was ?? 0) + n} in all.`);
   };
 
-  const tallyRow = (sp: Species) => {
+  // The New band's card: the celebration she would have had, when she has a moment for it.
+  const seeCard = (sp: Species) => {
+    celebrate({ speciesId: sp.id, newBadges: [], sightings });
+  };
+
+  const tallyRow = (sp: Species, found = false) => {
     const row = tallied.get(sp.id);
     const firstEver = !seenOutside.has(sp.id);
+    const band = firstEver && !found && !!row;
     return (
-      <li className={`tally-row ${row ? 'tally-row--on' : ''}`} key={sp.id}>
+      <li className={`tally-row ${row ? 'tally-row--on' : ''}${band ? ' tally-row--new' : ''}`} key={sp.id} data-sp={sp.id}>
         <Link className="tally-sp" to={`/bird/${sp.id}`}>
           <span className="row-thumb">
             <SpeciesImage sp={sp} />
@@ -417,6 +501,21 @@ export default function Outing() {
             {firstEver && <span className="lifer">New for your dex</span>}
           </span>
         </Link>
+        {band && (
+          <button
+            type="button"
+            className="lifer-band"
+            data-lifer={sp.id}
+            // Starts with the brief's words and holds the visible "New", so "tap New" works by voice too.
+            aria-label={`See ${sp.name}'s card, new for your dex`}
+            onClick={(e) => {
+              e.currentTarget.focus({ preventScroll: true });
+              seeCard(sp);
+            }}
+          >
+            New
+          </button>
+        )}
         {editing ? (
           <div className="tally-ctl">
             {row && (
@@ -441,7 +540,7 @@ export default function Outing() {
               aria-label={`Add ${sp.name}`}
               {...hold.bind(sp)}
               onClick={(e) => {
-                if (!hold.swallowClick(e)) change(sp, 1);
+                if (!hold.swallowClick(e)) add(sp);
               }}
             >
               +
@@ -473,6 +572,25 @@ export default function Outing() {
             {!live ? (outing.complete ? '. Complete checklist.' : '.') : ''}
           </p>
         </div>
+        {live && (
+          // Two icon-sized glass toggles for the field: keep the screen awake, and the Outdoor theme for full sun.
+          <div className="outing-tools" role="group" aria-label="Outing tools">
+            {wake.supported && (
+              <button
+                type="button"
+                className="tool-tog wake-toggle"
+                aria-pressed={wake.on}
+                aria-label="Keep the screen on"
+                title={wake.on ? 'The screen stays on' : 'Keep the screen on'}
+                data-wake=""
+                onClick={wake.toggle}
+              >
+                <PhoneIcon />
+              </button>
+            )}
+            <SunToggle />
+          </div>
+        )}
       </header>
 
       <div className="tally-sum">
@@ -497,14 +615,14 @@ export default function Outing() {
           </div>
           {query.trim() !== '' && (
             <ul className="tally-list rows--card tally-list--found">
-              {results.length ? results.map(tallyRow) : <li className="muted pad">Nothing by that name in the dex.</li>}
+              {results.length ? results.map((sp) => tallyRow(sp, true)) : <li className="muted pad">Nothing by that name in the dex.</li>}
             </ul>
           )}
         </>
       )}
 
       {ordered.length ? (
-        <ul className="tally-list rows--card">{ordered.map(tallyRow)}</ul>
+        <ul className="tally-list rows--card">{ordered.map((sp) => tallyRow(sp))}</ul>
       ) : editing ? (
         <p className="empty-inline tally-empty">Search above to add the first species. Tap + again each time you count another.</p>
       ) : (
@@ -541,6 +659,7 @@ export default function Outing() {
         <FinishOuting
           outing={outing}
           sightingCount={tallied.rows.length}
+          lifers={ordered.filter((sp) => !seenOutside.has(sp.id))}
           flush={tallied.flush}
           onClose={() => setFinishOpen(false)}
           onSaved={() => setEditingBirds(false)}
