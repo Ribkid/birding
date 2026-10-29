@@ -169,7 +169,7 @@ const pointer = (type: string, target: EventTarget, y: number, step = 16) => {
 const settle = () => act(() => new Promise<void>((r) => queueMicrotask(() => r())));
 
 describe('a closing sheet', () => {
-  it('leaves an inert copy without ids that keeps what was typed, with focus back on the opener at once', async () => {
+  it('leaves an inert, hidden copy without ids that keeps what was typed, with focus back on the opener at once', async () => {
     render(<Harness />);
     const sheet = await openSheet();
     (sheet.querySelector('input[name="count"]') as HTMLInputElement).value = '12';
@@ -178,12 +178,24 @@ describe('a closing sheet', () => {
     const copy = document.querySelector<HTMLElement>('.sheet-wrap[data-closing]')!;
     expect(copy).not.toBeNull();
     expect(copy.inert).toBe(true);
+    expect(copy.getAttribute('aria-hidden')).toBe('true');
     expect(copy.querySelectorAll('[id]').length).toBe(0);
     expect((copy.querySelector('input[name="count"]') as HTMLInputElement).value).toBe('12');
     expect(document.activeElement?.id).toBe('opener');
     // It goes once its slide has played.
     await act(async () => { ends.forEach((f) => f()); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); });
     expect(document.querySelector('.sheet-wrap')).toBeNull();
+  });
+
+  it('is gone at once when the sheet is opened again while it leaves', async () => {
+    render(<Harness />);
+    await openSheet();
+    act(() => { (document.querySelector('.sheet [data-close]') as HTMLButtonElement).click(); });
+    await settle();
+    expect(document.querySelectorAll('.sheet-wrap[data-closing]').length).toBe(1);
+    await openSheet();
+    expect(document.querySelectorAll('.sheet-wrap').length).toBe(1);
+    expect(document.querySelector('.sheet-wrap[data-closing]')).toBeNull();
   });
 
   it('is removed by a route change (flushClosingSheets)', async () => {
@@ -277,11 +289,11 @@ describe('dragging a sheet', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('never starts on a field', async () => {
+  it('never starts on a field, a [data-nodrag] surface or one that takes every touch itself', async () => {
     const onClose = vi.fn();
     render(<Harness onClose={onClose} />);
     const sheet = await openSheet();
-    for (const sel of ['input[name="count"]']) {
+    for (const sel of ['input[name="count"]', '.stage', '.crop-in']) {
       pointer('pointerdown', sheet.querySelector(sel)!, 430);
       for (const y of [470, 520, 600]) pointer('pointermove', window, y, 40);
       expect(sheet.style.transform).toBe('');

@@ -80,7 +80,9 @@ function playOut(wrap: HTMLElement, scrollTop: number, reason?: string) {
   if (scrim) scrim.style.opacity = scrim.style.transition = '';
   wrap.classList.remove('sheet-wrap--drag');
   wrap.setAttribute('data-closing', '');
+  // Only a picture of the sheet now: nothing in it can be reached, focused or read out.
   wrap.inert = true;
+  wrap.setAttribute('aria-hidden', 'true');
   // A sheet opening as this one leaves may use the same ids.
   wrap.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
   document.body.append(wrap);
@@ -188,12 +190,17 @@ function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void)
   const down = (e: PointerEvent) => {
     if (g || e.button > 0 || wrap.hasAttribute('data-closing')) return;
     const target = e.target as Element;
-    if (target.closest('input, textarea, select, [contenteditable], .leaflet-container')) return;
+    if (target.closest('input, textarea, select, [contenteditable], .leaflet-container, [data-nodrag]')) return;
     const r = sheet.getBoundingClientRect();
     const handle = e.clientY - r.top < 56;
     if (!handle && sheet.scrollTop > 0) return;
-    // A list scrolled inside the sheet (the avatar picker) scrolls back up rather than dragging the sheet away.
-    for (let n: Element | null = target; n && n !== sheet; n = n.parentElement) if (n.scrollTop > 0 && n.scrollHeight > n.clientHeight) return;
+    for (let n: Element | null = target; n && n !== sheet; n = n.parentElement) {
+      // A list scrolled inside the sheet (the avatar picker) scrolls back up rather than dragging the sheet away.
+      if (n.scrollTop > 0 && n.scrollHeight > n.clientHeight) return;
+      // A surface that takes every touch for itself (touch-action: none, as the photo framing stage does) keeps the
+      // gesture; the grip is the sheet's own.
+      if (!n.classList.contains('sheet-grip') && getComputedStyle(n).touchAction === 'none') return;
+    }
     // Caught while it moves (springing back, rising in, a step sliding up), it stops under her finger, and a drag
     // carries on from there rather than jumping to where the finger is from its resting place.
     const base = translateYOf(getComputedStyle(sheet).transform);
@@ -237,6 +244,42 @@ const replaced = new WeakSet<HTMLElement>();
 /** A route change doesn't wait for a sheet that is still sliding away (v1 flushClosingSheets). */
 export function flushClosingSheets() {
   document.querySelectorAll('.sheet-wrap[data-closing]').forEach((w) => w.remove());
+}
+
+/**
+ * A sheet opened while another is still sliding away (she dismissed it and changed her mind) takes over from it
+ * rather than rising from the bottom behind it: the leaving copy goes, and the new sheet starts where the copy was,
+ * at its opacity and with its scrim, then settles with its own entry timing. Under reduced motion it fades up from
+ * the copy's opacity where it rests.
+ */
+function takeOver(wrap: HTMLElement, card: HTMLElement) {
+  const ghost = [...document.querySelectorAll<HTMLElement>('.sheet-wrap[data-closing]')].pop();
+  if (!ghost) return;
+  const was = ghost.querySelector<HTMLElement>('.sheet');
+  const wasScrim = ghost.querySelector<HTMLElement>('.sheet-scrim');
+  const top = was?.getBoundingClientRect().top;
+  const opacity = was ? Number(getComputedStyle(was).opacity) : 1;
+  const scrimFrom = wasScrim && getComputedStyle(wasScrim).display !== 'none' ? getComputedStyle(wasScrim).opacity : '0';
+  flushClosingSheets();
+  if (!STARTING_STYLE || top == null || typeof card.animate !== 'function') return;
+  const scrim = wrap.querySelector<HTMLElement>('.sheet-scrim');
+  // The sheet's own entry, read before it is turned off so it can't also run from the bottom.
+  const cs = getComputedStyle(card);
+  const timing = { duration: ms(cs.transitionDuration.split(',')[0]) || 320, easing: firstEasing(cs.transitionTimingFunction, 'ease-out') };
+  const scrimTiming = scrim ? { duration: ms(getComputedStyle(scrim).transitionDuration) || 320, easing: 'cubic-bezier(.2, .8, .2, 1)' } : null;
+  card.style.transition = 'none';
+  if (scrim) scrim.style.transition = 'none';
+  const from = Math.max(0, top - card.getBoundingClientRect().top);
+  try {
+    if (motionOK() && from > 1) card.animate([{ transform: `translateY(${from}px)`, opacity }, { transform: 'none', opacity: 1 }], timing);
+    else card.animate([{ opacity }, { opacity: 1 }], { duration: 200, easing: 'linear' });
+    if (scrim && scrimTiming) scrim.animate([{ opacity: scrimFrom }, { opacity: 1 }], scrimTiming);
+  } catch { /* drawn where it rests */ }
+  // Its transitions come back once it has been drawn, for a later drag or close.
+  requestAnimationFrame(() => {
+    card.style.transition = '';
+    if (scrim) scrim.style.transition = '';
+  });
 }
 
 interface SheetProps {
@@ -293,13 +336,14 @@ export function Sheet({ open, onClose, children, label, labelledBy, wide = false
   useLayoutEffect(() => {
     if (!open) return;
     const wrap = wrapRef.current;
+    const card = cardRef.current;
     const hash = location.hash;
     reason.current = undefined;
     if (wrap && leaving && leaving !== wrap) {
       replaced.add(leaving);
       leaving = null;
       wrap.classList.add('sheet-wrap--swap');
-    }
+    } else if (wrap && card) takeOver(wrap, card);
     return () => {
       const why = reason.current;
       reason.current = undefined;
