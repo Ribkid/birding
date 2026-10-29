@@ -160,7 +160,7 @@ describe('the narrow rules stay out of the default layout', () => {
     ['screens/screens.css', /^\.dex-hero-actions$/, /order: -1/],
     ['screens/learn/learn.css', /^\.lh-seg-thumb$/, /translateY/],
     ['screens/learn/learn.css', /^\.lh-modes$/, /minmax\(0, 1fr\)/],
-    ['screens/lists/lists.css', /^\.outing-tools$/, /display: flex/],
+    ['screens/lists/lists.css', /^\.page-head--tools h1$/, /grid-column: 1 \/ -1/],
     ['screens/rest.css', /^\.tally-sum$/, /flex-wrap: wrap/],
   ];
   it.each(narrowOnly)('%s: %s', (file, sel, body) => {

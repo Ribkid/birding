@@ -103,17 +103,31 @@
 @media (prefers-reduced-transparency: reduce) { .outing-tools { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 :root[data-theme="outdoor"] .outing-tools { box-shadow: inset 0 0 0 2px var(--line-strong); }
 :root[data-theme="outdoor"] .outing-tools .tool-tog:not([aria-pressed="true"]) { box-shadow: none; }
-/* Larger text (a page under 300 px wide, Chrome on Android's 150% and 200%): Back and the two toggles, side by side,
-   share the top row, and the outing's name has the whole width under them, so it breaks between words, not inside
-   them. */
-@media (max-width: 299px) {
-  .page-head--back:has(> .outing-tools) { flex-wrap: wrap; row-gap: var(--sp-2); }
-  .page-head--back:has(> .outing-tools) > .lists-head-text { order: 1; flex-basis: 100%; }
-  .page-head.page-head--back:has(> .outing-tools) > .iconbtn { margin-top: 3px; }
-  .outing-tools { display: flex; margin-top: 0; }
+/* On a narrow phone the stacked rail took the title down to three lines: there it lies flat beside the date line,
+   and the title keeps the whole width. */
+@media (max-width: 379px) {
+  .page-head--tools { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 6px; row-gap: 4px; align-items: center; }
+  .page-head--tools > .lists-head-text { display: contents; }
+  .page-head--tools > .iconbtn { grid-row: 1; align-self: start; }
+  .page-head--tools h1 { grid-column: 2 / -1; grid-row: 1; }
+  .page-head--tools .lists-head-text > p { grid-column: 2; grid-row: 2; margin: 0; }
+  .page-head--tools > .outing-tools { grid-column: 3; grid-row: 2; display: flex; margin: 0; }
+}
+/* Larger text (Chrome on Android narrows the page as the phone's text grows: 260 px wide at 150%, 195 at 200%): once
+   the header is under 268 px (a page under 300 px), the date line beside the toggles would be a column of single
+   words, so Back and the two toggles share the top row and the outing's name and its date line have the whole width
+   under them; the name breaks between words, not inside them. */
+.page-head--tools { container: outing-head / inline-size; }
+@container outing-head (width < 268px) {
+  .page-head.page-head--tools > .iconbtn { grid-column: 1; grid-row: 1; align-self: center; margin-top: 0; }
+  .page-head--tools > .outing-tools { grid-column: 3; grid-row: 1; }
+  .page-head--tools h1 { grid-column: 1 / -1; grid-row: 2; }
+  .page-head--tools .lists-head-text > p { grid-column: 1 / -1; grid-row: 3; }
 }
 /* A toast on a live outing (a badge, a count that didn't save) sits above the Discard and Finish row, not over it. */
 body:has(.tally-foot--live) .toast { bottom: calc(var(--chrome-bottom) + 84px); }
+/* The same while the sign-up nudge is up (it was there before the outing started): the row has stepped up over it. */
+body.has-nudge:has(.tally-foot--live) .toast { bottom: calc(var(--chrome-bottom) + var(--nudge-h, 0px) + 92px); }
 
 /* A species new for her dex on this outing wears a gold New band on its photo, like a leg band on the bird: a
    button that opens its new-for-your-dex card. The photo keeps to the top of the row, so the band sits on it however
@@ -148,7 +162,7 @@ body:has(.tally-foot--live) .toast { bottom: calc(var(--chrome-bottom) + 84px); 
   overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
 }
 .finish-lifers-row::-webkit-scrollbar { display: none; }
-.finish-lifers-row li { flex: none; width: 76px; display: grid; gap: 5px; justify-items: center; }
+.finish-lifers-row li { flex: none; width: 86px; display: grid; gap: 5px; justify-items: center; align-content: start; }
 .finish-lifer-ph {
   position: relative; width: 76px; height: 76px; border-radius: 18px; overflow: hidden; background: var(--surface-2);
   box-shadow: 0 0 0 2px var(--sun), 0 8px 18px -10px rgba(12, 18, 27, .5);
@@ -156,6 +170,38 @@ body:has(.tally-foot--live) .toast { bottom: calc(var(--chrome-bottom) + 84px); 
 .finish-lifer-ph img { width: 100%; height: 100%; object-fit: cover; }
 .finish-lifer-name {
   width: 100%; font-size: var(--fs-1); font-weight: 600; line-height: 1.25; text-align: center; color: var(--ink-2);
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  /* Three lines, so the long names (Yellow-tailed Black-Cockatoo) are whole under their photos. */
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
+.finish-lifers-badges { margin: 6px 0 0; color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { .lifer-band:active { scale: none; } }
+
+/* A row counted down to 0 holds its place for a moment (Outing.tsx ZERO_HOLD_MS), so a quick second − lands on it and
+   not on the row below: the bird is struck through and greys, its − rests, and its + turns to Undo, ringed by the
+   time left, which drains. Then the row folds shut and the rows under it close up. */
+@property --tally-left { syntax: '<angle>'; inherits: false; initial-value: 360deg; }
+.tally-row--zero .row-thumb { opacity: .5; filter: grayscale(1); }
+.tally-row--zero .tally-sp strong { opacity: .62; text-decoration: line-through; text-decoration-thickness: 2px; }
+.tally-row--zero .row-thumb, .tally-row--zero .tally-sp strong { transition: opacity var(--dur-2) var(--ease-out), filter var(--dur-3) var(--ease-out); }
+.tally-gone { justify-self: start; font-size: var(--fs-1); font-weight: 700; color: var(--ink-2); }
+.tally-row--zero .tally-n { color: var(--ink-2); }
+.tally-ctl button[aria-disabled="true"] { opacity: .38; cursor: default; }
+.tally-ctl button[aria-disabled="true"]:active { scale: none; }
+.tally-ctl .tally-undo {
+  font: 700 .78rem/1 var(--font); letter-spacing: .01em;
+  background: var(--surface); color: var(--azure); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--azure) 28%, transparent);
+}
+.tally-undo-ring {
+  position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: conic-gradient(from 0deg, var(--azure) var(--tally-left), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  animation: tally-undo-left 4000ms linear both;
+}
+@keyframes tally-undo-left { to { --tally-left: 0deg; } }
+.tally-row--folding { overflow: clip; }
+:root[data-theme="outdoor"] .tally-ctl .tally-undo { box-shadow: inset 0 0 0 2px var(--line-strong); }
+@media (prefers-reduced-motion: reduce) {
+  .tally-undo-ring { animation: none; }
+  .tally-row--zero .row-thumb, .tally-row--zero .tally-sp strong { transition: none; }
+}
