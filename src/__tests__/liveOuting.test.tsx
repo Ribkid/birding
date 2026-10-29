@@ -59,11 +59,14 @@ vi.mock('../lib/hooks', async (orig) => ({ ...(await orig<typeof import('../lib/
 import Outing from '../screens/lists/Outing';
 import { SightingSheetHost } from '../components/SightingSheet';
 import { SUN_PREV_KEY, SunToggle, currentTheme, sunStep, toggleSun } from '../components/SunToggle';
+import { saveTheme } from '../screens/progress/theme';
 import { liveOutingId } from '../lib/liveOuting';
 import { ScreenWake, WAKE_MAX_MS, type WakeEnv } from '../lib/wakeLock';
 import { announceSaved, onCelebrate, type SaveOutcome } from '../screens/lists/shared';
 import { refreshStore } from '../lib/store';
+import { forgetTally } from '../screens/lists/useTally';
 import { byId } from '../lib/data';
+import { clearOf } from '../lib/toast';
 
 // layers.ts finds the control to give focus back to with CSS.escape, which jsdom lacks.
 const g = globalThis as { CSS?: { escape?: (s: string) => string } };
@@ -102,6 +105,8 @@ const main = (attr: string, id: number) => document.querySelector<HTMLElement>(`
 const stored = (speciesId: number) => fake.stores.sightings.filter((s) => s.speciesId === speciesId).map((s) => s.count);
 
 beforeEach(async () => {
+  // Each test's records start afresh, ids and all: the outing's tally queue must not remember the last test's writes.
+  forgetTally(2);
   seed();
   document.documentElement.removeAttribute('data-theme');
   localStorage.clear();
@@ -188,6 +193,162 @@ describe('a lifer on the tally', () => {
     const h = await waitFor(() => { const el = document.querySelector('.finish-lifers-h'); if (!el) throw new Error('no row'); return el; });
     expect(h.textContent).toBe('New for your dex today: 1');
     expect([...document.querySelectorAll('.finish-lifer-name')].map((n) => n.textContent)).toEqual([byId.get(ON_OUTING)!.name]);
+  });
+
+  it('a band tapped before its bird\'s first save has landed opens the card once the save is in, counting the bird', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    const cards = vi.fn();
+    const off = onCelebrate(cards);
+    page();
+    await waitFor(() => expect(main('data-inc', ON_OUTING)).toBeTruthy());
+    fireEvent.change(document.querySelector('[data-tq]')!, { target: { value: byId.get(LIFER)!.name } });
+    fireEvent.click(document.querySelector<HTMLElement>(`.tally-list--found [data-inc="${LIFER}"]`)!);
+    // At once, while the save is still on its way: one card, and only once it is stored.
+    const band = main('data-lifer', LIFER)!;
+    fireEvent.click(band);
+    fireEvent.click(band);
+    expect(cards).not.toHaveBeenCalled();
+    await waitFor(() => expect(cards).toHaveBeenCalledTimes(1));
+    expect(stored(LIFER)).toEqual([1]);
+    const c = cards.mock.calls[0][0] as { speciesId: number; sightings: { speciesId: number }[] };
+    expect(c.speciesId).toBe(LIFER);
+    expect(c.sightings.some((s) => s.speciesId === LIFER)).toBe(true);
+    off();
+  });
+
+  it('a badge the lifer earned goes with it: its band\'s card and the Finish sheet say it, and take the toast down', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    page();
+    await waitFor(() => expect(main('data-lifer', ON_OUTING)).toBeTruthy());
+    announceSaved({ speciesId: ON_OUTING, date: today }, { id: 2, isNew: true, newBadges: [{ id: 'garden', name: 'Gardens & parks' }], sightings: [] }, { quiet: true });
+    const toastEl = document.querySelector('.toast')!;
+    expect(toastEl.textContent).toBe('Badge earned: Gardens & parks');
+    fireEvent.click(main('data-lifer', ON_OUTING)!);
+    await waitFor(() => expect(document.querySelector('.celebrate')).toBeTruthy());
+    expect(document.querySelector('.celebrate-badges')?.textContent).toBe('Badge earned: Gardens & parks');
+    expect(toastEl.classList.contains('toast--out')).toBe(true);
+    expect(toastEl.isConnected).toBe(false); // gone at once: it sits above the card, so a fade would draw over it
+    fireEvent.click(document.querySelector('.celebrate [data-dismiss]')!);
+    await waitFor(() => expect(document.querySelector('.celebrate')).toBeNull());
+    // A second toast, then Finish: the sheet says the badge and the toast goes at once.
+    announceSaved({ speciesId: ON_OUTING, date: today }, { id: 2, isNew: true, newBadges: [{ id: 'garden', name: 'Gardens & parks' }], sightings: [] }, { quiet: true });
+    const again = document.querySelector('.toast:not(.toast--out)')!;
+    fireEvent.click(document.querySelector('[data-finish]')!);
+    expect(document.querySelector('.toast')).toBeNull();
+    const line = await waitFor(() => { const el = document.querySelector('.finish-lifers-badges'); if (!el) throw new Error('no badge line'); return el; });
+    expect(line.textContent).toBe('Badge earned: Gardens & parks');
+    expect(again.classList.contains('toast--out')).toBe(true);
+    expect(again.isConnected).toBe(false);
+  });
+
+  it('a badge whose save lands with the Finish sheet already open is said in the sheet, not in a toast over its fields', async () => {
+    const quiet = (names: string[]) => announceSaved({ speciesId: ON_OUTING, date: today }, { id: 2, isNew: true, newBadges: names.map((n) => ({ id: n, name: n })), sightings: [] }, { quiet: true });
+    quiet([]); // no badge from an earlier test
+    page();
+    await waitFor(() => expect(main('data-lifer', ON_OUTING)).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-finish]')!);
+    await waitFor(() => expect(document.querySelector('.finish-lifers-h')).toBeTruthy());
+    expect(document.querySelector('.finish-lifers-badges')).toBeNull();
+    act(() => quiet(['Wetlands']));
+    await waitFor(() => expect(document.querySelector('.finish-lifers-badges')?.textContent).toBe('Badge earned: Wetlands'));
+    expect(document.querySelector('.toast:not(.toast--out)')).toBeNull();
+    await act(() => new Promise((r) => setTimeout(r, 80)));
+    expect(document.getElementById('announce')?.textContent).toBe(`${byId.get(ON_OUTING)!.name}, new for your dex. Badge earned: Wetlands`);
+  });
+});
+
+describe('a row counted down to 0', () => {
+  const SEEN = 1; // in her dex from before; here also on the outing at 1, above ON_OUTING (at 2)
+  async function withRowAtOne() {
+    fake.stores.sightings.push({ id: 3, speciesId: SEEN, count: 1, heard: false, date: today, time: '07:10', lat: -27.44, lng: 153.17, acc: null, place: 'Sandy Camp Road Wetlands', notes: 'kept', photoId: null, outingId: 2, createdAt: 3 });
+    await refreshStore();
+    page();
+    await waitFor(() => expect(main('data-dec', SEEN)).toBeTruthy());
+  }
+  const rowOf = (id: number) => main('data-inc', id)!.closest('li')!;
+  const tap = (el: HTMLElement) => { el.focus(); fireEvent.click(el); };
+  const onOuting = (id: number) => fake.stores.sightings.filter((s) => s.speciesId === id && s.outingId === 2).map((s) => s.count);
+
+  it('holds its place at 0 with Undo, so quick taps after it never reach the row below', async () => {
+    await withRowAtOne();
+    const order = () => [...document.querySelectorAll('.tally-list:not(.tally-list--found) > li')].map((li) => Number(li.getAttribute('data-sp')));
+    expect(order()).toEqual([SEEN, ON_OUTING]);
+    const minus = main('data-dec', SEEN)!;
+    tap(minus);
+    tap(main('data-dec', SEEN)!);
+    tap(main('data-dec', SEEN)!);
+    // Still in its place, at 0: the − rests, the + is Undo, and the bird below kept its 2.
+    expect(order()).toEqual([SEEN, ON_OUTING]);
+    expect(rowOf(SEEN).classList.contains('tally-row--zero')).toBe(true);
+    expect(rowOf(SEEN).querySelector('[data-n0]')?.textContent).toBe('0');
+    expect(main('data-dec', SEEN)!.getAttribute('aria-disabled')).toBe('true');
+    expect(main('data-inc', SEEN)!.getAttribute('aria-label')).toBe(`Undo, put ${byId.get(SEEN)!.name} back`);
+    expect(main('data-n', ON_OUTING)!.textContent).toBe('2');
+    expect(document.activeElement).toBe(main('data-dec', SEEN));
+    await act(() => new Promise((r) => setTimeout(r, 80)));
+    expect(document.getElementById('announce')?.textContent).toBe(`${byId.get(SEEN)!.name} taken off. Undo puts it back.`);
+    // Nothing is taken off the stored sighting while it holds.
+    await act(() => new Promise((r) => setTimeout(r, 300)));
+    expect(onOuting(SEEN)).toEqual([1]);
+    // Its time up, it folds away and its sighting goes; the bird below is untouched.
+    await waitFor(() => expect(main('data-inc', SEEN)).toBeNull(), { timeout: 6000 });
+    await waitFor(() => expect(onOuting(SEEN)).toEqual([]));
+    expect(onOuting(ON_OUTING)).toEqual([2]);
+  }, 10000);
+
+  it('Undo puts it back as it was, with nothing written', async () => {
+    await withRowAtOne();
+    tap(main('data-dec', SEEN)!);
+    tap(main('data-inc', SEEN)!); // Undo
+    expect(rowOf(SEEN).classList.contains('tally-row--zero')).toBe(false);
+    expect(main('data-n', SEEN)!.textContent).toBe('1');
+    expect(main('data-inc', SEEN)!.textContent).toBe('+');
+    expect(document.activeElement).toBe(main('data-inc', SEEN));
+    await act(() => new Promise((r) => setTimeout(r, 300)));
+    // The same record, notes and all: nothing was deleted and made again.
+    expect(fake.stores.sightings.find((s) => s.speciesId === SEEN && s.outingId === 2)).toMatchObject({ id: 3, count: 1, notes: 'kept' });
+    // A + after it counts on as usual.
+    tap(main('data-inc', SEEN)!);
+    await waitFor(() => expect(onOuting(SEEN)).toEqual([2]));
+  });
+
+  it('goes at once on Finish, and when she leaves the outing', async () => {
+    await withRowAtOne();
+    tap(main('data-dec', SEEN)!);
+    fireEvent.click(document.querySelector('[data-finish]')!);
+    expect(main('data-inc', SEEN)).toBeNull();
+    await waitFor(() => expect(onOuting(SEEN)).toEqual([]));
+    cleanup();
+    forgetTally(2);
+    seed();
+    await withRowAtOne();
+    tap(main('data-dec', SEEN)!);
+    cleanup(); // leaving the page
+    await waitFor(() => expect(onOuting(SEEN)).toEqual([]));
+    expect(onOuting(ON_OUTING)).toEqual([2]);
+  });
+});
+
+describe('"Outing finished"', () => {
+  it('rests just above the finished outing\'s buttons when its usual place would cover them', () => {
+    const vh = 844;
+    const rest = { top: 646, bottom: 694 }; // its usual place, above the tab bar
+    expect(clearOf(rest, { top: 642, bottom: 746 }, vh)).toBe(vh - 642 + 10); // the foot at the bottom: it steps up
+    expect(clearOf(rest, { top: 300, bottom: 400 }, vh)).toBeNull(); // the foot higher up the page: it stays
+    expect(clearOf(rest, { top: 700, bottom: 900 }, vh)).toBeNull(); // the foot below it
+    expect(clearOf(rest, { top: 100, bottom: 800 }, vh)).toBeNull(); // no room above: it stays (a tap takes it away)
+    expect(clearOf(rest, { top: 0, bottom: 0 }, vh)).toBeNull(); // not drawn
+  });
+
+  it('is said once the page has drawn the outing as finished', async () => {
+    page();
+    await waitFor(() => expect(main('data-inc', ON_OUTING)).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-finish]')!);
+    await waitFor(() => expect(document.querySelector('.sheet-wrap form')).toBeTruthy());
+    fireEvent.submit(document.querySelector('.sheet-wrap form')!);
+    await waitFor(() => expect(document.querySelector('.toast')?.textContent).toBe('Outing finished'));
+    expect(document.querySelector('[data-finish]')?.textContent).toBe('Edit details');
+    expect(document.querySelectorAll('.toast')).toHaveLength(1);
   });
 });
 
@@ -289,6 +450,110 @@ describe('Sun', () => {
     expect(animate).toHaveBeenCalledTimes(1);
     root.animate = was;
   });
+
+  /** A view transition as the browser runs one: the update a moment later, and finished only when it ends. */
+  function liveReveal() {
+    const root = document.documentElement as HTMLElement & { animate: unknown };
+    const was = root.animate;
+    root.animate = vi.fn();
+    const runs: { finish: () => void; skip: ReturnType<typeof vi.fn> }[] = [];
+    (document as unknown as { startViewTransition: unknown }).startViewTransition = (cb: () => void) => {
+      let finish = () => {};
+      const finished = new Promise<void>((r) => { finish = r; });
+      const run = { finish, skip: vi.fn(() => finish()) };
+      runs.push(run);
+      return { ready: new Promise<void>((r) => setTimeout(r, 5)).then(() => { cb(); }), finished, skipTransition: run.skip };
+    };
+    return {
+      root,
+      runs,
+      done: () => {
+        root.animate = was;
+        delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
+      },
+    };
+  }
+
+  it('resolves once the theme is stored, even when the reveal puts it on the page a moment later', async () => {
+    const vt = liveReveal();
+    fake.kv.settings = { theme: 'dark', mapLayer: 'sat' };
+    document.documentElement.dataset.theme = 'dark';
+    await act(() => toggleSun({ x: 300, y: 40 }));
+    expect(fake.kv.settings).toEqual({ theme: 'outdoor', mapLayer: 'sat' });
+    vt.runs.forEach((r) => r.finish());
+    vt.done();
+  });
+
+  it('a second tap while the reveal still runs takes her straight back, and the reveal after it keeps its look', async () => {
+    const vt = liveReveal();
+    fake.kv.settings = { theme: 'dark' };
+    document.documentElement.dataset.theme = 'dark';
+    await act(() => toggleSun({ x: 300, y: 40 }));
+    expect(currentTheme()).toBe('outdoor');
+    await act(() => toggleSun({ x: 300, y: 40 }));
+    expect(currentTheme()).toBe('dark');
+    expect(fake.kv.settings).toEqual({ theme: 'dark' });
+    expect(localStorage.getItem(SUN_PREV_KEY)).toBeNull();
+    // The first reveal ending (the browser skips it for the second) leaves the second its data-nav.
+    vt.runs[0].finish();
+    await act(() => new Promise((r) => setTimeout(r, 0)));
+    expect(vt.root.dataset.nav).toBe('sun');
+    vt.runs[1].finish();
+    await act(() => new Promise((r) => setTimeout(r, 0)));
+    expect(vt.root.dataset.nav).toBeUndefined();
+    vt.done();
+  });
+
+  it('a press on the page while the reveal runs ends it, and the tap reaches what is under it', async () => {
+    const vt = liveReveal();
+    document.documentElement.dataset.theme = 'light';
+    const plus = document.body.appendChild(document.createElement('button'));
+    const icon = plus.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
+    const counted = vi.fn();
+    plus.addEventListener('click', counted);
+    const doc = document as Document & { elementFromPoint?: unknown };
+    const efp = doc.elementFromPoint;
+    doc.elementFromPoint = () => icon;
+    await act(() => toggleSun({ x: 300, y: 40 }));
+    // The browser aims every tap at <html> while the reveal is one picture over the page.
+    vt.root.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 20, clientY: 400 }));
+    expect(vt.runs[0].skip).toHaveBeenCalledTimes(1);
+    // The click the browser aimed at <html> goes no further (the one handed on bubbles through it from the button).
+    const lost = vi.fn();
+    const onRoot = (ev: Event) => { if (ev.target === vt.root) lost(); };
+    vt.root.addEventListener('click', onRoot);
+    vt.root.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 20, clientY: 400 }));
+    expect(counted).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(plus);
+    expect(lost).not.toHaveBeenCalled();
+    // Once it is over, a click on the page itself is left alone.
+    await act(() => new Promise((r) => setTimeout(r, 0)));
+    vt.root.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    vt.root.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(counted).toHaveBeenCalledTimes(1);
+    expect(lost).toHaveBeenCalledTimes(1);
+    expect(currentTheme()).toBe('outdoor');
+    vt.root.removeEventListener('click', onRoot);
+    doc.elementFromPoint = efp;
+    plus.remove();
+    vt.done();
+  });
+
+  it('goes back to the theme Outdoor took over from, however Outdoor came on', async () => {
+    fake.kv.settings = { theme: 'light', colourUnseen: true };
+    document.documentElement.dataset.theme = 'light';
+    await act(() => toggleSun());
+    expect(localStorage.getItem(SUN_PREV_KEY)).toBe('light');
+    // In Settings: Dark, then Outdoor. Sun off goes to Dark, the theme she picked last.
+    await act(() => saveTheme('dark'));
+    expect(localStorage.getItem(SUN_PREV_KEY)).toBeNull();
+    await act(() => saveTheme('outdoor'));
+    expect(localStorage.getItem(SUN_PREV_KEY)).toBe('dark');
+    await act(() => toggleSun());
+    expect(currentTheme()).toBe('dark');
+    expect(fake.kv.settings).toEqual({ theme: 'dark', colourUnseen: true });
+    expect(localStorage.getItem(SUN_PREV_KEY)).toBeNull();
+  });
 });
 
 describe('Screen on', () => {
@@ -362,6 +627,72 @@ describe('Screen on', () => {
     await flush();
     expect(w.on).toBe(false);
     expect(changes.map((c) => c[1])).toEqual([undefined, 'timeout', undefined, 'failed']);
+  });
+
+  it('asks once more when the browser lets go while the page is in view, and turns off if it goes again', async () => {
+    const t = env();
+    const changes: [boolean, string | undefined][] = [];
+    const w = new ScreenWake(t.e, (on, why) => changes.push([on, why]));
+    w.start();
+    await flush();
+    t.sentinels[0].fire(); // battery saver, say, with the page still in view
+    await flush();
+    expect(t.sentinels).toHaveLength(2);
+    expect(w.held()).toBe(true);
+    t.sentinels[1].fire();
+    await flush();
+    expect(w.on).toBe(false);
+    expect(t.sentinels).toHaveLength(2);
+    expect(changes).toEqual([[true, undefined], [false, 'failed']]);
+    // A fresh visit (hidden and back) gets its one more ask again.
+    w.start();
+    await flush();
+    t.doc.visibilityState = 'hidden';
+    t.sentinels[2].fire();
+    t.doc.visibilityState = 'visible';
+    t.doc.dispatchEvent(new Event('visibilitychange'));
+    await flush();
+    t.sentinels[3].fire();
+    await flush();
+    expect(w.on).toBe(true);
+    expect(w.held()).toBe(true);
+  });
+
+  it('a page shown again while an earlier ask is still out asks once more, rather than turning off when that one is refused', async () => {
+    const doc = new EventTarget() as EventTarget & { visibilityState: string };
+    doc.visibilityState = 'visible';
+    const asks: { resolve: (s: unknown) => void; reject: (e: unknown) => void }[] = [];
+    const request = vi.fn(() => new Promise((resolve, reject) => { asks.push({ resolve, reject }); }));
+    const e = {
+      wakeLock: { request },
+      doc: doc as unknown as WakeEnv['doc'],
+      setTimer: () => 1,
+      clearTimer: () => {},
+    } as unknown as WakeEnv;
+    const changes: [boolean, string | undefined][] = [];
+    const w = new ScreenWake(e, (on, why) => changes.push([on, why]));
+    w.start();
+    // She switches away and straight back while the first ask is out.
+    doc.visibilityState = 'hidden';
+    doc.dispatchEvent(new Event('visibilitychange'));
+    doc.visibilityState = 'visible';
+    doc.dispatchEvent(new Event('visibilitychange'));
+    expect(request).toHaveBeenCalledTimes(1);
+    asks[0].reject(new Error('NotAllowedError')); // refused: the page was hidden as it was asked
+    await flush();
+    expect(w.on).toBe(true);
+    expect(request).toHaveBeenCalledTimes(2);
+    asks[1].resolve({ released: false, release: async () => {}, addEventListener: () => {} });
+    await flush();
+    expect(w.held()).toBe(true);
+    expect(changes).toEqual([[true, undefined]]);
+    // Refused with the page in view and nothing asked since: it turns off and says so, as before.
+    w.stop();
+    w.start();
+    asks[2].reject(new Error('NotAllowedError'));
+    await flush();
+    expect(w.on).toBe(false);
+    expect(changes.at(-1)).toEqual([false, 'failed']);
   });
 
   it('is not offered where the browser has no wake lock, and is in the header where it has', async () => {
