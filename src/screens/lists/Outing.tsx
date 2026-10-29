@@ -509,9 +509,9 @@ function OutingPage() {
   const clearSearchSoon = (id: number) => {
     stopSearchClear();
     const t = window.setTimeout(() => {
-      // A card or sheet over the page (a result's New band, the chooser): the results wait for it to close, so it
-      // can give focus back to the control that opened it.
-      if (topLayer()) { clearSearchSoon(id); return; }
+      // A card or sheet over the page (the one a result's New band opens), or the flock chooser held open from a
+      // result: the results wait for it to close, so it can give focus back to the control that opened it.
+      if (topLayer() || document.querySelector('.tally-chooser')) { clearSearchSoon(id); return; }
       searchClear.current = null;
       // A control in the results that has focus goes with them: focus moves to its twin on the tally (v1's keepFocus).
       const a = document.activeElement as HTMLElement | null;

@@ -417,6 +417,25 @@ describe('a bird found with the search', () => {
     expect(document.activeElement).toBe(main('data-lifer', LIFER));
   });
 
+  it('a flock picked from the held + of a result waits with the results, and counts on that bird', async () => {
+    page();
+    await waitFor(() => expect(main('data-inc', ON_OUTING)).toBeTruthy());
+    const box = document.querySelector<HTMLInputElement>('[data-tq]')!;
+    fireEvent.change(box, { target: { value: 'honeyeater' } });
+    const plus = found()[1];
+    const id = Number(plus.getAttribute('data-inc'));
+    tap(plus);
+    fireEvent.contextMenu(plus); // as a hold does: the chooser opens against this +
+    await waitFor(() => expect(document.querySelector('.tally-chooser')).toBeTruthy());
+    await act(() => new Promise((r) => setTimeout(r, 2000)));
+    expect(box.value).toBe('honeyeater'); // the + it grew from is still there
+    fireEvent.click(document.querySelector<HTMLElement>('.tally-chooser button')!); // +5
+    expect(document.activeElement).toBe(plus);
+    await waitFor(() => expect(box.value).toBe(''), { timeout: 3000 });
+    expect(document.activeElement).toBe(main('data-inc', id));
+    await waitFor(() => expect(onOuting(id)).toEqual([6]));
+  });
+
   it('typing a new name after a + keeps what she types', async () => {
     page();
     await waitFor(() => expect(main('data-inc', ON_OUTING)).toBeTruthy());
