@@ -79,6 +79,8 @@
 }
 .pv-step svg { width: 20px; height: 20px; }
 .pv-step:active:not([aria-disabled="true"]) { scale: .88; }
+/* The ring is drawn inside the button: the count sits 2 px away, and the usual ring outside it covered the digit. */
+.pv-step:focus-visible { outline-offset: -3px; }
 .pv-step[aria-disabled="true"] { opacity: .32; cursor: default; }
 /* The credit always shows in full: a long one wraps to a second line rather than being cut off. */
 .pv-credit {

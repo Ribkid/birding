@@ -258,7 +258,8 @@ it).
 - The phone's Back closes the photo viewer before it leaves the species page (a CloseWatcher close request, so no
   history entry; where CloseWatcher is missing, Back leaves as before). Checked with a real close request from
   Chromium (an Escape the app never sees, which runs the same path as Android's Back), not yet on a phone.
-- The photo viewer has named Previous and Next buttons either side of its count.
+- The photo viewer has named Previous and Next buttons either side of its count. Their keyboard focus ring is drawn
+  inside the button, so it never covers the count beside it.
 - progressive-photo's "develops in" check serves the large photo from a local stub, so it no longer depends on a
   live photo host.
 
