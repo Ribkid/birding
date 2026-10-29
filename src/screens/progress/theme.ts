@@ -14,12 +14,22 @@ export const THEMES: [Theme, string][] = [
  *  in IndexedDB, which answers too late for that), so a chosen theme never opens in the phone's scheme first. */
 export const THEME_KEY = 'birddex-theme';
 
+/** While Outdoor is on, the theme she had before it, in this browser: where Sun (components/SunToggle.tsx) goes back to. */
+export const SUN_PREV_KEY = 'birdydex:sunPrev';
+
 export function applyTheme(theme?: string | null) {
   const root = document.documentElement;
+  const was = root.dataset.theme || 'auto';
   const t = theme || 'auto';
   if (t === 'auto') delete root.dataset.theme;
   else root.dataset.theme = t;
-  try { localStorage.setItem(THEME_KEY, t); } catch { /* private mode: the first frame follows the phone */ }
+  try {
+    localStorage.setItem(THEME_KEY, t);
+    // However Outdoor comes on (Sun, Settings, a restored backup) it remembers the theme it took over from, and any
+    // other theme forgets it, so Sun off goes back to the theme she picked last, not one from before an earlier Sun.
+    if (t !== 'outdoor') localStorage.removeItem(SUN_PREV_KEY);
+    else if (was !== 'outdoor') localStorage.setItem(SUN_PREV_KEY, was);
+  } catch { /* private mode: the first frame follows the phone */ }
 }
 
 export async function storedSettings(): Promise<Record<string, unknown>> {
