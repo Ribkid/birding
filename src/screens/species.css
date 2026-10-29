@@ -310,6 +310,15 @@ body.has-outing .bird .logbar { bottom: calc(var(--chrome-bottom) + 62px); }
 .compare .cmp-notes { margin: 4px 0 0; }
 .compare .cmp-col .btn { justify-self: start; min-height: var(--tap); background: var(--surface-2); box-shadow: none; }
 .compare .season--mini { margin-top: 6px; }
+/* With the phone's text at 150% and more (the screen under 280 px wide) the two photos stay side by side, their names
+   breaking where they must, and each bird's facts take the full width, one card under the other, as the base .cmp
+   grid would, instead of two columns too narrow for their words. */
+.compare { container: compare / inline-size; }
+@container compare (width < 280px) {
+  .compare .cmp-stage { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .compare .cmp-name { overflow-wrap: anywhere; hyphens: auto; }
+  .compare .cmp { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 359px) {
   .bird .bird-hero > .iconbtn--float { left: 8px; }
   .bird .bird-hero > .iconbtn--right { left: auto; right: 8px; }
