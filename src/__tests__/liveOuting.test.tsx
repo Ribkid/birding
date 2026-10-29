@@ -422,6 +422,35 @@ describe('Screen on', () => {
     expect(changes.map((c) => c[1])).toEqual([undefined, 'timeout', undefined, 'failed']);
   });
 
+  it('asks once more when the browser lets go while the page is in view, and turns off if it goes again', async () => {
+    const t = env();
+    const changes: [boolean, string | undefined][] = [];
+    const w = new ScreenWake(t.e, (on, why) => changes.push([on, why]));
+    w.start();
+    await flush();
+    t.sentinels[0].fire(); // battery saver, say, with the page still in view
+    await flush();
+    expect(t.sentinels).toHaveLength(2);
+    expect(w.held()).toBe(true);
+    t.sentinels[1].fire();
+    await flush();
+    expect(w.on).toBe(false);
+    expect(t.sentinels).toHaveLength(2);
+    expect(changes).toEqual([[true, undefined], [false, 'failed']]);
+    // A fresh visit (hidden and back) gets its one more ask again.
+    w.start();
+    await flush();
+    t.doc.visibilityState = 'hidden';
+    t.sentinels[2].fire();
+    t.doc.visibilityState = 'visible';
+    t.doc.dispatchEvent(new Event('visibilitychange'));
+    await flush();
+    t.sentinels[3].fire();
+    await flush();
+    expect(w.on).toBe(true);
+    expect(w.held()).toBe(true);
+  });
+
   it('is not offered where the browser has no wake lock, and is in the header where it has', async () => {
     page();
     await waitFor(() => expect(document.querySelector('.outing-tools')).toBeTruthy());
