@@ -71,15 +71,17 @@ full-screen "New for your dex" card, the page went inert and the taps after it w
   label glows once, the phone buzzes, a screen reader hears "<name>, new for your dex", and focus stays on +.
 - The New band stays on the row as a button that opens the full card when she wants it.
 - The Finish sheet shows the outing's new species as a row of photos, their names whole. A badge she earns comes as a
-  toast; the card the New band opens and the Finish sheet both say it too, and opening either takes the toast down,
-  so no toast ever sits over the card or the sheet's fields.
+  toast; the card the New band opens and the Finish sheet both say it too, and opening either takes the toast down
+  at once (no fade over them), so no toast ever sits over the card or the sheet's fields.
 - The sign-up nudge waits until the outing is finished or discarded, so it never covers Discard and Finish. It also
   no longer covers the map's Map/Satellite switch.
 - A live outing's header has two icon-sized glass toggles. Screen on (a phone with an open eye) keeps the phone awake;
   it is off until she asks and lets go on Finish, on leaving or after two hours, and if the phone takes it back while
   she is looking it asks once more, then turns off and says so. Sun switches to the Outdoor theme and back to the
-  theme she had. The same Sun sits above locate on the map. Under 380 px the two lie flat beside the date line so the
-  title keeps its width.
+  theme she had (the one Outdoor took over from, even when she picked Outdoor in Settings). A quick second tap goes
+  straight back, and a tap while its circular reveal runs (a + straight after Sun, say) ends the reveal and lands
+  where she tapped instead of being lost. The same Sun sits 10 px above locate on the map. Under 380 px the two lie
+  flat beside the date line so the title keeps its width.
 - "Outing finished" rests above the finished outing's buttons when its usual place would cover them.
 - Saves made anywhere else (the species page, the + sheet) still get the full card.
 
