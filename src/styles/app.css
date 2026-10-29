@@ -657,7 +657,8 @@ body.has-sheet .tabbar .tab-plus { rotate: 45deg; }
 .quiz-mark.ok { color: var(--seen); } .quiz-mark.no { color: var(--danger); }
 
 /* stats */
-.statgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 6px 16px 4px; }
+/* Two tiles to a row; one, once two would no longer fit (the page under 220 px wide inside, at 200% text). */
+.statgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(max(min(100%, 104px), (100% - 16px) / 2), 1fr)); gap: 10px; padding: 6px 16px 4px; }
 .statgrid div { display: grid; gap: 4px; padding: 14px 12px; border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-1); }
 .statgrid b { font: 800 2.2rem/1 var(--stamp); font-variant-numeric: tabular-nums; }
 .statgrid span { font-size: var(--fs-2); color: var(--ink-2); }
@@ -676,6 +677,13 @@ body.has-sheet .tabbar .tab-plus { rotate: 45deg; }
 .gbars li { display: grid; grid-template-columns: 1fr 90px auto; gap: 10px; align-items: center; font-size: .9rem; }
 .gbars .meter { margin: 0; }
 .gbars .num { font: 600 1rem/1 var(--stamp); color: var(--ink-2); }
+/* With the phone's text at 150% and more the bar takes its own line under the group's name and count, so the name
+   isn't squeezed to a word a line or pushed past the screen's edge. */
+.gbars { container: gbars / inline-size; }
+@container gbars (width < 200px) {
+  .gbars li { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+  .gbars .meter { grid-column: 1 / -1; grid-row: 2; }
+}
 
 /* welcome + update */
 .welcome { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 16px; background: var(--scrim); animation: fade var(--dur-3) both; }
