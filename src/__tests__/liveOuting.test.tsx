@@ -327,6 +327,28 @@ describe('a row counted down to 0', () => {
     await waitFor(() => expect(onOuting(SEEN)).toEqual([]));
     expect(onOuting(ON_OUTING)).toEqual([2]);
   });
+
+  it('keeps its place while she counts on the row below, so the rows under her thumb never move, and folds once she stops', async () => {
+    await withRowAtOne();
+    const order = () => [...document.querySelectorAll('.tally-list:not(.tally-list--found) > li')].map((li) => Number(li.getAttribute('data-sp')));
+    tap(main('data-dec', SEEN)!);
+    const plusBelow = main('data-inc', ON_OUTING)!;
+    // A flock on the row below, one tap a second: past the 4 s a row at 0 would hold on its own.
+    for (let k = 0; k < 5; k++) {
+      await act(() => new Promise((r) => setTimeout(r, 950)));
+      expect(order()).toEqual([SEEN, ON_OUTING]);
+      expect(main('data-inc', ON_OUTING)).toBe(plusBelow);
+      tap(plusBelow);
+    }
+    expect(rowOf(SEEN).classList.contains('tally-row--zero')).toBe(true);
+    expect(main('data-n', ON_OUTING)!.textContent).toBe('7');
+    // She stops: it folds away 4 s after her last tap, and its sighting goes.
+    await act(() => new Promise((r) => setTimeout(r, 3000)));
+    expect(order()).toEqual([SEEN, ON_OUTING]);
+    await waitFor(() => expect(order()).toEqual([ON_OUTING]), { timeout: 3000 });
+    await waitFor(() => expect(onOuting(SEEN)).toEqual([]));
+    await waitFor(() => expect(onOuting(ON_OUTING)).toEqual([7]));
+  }, 20000);
 });
 
 describe('"Outing finished"', () => {

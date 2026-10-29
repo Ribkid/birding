@@ -299,9 +299,10 @@ function liferMoment(row: HTMLElement) {
   row.querySelector<HTMLElement>('.lifer')?.animate(GLOW, { duration: 500, easing: 'cubic-bezier(.2, .8, .2, 1)' });
 }
 
-// A row counted down to 0 holds its place this long, with Undo where its + was, before it folds away and its sighting
-// goes. The − that took it to 0, and any quick taps after it, land on that row, never on the one that would slide up
-// into its place.
+// A row counted down to 0 holds its place this long after her last tap on the outing, with Undo where its + was,
+// before it folds away and its sighting goes. The − that took it to 0, and any quick taps after it, land on that row,
+// never on the one that would slide up into its place; and while she counts on another row the rows under her thumb
+// stay where they are (the fold moves every row below it up one place).
 const ZERO_HOLD_MS = 4000;
 type ZeroState = { zeroed: ReadonlyMap<number, number>; folding: ReadonlySet<number> };
 const NO_ZERO_STATE: ZeroState = { zeroed: new Map(), folding: new Set() };
@@ -494,6 +495,18 @@ function OutingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Every tap on the outing keeps the rows where they are a while longer: each row at 0 holds its place for
+   * ZERO_HOLD_MS more, so nothing folds away under her thumb while she counts, whichever row she counts on.
+   */
+  const holdStill = () => {
+    const { zeroed } = zeros.current;
+    if (zeroed.size) {
+      const until = Date.now() + ZERO_HOLD_MS;
+      setZeros({ ...zeros.current, zeroed: new Map([...zeroed.keys()].map((id) => [id, until])) });
+    }
+  };
+
   const seenOutside = useMemo(
     () =>
       new Set(
@@ -620,13 +633,12 @@ function OutingPage() {
   // It gets its moment on the row as she taps (the save after it is quiet: no card), so the taps after it all count.
   const change = (sp: Species, delta: number): boolean => {
     refocus.current = { id: sp.id, attr: delta > 0 ? 'data-inc' : 'data-dec', until: Date.now() + 1500, spare: null };
+    holdStill();
     const { zeroed } = zeros.current;
     if (zeroed.has(sp.id)) {
-      // A − on a row already at 0 does nothing but keep it there a little longer, under the thumb still tapping.
-      if (delta < 0) {
-        setZeros({ ...zeros.current, zeroed: new Map(zeroed).set(sp.id, Date.now() + ZERO_HOLD_MS) });
-        return false;
-      }
+      // A − on a row already at 0 does nothing but keep it there a little longer (holdStill), under the thumb still
+      // tapping.
+      if (delta < 0) return false;
       // Undo (or a flock from holding it) puts the row back as it was: nothing had been taken off yet.
       const z = new Map(zeroed);
       z.delete(sp.id);
