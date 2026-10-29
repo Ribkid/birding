@@ -1,9 +1,8 @@
 # UI improvements, round one
 
-This branch, `ui-improvements`, is `port-fixes` plus nine of the ten improvements in the plan. Five lens agents
-proposed 28 ideas, three judges scored them (Sarah in the field, craft and risk), and ten were chosen. Each was built
-on its own branch `ui-<slug>` off `ui-improvements`, checked by its own acceptance script, reviewed, and merged back.
-Item 10 (larger text) was not finished, so it is not here.
+This branch, `ui-improvements`, is `port-fixes` plus the ten improvements in the plan. Five lens agents proposed 28
+ideas, three judges scored them (Sarah in the field, craft and risk), and ten were chosen. Each was built on its own
+branch `ui-<slug>` off `ui-improvements`, checked by its own acceptance script, reviewed, and merged back.
 
 Nothing here changes how sightings are stored. `src/core/db.js`, `sync.js`, `cloud.js`, `supabase/`, the IndexedDB
 stores and the sighting record shape are untouched; new code reads and writes only through the existing functions
@@ -201,15 +200,46 @@ becomes a list of birds to go and see properly, and "No photo yet" a shot list f
 **Files.** `src/lib/tiers.ts` (new), `src/screens/Dex.tsx`, `src/screens/dexParts.tsx`, `src/screens/screens.css`.
 Test: `tiers.test.ts`.
 
+## 10. Larger text that still works
+
+**For Sarah.** If she turns her phone's text up, to read in sun or without her glasses, she still has every tab, the
++, Back and Search, and nothing runs off the screen. Chrome on Android shows larger text by narrowing the page: 300 px
+wide at 130%, 260 at 150%, 195 at 200%.
+
+- Tab bar: the tabs share the bar's width. At 150% the + shrinks from 58 to 48 px, so each tab keeps a 44 px target
+  and its label. From about 175% the bar sits 4 px from the screen edges, the labels are hidden from sight (screen
+  readers still read them as the tabs' names), each icon gets a target the bar's full height, and the + is 44 px. At
+  200% a tab is 34.75 by 64 px, the most there is: five 44 px targets need 220 px, and the screen has 195.
+- Species page: once the Photos / 3D model / Card switch would touch Back and Search (below 316 px), it moves to its
+  own row under them and the name follows both rows. The hero is held to 45% of the screen unless the name needs more,
+  so the summary and Log come up into view at 130% and 150%. The photo credit wraps. Every segment of the switch is a
+  44 px target at every size (it was 38 px tall), drawn as before.
+- Dex: Bird of the day runs to a second line instead of an ellipsis, at every size. From 175% the pick sits under the
+  search and settings buttons. The count capsule's lines wrap inside it, and from 150% "photographed" and "heard only"
+  take a line each.
+- Learn no longer widens the page at 200%, which had pushed the tab bar off the bottom. Today's pips wrap, the quiz
+  packs stand one to a row, and Quick play's three-way choices stack.
+- A live outing below 300 px: Back and the Screen on and Sun toggles share the top row, so the outing's name breaks
+  between words. "In progress" drops under the count, and Discard and Finish outing take a row each.
+- At 390 and 320 px every screen draws as before. The changes sit in container queries, and in a page-width media
+  query for the outing page.
+
+**See it.** In Chrome DevTools, use a phone viewport of 195 x 422 (200%), 260 x 563 (150%) or 300 x 649 (130%) and
+open `#/dex`, `#/bird/42`, `#/learn` and a live outing. On an Android phone, turn up the font size in Settings.
+
+**Files.** `index.html`, `src/components/TabBar.tsx`, `src/styles/app.css`, `src/styles/look.css`,
+`src/screens/species.css`, `src/screens/screens.css`, `src/screens/learn/learn.css`, `src/screens/lists/lists.css`,
+`src/screens/rest.css`. Tests: `largeText.test.tsx` (the tab bar's sizes at every width from 195 to 420 px),
+`shell.test.tsx`.
+
 ## What was left out, and why
 
-**Item 10, larger text that still works, is not merged.** It was started on branch `ui-large-text` (worktree
-`C:\Users\Rhys\Documents\Birdy-React-ui-large-text`) but never finished: the worktree has uncommitted CSS changes and
-no commits, cut from an older `ui-improvements` (d0be3f4), so it was never reviewed. The problem it fixes is still
-there: with the phone's text at 150% the tab bar pushes Me off screen, at 200% Map and Me are gone, and on a species
-page the Photos / 3D model / Card switch covers Back and Search. It is a small job (container queries only), best done
-next on the current `ui-improvements`, keeping `index.html`'s shell in step with TabBar (`shell.test.tsx` enforces
-it).
+**What larger text (item 10) leaves as it was.** At 175% and 200% with an outing running, the map's controls (Sun,
+locate, zoom, Map / Satellite, New patch here) overlap, as before: 195 x 422 px has no room for all of them, so they
+want a different arrangement, such as a tools menu. The outing bar's "Outing in progress" is cut short from 150%. A
+few links in running text are under 44 px, as before: the group link and the xeno-canto and ALA links on a species
+page, and Leaflet's credit. Chrome 146's `<meta name="text-scale">` would let the text grow in place instead of the
+page narrowing, but only Chrome has it so far.
 
 **Runners-up from the plan, for next round:**
 
@@ -254,6 +284,8 @@ it).
    `C:\Users\Rhys\AppData\Local\Temp\claude\C--Users-Rhys-Documents-Birding\50bbd68c-99d3-4370-8d9a-7660079d8d87\scratchpad\ui-build\accept\<slug>.mjs`.
    Run one from the scratchpad's `tools` folder with `node ..\ui-build\accept\<slug>.mjs http://127.0.0.1:4600/`.
    Each prints PASS or FAIL lines. The scratchpad is temporary, so copy the scripts if you want to keep them.
+   `large-text.mjs` also takes a second address, a build without item 10, and then compares the 390 and 320 px
+   screens with it pixel for pixel and element by element.
 4. Every script routes Supabase so only `get_leaderboard`, `get_profile` and public storage reads pass. Nothing signs
    in or writes to the live project.
 5. For a full pass, the scratchpad's `tools` folder has `ui-final-routes.mjs`, `ui-final-flows.mjs`,
@@ -278,6 +310,9 @@ never-seen species saves quietly, focus stays on +, and the New band opens the c
 | sheet-gestures | 17/17 |
 | learn-answer-dock | 9/10, then 10/10 on a second run |
 | dex-tiers | 26/26 |
+
+Item 10 was checked on its own build afterwards: `large-text.mjs` passed 64/64 against the `ui-improvements` build
+as its reference, and the nine scripts above gave the same results there as on that build.
 
 The two first-run misses were timing, not the app:
 
