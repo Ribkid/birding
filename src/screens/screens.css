@@ -395,6 +395,15 @@ body.has-outing .logbar { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bot
 .shelf { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-2); margin: 0; padding: 0; list-style: none; }
 @media (min-width: 600px) { .shelf { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); } }
 @media (max-width: 359px) { .shelf-sec { margin-inline: var(--sp-3); padding-inline: var(--sp-3); } .trophy { margin-inline: var(--sp-3); } .trophy-ring { width: 88px; height: 88px; } }
+/* With the phone's text at 150% and more (Chrome on Android narrows the page) the trophy's words go under its ring
+   instead of a word a line beside it, and a shelf holds two badges to a row, then one, so its emblems and long names
+   (Paperbarks, bottlebrushes & banksias) stay on the screen. At 300 px and wider nothing changes. */
+.trophy, .shelf-sec { container-type: inline-size; }
+.trophy { container-name: trophy; }
+.shelf-sec { container-name: shelf; }
+@container trophy (width < 240px) { .trophy-top { flex-direction: column; align-items: flex-start; } }
+@container shelf (width < 240px) { .shelf { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container shelf (width < 168px) { .shelf { grid-template-columns: minmax(0, 1fr); } }
 .badge { display: grid; justify-items: center; align-content: start; gap: 2px; text-align: center; min-width: 0; }
 .badge--milestone { --ef: var(--azure); --eo: var(--on-azure); --ny: 44%; }
 .badge--kind { --ef: var(--kc); --eo: var(--on-kind); --ny: 50%; }

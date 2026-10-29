@@ -167,6 +167,8 @@ describe('the narrow rules stay out of the default layout', () => {
     ['styles/app.css', /^\.grid2$/, /grid-template-columns: minmax\(0, 1fr\)/],
     ['screens/screens.css', /^\.rows--dex \.row--sp$/, /"main main main"/],
     ['styles/app.css', /^\.gbars \.meter$/, /grid-row: 2/],
+    ['screens/screens.css', /^\.trophy-top$/, /flex-direction: column/],
+    ['screens/screens.css', /^\.shelf$/, /columns: (repeat\(2, )?minmax\(0, 1fr\)/],
   ];
   it.each(narrowOnly)('%s: %s', (file, sel, body) => {
     const found = rules(css(file)).filter((r) => sel.test(r.sel) && body.test(r.body));
