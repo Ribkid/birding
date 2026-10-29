@@ -296,6 +296,41 @@ function liferMoment(row: HTMLElement) {
   row.querySelector<HTMLElement>('.lifer')?.animate(GLOW, { duration: 500, easing: 'cubic-bezier(.2, .8, .2, 1)' });
 }
 
+// A row counted down to 0 holds its place this long, with Undo where its + was, before it folds away and its sighting
+// goes. The − that took it to 0, and any quick taps after it, land on that row, never on the one that would slide up
+// into its place.
+export const ZERO_HOLD_MS = 4000;
+type ZeroState = { zeroed: ReadonlyMap<number, number>; folding: ReadonlySet<number> };
+const NO_ZERO_STATE: ZeroState = { zeroed: new Map(), folding: new Set() };
+
+/** The row folds shut (280 ms) and the rows under it close up; no fold under reduced motion. */
+function foldRow(li: HTMLElement): Promise<unknown> {
+  if (!motionOK() || document.hidden || typeof li.animate !== 'function') return Promise.resolve();
+  const h = li.getBoundingClientRect().height;
+  const a = li.animate(
+    [
+      { height: `${h}px`, minHeight: '0px', opacity: 1 },
+      { height: '0px', minHeight: '0px', paddingTop: '0px', paddingBottom: '0px', borderBottomWidth: '0px', opacity: 0 },
+    ],
+    { duration: 280, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' },
+  );
+  // Once the row has gone from the page the fill goes too, so a row that comes back (a write taken back) is whole.
+  return a.finished.finally(() => requestAnimationFrame(() => a.cancel())).catch(() => {});
+}
+
+/** Focus in a row that is going moves on: to the search box for a keyboard (v1's keepFocus), else to the heading. */
+function focusOffRow(li: HTMLElement) {
+  const a = document.activeElement as HTMLElement | null;
+  if (!a || !li.contains(a)) return;
+  let keyboard = false;
+  try { keyboard = a.matches(':focus-visible'); } catch { /* an older engine */ }
+  const view = document.getElementById('view') ?? document.body;
+  const to = (keyboard && view.querySelector<HTMLElement>('[data-tq]')) || view.querySelector<HTMLElement>('h1');
+  if (!to) return;
+  if (to.matches('h1')) to.tabIndex = -1;
+  to.focus({ preventScroll: true });
+}
+
 // Screen on: a phone with an open eye on its screen (awake), not lines at its sides, which read as vibrate.
 const ScreenOnIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -306,8 +341,16 @@ const ScreenOnIcon = () => (
   </svg>
 );
 
-/** v1 renderOuting (js/app.js:2046): an outing's tally, live or finished. */
+/**
+ * v1 renderOuting (js/app.js:2046): an outing's tally, live or finished. Drawn afresh for each outing, so nothing
+ * held for one (a row at 0, the search, Screen on) carries over to another opened from the outing bar.
+ */
 export default function Outing() {
+  const { id } = useParams();
+  return <OutingPage key={id} />;
+}
+
+function OutingPage() {
   const { id } = useParams();
   const outingId = Number(id);
   const navigate = useNavigate();
@@ -345,6 +388,17 @@ export default function Outing() {
     finishedNote.current = false;
     toast('Outing finished', undefined, { clear: foot.current });
   };
+  // Rows counted down to 0 that still hold their place (species → when they fold) and those folding shut now. The −1
+  // that takes the sighting off goes to the tally only as the row goes, so Undo has nothing to put back. The ref is
+  // what handlers read (it is set with the state, so two taps in one frame see each other).
+  const [zeroState, setZeroState] = useState<ZeroState>(NO_ZERO_STATE);
+  const zeros = useRef(zeroState);
+  const setZeros = (next: ZeroState) => {
+    zeros.current = next;
+    setZeroState(next);
+  };
+  const zeroStamp = useRef<number | null>(null);
+  const list = useRef<HTMLUListElement>(null);
   const wake = useScreenWake(!!outing && !outing.endedAt);
 
   const recs = useMemo(
@@ -373,6 +427,69 @@ export default function Outing() {
   const counts = useMemo(() => new Map(tally.map((rec) => [rec.speciesId, rec])), [tally]);
   const tallied = useTally(outing, counts);
   const hold = useHold((anchor, sp) => setFlock({ key: ++flockKey.current, sp, anchor }));
+  const talliedNow = useRef(tallied);
+  useLayoutEffect(() => { talliedNow.current = tallied; });
+
+  /** Gives the tally the −1s that rows at 0 were holding back: their sightings go. */
+  const letGo = (ids: Iterable<number>) => {
+    const t = talliedNow.current;
+    for (const id of ids) {
+      const row = t.get(id);
+      if (row) t.tap(id, -(row.count ?? 1));
+    }
+  };
+  // Every row at 0 goes at once: Finish, Discard, Done editing, leaving the outing or the app.
+  const letAllGo = (redraw = true) => {
+    const { zeroed, folding } = zeros.current;
+    if (!zeroed.size && !folding.size) return;
+    zeros.current = NO_ZERO_STATE;
+    letGo(new Set([...zeroed.keys(), ...folding]));
+    if (redraw) setZeroState(NO_ZERO_STATE);
+  };
+  // A row's time at 0 is up: it folds shut, then its sighting goes.
+  const fold = (id: number) => {
+    const { zeroed, folding } = zeros.current;
+    if (!zeroed.has(id) || folding.has(id)) return;
+    const z = new Map(zeroed);
+    z.delete(id);
+    setZeros({ zeroed: z, folding: new Set(folding).add(id) });
+    const li = list.current?.querySelector<HTMLElement>(`:scope > [data-sp="${id}"]`) ?? null;
+    if (li) focusOffRow(li);
+    void (li ? foldRow(li) : Promise.resolve()).then(() => {
+      if (!zeros.current.folding.has(id)) return; // already gone with the rest (Finish, leaving)
+      const f = new Set(zeros.current.folding);
+      f.delete(id);
+      setZeros({ ...zeros.current, folding: f });
+      letGo([id]);
+    });
+  };
+
+  useEffect(() => {
+    if (!zeroState.zeroed.size) return;
+    const next = Math.min(...zeroState.zeroed.values());
+    const t = window.setTimeout(() => {
+      const now = Date.now();
+      for (const [id, until] of zeros.current.zeroed) if (until <= now + 20) fold(id);
+    }, Math.max(0, next - Date.now()));
+    return () => clearTimeout(t);
+    // fold reads only refs and state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zeroState]);
+
+  // Leaving the page or the app lets every row at 0 go, so the sighting is never left behind by a row she took off.
+  useEffect(() => {
+    const hidden = () => { if (document.visibilityState === 'hidden') letAllGo(); };
+    const pagehide = () => letAllGo();
+    document.addEventListener('visibilitychange', hidden);
+    window.addEventListener('pagehide', pagehide);
+    return () => {
+      document.removeEventListener('visibilitychange', hidden);
+      window.removeEventListener('pagehide', pagehide);
+      letAllGo(false);
+    };
+    // letAllGo reads only refs and a state setter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const seenOutside = useMemo(
     () =>
@@ -455,6 +572,14 @@ export default function Outing() {
     if (finishedNote.current && outing?.endedAt) sayFinished();
   });
 
+  // The 0 a − took a row to stamps in like any other count.
+  useLayoutEffect(() => {
+    const id = zeroStamp.current;
+    if (id == null) return;
+    zeroStamp.current = null;
+    for (const el of document.querySelectorAll<HTMLElement>(`[data-n0="${id}"]`)) stamp(el);
+  });
+
   if (!outing) {
     return (
       <>
@@ -492,7 +617,33 @@ export default function Outing() {
   // It gets its moment on the row as she taps (the save after it is quiet: no card), so the taps after it all count.
   const change = (sp: Species, delta: number): boolean => {
     refocus.current = { id: sp.id, attr: delta > 0 ? 'data-inc' : 'data-dec', until: Date.now() + 1500, spare: null };
+    const { zeroed } = zeros.current;
+    if (zeroed.has(sp.id)) {
+      // A − on a row already at 0 does nothing but keep it there a little longer, under the thumb still tapping.
+      if (delta < 0) {
+        setZeros({ ...zeros.current, zeroed: new Map(zeroed).set(sp.id, Date.now() + ZERO_HOLD_MS) });
+        return false;
+      }
+      // Undo (or a flock from holding it) puts the row back as it was: nothing had been taken off yet.
+      const z = new Map(zeroed);
+      z.delete(sp.id);
+      setZeros({ ...zeros.current, zeroed: z });
+      stamps.current.push({ id: sp.id, from: 0 });
+      buzz(8);
+      if (query) setQuery('');
+      announce(`${sp.name} put back.`);
+      if (delta === 1) return false;
+      delta -= 1;
+    }
     const cur = tallied.get(sp.id);
+    // Down to 0: the row stays where it is, at 0 with Undo, until ZERO_HOLD_MS have passed.
+    if (delta < 0 && cur && (cur.count ?? 1) + delta <= 0) {
+      setZeros({ ...zeros.current, zeroed: new Map(zeros.current.zeroed).set(sp.id, Date.now() + ZERO_HOLD_MS) });
+      zeroStamp.current = sp.id;
+      buzz(8);
+      announce(`${sp.name} taken off. Undo puts it back.`);
+      return false;
+    }
     const lifer = delta > 0 && !cur && !seenOutside.has(sp.id);
     stamps.current.push({ id: sp.id, from: cur ? cur.count : 0 });
     tallied.tap(sp.id, delta);
@@ -508,7 +659,7 @@ export default function Outing() {
 
   // A flock from the hold chooser: the count runs up to the new total and is read out once.
   const addFlock = (sp: Species, n: number) => {
-    const was = tallied.get(sp.id)?.count;
+    const was = zeros.current.zeroed.has(sp.id) ? 0 : tallied.get(sp.id)?.count;
     const lifer = change(sp, n);
     announce(`${lifer ? `${sp.name}, new for your dex. ` : ''}${n} more ${sp.name}, ${(was ?? 0) + n} in all.`);
   };
@@ -538,16 +689,24 @@ export default function Outing() {
   const tallyRow = (sp: Species, found = false) => {
     const row = tallied.get(sp.id);
     const firstEver = !seenOutside.has(sp.id);
-    const band = firstEver && !found && !!row;
+    const until = zeroState.zeroed.get(sp.id);
+    const goes = zeroState.folding.has(sp.id);
+    const zero = !!row && (until != null || goes);
+    const band = firstEver && !found && !!row && !zero;
     return (
-      <li className={`tally-row ${row ? 'tally-row--on' : ''}${band ? ' tally-row--new' : ''}`} key={sp.id} data-sp={sp.id}>
+      <li
+        className={`tally-row ${row ? 'tally-row--on' : ''}${band ? ' tally-row--new' : ''}${zero ? ' tally-row--zero' : ''}${goes ? ' tally-row--folding' : ''}`}
+        key={sp.id}
+        data-sp={sp.id}
+        inert={goes || undefined}
+      >
         <Link className="tally-sp" to={`/bird/${sp.id}`}>
           <span className="row-thumb">
             <SpeciesImage sp={sp} />
           </span>
           <span>
             <strong>{sp.name}</strong>
-            {firstEver && <span className="lifer">New for your dex</span>}
+            {zero ? <span className="tally-gone">Taken off</span> : firstEver && <span className="lifer">New for your dex</span>}
           </span>
         </Link>
         {band && (
@@ -573,26 +732,39 @@ export default function Outing() {
                   type="button"
                   data-dec={sp.id}
                   aria-label={`One fewer ${sp.name}`}
+                  aria-disabled={zero || undefined}
                   onClick={() => change(sp, -1)}
                 >
                   −
                 </button>
-                <span className="tally-n" data-n={sp.id}>
-                  {row.count ?? 'X'}
-                </span>
+                {zero ? (
+                  <span className="tally-n" data-n0={sp.id}>0</span>
+                ) : (
+                  <span className="tally-n" data-n={sp.id}>
+                    {row.count ?? 'X'}
+                  </span>
+                )}
               </>
             )}
             <button
               type="button"
               data-inc={sp.id}
-              className="tally-inc"
-              aria-label={`Add ${sp.name}`}
+              className={`tally-inc${zero ? ' tally-undo' : ''}`}
+              aria-label={zero ? `Undo, put ${sp.name} back` : `Add ${sp.name}`}
               {...hold.bind(sp)}
               onClick={(e) => {
                 if (!hold.swallowClick(e)) add(sp);
               }}
             >
-              +
+              {zero ? (
+                <>
+                  Undo
+                  {/* The time left before the row goes, as a ring that drains; started again by each − on it. */}
+                  <span className="tally-undo-ring" key={until ?? 'going'} aria-hidden="true" style={{ animationDuration: `${ZERO_HOLD_MS}ms` }} />
+                </>
+              ) : (
+                '+'
+              )}
             </button>
           </div>
         ) : (
@@ -603,6 +775,8 @@ export default function Outing() {
   };
 
   const ordered = tallied.rows.map((row) => byId.get(row.speciesId)).filter((sp): sp is Species => !!sp);
+  // Rows at 0 still hold their place, but no longer count.
+  const onTally = tallied.rows.filter((r) => !zeroState.zeroed.has(r.speciesId) && !zeroState.folding.has(r.speciesId)).length;
   // The sightings Discard removes: the stored ones, less those counted down to 0, plus species not stored yet.
   const sightingTotal =
     recs.length - [...counts.keys()].filter((id) => !tallied.get(id)).length + tallied.rows.filter((row) => !counts.has(row.speciesId)).length;
@@ -644,7 +818,7 @@ export default function Outing() {
 
       <div className="tally-sum">
         <p className="list-count">
-          <CountKey k={`outing/${outing.id}`} value={tallied.rows.length} /> species{!live && outing.distanceKm ? `, ${outing.distanceKm} km` : ''}
+          <CountKey k={`outing/${outing.id}`} value={onTally} /> species{!live && outing.distanceKm ? `, ${outing.distanceKm} km` : ''}
         </p>
         {live && <span className="ocard-live">In progress</span>}
       </div>
@@ -671,7 +845,7 @@ export default function Outing() {
       )}
 
       {ordered.length ? (
-        <ul className="tally-list rows--card">{ordered.map((sp) => tallyRow(sp))}</ul>
+        <ul ref={list} className="tally-list rows--card">{ordered.map((sp) => tallyRow(sp))}</ul>
       ) : editing ? (
         <p className="empty-inline tally-empty">Search above to add the first species. Tap + again each time you count another.</p>
       ) : (
@@ -689,17 +863,17 @@ export default function Outing() {
           type="button"
           className="btn btn--danger btn--quiet"
           data-cancel=""
-          onClick={() => setConfirmDelete(true)}
+          onClick={() => { letAllGo(); setConfirmDelete(true); }}
         >
           {live ? 'Discard' : 'Delete outing'}
         </button>
         <span key="spacer" className="spacer" />
         {!live && (
-          <button key="editbirds" type="button" className="btn" data-editbirds="" onClick={() => { setEditingBirds(!editingBirds); setQuery(''); }}>
+          <button key="editbirds" type="button" className="btn" data-editbirds="" onClick={() => { if (editingBirds) letAllGo(); setEditingBirds(!editingBirds); setQuery(''); }}>
             {editing ? 'Done editing species' : 'Edit species'}
           </button>
         )}
-        <button key="finish" type="button" className={`btn${live ? ' btn--primary' : ''}`} data-finish="" onClick={() => { hideBadgeToast(); setFinishOpen(true); }}>
+        <button key="finish" type="button" className={`btn${live ? ' btn--primary' : ''}`} data-finish="" onClick={() => { letAllGo(); hideBadgeToast(); setFinishOpen(true); }}>
           {live ? 'Finish outing' : 'Edit details'}
         </button>
       </div>

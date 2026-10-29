@@ -63,6 +63,7 @@ import { liveOutingId } from '../lib/liveOuting';
 import { ScreenWake, WAKE_MAX_MS, type WakeEnv } from '../lib/wakeLock';
 import { announceSaved, onCelebrate, type SaveOutcome } from '../screens/lists/shared';
 import { refreshStore } from '../lib/store';
+import { forgetTally } from '../screens/lists/useTally';
 import { byId } from '../lib/data';
 import { clearOf } from '../lib/toast';
 
@@ -103,6 +104,8 @@ const main = (attr: string, id: number) => document.querySelector<HTMLElement>(`
 const stored = (speciesId: number) => fake.stores.sightings.filter((s) => s.speciesId === speciesId).map((s) => s.count);
 
 beforeEach(async () => {
+  // Each test's records start afresh, ids and all: the outing's tally queue must not remember the last test's writes.
+  forgetTally(2);
   seed();
   document.documentElement.removeAttribute('data-theme');
   localStorage.clear();
@@ -247,6 +250,78 @@ describe('a lifer on the tally', () => {
     expect(document.querySelector('.toast:not(.toast--out)')).toBeNull();
     await act(() => new Promise((r) => setTimeout(r, 80)));
     expect(document.getElementById('announce')?.textContent).toBe(`${byId.get(ON_OUTING)!.name}, new for your dex. Badge earned: Wetlands`);
+  });
+});
+
+describe('a row counted down to 0', () => {
+  const SEEN = 1; // in her dex from before; here also on the outing at 1, above ON_OUTING (at 2)
+  async function withRowAtOne() {
+    fake.stores.sightings.push({ id: 3, speciesId: SEEN, count: 1, heard: false, date: today, time: '07:10', lat: -27.44, lng: 153.17, acc: null, place: 'Sandy Camp Road Wetlands', notes: 'kept', photoId: null, outingId: 2, createdAt: 3 });
+    await refreshStore();
+    page();
+    await waitFor(() => expect(main('data-dec', SEEN)).toBeTruthy());
+  }
+  const rowOf = (id: number) => main('data-inc', id)!.closest('li')!;
+  const tap = (el: HTMLElement) => { el.focus(); fireEvent.click(el); };
+  const onOuting = (id: number) => fake.stores.sightings.filter((s) => s.speciesId === id && s.outingId === 2).map((s) => s.count);
+
+  it('holds its place at 0 with Undo, so quick taps after it never reach the row below', async () => {
+    await withRowAtOne();
+    const order = () => [...document.querySelectorAll('.tally-list:not(.tally-list--found) > li')].map((li) => Number(li.getAttribute('data-sp')));
+    expect(order()).toEqual([SEEN, ON_OUTING]);
+    const minus = main('data-dec', SEEN)!;
+    tap(minus);
+    tap(main('data-dec', SEEN)!);
+    tap(main('data-dec', SEEN)!);
+    // Still in its place, at 0: the − rests, the + is Undo, and the bird below kept its 2.
+    expect(order()).toEqual([SEEN, ON_OUTING]);
+    expect(rowOf(SEEN).classList.contains('tally-row--zero')).toBe(true);
+    expect(rowOf(SEEN).querySelector('[data-n0]')?.textContent).toBe('0');
+    expect(main('data-dec', SEEN)!.getAttribute('aria-disabled')).toBe('true');
+    expect(main('data-inc', SEEN)!.getAttribute('aria-label')).toBe(`Undo, put ${byId.get(SEEN)!.name} back`);
+    expect(main('data-n', ON_OUTING)!.textContent).toBe('2');
+    expect(document.activeElement).toBe(main('data-dec', SEEN));
+    await act(() => new Promise((r) => setTimeout(r, 80)));
+    expect(document.getElementById('announce')?.textContent).toBe(`${byId.get(SEEN)!.name} taken off. Undo puts it back.`);
+    // Nothing is taken off the stored sighting while it holds.
+    await act(() => new Promise((r) => setTimeout(r, 300)));
+    expect(onOuting(SEEN)).toEqual([1]);
+    // Its time up, it folds away and its sighting goes; the bird below is untouched.
+    await waitFor(() => expect(main('data-inc', SEEN)).toBeNull(), { timeout: 6000 });
+    await waitFor(() => expect(onOuting(SEEN)).toEqual([]));
+    expect(onOuting(ON_OUTING)).toEqual([2]);
+  }, 10000);
+
+  it('Undo puts it back as it was, with nothing written', async () => {
+    await withRowAtOne();
+    tap(main('data-dec', SEEN)!);
+    tap(main('data-inc', SEEN)!); // Undo
+    expect(rowOf(SEEN).classList.contains('tally-row--zero')).toBe(false);
+    expect(main('data-n', SEEN)!.textContent).toBe('1');
+    expect(main('data-inc', SEEN)!.textContent).toBe('+');
+    expect(document.activeElement).toBe(main('data-inc', SEEN));
+    await act(() => new Promise((r) => setTimeout(r, 300)));
+    // The same record, notes and all: nothing was deleted and made again.
+    expect(fake.stores.sightings.find((s) => s.speciesId === SEEN && s.outingId === 2)).toMatchObject({ id: 3, count: 1, notes: 'kept' });
+    // A + after it counts on as usual.
+    tap(main('data-inc', SEEN)!);
+    await waitFor(() => expect(onOuting(SEEN)).toEqual([2]));
+  });
+
+  it('goes at once on Finish, and when she leaves the outing', async () => {
+    await withRowAtOne();
+    tap(main('data-dec', SEEN)!);
+    fireEvent.click(document.querySelector('[data-finish]')!);
+    expect(main('data-inc', SEEN)).toBeNull();
+    await waitFor(() => expect(onOuting(SEEN)).toEqual([]));
+    cleanup();
+    forgetTally(2);
+    seed();
+    await withRowAtOne();
+    tap(main('data-dec', SEEN)!);
+    cleanup(); // leaving the page
+    await waitFor(() => expect(onOuting(SEEN)).toEqual([]));
+    expect(onOuting(ON_OUTING)).toEqual([2]);
   });
 });
 
