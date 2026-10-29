@@ -249,11 +249,15 @@ it).
   the names below 360 px, and a word too long for its line breaks instead of running under the pips.
 - Scan and Listen logs were checked against v1: both already raise the "New for your dex" card; a test now holds it.
 - A species page's tint from its photo is never green or olive: those hues are pulled to the app's neutral slate
-  (`calmTint` in `lib/look.ts`), and other tints are kept.
-- A quick second tap on a tab or a species tile while the screen is still changing is no longer lost: it ends the
-  transition and goes to what is under her finger. A fumbled double tap still opens one page.
+  (`calmTint` in `lib/look.ts`), and other tints are kept. Khaki between brown and olive (38° to 48°, which reads
+  olive at the page's depth) keeps the brown it borders and fades toward grey, so a khaki photo such as the Paradise
+  Riflebird's gives a warm grey page rather than an olive one.
+- A quick second tap on a tab, a species tile or the arriving screen's Back link while the screen is still changing
+  is no longer lost: it ends the transition and goes to what is under her finger. A fumbled double tap still opens
+  one page.
 - The phone's Back closes the photo viewer before it leaves the species page (a CloseWatcher close request, so no
-  history entry; where CloseWatcher is missing, Back leaves as before).
+  history entry; where CloseWatcher is missing, Back leaves as before). Checked with a real close request from
+  Chromium (an Escape the app never sees, which runs the same path as Android's Back), not yet on a phone.
 - The photo viewer has named Previous and Next buttons either side of its count.
 - progressive-photo's "develops in" check serves the large photo from a local stub, so it no longer depends on a
   live photo host.
@@ -265,7 +269,7 @@ it).
 - In about one Back in four on a slow phone, the shrink waits for the tile's photo to decode (up to about 0.6 s). The
   `port-fixes` build does the same. Every Back still lands exactly.
 - Not tried on real hardware: the photo viewer's pinch, double tap, swipe and drag; the sheet flick; the phone's own
-  Back swipe. Everything was checked in Chromium under Playwright only, with no real Firefox, WebKit, TalkBack or
+  Back swipe, and Android's Back closing the photo viewer. Everything was checked in Chromium under Playwright only, with no real Firefox, WebKit, TalkBack or
   VoiceOver.
 
 ## How to check it
