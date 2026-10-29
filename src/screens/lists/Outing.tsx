@@ -25,6 +25,7 @@ import {
   todayStr,
   useActiveOutingId,
   useOutingRows,
+  useLiferBadges,
   useSettled,
   useSightingRows,
   type OutingRow,
@@ -50,6 +51,7 @@ const minutesSinceStart = (outing: OutingRow): number | null => {
  * they earned (this session's, which the toast said as she tapped: opening the sheet takes that toast down).
  */
 function OutingLifers({ lifers, live }: { lifers: Species[]; live: boolean }) {
+  useLiferBadges();
   if (!lifers.length) return null;
   const earned = [...new Map(lifers.flatMap((sp) => liferBadges(sp.id)).map((b) => [b.id, b])).values()];
   return (

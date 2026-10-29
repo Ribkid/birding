@@ -232,6 +232,21 @@ describe('a lifer on the tally', () => {
     expect(line.textContent).toBe('Badge earned: Gardens & parks');
     expect(again.classList.contains('toast--out')).toBe(true);
   });
+
+  it('a badge whose save lands with the Finish sheet already open is said in the sheet, not in a toast over its fields', async () => {
+    const quiet = (names: string[]) => announceSaved({ speciesId: ON_OUTING, date: today }, { id: 2, isNew: true, newBadges: names.map((n) => ({ id: n, name: n })), sightings: [] }, { quiet: true });
+    quiet([]); // no badge from an earlier test
+    page();
+    await waitFor(() => expect(main('data-lifer', ON_OUTING)).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-finish]')!);
+    await waitFor(() => expect(document.querySelector('.finish-lifers-h')).toBeTruthy());
+    expect(document.querySelector('.finish-lifers-badges')).toBeNull();
+    act(() => quiet(['Wetlands']));
+    await waitFor(() => expect(document.querySelector('.finish-lifers-badges')?.textContent).toBe('Badge earned: Wetlands'));
+    expect(document.querySelector('.toast:not(.toast--out)')).toBeNull();
+    await act(() => new Promise((r) => setTimeout(r, 80)));
+    expect(document.getElementById('announce')?.textContent).toBe(`${byId.get(ON_OUTING)!.name}, new for your dex. Badge earned: Wetlands`);
+  });
 });
 
 describe('saves outside the tally', () => {

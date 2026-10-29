@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import { db } from '../../core/db.js';
@@ -11,7 +12,7 @@ import { badges, MONTHS, targets } from '../../core/stats.js';
 import { byId, dexCode, SPECIES, type Species } from '../../lib/data';
 import { useOutings, useSightings, type Outing, type Sighting } from '../../lib/hooks';
 import { useStore, type StoreState } from '../../lib/store';
-import { toast } from '../../lib/toast';
+import { announce, toast } from '../../lib/toast';
 import { Icon } from '../../components/Icon';
 import { Sheet } from '../../components/Sheet';
 import { nudgeAfterSave } from '../me/nudge';
@@ -268,9 +269,28 @@ export interface AnnounceOptions {
 // still say them once the toast has gone (memory only: nothing is stored).
 const liferBadgeMap = new Map<number, EarnedBadge[]>();
 let badgeToastDown: (() => void) | null = null;
+let liferBadgeVersion = 0;
+const liferBadgeSubs = new Set<() => void>();
+const subscribeLiferBadges = (fn: () => void) => {
+  liferBadgeSubs.add(fn);
+  return () => { liferBadgeSubs.delete(fn); };
+};
+const getLiferBadgeVersion = () => liferBadgeVersion;
 
 /** The badges the quiet first sighting of `speciesId` earned this session. */
 export const liferBadges = (speciesId: number): EarnedBadge[] => liferBadgeMap.get(speciesId) ?? [];
+
+/**
+ * Redraws with each badge a quiet first sighting earns, so a Finish sheet that is already open when the save lands
+ * (Finish straight after the tap) says it too.
+ */
+export function useLiferBadges(): number {
+  return useSyncExternalStore(subscribeLiferBadges, getLiferBadgeVersion, getLiferBadgeVersion);
+}
+
+/** True while a sheet or the new-for-your-dex card is open: a toast there would sit over its fields. */
+const layerOpen = () => typeof document !== 'undefined'
+  && !!document.querySelector('.sheet-wrap:not([data-closing]), .celebrate:not(.celebrate--out)');
 
 /** Takes a quiet first sighting's badge toast down early, for the card or sheet that says the badge itself. */
 export function hideBadgeToast(): void {
@@ -287,8 +307,15 @@ export function announceSaved(rec: SightingInput, outcome: SaveOutcome, { afterN
   if (outcome.isNew && rec.speciesId != null && quiet) {
     if (outcome.newBadges.length) liferBadgeMap.set(rec.speciesId, outcome.newBadges);
     else liferBadgeMap.delete(rec.speciesId);
-    // One message for screen readers: a second one straight after the row's "new for your dex" would cut it off.
-    if (badges) badgeToastDown = toast(`Badge earned: ${badges}`, `${byId.get(rec.speciesId)?.name ?? 'New species'}, new for your dex. Badge earned: ${badges}`);
+    liferBadgeVersion += 1;
+    for (const fn of liferBadgeSubs) fn();
+    if (badges) {
+      // One message for screen readers: a second one straight after the row's "new for your dex" would cut it off.
+      const say = `${byId.get(rec.speciesId)?.name ?? 'New species'}, new for your dex. Badge earned: ${badges}`;
+      // A save that lands with the Finish sheet already open (Finish straight after the tap) says it there instead.
+      if (layerOpen()) announce(say);
+      else badgeToastDown = toast(`Badge earned: ${badges}`, say);
+    }
   } else if (outcome.isNew && rec.speciesId != null) {
     celebrate({ speciesId: rec.speciesId, newBadges: outcome.newBadges, sightings: outcome.sightings, afterNav });
   } else if (badges) {
