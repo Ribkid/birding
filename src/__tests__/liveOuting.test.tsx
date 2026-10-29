@@ -376,6 +376,34 @@ describe('"Outing finished"', () => {
       foot.remove();
     }
   });
+
+  it('stops watching the page once a newer toast takes its place, not only when it times out', () => {
+    const watching = new Set<MutationObserver>();
+    const observe = vi.spyOn(MutationObserver.prototype, 'observe').mockImplementation(function (this: MutationObserver, target: Node) {
+      if (target === document.body) watching.add(this);
+    });
+    const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect').mockImplementation(function (this: MutationObserver) {
+      watching.delete(this);
+    });
+    const foot = document.body.appendChild(document.createElement('div'));
+    try {
+      toast('Outing finished', undefined, { clear: foot });
+      expect(watching.size).toBe(1);
+      // Edit details, Save details within its 4.5 s: a second "Outing finished" replaces it.
+      const down = toast('Outing finished', undefined, { clear: foot });
+      expect(document.querySelectorAll('.toast')).toHaveLength(1);
+      expect(watching.size).toBe(1);
+      toast('Badge earned: Gardens & parks'); // any other toast replaces it too
+      expect(watching.size).toBe(0);
+      down(true); // a late take-down of the replaced one does nothing more
+      expect(watching.size).toBe(0);
+      document.querySelector('.toast')?.remove();
+    } finally {
+      observe.mockRestore();
+      disconnect.mockRestore();
+      foot.remove();
+    }
+  });
 });
 
 describe('saves outside the tally', () => {
