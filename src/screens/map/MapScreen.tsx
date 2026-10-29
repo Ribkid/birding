@@ -1177,7 +1177,7 @@ function MapView() {
               value={q}
               placeholder="Search species and places"
               aria-label="Search the map"
-              aria-controls="map-search-results"
+              aria-controls={searchVisible ? 'map-search-results' : undefined}
               autoComplete="off"
               onFocus={() => setSearchOpen(true)}
               onChange={(event) => setQ(event.target.value)}
