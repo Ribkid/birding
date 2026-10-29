@@ -13,7 +13,9 @@ describe('secondTapTarget', () => {
     document.body.innerHTML = `
       <nav class="tabbar"><a href="#/dex" aria-current="page"><span id="dex-ico"></span></a><a href="#/learn"><span id="learn-ico"></span></a><a id="plus" href="#/add"></a></nav>
       <main id="view"><a href="#/bird/3" data-tile="3"><span class="tile-img"><img id="pic"></span></a><button id="btn">Log</button>
-      <a href="#/bird/9" id="text-link">Rock Dove</a><div inert><a href="#/bird/4" id="under"></a></div><a href="#/settings" id="settings">Settings</a></main>`;
+      <a href="#/bird/9" id="text-link">Rock Dove</a><div inert><a href="#/bird/4" id="under"></a></div><a href="#/settings" id="settings">Settings</a>
+      <div class="bird-hero"><a class="iconbtn iconbtn--float" href="#/dex" id="sp-back"><svg id="sp-back-ico"></svg></a><a class="iconbtn iconbtn--float iconbtn--right" href="#/dex?q=" id="sp-search"></a></div>
+      <header class="page-head page-head--back"><a class="iconbtn" href="#/lists" id="head-back"></a><button class="iconbtn" id="head-btn"></button></header></main>`;
   };
   const $ = (id: string) => document.getElementById(id);
 
@@ -23,6 +25,15 @@ describe('secondTapTarget', () => {
     expect(secondTapTarget($('plus'), '#/dex')?.id).toBe('plus');
     expect(secondTapTarget($('pic'), '#/dex')?.getAttribute('data-tile')).toBe('3');
     expect(secondTapTarget($('text-link'), '#/dex')?.id).toBe('text-link');
+  });
+
+  it("goes to the arriving screen's own Back link: a species page's, or a page head's", () => {
+    dom();
+    expect(secondTapTarget($('sp-back-ico'), '#/bird/3')?.id).toBe('sp-back');
+    expect(secondTapTarget($('head-back'), '#/log')?.id).toBe('head-back');
+    // Search on the hero, and a page head's button (it may do more than go back), are left alone.
+    expect(secondTapTarget($('sp-search'), '#/bird/3')).toBeNull();
+    expect(secondTapTarget($('head-btn'), '#/add')).toBeNull();
   });
 
   it('leaves alone the tab or species she is on, anything else, and a page under a layer', () => {

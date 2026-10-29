@@ -191,12 +191,13 @@ function onPress(e: MouseEvent) {
 // ---------- a tap that lands while the screen changes ----------
 // While a view transition runs, the page under it can't be hit: Chromium sends every tap to <html>, so a quick second
 // tap on a tab or a tile (60 to 250 ms after the first) was lost. Such a tap ends the transition at once (a new tap
-// takes over from the motion, as on a phone) and goes to the tab, or the tile or card that opens a species, under her
-// finger on the screen she can see arriving. Left alone: a second tap on the spot of the first (a fumbled double tap
-// still opens one page), one on the tab or species she is now on, and anything else, which only ends the motion.
-const SECOND_TAP = '.tabbar a[href], a[data-tile], a[href^="#/bird/"]';
+// takes over from the motion, as on a phone) and goes to the tab, the tile or card that opens a species, or the
+// screen's own Back link (a species opened by mistake, left at once), under her finger on the screen she can see
+// arriving. Left alone: a second tap on the spot of the first (a fumbled double tap still opens one page), one on the
+// tab or species she is now on, and anything else, which only ends the motion.
+const SECOND_TAP = '.tabbar a[href], a[data-tile], a[href^="#/bird/"], .bird-hero > a.iconbtn--float:not(.iconbtn--right), .page-head--back > a.iconbtn[href]';
 let lastTap: { x: number; y: number; at: number } | null = null;
-/** What a tap that landed during a transition goes to, from what is under it now: a tab, or a link to a species. */
+/** What a tap that landed during a transition goes to, from what is under it now: a tab, a link to a species, or Back. */
 export function secondTapTarget(hit: Element | null, here: string): HTMLElement | null {
   const el = hit?.closest?.<HTMLElement>(SECOND_TAP) ?? null;
   if (!el || el.closest('[inert]')) return null;
