@@ -28,6 +28,8 @@ export function announce(msg: string) {
 
 let toastEl: HTMLElement | null = null;
 let toastT = 0;
+/** Lets go of the toast on screen's watch on <body> (one placed clear of an element), when a newer toast replaces it. */
+let toastStop = () => {};
 /**
  * Where a toast rests to keep clear of `clear` (an element near the foot of the screen, such as a page's own
  * buttons), as its offset from the bottom of the viewport: null when its usual place doesn't cover it, or when there
@@ -49,6 +51,9 @@ export function clearOf(rest: { top: number; bottom: number }, clear: { top: num
 export function toast(msg: string, say = msg, { clear }: { clear?: Element | null } = {}): (now?: boolean) => void {
   announce(say);
   clearTimeout(toastT);
+  // The toast it replaces never reaches its own hide(), so its watch on <body> goes here.
+  toastStop();
+  toastStop = () => {};
   toastEl?.remove();
   const t = toastEl = document.createElement('div');
   t.className = 'toast';
@@ -85,6 +90,7 @@ export function toast(msg: string, say = msg, { clear }: { clear?: Element | nul
     const mo = new MutationObserver(place);
     mo.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
     stopPlacing = () => mo.disconnect();
+    toastStop = stopPlacing;
   }
   toastT = window.setTimeout(() => hide(), 4500);
   return hide;

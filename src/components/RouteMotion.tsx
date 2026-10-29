@@ -173,6 +173,11 @@ const unreveal = () => { for (const a of revealed.splice(0)) a.style.removePrope
 // Tapping a photo that links to a species names it, so the view transition grows it into that page's hero. Any press
 // on a control is kept as the control she may leave the screen by.
 function onPress(e: MouseEvent) {
+  if (fumbled(e)) {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    return;
+  }
   const target = e.target as Element | null;
   const control = target?.closest?.(FOCUSABLE);
   pressed = control ? { el: control, at: performance.now() } : null;
@@ -197,6 +202,18 @@ function onPress(e: MouseEvent) {
 // tab or species she is now on, and anything else, which only ends the motion.
 const SECOND_TAP = '.tabbar a[href], a[data-tile], a[href^="#/bird/"], .bird-hero > a.iconbtn--float:not(.iconbtn--right), .page-head--back > a.iconbtn[href]';
 let lastTap: { x: number; y: number; at: number } | null = null;
+/** When the address last changed. */
+let navAt = -Infinity;
+/**
+ * A fumbled double tap: a second tap within 400 ms, on the spot of a first tap that changed the screen. With no
+ * transition to catch it (reduced motion, or one already over), it would land on whatever the new screen has there:
+ * a tile's species page opened its photo viewer, a tab tapped twice went back to the top. It goes nowhere, as one
+ * during a transition does (onLostTap), so a fumbled double tap opens one screen.
+ */
+function fumbled(e: MouseEvent) {
+  if (e.button || !(e.clientX || e.clientY) || !lastTap || navAt < lastTap.at) return false;
+  return performance.now() - lastTap.at < 400 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 32;
+}
 /** What a tap that landed during a transition goes to, from what is under it now: a tab, a link to a species, or Back. */
 export function secondTapTarget(hit: Element | null, here: string): HTMLElement | null {
   const el = hit?.closest?.<HTMLElement>(SECOND_TAP) ?? null;
@@ -266,6 +283,7 @@ function onRouteChange(prev: Location, next: Location, action: Action, delta: nu
   tabTap = false;
   // Only the history state changed (the same screen), or the first draw's redirect from an empty address.
   if (from === to || prev.pathname === '/') { apply(); return; }
+  navAt = performance.now();
   // Leaving the screen on show (not one a quick second tap is already replacing): keep where she was on it.
   if (prev.key === drawnKey) {
     const here = placeHere();
@@ -474,6 +492,7 @@ export function forgetPlaces() {
   returning = null;
   pressed = null;
   lastTap = null;
+  navAt = -Infinity;
   drawnKey = null;
   tabTap = false;
   stopLanding();

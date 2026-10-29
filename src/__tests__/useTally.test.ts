@@ -276,6 +276,60 @@ describe('TallyQueue', () => {
     expect(f.rows.has(1)).toBe(false);
   });
 
+  it('a lifer tapped again just before she leaves gets one sighting, even when the store reads its first save back before the second', async () => {
+    const f = fakeDb(100);
+    const q = new TallyQueue(OUTING, f.io);
+    const old = { id: 1, speciesId: 4, date: '2026-10-29', time: '06:50', count: 2, outingId: 7, uid: 'u1', updatedAt: 500 };
+    f.rows.set(1, { ...old } as never);
+    q.setStored(f.stored()); // the rows as they were when she left: nothing hands the queue the store's rows after this
+    q.tap(52, 1); // a lifer, being written
+    await vi.advanceTimersByTimeAsync(10);
+    q.tap(4, 1);
+    q.tap(52, 1);
+    await vi.advanceTimersByTimeAsync(150); // the lifer's save has landed and 4's write is running
+    expect(f.log).toEqual(['create 52=1']);
+    const read = new Map([...f.rows.values()].map((r) => [r.id, { ...r }]));
+    q.catchUp((id) => read.get(id)); // the store reads the lifer's save back, with the outing off screen
+    await settle(q);
+    expect(f.log).toEqual(['create 52=1', 'put 4=3', 'put 52=2']);
+    expect([...f.rows.values()].filter((r) => r.speciesId === 52).map((r) => r.count)).toEqual([2]);
+  });
+
+  it('a stored species tapped again just before she leaves keeps every tap, even when the store reads the first write back before the next', async () => {
+    const f = fakeDb(100);
+    const q = new TallyQueue(OUTING, f.io);
+    const old = { id: 1, speciesId: 4, date: '2026-10-29', time: '06:50', count: 2, outingId: 7, uid: 'u1', updatedAt: 500 };
+    f.rows.set(1, { ...old } as never);
+    q.setStored(f.stored());
+    q.tap(4, 1); // being written: 3
+    await vi.advanceTimersByTimeAsync(10);
+    q.tap(52, 1);
+    q.tap(4, 1);
+    await vi.advanceTimersByTimeAsync(150); // 4's 3 has landed and the lifer's save is running
+    expect(f.log).toEqual(['put 4=3']);
+    const read = new Map([...f.rows.values()].map((r) => [r.id, { ...r }]));
+    q.catchUp((id) => read.get(id)); // the store reads the 3 back
+    await settle(q);
+    expect(f.log).toEqual(['put 4=3', 'create 52=1', 'put 4=4']);
+    expect(f.rows.get(1)?.count).toBe(4);
+  });
+
+  it('a record moved off the outing elsewhere is not what the next write builds on', async () => {
+    const f = fakeDb(100);
+    const q = new TallyQueue(OUTING, f.io);
+    q.setStored(new Map());
+    q.tap(52, 1);
+    await vi.advanceTimersByTimeAsync(10);
+    q.tap(4, 1);
+    q.tap(52, 1);
+    await vi.advanceTimersByTimeAsync(150);
+    // The store reads the lifer's save back already moved to another outing (an edit on the species page).
+    const read = new Map([...f.rows.values()].map((r) => [r.id, { ...r, outingId: 8 }]));
+    q.catchUp((id) => read.get(id));
+    await settle(q);
+    expect(f.log).toEqual(['create 52=1', 'create 4=1', 'create 52=1']);
+  });
+
   it('keeps a write the store has not read back, and a store that is behind changes nothing', async () => {
     const f = fakeDb();
     const q = new TallyQueue(OUTING, f.io);

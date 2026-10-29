@@ -158,3 +158,61 @@ describe('a tap during a transition', () => {
     expect(started).toEqual([]);
   });
 });
+
+describe('a fumbled double tap with no transition (reduced motion)', () => {
+  const wait = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)));
+  const h1 = () => document.querySelector('h1')?.textContent;
+  const tapOn = (el: Element, x: number, y: number) => act(() => { el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 })); });
+  const viewer = vi.fn();
+
+  beforeEach(async () => {
+    forgetPlaces();
+    viewer.mockClear();
+    window.location.hash = '#/dex';
+    await new Promise((r) => setTimeout(r, 30));
+    vi.spyOn(window, 'scrollTo').mockImplementation((() => {}) as typeof window.scrollTo);
+    render(
+      <MotionHashRouter>
+        <main id="view">
+          <Routes>
+            <Route path="/dex" element={<><h1>Dex</h1><a href="#/bird/3" data-tile="3">Magpie Goose</a></>} />
+            {/* The species page's photo is a button that opens the viewer, where the tile was. */}
+            <Route path="/bird/:id" element={<><h1>Bird</h1><button id="hero" type="button" onClick={viewer}>Photo</button></>} />
+          </Routes>
+        </main>
+      </MotionHashRouter>,
+    );
+  });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('opens the species page and nothing on it: the second tap on the same spot goes nowhere', async () => {
+    tapOn(document.querySelector('[data-tile="3"]')!, 150, 300);
+    await waitFor(() => expect(h1()).toBe('Bird'));
+    await wait(120);
+    tapOn(document.getElementById('hero')!, 153, 303);
+    expect(viewer).not.toHaveBeenCalled();
+  });
+
+  it('a tap on the new page a moment later, or somewhere else on it, still counts', async () => {
+    tapOn(document.querySelector('[data-tile="3"]')!, 150, 300);
+    await waitFor(() => expect(h1()).toBe('Bird'));
+    await wait(120);
+    tapOn(document.getElementById('hero')!, 150, 380); // well away from the first tap
+    expect(viewer).toHaveBeenCalledTimes(1);
+    await wait(400);
+    tapOn(document.getElementById('hero')!, 151, 301); // the same spot, but not a double tap any more
+    expect(viewer).toHaveBeenCalledTimes(2);
+    tapOn(document.getElementById('hero')!, 151, 301); // a double tap on a page that didn't change: both count
+    expect(viewer).toHaveBeenCalledTimes(3);
+  });
+
+  it('a keyboard press is never taken for a double tap', async () => {
+    tapOn(document.querySelector('[data-tile="3"]')!, 150, 300);
+    await waitFor(() => expect(h1()).toBe('Bird'));
+    tapOn(document.getElementById('hero')!, 0, 0);
+    expect(viewer).toHaveBeenCalledTimes(1);
+  });
+});

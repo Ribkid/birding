@@ -8,6 +8,7 @@ import { LocationPicker, type PickedPlace } from '../../components/LocationPicke
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { SunToggle } from '../../components/SunToggle';
 import { announce, toast } from '../../lib/toast';
+import { topLayer } from '../../lib/layers';
 import { countOnTo, countUp, motionOK, stamp } from '../../lib/motion';
 import { useScreenWake } from '../../lib/wakeLock';
 import { CountKey } from './hubParts';
@@ -278,7 +279,7 @@ function FinishOuting({
 }
 
 /** Where focus should land after a + or −, as v1's keepFocus(..., { fallback: '[data-tq], #view h1' }) did. */
-type Refocus = { id: number; attr: 'data-inc' | 'data-dec'; until: number; spare: HTMLElement | null };
+type Refocus = { id: number; attr: 'data-inc' | 'data-dec' | 'data-lifer'; until: number; spare: HTMLElement | null };
 
 // The lifer moment on a tally row, instead of the card that made the page inert: the gold New band clamps onto the
 // photo (the celebration card's leg-band clamp) and the "New for your dex" label glows gold once, 500 ms. --sun is
@@ -299,10 +300,15 @@ function liferMoment(row: HTMLElement) {
   row.querySelector<HTMLElement>('.lifer')?.animate(GLOW, { duration: 500, easing: 'cubic-bezier(.2, .8, .2, 1)' });
 }
 
-// A row counted down to 0 holds its place this long, with Undo where its + was, before it folds away and its sighting
-// goes. The − that took it to 0, and any quick taps after it, land on that row, never on the one that would slide up
-// into its place.
+// A row counted down to 0 holds its place this long after her last tap on the outing, with Undo where its + was,
+// before it folds away and its sighting goes. The − that took it to 0, and any quick taps after it, land on that row,
+// never on the one that would slide up into its place; and while she counts on another row the rows under her thumb
+// stay where they are (the fold moves every row below it up one place).
 const ZERO_HOLD_MS = 4000;
+// After a + with a name in the search box, the box clears (as v1's did) once she has stopped tapping for this long,
+// not with the first +: the results going would move the tally up under her thumb, and the rest of a quick burst on
+// the bird she found would land on whichever tally row took its place.
+const SEARCH_HOLD_MS = 1500;
 type ZeroState = { zeroed: ReadonlyMap<number, number>; folding: ReadonlySet<number> };
 const NO_ZERO_STATE: ZeroState = { zeroed: new Map(), folding: new Set() };
 
@@ -494,6 +500,46 @@ function OutingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The search clearing after a + (SEARCH_HOLD_MS): when it is due, and the species the + was for.
+  const searchClear = useRef<{ t: number; id: number } | null>(null);
+  const stopSearchClear = () => {
+    if (searchClear.current) clearTimeout(searchClear.current.t);
+    searchClear.current = null;
+  };
+  const clearSearchSoon = (id: number) => {
+    stopSearchClear();
+    const t = window.setTimeout(() => {
+      // A card or sheet over the page (the one a result's New band opens), or the flock chooser held open from a
+      // result: the results wait for it to close, so it can give focus back to the control that opened it.
+      if (topLayer() || document.querySelector('.tally-chooser')) { clearSearchSoon(id); return; }
+      searchClear.current = null;
+      // A control in the results that has focus goes with them: focus moves to its twin on the tally (v1's keepFocus).
+      const a = document.activeElement as HTMLElement | null;
+      if (a?.closest('.tally-list--found')) {
+        const sp = Number(a.closest('[data-sp]')?.getAttribute('data-sp')) || id;
+        const attr = (['data-lifer', 'data-dec'] as const).find((k) => a.hasAttribute(k)) ?? 'data-inc';
+        refocus.current = { id: sp, attr, until: Date.now() + 1500, spare: null };
+      }
+      setQuery('');
+    }, SEARCH_HOLD_MS);
+    searchClear.current = { t, id };
+  };
+  useEffect(() => stopSearchClear, []);
+
+  /**
+   * Every tap on the outing keeps the rows where they are a while longer: each row at 0 holds its place for
+   * ZERO_HOLD_MS more, and the search waiting to clear keeps its results. Nothing then moves under her thumb while
+   * she counts, whichever row she counts on.
+   */
+  const holdStill = () => {
+    const { zeroed } = zeros.current;
+    if (zeroed.size) {
+      const until = Date.now() + ZERO_HOLD_MS;
+      setZeros({ ...zeros.current, zeroed: new Map([...zeroed.keys()].map((id) => [id, until])) });
+    }
+    if (searchClear.current) clearSearchSoon(searchClear.current.id);
+  };
+
   const seenOutside = useMemo(
     () =>
       new Set(
@@ -564,7 +610,9 @@ function OutingPage() {
     if (!moments.current.size) return;
     const view = document.getElementById('view');
     for (const [id, until] of [...moments.current]) {
-      const row = view?.querySelector<HTMLElement>(`.tally-list:not(.tally-list--found) [data-sp="${id}"]`);
+      // On the row she tapped: a search result while the results are up (SEARCH_HOLD_MS), else the tally's row.
+      const row = view?.querySelector<HTMLElement>(`.tally-list--found [data-sp="${id}"]`)
+        ?? view?.querySelector<HTMLElement>(`.tally-list:not(.tally-list--found) [data-sp="${id}"]`);
       if (!row && Date.now() < until) continue;
       moments.current.delete(id);
       if (row) liferMoment(row);
@@ -620,20 +668,19 @@ function OutingPage() {
   // It gets its moment on the row as she taps (the save after it is quiet: no card), so the taps after it all count.
   const change = (sp: Species, delta: number): boolean => {
     refocus.current = { id: sp.id, attr: delta > 0 ? 'data-inc' : 'data-dec', until: Date.now() + 1500, spare: null };
+    holdStill();
     const { zeroed } = zeros.current;
     if (zeroed.has(sp.id)) {
-      // A − on a row already at 0 does nothing but keep it there a little longer, under the thumb still tapping.
-      if (delta < 0) {
-        setZeros({ ...zeros.current, zeroed: new Map(zeroed).set(sp.id, Date.now() + ZERO_HOLD_MS) });
-        return false;
-      }
+      // A − on a row already at 0 does nothing but keep it there a little longer (holdStill), under the thumb still
+      // tapping.
+      if (delta < 0) return false;
       // Undo (or a flock from holding it) puts the row back as it was: nothing had been taken off yet.
       const z = new Map(zeroed);
       z.delete(sp.id);
       setZeros({ ...zeros.current, zeroed: z });
       stamps.current.push({ id: sp.id, from: 0 });
       buzz(8);
-      if (query) setQuery('');
+      if (query) clearSearchSoon(sp.id);
       announce(`${sp.name} put back.`);
       if (delta === 1) return false;
       delta -= 1;
@@ -652,7 +699,7 @@ function OutingPage() {
     tallied.tap(sp.id, delta);
     if (lifer) moments.current.set(sp.id, Date.now() + 1500);
     buzz(lifer ? [20, 30, 40] : 8);
-    if (delta > 0 && query) setQuery('');
+    if (delta > 0 && query) clearSearchSoon(sp.id);
     return lifer;
   };
 
@@ -695,7 +742,8 @@ function OutingPage() {
     const until = zeroState.zeroed.get(sp.id);
     const goes = zeroState.folding.has(sp.id);
     const zero = !!row && (until != null || goes);
-    const band = firstEver && !found && !!row && !zero;
+    // Once the bird is on the tally; a search result too, while the results stay up after its + (SEARCH_HOLD_MS).
+    const band = firstEver && !!row && !zero;
     return (
       <li
         className={`tally-row ${row ? 'tally-row--on' : ''}${band ? ' tally-row--new' : ''}${zero ? ' tally-row--zero' : ''}${goes ? ' tally-row--folding' : ''}`}
@@ -748,6 +796,14 @@ function OutingPage() {
                   </span>
                 )}
               </>
+            )}
+            {!row && found && (
+              // A result not on the tally yet keeps the room its − and count will take, so its first + moves nothing:
+              // the + stays under her thumb for the rest of the burst, even where the controls wrap under the name.
+              <span className="tally-room">
+                <span className="tally-room-b" />
+                <span className="tally-n">0</span>
+              </span>
             )}
             <button
               type="button"
@@ -836,7 +892,11 @@ function OutingPage() {
               value={query}
               data-tq=""
               aria-label="Find a species to add"
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                // Typing a new name: the search clearing after the last + is no longer wanted.
+                stopSearchClear();
+                setQuery(event.target.value);
+              }}
             />
           </div>
           {query.trim() !== '' && (
@@ -872,7 +932,7 @@ function OutingPage() {
         </button>
         <span key="spacer" className="spacer" />
         {!live && (
-          <button key="editbirds" type="button" className="btn" data-editbirds="" onClick={() => { if (editingBirds) letAllGo(); setEditingBirds(!editingBirds); setQuery(''); }}>
+          <button key="editbirds" type="button" className="btn" data-editbirds="" onClick={() => { if (editingBirds) letAllGo(); setEditingBirds(!editingBirds); stopSearchClear(); setQuery(''); }}>
             {editing ? 'Done editing species' : 'Edit species'}
           </button>
         )}
