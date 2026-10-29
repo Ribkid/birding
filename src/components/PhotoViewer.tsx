@@ -3,7 +3,8 @@
 // - pinch from 1x to 4x around her fingers, double tap for 2.5x at the tap (and back), pan within the photo;
 // - at 1x, swipe sideways for the next photo, or drag up or down to put it back: the photo follows the finger, the
 //   stage clears, and past 100 px or on a flick it shrinks back into its frame on the page;
-// - arrows, + and -, and Escape from the keyboard, with focus kept inside and given back on close.
+// - arrows, + and -, and Escape from the keyboard, with focus kept inside and given back on close;
+// - Previous and Next buttons either side of the count, for a screen reader, a keyboard or a hand that can't swipe.
 // It sits on the layer stack (lib/layers.ts), so a change of address closes it at once. It is controlled: the
 // caller owns the photo list and the index (onIndex) and says where each photo lives on the page (origin), so the
 // same viewer can show her own photos or Scan's reference photos later. Only the photo on show and its neighbours
@@ -123,7 +124,20 @@ export function PhotoViewer({ photos, index, onIndex, onClose, name, origin, cov
         <button type="button" className="pv-close" data-pv-close="" aria-label="Close" onClick={() => ctl.current?.close('button')}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
         </button>
-        {n > 1 && <p className="pv-count" aria-hidden="true"><b>{i + 1}</b> / {n}</p>}
+        {/* Previous and next sit either side of the count, off the photo: a way through the photos for a screen
+            reader, a keyboard or a hand that can't swipe. At either end the button stays (aria-disabled) so focus
+            isn't dropped. */}
+        {n > 1 && (
+          <div className="pv-nav">
+            <button type="button" className="pv-step" data-pv-step="-1" aria-label="Previous photo" aria-disabled={i <= 0 || undefined} onClick={() => { if (i > 0) ctl.current?.step(-1); }}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+            <p className="pv-count" aria-hidden="true"><b>{i + 1}</b> / {n}</p>
+            <button type="button" className="pv-step" data-pv-step="1" aria-label="Next photo" aria-disabled={i >= n - 1 || undefined} onClick={() => { if (i < n - 1) ctl.current?.step(1); }}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+          </div>
+        )}
       </div>
       {cur?.credit ? <p className="pv-credit">{cur.credit}</p> : null}
       <p className="sr-only" id={statusId} aria-live="polite">
@@ -197,6 +211,8 @@ interface Controller {
   open: () => void;
   close: (why?: string) => void;
   indexChanged: (i: number) => void;
+  /** The previous (-1) or next (1) photo, as an arrow key or a swipe moves. */
+  step: (d: number) => void;
   destroy: () => void;
 }
 type Mode = 'wait' | 'pan' | 'swipe' | 'drag' | 'pinch';
@@ -747,6 +763,7 @@ function controller(root: HTMLDivElement, live: { current: Live }): Controller {
     open: () => { void open(); },
     close,
     indexChanged,
+    step: (d: number) => { if (phase === 'open') go(shown + d); },
     destroy() {
       if (phase !== 'gone') phase = 'gone';
       if (tw) { cancelAnimationFrame(tw.raf); tw = null; }
