@@ -592,7 +592,7 @@ body.has-outing .lq-fb { scroll-margin-bottom: calc(var(--chrome-bottom) + var(-
 :root[data-theme="outdoor"] .lq-card.is-answered { box-shadow: 0 0 0 1.5px var(--line-strong); }
 .lq-foot { position: relative; }
 .lq-verdictbar {
-  position: relative; isolation: isolate; overflow: hidden; outline: none;
+  position: relative; isolation: isolate; overflow: hidden; outline: none; border-radius: 0 0 var(--r-card) var(--r-card);
   display: grid; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 3px; align-items: start;
   padding: 13px 16px 14px 12px; background: var(--surface); color: var(--ink);
 }
@@ -669,9 +669,11 @@ body.has-outing .lq-screen { --lq-dock-b: calc(var(--chrome-bottom) + 58px); }
 }
 .lq-chip:active { transform: scale(.9); }
 .lq-chip:focus-visible { border-radius: 50%; }
-/* the verdict takes focus when she answers; from the keyboard it shows a ring inside its edge */
-:is(.lq-verdictbar, .lq-dock-verdict):focus-visible { outline: none; box-shadow: inset 0 0 0 3px var(--azure); border-radius: inherit; }
-.lq-dock-verdict:focus-visible { border-radius: 22px; }
+/* the verdict takes focus when she answers; from the keyboard it shows a ring inside its edge. Under the photo the
+   ring is an outline, drawn over the bar's glass and glow (they sit over its own box-shadow, inside its isolation). */
+.lq-verdictbar:focus-visible { outline: 3px solid var(--azure); outline-offset: -3px; }
+.lq-verdictbar:focus-visible::before { inset: 3px 3px auto; } /* its coloured edge steps inside the ring */
+.lq-dock-verdict:focus-visible { outline: none; box-shadow: inset 0 0 0 3px var(--azure); border-radius: 22px; }
 .lq-chip > svg { width: 20px; height: 20px; }
 .lq-chip.is-playing { background: var(--azure-soft); color: var(--azure); }
 .lq-chip.is-loading { opacity: .6; }
