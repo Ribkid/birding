@@ -37,6 +37,15 @@ export function tiersOf(sightings: readonly SightingLike[]): Tiers {
   return { heardOnly, photographed };
 }
 
+/**
+ * Whether she has only ever heard this species: the species page's "Heard only so far." on its seen line, by the same
+ * rule as the Dex's dashed ring and ear, so the two never disagree.
+ */
+export function heardOnlySoFar(sightings: readonly { speciesId?: unknown; heard?: unknown }[], speciesId: number): boolean {
+  const own = sightings.filter((s) => Number(s.speciesId) === speciesId) as readonly SightingLike[];
+  return tiersOf(own).heardOnly.has(speciesId);
+}
+
 const sameSet = (a: Set<number>, b: Set<number>) => a.size === b.size && [...b].every((x) => a.has(x));
 
 // One selector for every screen that asks: worked out again only when the store's sightings change, and the sets
