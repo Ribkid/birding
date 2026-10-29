@@ -148,17 +148,27 @@ export class TallyQueue {
    * The store's sightings by record id, after every change to the store, whether or not the outing is on screen.
    * Without it, a write that landed after she left the outing stayed "last known" until she came back, so a sighting
    * deleted elsewhere meanwhile showed again on the outing, and the next + there wrote it back.
+   *
+   * The store's record also takes the write's place in the rows' copy of the store (setStored), which only the outing
+   * page refreshes: once she has left it, taps she made before leaving can still be waiting for that species, and
+   * the next write builds on that copy. Built on the copy she left, a lifer's second + made a second sighting and a
+   * stored count's next + wrote the old count back.
    */
   catchUp(find: (recId: number) => SightingRow | undefined) {
     let changed = false;
+    let stored: Map<number, SightingRow> | null = null;
     for (const [id, k] of this.known) {
       if (!('rec' in k)) continue;
       const s = find(k.rec.id);
       if (s && writtenAt(s) >= writtenAt(k.rec)) {
         this.known.delete(id);
+        stored ??= new Map(this.stored);
+        if (s.speciesId === id && s.outingId === this.outing.id) stored.set(id, s);
+        else if (stored.get(id)?.id === s.id) stored.delete(id); // moved off this species or outing elsewhere
         changed = true;
       }
     }
+    if (stored) this.stored = stored;
     if (changed) this.bump();
   }
 
