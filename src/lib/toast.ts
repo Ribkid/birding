@@ -29,10 +29,23 @@ export function announce(msg: string) {
 let toastEl: HTMLElement | null = null;
 let toastT = 0;
 /**
- * Shows `msg` for about 4.5 s; screen readers hear `say` (the same words unless a fuller line is given). Returns a
- * function that takes this toast down early (it does nothing once the toast has gone).
+ * Where a toast rests to keep clear of `clear` (an element near the foot of the screen, such as a page's own
+ * buttons), as its offset from the bottom of the viewport: null when its usual place doesn't cover it, or when there
+ * is no room above it. `rest` is the toast's usual box, measured from the top of the viewport.
  */
-export function toast(msg: string, say = msg): () => void {
+export function clearOf(rest: { top: number; bottom: number }, clear: { top: number; bottom: number }, vh: number, gap = 10): number | null {
+  if (clear.bottom <= clear.top || rest.top >= clear.bottom || rest.bottom <= clear.top) return null;
+  const height = rest.bottom - rest.top;
+  if (clear.top - gap - height < 72) return null; // no room above it: it stays where it is (a tap takes it away)
+  return Math.ceil(vh - clear.top + gap);
+}
+
+/**
+ * Shows `msg` for about 4.5 s; screen readers hear `say` (the same words unless a fuller line is given). With `clear`,
+ * a toast whose usual place would cover that element rests just above it instead. Returns a function that takes this
+ * toast down early (it does nothing once the toast has gone).
+ */
+export function toast(msg: string, say = msg, { clear }: { clear?: Element | null } = {}): () => void {
   announce(say);
   clearTimeout(toastT);
   toastEl?.remove();
@@ -48,6 +61,12 @@ export function toast(msg: string, say = msg): () => void {
   };
   t.addEventListener('click', hide);
   document.body.append(t);
+  if (clear?.isConnected) {
+    // Its resting place comes from its bottom offset and height, not its box, which the rise-in animation moves.
+    const restBottom = innerHeight - (parseFloat(getComputedStyle(t).bottom) || 0);
+    const at = clearOf({ top: restBottom - t.offsetHeight, bottom: restBottom }, clear.getBoundingClientRect(), innerHeight);
+    if (at != null) t.style.bottom = `${at}px`;
+  }
   toastT = window.setTimeout(hide, 4500);
   return hide;
 }

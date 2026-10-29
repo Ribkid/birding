@@ -64,6 +64,7 @@ import { ScreenWake, WAKE_MAX_MS, type WakeEnv } from '../lib/wakeLock';
 import { announceSaved, onCelebrate, type SaveOutcome } from '../screens/lists/shared';
 import { refreshStore } from '../lib/store';
 import { byId } from '../lib/data';
+import { clearOf } from '../lib/toast';
 
 // layers.ts finds the control to give focus back to with CSS.escape, which jsdom lacks.
 const g = globalThis as { CSS?: { escape?: (s: string) => string } };
@@ -246,6 +247,29 @@ describe('a lifer on the tally', () => {
     expect(document.querySelector('.toast:not(.toast--out)')).toBeNull();
     await act(() => new Promise((r) => setTimeout(r, 80)));
     expect(document.getElementById('announce')?.textContent).toBe(`${byId.get(ON_OUTING)!.name}, new for your dex. Badge earned: Wetlands`);
+  });
+});
+
+describe('"Outing finished"', () => {
+  it('rests just above the finished outing\'s buttons when its usual place would cover them', () => {
+    const vh = 844;
+    const rest = { top: 646, bottom: 694 }; // its usual place, above the tab bar
+    expect(clearOf(rest, { top: 642, bottom: 746 }, vh)).toBe(vh - 642 + 10); // the foot at the bottom: it steps up
+    expect(clearOf(rest, { top: 300, bottom: 400 }, vh)).toBeNull(); // the foot higher up the page: it stays
+    expect(clearOf(rest, { top: 700, bottom: 900 }, vh)).toBeNull(); // the foot below it
+    expect(clearOf(rest, { top: 100, bottom: 800 }, vh)).toBeNull(); // no room above: it stays (a tap takes it away)
+    expect(clearOf(rest, { top: 0, bottom: 0 }, vh)).toBeNull(); // not drawn
+  });
+
+  it('is said once the page has drawn the outing as finished', async () => {
+    page();
+    await waitFor(() => expect(main('data-inc', ON_OUTING)).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-finish]')!);
+    await waitFor(() => expect(document.querySelector('.sheet-wrap form')).toBeTruthy());
+    fireEvent.submit(document.querySelector('.sheet-wrap form')!);
+    await waitFor(() => expect(document.querySelector('.toast')?.textContent).toBe('Outing finished'));
+    expect(document.querySelector('[data-finish]')?.textContent).toBe('Edit details');
+    expect(document.querySelectorAll('.toast')).toHaveLength(1);
   });
 });
 

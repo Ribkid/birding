@@ -157,9 +157,9 @@ function FinishOuting({
 
       const active = await db.kvGet('activeOuting');
       if (Number(active) === outing.id) await db.kvSet('activeOuting', null);
+      // onSaved says "Outing finished" once the page has drawn it (Outing).
       onSaved();
       onClose();
-      toast('Outing finished');
     } catch {
       setError('The outing could not be saved. Try again.');
     } finally {
@@ -336,6 +336,15 @@ export default function Outing() {
   const moments = useRef(new Map<number, number>());
   // A New band waiting for its bird's first save before it opens the card (seeCard).
   const cardWait = useRef(false);
+  // "Outing finished" waits for the page to draw the finished outing, so the toast can rest clear of its buttons
+  // (scrolled to the bottom, its usual place covered them for 4.5 s).
+  const foot = useRef<HTMLDivElement>(null);
+  const finishedNote = useRef(false);
+  const sayFinished = () => {
+    if (!finishedNote.current) return;
+    finishedNote.current = false;
+    toast('Outing finished', undefined, { clear: foot.current });
+  };
   const wake = useScreenWake(!!outing && !outing.endedAt);
 
   const recs = useMemo(
@@ -440,6 +449,10 @@ export default function Outing() {
       moments.current.delete(id);
       if (row) liferMoment(row);
     }
+  });
+
+  useLayoutEffect(() => {
+    if (finishedNote.current && outing?.endedAt) sayFinished();
   });
 
   if (!outing) {
@@ -667,7 +680,7 @@ export default function Outing() {
 
       {outing.notes && <p className="pad-x">{outing.notes}</p>}
 
-      <div className={`tally-foot ${live ? 'tally-foot--live' : ''}`}>
+      <div ref={foot} className={`tally-foot ${live ? 'tally-foot--live' : ''}`}>
         {/* Keyed so the Finish outing button stays the same element as it becomes Edit details: closing the sheet
             hands focus back to it. v1's restoreFocus did too, but the redraw after Finish then left focus on the
             page; keeping it on the button is deliberate. */}
@@ -698,7 +711,12 @@ export default function Outing() {
           lifers={ordered.filter((sp) => !seenOutside.has(sp.id))}
           flush={tallied.flush}
           onClose={() => setFinishOpen(false)}
-          onSaved={() => setEditingBirds(false)}
+          onSaved={() => {
+            setEditingBirds(false);
+            finishedNote.current = true;
+            // Said within a moment even if the store is slow to draw the outing as finished.
+            window.setTimeout(sayFinished, 1200);
+          }}
         />
       )}
 
