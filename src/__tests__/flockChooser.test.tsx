@@ -166,3 +166,33 @@ describe('FlockChooser', () => {
     expect(onPick).not.toHaveBeenCalled();
   });
 });
+
+describe('the chooser on a narrow screen', () => {
+  it('never puts +5, where focus lands, off the left edge, even when the screen is narrower than it', () => {
+    const html = document.documentElement;
+    const width = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth');
+    const offset = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth');
+    Object.defineProperty(html, 'clientWidth', { configurable: true, get: () => 195 });
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get() { return this.classList.contains('tally-chooser') ? 242 : 0; } });
+    const rect = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      return this.matches('[data-inc]') ? ({ top: 300, bottom: 344, left: 140, right: 184, width: 44, height: 44, x: 140, y: 300, toJSON() {} } as DOMRect) : rect.call(this);
+    };
+    try {
+      function Narrow() {
+        const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
+        return createElement('div', null,
+          createElement('button', { ref: setAnchor, 'data-inc': 52 }, '+'),
+          anchor ? createElement(FlockChooser, { sp: SP, anchor, onPick: () => {}, onClose: () => {} }) : null);
+      }
+      render(createElement(Narrow));
+      expect(parseFloat(screen.getByRole('group').style.left)).toBe(8);
+      expect(document.activeElement?.getAttribute('aria-label')).toBe('Add 5 Australian White Ibis');
+    } finally {
+      delete (html as { clientWidth?: number }).clientWidth;
+      if (width) Object.defineProperty(Element.prototype, 'clientWidth', width);
+      if (offset) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', offset);
+      HTMLElement.prototype.getBoundingClientRect = rect;
+    }
+  });
+});

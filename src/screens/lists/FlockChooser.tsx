@@ -173,7 +173,9 @@ export function FlockChooser({ sp, anchor, onPick, onClose }: ChooserProps) {
     const h = el.offsetHeight;
     const edge = 8;
     const gap = 10;
-    const left = Math.round(Math.min(Math.max(edge, r.right + 6 - w), vw - edge - w));
+    // Its left edge wins when the screen is narrower than the chooser (lists.css lays it out two by two before that):
+    // +5, where focus lands, is never off the screen.
+    const left = Math.round(Math.max(edge, Math.min(r.right + 6 - w, vw - edge - w)));
     const up = Math.round(r.top - gap - h);
     const down = Math.round(r.bottom + gap);
     const roomAbove = up >= edge + 40;

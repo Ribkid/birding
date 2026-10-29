@@ -69,6 +69,9 @@
   margin: 2px 10px 8px; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2);
 }
 .tally-chooser-row { display: flex; gap: 6px; }
+/* With larger text (Chrome's 175% and 200% make a 390 px phone 223 and 195 px wide) the row of four is wider than the
+   screen: the counts sit two by two, 5 and 10 above 20 and 50, so none runs off its left edge. */
+@media (width < 258px) { .tally-chooser-row { display: grid; grid-template-columns: repeat(2, 52px); } }
 .tally-chooser button {
   width: 52px; height: 52px; padding: 0; border: 0; border-radius: 50%; cursor: pointer;
   display: grid; place-items: center; grid-auto-flow: column; justify-content: center; gap: 1px;
