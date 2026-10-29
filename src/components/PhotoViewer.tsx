@@ -4,7 +4,8 @@
 // - at 1x, swipe sideways for the next photo, or drag up or down to put it back: the photo follows the finger, the
 //   stage clears, and past 100 px or on a flick it shrinks back into its frame on the page;
 // - arrows, + and -, and Escape from the keyboard, with focus kept inside and given back on close;
-// - Previous and Next buttons either side of the count, for a screen reader, a keyboard or a hand that can't swipe.
+// - Previous and Next buttons either side of the count, for a screen reader, a keyboard or a hand that can't swipe;
+// - the phone's Back closes it first, as Escape does: a close request (lib/layers.ts back), not a history entry.
 // It sits on the layer stack (lib/layers.ts), so a change of address closes it at once. It is controlled: the
 // caller owns the photo list and the index (onIndex) and says where each photo lives on the page (origin), so the
 // same viewer can show her own photos or Scan's reference photos later. Only the photo on show and its neighbours
@@ -83,6 +84,8 @@ export function PhotoViewer({ photos, index, onIndex, onClose, name, origin, cov
       labelledBy: statusId,
       close: (why) => c.close(why),
       returnTo: returnTo ?? document.activeElement,
+      // The phone's Back puts the photo back into the page before it leaves the page.
+      back: true,
     });
     c.open();
     return () => {

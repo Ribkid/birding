@@ -240,6 +240,35 @@ describe('the photo viewer', () => {
     expect(document.activeElement).toBe(b.opener);
   });
 
+  it("closes on the phone's Back (a close request) before the page goes back", async () => {
+    const watchers: { onclose: ((e: Event) => void) | null; destroyed: boolean }[] = [];
+    (window as unknown as { CloseWatcher?: unknown }).CloseWatcher = class {
+      onclose: ((e: Event) => void) | null = null;
+      destroyed = false;
+      constructor() { watchers.push(this); }
+      destroy() { this.destroyed = true; }
+    };
+    try {
+      const a = setup(1);
+      expect(watchers).toHaveLength(1);
+      act(() => watchers[0].onclose?.(new Event('close')));
+      await settled();
+      expect(a.onClose).toHaveBeenCalledTimes(1);
+      a.view.unmount();
+      expect(document.activeElement).toBe(a.opener);
+      expect(layers()).toHaveLength(0);
+      // Closed with its own button instead, it lets go of Back, so the next Back leaves the page.
+      document.body.innerHTML = '';
+      const b = setup(0);
+      fireEvent.click(document.querySelector('.pv-close')!);
+      await settled();
+      b.view.unmount();
+      expect(watchers[1].destroyed).toBe(true);
+    } finally {
+      delete (window as unknown as { CloseWatcher?: unknown }).CloseWatcher;
+    }
+  });
+
   it('closes at once on a change of address', () => {
     const { onClose } = setup(0);
     act(() => closeAllLayers('nav'));
