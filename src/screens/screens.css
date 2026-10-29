@@ -9,7 +9,7 @@
   --hero-deep: var(--tint-deep, color-mix(in srgb, var(--kc, #121821) 30%, #06120F));
   position: relative; isolation: isolate; overflow: hidden;
   display: flex; flex-direction: column; justify-content: space-between;
-  height: calc(clamp(300px, 42svh, 440px) + env(safe-area-inset-top));
+  min-height: calc(clamp(300px, 42svh, 440px) + env(safe-area-inset-top)); /* taller only if its content needs it */
   padding: calc(var(--sp-2) + env(safe-area-inset-top)) var(--sp-4) calc(24px + var(--sp-5));
   background: var(--hero-deep); color: #fff;
 }
@@ -23,14 +23,24 @@
     linear-gradient(to bottom, rgba(7, 11, 16, .55) 0, rgba(7, 11, 16, .2) 18%, rgba(7, 11, 16, 0) 32%),
     linear-gradient(to top, color-mix(in srgb, var(--hero-deep) 94%, transparent) 0, color-mix(in srgb, var(--hero-deep) 72%, transparent) 36%, color-mix(in srgb, var(--hero-deep) 30%, transparent) 56%, transparent 72%);
 }
-.dex-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+/* The pick takes the room the buttons leave, up to its own width, and its name runs to a second line before it is
+   cut short. With larger text (a top row under 220 px, from Chrome on Android's 175%) the buttons keep the top right
+   and the pick has the full width under them. */
+.dex-hero-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); container: dex-top / inline-size; }
 .dex-hero-pick {
-  display: grid; align-content: center; min-width: 0; min-height: var(--tap); padding-right: var(--sp-2);
+  display: grid; align-content: center; flex: 1 1 0; min-width: 0; max-width: max-content; min-height: var(--tap); padding-right: var(--sp-2);
   color: #fff; text-decoration: none; text-shadow: 0 1px 10px rgba(0, 0, 0, .5); line-height: 1.2;
 }
 .dex-hero-pick span { font-size: var(--fs-1); font-weight: 600; opacity: .92; }
-.dex-hero-pick strong { font-size: var(--fs-2); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dex-hero-pick strong {
+  font-size: var(--fs-2); font-weight: 700; overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
 .dex-hero-actions { flex: none; display: flex; align-items: center; gap: var(--sp-2); }
+@container dex-top (width < 220px) {
+  .dex-hero-actions { order: -1; margin-left: auto; }
+  .dex-hero-pick { flex-basis: 100%; max-width: 100%; }
+}
 .hero-btn {
   display: grid; place-items: center; width: var(--tap); height: var(--tap); padding: 0; border: 0; border-radius: 50%;
   color: var(--ink); cursor: pointer; transition: scale var(--dur-1) var(--ease-out);
@@ -61,6 +71,17 @@
 .dex-cap-txt { display: grid; align-content: center; min-height: 34px; }
 .dex-cap-txt > span:first-child { line-height: 1; }
 .dex-cap-sub { margin-top: 1px; font-size: var(--fs-1); font-weight: 600; line-height: 1; color: var(--ink-2); white-space: nowrap; }
+/* Larger text (the foot narrower than 270 px, from Chrome on Android's 130%): the count and its second line wrap
+   inside the capsule instead of running out of it, with room between the lines, and the capsule grows to hold them. */
+.dex-hero-foot { container: dex-foot / inline-size; }
+@container dex-foot (width < 270px) {
+  .dex-cap-txt > span:first-child, .dex-cap-sub { line-height: 1.15; }
+  .dex-cap-sub { margin-top: 2px; white-space: normal; text-wrap: balance; }
+}
+/* Narrower still (150% and up), photographed and heard only take a line each, the dot between them giving way. */
+@container dex-foot (width < 240px) {
+  .dex-cap-sub > [aria-hidden="true"] { display: block; height: 0; overflow: hidden; }
+}
 
 /* Rings: a track and an arc in the kind colour, filled from empty on the first draw of a session. */
 .ring { flex: none; transform: rotate(-90deg); }

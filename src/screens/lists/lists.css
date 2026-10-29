@@ -113,6 +113,17 @@
   .page-head--tools .lists-head-text > p { grid-column: 2; grid-row: 2; margin: 0; }
   .page-head--tools > .outing-tools { grid-column: 3; grid-row: 2; display: flex; margin: 0; }
 }
+/* Larger text (Chrome on Android narrows the page as the phone's text grows: 260 px wide at 150%, 195 at 200%): once
+   the header is under 268 px (a page under 300 px), the date line beside the toggles would be a column of single
+   words, so Back and the two toggles share the top row and the outing's name and its date line have the whole width
+   under them; the name breaks between words, not inside them. */
+.page-head--tools { container: outing-head / inline-size; }
+@container outing-head (width < 268px) {
+  .page-head.page-head--tools > .iconbtn { grid-column: 1; grid-row: 1; align-self: center; margin-top: 0; }
+  .page-head--tools > .outing-tools { grid-column: 3; grid-row: 1; }
+  .page-head--tools h1 { grid-column: 1 / -1; grid-row: 2; }
+  .page-head--tools .lists-head-text > p { grid-column: 1 / -1; grid-row: 3; }
+}
 /* A toast on a live outing (a badge, a count that didn't save) sits above the Discard and Finish row, not over it. */
 body:has(.tally-foot--live) .toast { bottom: calc(var(--chrome-bottom) + 84px); }
 /* The same while the sign-up nudge is up (it was there before the outing started): the row has stepped up over it. */

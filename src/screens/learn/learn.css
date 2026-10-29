@@ -8,6 +8,8 @@
 :where(.lq-screen, .lr, .learn) [hidden] { display: none !important; }
 .page-head .lh-title { font: 400 clamp(2rem, 8vw, 2.5rem)/1.04 var(--display); letter-spacing: 0; }
 .learn { padding: var(--sp-2) var(--sp-4) var(--sp-6); display: grid; gap: var(--sp-5); }
+/* A size container, so the hub can make room for larger text (the narrow rules follow the quiz packs). */
+.learn { container: learn / inline-size; }
 .learn--loading { min-height: 60vh; }
 .lh-offline { margin: 0; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-2); background: var(--surface-2); color: var(--ink); font-size: var(--fs-2); }
 
@@ -191,6 +193,18 @@
 .lh-mode.is-off .lh-mode-bg img { filter: grayscale(1) brightness(.75); }
 .lh-mode.is-off { --fill: #2A3532; }
 :root[data-theme="outdoor"] :is(.lh-mode, .lh-deck) { box-shadow: 0 0 0 2px var(--ink); }
+
+/* Larger text: Chrome on Android narrows the page as the phone's text grows (260 px wide at 150%, 195 at 200%). Below
+   240 px the hub's cards keep to the screen instead of widening the page to their widest row: today's pips wrap, the
+   quiz packs stand one to a row, and a choice of three (Quick play's round) stacks its options, the glass thumb
+   sliding down to the one she picks instead of across. */
+@container learn (width < 240px) {
+  .learn > *, .lh-sec > * { min-width: 0; }
+  .lh-daily .lh-pips { flex-wrap: wrap; }
+  .lh-modes { grid-template-columns: minmax(0, 1fr); }
+  .lh-seg { grid-template-columns: minmax(0, 1fr); border-radius: 24px; }
+  .lh-seg-thumb { right: 4px; bottom: auto; width: auto; height: calc((100% - 8px) / var(--n, 3)); transform: translateY(calc(var(--idx, 0) * 100%)); }
+}
 
 /* progress by kind */
 .lh-prog { list-style: none; margin: 0; padding: var(--sp-1) var(--sp-4); display: grid; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
@@ -643,7 +657,9 @@ body.has-outing .lq-screen { --lq-dock-b: calc(var(--chrome-bottom) + 58px); }
 .lq-dock.no-anim { transition: none; }
 .lq-dock--verdict { left: max(var(--tabbar-float), calc((100vw - 560px) / 2)); }
 :root[data-theme="outdoor"] .lq-dock { box-shadow: 0 0 0 2px var(--ink), var(--shadow-float); }
-.lq-dock-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+/* With larger text (a page under about 300 px) the call chips and Next no longer fit one line: Next drops under them,
+   still at the right, instead of running off the screen. Where they fit, the wrap changes nothing. */
+.lq-dock-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .lq-dock--verdict .lq-chips { margin-right: auto; }
 .lq-chips { display: flex; gap: 6px; }
 .lq-chip {

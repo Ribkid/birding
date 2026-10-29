@@ -317,6 +317,13 @@ span.bird-photo { display: block; }
 .field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible { outline: 3px solid var(--azure); outline-offset: 1px; border-color: transparent; }
 .field input[type=range] { padding: 0; accent-color: var(--azure); border: 0; background: none; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }
+/* Larger text: a date and a time field side by side need 270 px (Chrome on Android's 130% and up leaves a sheet's form
+   less), so in a narrower form each pair stacks rather than pushing the whole form, and the sheet's Save, off the
+   screen. */
+.form:has(> .grid2) { container: form / inline-size; }
+@container form (width < 270px) {
+  .grid2 { grid-template-columns: minmax(0, 1fr); }
+}
 .check { display: flex; gap: 10px; align-items: center; font-weight: 500; min-height: var(--tap); cursor: pointer; }
 .check input { width: 22px; height: 22px; accent-color: var(--azure); flex: none; }
 .check--card { padding: 10px 12px; border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-1); }
@@ -482,19 +489,22 @@ body.has-outing .mapwrap { bottom: calc(var(--tabbar-h) + 62px + env(safe-area-i
 
 /* ---------- tab bar ----------
    The current tab gets a tinted pill behind its icon; the pill is one named element so a route transition can
-   slide it from tab to tab. */
+   slide it from tab to tab. The bar is a size container: with the phone's text turned up, Chrome on Android narrows
+   the page (300 px wide at 130%, 260 at 150%, 195 at 200%), and the tabs share whatever width the bar has instead of
+   pushing Map and Me off the screen (look.css has the narrow steps). */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; justify-content: space-around; align-items: center;
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); padding: 0 4px env(safe-area-inset-bottom);
   background: var(--surface); box-shadow: 0 -1px 0 var(--line), 0 -8px 24px -18px rgba(15, 23, 35, .4);
+  container: tabbar / inline-size;
 }
 /* The plus is v1's link to #/add (TabBar opens the Add sheet in place), so the links' rules draw its glyph too. */
 .tabbar a {
-  flex: 1; display: grid; justify-items: center; gap: 3px; min-height: var(--tap); color: var(--ink-2); text-decoration: none;
+  flex: 1 1 0; min-width: 0; display: grid; justify-items: center; gap: 3px; min-height: var(--tap); color: var(--ink-2); text-decoration: none;
   font-size: .8rem; font-weight: 600; padding: 6px 0;
 }
 .tabbar a svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.tab-ico { position: relative; display: grid; place-items: center; width: 56px; height: 30px; border-radius: var(--r-pill); transition: scale var(--dur-1) var(--ease-out); }
+.tab-ico { position: relative; display: grid; place-items: center; width: min(56px, 100%); height: 30px; border-radius: var(--r-pill); transition: scale var(--dur-1) var(--ease-out); }
 .tab-ico svg { position: relative; z-index: 1; }
 .tabbar a:active .tab-ico { scale: .9; }
 .tabbar a[aria-current=page] { color: var(--ink); font-weight: 700; }
@@ -604,7 +614,7 @@ body.has-sheet .tabbar .tab-plus { rotate: 45deg; }
 .search-ov { position: fixed; inset: 0; z-index: 70; background: var(--paper); overflow-y: auto; animation: fade var(--dur-2) both; }
 .search-bar { position: sticky; top: 0; display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) 10px 10px 16px; background: var(--paper); border-bottom: 1px solid var(--line); }
 .search-bar > svg { width: 22px; height: 22px; color: var(--ink-2); flex: none; }
-.search-bar input { flex: 1; min-height: var(--tap); border: 0; background: none; font-size: 1.125rem; padding: 10px 0; outline: none; color: var(--ink); }
+.search-bar input { flex: 1; min-width: 0; min-height: var(--tap); border: 0; background: none; font-size: 1.125rem; padding: 10px 0; outline: none; color: var(--ink); }
 .search-bar:focus-within { box-shadow: inset 0 -3px 0 var(--azure); }
 .search-bar input::-webkit-search-cancel-button { appearance: none; }
 .search-res { padding-bottom: 40px; }
