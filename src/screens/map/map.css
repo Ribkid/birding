@@ -65,7 +65,7 @@
 
 /* Sun (components/SunToggle.tsx) tops the right-hand stack: zoom, locate, then Sun, 10 px apart. */
 .mapwrap .map-sun {
-  position: absolute; z-index: 500; right: 12px; bottom: calc(var(--chrome-bottom) + 178px); width: 46px; height: 46px;
+  position: absolute; z-index: 500; right: 12px; bottom: calc(var(--chrome-bottom) + 178px); width: 48px; height: 48px;
   box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
 }
 .mapwrap .map-sun[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #2A2000, var(--shadow-float); }

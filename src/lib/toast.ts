@@ -28,8 +28,11 @@ export function announce(msg: string) {
 
 let toastEl: HTMLElement | null = null;
 let toastT = 0;
-/** Shows `msg` for about 4.5 s; screen readers hear `say` (the same words unless a fuller line is given). */
-export function toast(msg: string, say = msg) {
+/**
+ * Shows `msg` for about 4.5 s; screen readers hear `say` (the same words unless a fuller line is given). Returns a
+ * function that takes this toast down early (it does nothing once the toast has gone).
+ */
+export function toast(msg: string, say = msg): () => void {
   announce(say);
   clearTimeout(toastT);
   toastEl?.remove();
@@ -46,4 +49,5 @@ export function toast(msg: string, say = msg) {
   t.addEventListener('click', hide);
   document.body.append(t);
   toastT = window.setTimeout(hide, 4500);
+  return hide;
 }

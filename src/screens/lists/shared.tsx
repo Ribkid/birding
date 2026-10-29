@@ -249,7 +249,7 @@ export function onCelebrate(fn: (c: Celebration) => void): () => void {
   };
 }
 
-/** Opens the new-for-your-dex card for a species she already has (the outing row's New chip). */
+/** Opens the new-for-your-dex card for a species she already has (the outing row's New band). */
 export function celebrate(c: Celebration): void {
   for (const fn of celebrators) fn(c);
 }
@@ -264,6 +264,20 @@ export interface AnnounceOptions {
   quiet?: boolean;
 }
 
+// The badges each quiet first sighting earned this session, so the card its New band opens, and the Finish sheet,
+// still say them once the toast has gone (memory only: nothing is stored).
+const liferBadgeMap = new Map<number, EarnedBadge[]>();
+let badgeToastDown: (() => void) | null = null;
+
+/** The badges the quiet first sighting of `speciesId` earned this session. */
+export const liferBadges = (speciesId: number): EarnedBadge[] => liferBadgeMap.get(speciesId) ?? [];
+
+/** Takes a quiet first sighting's badge toast down early, for the card or sheet that says the badge itself. */
+export function hideBadgeToast(): void {
+  badgeToastDown?.();
+  badgeToastDown = null;
+}
+
 /**
  * The rest of v1 saveSighting: the new-for-the-dex celebration for a first sighting, otherwise a toast for any
  * badge earned, then the one-time sign-up nudge.
@@ -271,8 +285,10 @@ export interface AnnounceOptions {
 export function announceSaved(rec: SightingInput, outcome: SaveOutcome, { afterNav = false, quiet = false }: AnnounceOptions = {}): void {
   const badges = outcome.newBadges.map((b) => b.name).join(', ');
   if (outcome.isNew && rec.speciesId != null && quiet) {
+    if (outcome.newBadges.length) liferBadgeMap.set(rec.speciesId, outcome.newBadges);
+    else liferBadgeMap.delete(rec.speciesId);
     // One message for screen readers: a second one straight after the row's "new for your dex" would cut it off.
-    if (badges) toast(`Badge earned: ${badges}`, `${byId.get(rec.speciesId)?.name ?? 'New species'}, new for your dex. Badge earned: ${badges}`);
+    if (badges) badgeToastDown = toast(`Badge earned: ${badges}`, `${byId.get(rec.speciesId)?.name ?? 'New species'}, new for your dex. Badge earned: ${badges}`);
   } else if (outcome.isNew && rec.speciesId != null) {
     celebrate({ speciesId: rec.speciesId, newBadges: outcome.newBadges, sightings: outcome.sightings, afterNav });
   } else if (badges) {

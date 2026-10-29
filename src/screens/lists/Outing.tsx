@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../core/db.js';
 import { byId, type Species } from '../../lib/data';
@@ -18,6 +18,8 @@ import {
   celebrate,
   deleteSighting,
   fmtDate,
+  hideBadgeToast,
+  liferBadges,
   matchSpecies,
   plural,
   todayStr,
@@ -43,9 +45,13 @@ const minutesSinceStart = (outing: OutingRow): number | null => {
   return Math.max(0, Math.round((Date.now() - start) / 60000));
 };
 
-/** The species new for her dex on this outing, as a row of their photos at the top of the Finish sheet. */
+/**
+ * The species new for her dex on this outing, as a row of their photos at the top of the Finish sheet, and the badges
+ * they earned (this session's, which the toast said as she tapped: opening the sheet takes that toast down).
+ */
 function OutingLifers({ lifers, live }: { lifers: Species[]; live: boolean }) {
   if (!lifers.length) return null;
+  const earned = [...new Map(lifers.flatMap((sp) => liferBadges(sp.id)).map((b) => [b.id, b])).values()];
   return (
     <section className="finish-lifers" aria-labelledby="finish-lifers-h">
       <p className="finish-lifers-h" id="finish-lifers-h">
@@ -61,6 +67,12 @@ function OutingLifers({ lifers, live }: { lifers: Species[]; live: boolean }) {
           </li>
         ))}
       </ul>
+      {earned.length > 0 && (
+        <p className="finish-lifers-badges">
+          Badge earned:{' '}
+          {earned.map((b, i) => <Fragment key={b.id}>{i ? ', ' : ''}<strong>{b.name}</strong></Fragment>)}
+        </p>
+      )}
     </section>
   );
 }
@@ -282,10 +294,13 @@ function liferMoment(row: HTMLElement) {
   row.querySelector<HTMLElement>('.lifer')?.animate(GLOW, { duration: 500, easing: 'cubic-bezier(.2, .8, .2, 1)' });
 }
 
-const PhoneIcon = () => (
+// Screen on: a phone with an open eye on its screen (awake), not lines at its sides, which read as vibrate.
+const ScreenOnIcon = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
-    <rect x="7.5" y="3" width="9" height="18" rx="2.4" />
-    <path d="M11 17.6h2M4 9.5v5M20 9.5v5" />
+    <rect x="6" y="2.5" width="12" height="19" rx="2.6" />
+    <path d="M8.3 11.2c2-2.9 5.4-2.9 7.4 0-2 2.9-5.4 2.9-7.4 0z" strokeWidth="1.7" />
+    <circle cx="12" cy="11.2" r="1.25" fill="currentColor" stroke="none" />
+    <path d="M10.8 18.4h2.4" />
   </svg>
 );
 
@@ -317,6 +332,8 @@ export default function Outing() {
   const flockKey = useRef(0);
   // Species a + has just made new for her dex, and until when: their rows play the lifer moment once drawn.
   const moments = useRef(new Map<number, number>());
+  // A New band waiting for its bird's first save before it opens the card (seeCard).
+  const cardWait = useRef(false);
   const wake = useScreenWake(!!outing && !outing.endedAt);
 
   const recs = useMemo(
@@ -481,9 +498,26 @@ export default function Outing() {
     announce(`${lifer ? `${sp.name}, new for your dex. ` : ''}${n} more ${sp.name}, ${(was ?? 0) + n} in all.`);
   };
 
-  // The New band's card: the celebration she would have had, when she has a moment for it.
-  const seeCard = (sp: Species) => {
-    celebrate({ speciesId: sp.id, newBadges: [], sightings });
+  // The New band's card: the celebration she would have had, when she has a moment for it, with the badge the save
+  // earned. The card says the badge, so the toast that said it goes. A band tapped before its first save has landed
+  // waits for it, so the card counts the bird (and opens only if she is still on the outing).
+  const seeCard = async (sp: Species, band: HTMLElement) => {
+    if (cardWait.current) return;
+    let all = sightings;
+    if (!all.some((s) => s.speciesId === sp.id)) {
+      cardWait.current = true;
+      try {
+        await tallied.flush();
+        all = (await db.all('sightings')) as SightingRow[];
+      } catch {
+        return;
+      } finally {
+        cardWait.current = false;
+      }
+      if (!band.isConnected || !all.some((s) => s.speciesId === sp.id)) return;
+    }
+    hideBadgeToast();
+    celebrate({ speciesId: sp.id, newBadges: liferBadges(sp.id), sightings: all });
   };
 
   const tallyRow = (sp: Species, found = false) => {
@@ -510,7 +544,7 @@ export default function Outing() {
             aria-label={`See ${sp.name}'s card, new for your dex`}
             onClick={(e) => {
               e.currentTarget.focus({ preventScroll: true });
-              seeCard(sp);
+              void seeCard(sp, e.currentTarget);
             }}
           >
             New
@@ -585,7 +619,7 @@ export default function Outing() {
                 data-wake=""
                 onClick={wake.toggle}
               >
-                <PhoneIcon />
+                <ScreenOnIcon />
               </button>
             )}
             <SunToggle />
@@ -650,7 +684,7 @@ export default function Outing() {
             {editing ? 'Done editing species' : 'Edit species'}
           </button>
         )}
-        <button key="finish" type="button" className={`btn${live ? ' btn--primary' : ''}`} data-finish="" onClick={() => setFinishOpen(true)}>
+        <button key="finish" type="button" className={`btn${live ? ' btn--primary' : ''}`} data-finish="" onClick={() => { hideBadgeToast(); setFinishOpen(true); }}>
           {live ? 'Finish outing' : 'Edit details'}
         </button>
       </div>

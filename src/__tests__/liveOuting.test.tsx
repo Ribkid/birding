@@ -189,6 +189,49 @@ describe('a lifer on the tally', () => {
     expect(h.textContent).toBe('New for your dex today: 1');
     expect([...document.querySelectorAll('.finish-lifer-name')].map((n) => n.textContent)).toEqual([byId.get(ON_OUTING)!.name]);
   });
+
+  it('a band tapped before its bird\'s first save has landed opens the card once the save is in, counting the bird', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    const cards = vi.fn();
+    const off = onCelebrate(cards);
+    page();
+    await waitFor(() => expect(main('data-inc', ON_OUTING)).toBeTruthy());
+    fireEvent.change(document.querySelector('[data-tq]')!, { target: { value: byId.get(LIFER)!.name } });
+    fireEvent.click(document.querySelector<HTMLElement>(`.tally-list--found [data-inc="${LIFER}"]`)!);
+    // At once, while the save is still on its way: one card, and only once it is stored.
+    const band = main('data-lifer', LIFER)!;
+    fireEvent.click(band);
+    fireEvent.click(band);
+    expect(cards).not.toHaveBeenCalled();
+    await waitFor(() => expect(cards).toHaveBeenCalledTimes(1));
+    expect(stored(LIFER)).toEqual([1]);
+    const c = cards.mock.calls[0][0] as { speciesId: number; sightings: { speciesId: number }[] };
+    expect(c.speciesId).toBe(LIFER);
+    expect(c.sightings.some((s) => s.speciesId === LIFER)).toBe(true);
+    off();
+  });
+
+  it('a badge the lifer earned goes with it: its band\'s card and the Finish sheet say it, and take the toast down', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    page();
+    await waitFor(() => expect(main('data-lifer', ON_OUTING)).toBeTruthy());
+    announceSaved({ speciesId: ON_OUTING, date: today }, { id: 2, isNew: true, newBadges: [{ id: 'garden', name: 'Gardens & parks' }], sightings: [] }, { quiet: true });
+    const toastEl = document.querySelector('.toast')!;
+    expect(toastEl.textContent).toBe('Badge earned: Gardens & parks');
+    fireEvent.click(main('data-lifer', ON_OUTING)!);
+    await waitFor(() => expect(document.querySelector('.celebrate')).toBeTruthy());
+    expect(document.querySelector('.celebrate-badges')?.textContent).toBe('Badge earned: Gardens & parks');
+    expect(toastEl.classList.contains('toast--out')).toBe(true);
+    fireEvent.click(document.querySelector('.celebrate [data-dismiss]')!);
+    await waitFor(() => expect(document.querySelector('.celebrate')).toBeNull());
+    // A second toast, then Finish: the sheet says the badge and the toast goes.
+    announceSaved({ speciesId: ON_OUTING, date: today }, { id: 2, isNew: true, newBadges: [{ id: 'garden', name: 'Gardens & parks' }], sightings: [] }, { quiet: true });
+    const again = document.querySelector('.toast:not(.toast--out)')!;
+    fireEvent.click(document.querySelector('[data-finish]')!);
+    const line = await waitFor(() => { const el = document.querySelector('.finish-lifers-badges'); if (!el) throw new Error('no badge line'); return el; });
+    expect(line.textContent).toBe('Badge earned: Gardens & parks');
+    expect(again.classList.contains('toast--out')).toBe(true);
+  });
 });
 
 describe('saves outside the tally', () => {
