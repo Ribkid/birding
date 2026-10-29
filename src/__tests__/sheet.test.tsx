@@ -146,6 +146,44 @@ function Harness({ onClose }: { onClose?: (why?: string) => void }) {
   );
 }
 
+// A sheet that stays mounted and is closed by its open prop (the + sheet), so React takes its wrapper out before the
+// sheet's own effects hear of it.
+function Toggled() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" id="opener" onClick={() => setOpen(true)}>Add</button>
+      <Sheet open={open} onClose={() => setOpen(false)} label="Add">
+        <h2>Add</h2>
+        <button type="button" data-close="" onClick={() => setOpen(false)}>Cancel</button>
+      </Sheet>
+    </>
+  );
+}
+
+// A tall sheet and a short one, opened from the page.
+function TwoSheets() {
+  const [which, setWhich] = useState<'' | 'tall' | 'short'>('');
+  return (
+    <>
+      <button type="button" id="open-tall" onClick={() => setWhich('tall')}>Tall</button>
+      <button type="button" id="open-short" onClick={() => setWhich('short')}>Short</button>
+      {which === 'tall' && (
+        <Sheet open onClose={() => setWhich('')} label="Log a sighting">
+          <div className="tall">Log a sighting</div>
+          <button type="button" data-close="" onClick={() => setWhich('')}>Cancel</button>
+        </Sheet>
+      )}
+      {which === 'short' && (
+        <Sheet open onClose={() => setWhich('')} label="Add">
+          <div className="short">Add</div>
+          <button type="button" data-close="" onClick={() => setWhich('')}>Cancel</button>
+        </Sheet>
+      )}
+    </>
+  );
+}
+
 async function openSheet() {
   // The click that ends a drag is dropped until the next task; a test's next tap comes after it, as hers would.
   await act(() => new Promise<void>((r) => setTimeout(r, 0)));
@@ -196,6 +234,71 @@ describe('a closing sheet', () => {
     await openSheet();
     expect(document.querySelectorAll('.sheet-wrap').length).toBe(1);
     expect(document.querySelector('.sheet-wrap[data-closing]')).toBeNull();
+  });
+
+  it('leaves from where it is drawn when closed while still rising in, whether its owner drops it or closes it', async () => {
+    // getComputedStyle stands in for a sheet caught by Cancel part-way up its entry, its scrim still fading in.
+    const real = window.getComputedStyle.bind(window);
+    const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element, p?: string | null) => {
+      const cs = real(el, p);
+      if (!el.isConnected || el.closest('[data-closing]') || !el.matches('.sheet, .sheet-scrim')) return cs;
+      const over: Record<string, string> = el.matches('.sheet') ? { transform: 'matrix(1, 0, 0, 1, 0, 250)', opacity: '0.6' } : { opacity: '0.4' };
+      return new Proxy(cs, { get: (t, k) => (typeof k === 'string' && k in over ? over[k] : Reflect.get(t, k)) });
+    });
+    try {
+      for (const H of [Harness, Toggled]) {
+        cleanup();
+        flushClosingSheets();
+        animate.mockClear();
+        render(<H />);
+        await openSheet();
+        act(() => { (document.querySelector('.sheet-wrap:not([data-closing]) .sheet [data-close]') as HTMLButtonElement).click(); });
+        await settle();
+        expect(document.querySelector('.sheet-wrap[data-closing]')).not.toBeNull();
+        const kf = animate.mock.calls.map((c) => (c as unknown as [Keyframe[]])[0]);
+        // The sheet goes on down from 250 px and 0.6 opacity, the scrim from 0.4, rather than from rest at full.
+        expect(kf.find((k) => 'transform' in k[0])?.[0]).toEqual({ transform: 'matrix(1, 0, 0, 1, 0, 250)', opacity: 0.6 });
+        expect(kf.find((k) => !('transform' in k[0]))?.[0]).toEqual({ opacity: '0.4' });
+      }
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('lets a taller sheet slide on out when a shorter one opens before it has gone', async () => {
+    // Heights and resting places as a 390x844 phone lays them out: the tall sheet 700 px, the short one 300 px.
+    const proto = HTMLElement.prototype as unknown as Record<string, unknown>;
+    const had = ['offsetHeight', 'offsetTop'].map((k) => [k, Object.getOwnPropertyDescriptor(HTMLElement.prototype, k)] as const);
+    const h = (el: HTMLElement) => (el.classList.contains('sheet') ? (el.querySelector('.tall') ? 700 : 300) : 0);
+    Object.defineProperty(proto, 'offsetHeight', { configurable: true, get() { return h(this); } });
+    Object.defineProperty(proto, 'offsetTop', { configurable: true, get() { return this.classList.contains('sheet') ? 844 - h(this) : 0; } });
+    try {
+      render(<TwoSheets />);
+      act(() => { document.getElementById('open-tall')!.click(); });
+      await frame();
+      act(() => { (document.querySelector('.sheet [data-close]') as HTMLButtonElement).click(); });
+      await settle();
+      const ghost = document.querySelector<HTMLElement>('.sheet-wrap[data-closing]')!;
+      // Still near the top of the screen, well above where the short sheet rests (544 px).
+      ghost.querySelector<HTMLElement>('.sheet')!.getBoundingClientRect = () => ({ top: 200, height: 700, bottom: 900, left: 0, right: 390, width: 390, x: 0, y: 200, toJSON: () => ({}) });
+      act(() => { document.getElementById('open-short')!.click(); });
+      expect(ghost.isConnected).toBe(true);
+      expect(document.querySelectorAll('.sheet-wrap').length).toBe(2);
+      // Once it is below where the short sheet rests, the short one takes over from it, as the same sheet would.
+      act(() => { (document.querySelector('.sheet-wrap:not([data-closing]) .sheet [data-close]') as HTMLButtonElement).click(); });
+      await settle();
+      flushClosingSheets();
+      act(() => { document.getElementById('open-tall')!.click(); });
+      await frame();
+      act(() => { (document.querySelector('.sheet [data-close]') as HTMLButtonElement).click(); });
+      await settle();
+      const low = document.querySelector<HTMLElement>('.sheet-wrap[data-closing] .sheet')!;
+      low.getBoundingClientRect = () => ({ top: 600, height: 700, bottom: 1300, left: 0, right: 390, width: 390, x: 0, y: 600, toJSON: () => ({}) });
+      act(() => { document.getElementById('open-short')!.click(); });
+      expect(document.querySelectorAll('.sheet-wrap').length).toBe(1);
+    } finally {
+      for (const [k, d] of had) { if (d) Object.defineProperty(HTMLElement.prototype, k, d); else delete proto[k]; }
+    }
   });
 
   it('is removed by a route change (flushClosingSheets)', async () => {
@@ -274,6 +377,23 @@ describe('dragging a sheet', () => {
     pointer('pointermove', window, 440, 40);
     expect(sheet.style.transform).toBe('translateY(80px)');
     pointer('pointerup', window, 440, 200);
+    expect(sheet.style.transform).toBe('');
+  });
+
+  it('follows from where it was caught above rest (a spring entry overshooting), resisting only beyond that', async () => {
+    render(<Harness />);
+    const sheet = await openSheet();
+    sheet.style.transform = 'translateY(-30px)'; // overshooting its resting place
+    pointer('pointerdown', sheet.querySelector('.sheet-grip')!, 420);
+    pointer('pointermove', window, 430, 16);
+    // 10 px down from where she caught it, not snapped to the rubber band's -7 px.
+    expect(sheet.style.transform).toBe('translateY(-20px)');
+    pointer('pointermove', window, 400, 16);
+    // 20 px above where she caught it: that much resisted, as above rest.
+    const y = parseFloat(/translateY\((-?[\d.]+)px\)/.exec(sheet.style.transform)![1]);
+    expect(y).toBeLessThan(-30);
+    expect(y).toBeGreaterThan(-40);
+    pointer('pointerup', window, 400, 200);
     expect(sheet.style.transform).toBe('');
   });
 

@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { closeLayer, focusFirst, openLayer, type Layer } from '../lib/layers';
 import { motionOK } from '../lib/motion';
@@ -63,6 +63,18 @@ export function exitTiming(remaining: number, v: number): { duration: number; ea
 // from.
 const flung = new WeakMap<HTMLElement, { v: number; at: number }>();
 
+// Where each sheet was drawn as React took it out of the page: it may still be rising in, springing back or fading up,
+// and its exit goes on from there rather than jumping back to its resting place first.
+const looks = new WeakMap<HTMLElement, { transform: string; opacity: number; scrim: string }>();
+function keepLook(wrap: HTMLElement) {
+  const sheet = wrap.querySelector<HTMLElement>('.sheet');
+  if (!sheet || !wrap.isConnected) return;
+  const scrim = wrap.querySelector<HTMLElement>('.sheet-scrim');
+  const cs = getComputedStyle(sheet);
+  const opacity = parseFloat(cs.opacity);
+  looks.set(wrap, { transform: cs.transform, opacity: Number.isFinite(opacity) ? opacity : 1, scrim: scrim ? getComputedStyle(scrim).opacity : '' });
+}
+
 /**
  * v1 closeSheet/exitSheet: a sheet she dismisses (Escape, the scrim, a button) slides back down before it goes, and
  * under reduced motion fades where it is. React has already taken the closed sheet out of the page, so its last
@@ -71,10 +83,14 @@ const flung = new WeakMap<HTMLElement, { v: number; at: number }>();
 function playOut(wrap: HTMLElement, scrollTop: number, reason?: string) {
   const sheet = wrap.querySelector<HTMLElement>('.sheet');
   const scrim = wrap.querySelector<HTMLElement>('.sheet-scrim');
+  const look = looks.get(wrap);
+  looks.delete(wrap);
   if (!sheet || typeof sheet.animate !== 'function' || !wrap.classList.contains('open')) return;
-  // v1 exitSheet: hand over from wherever a drag left the sheet (under reduced motion it fades where it is).
-  const from = sheet.style.transform || 'none';
-  const scrimFrom = scrim?.style.opacity || '1';
+  // v1 exitSheet: hand over from wherever a drag left the sheet (under reduced motion it fades where it is), or from
+  // where it was drawn when it closed, still rising in or springing back.
+  const from = sheet.style.transform || look?.transform || 'none';
+  const opacityFrom = look?.opacity ?? 1;
+  const scrimFrom = scrim?.style.opacity || look?.scrim || '1';
   sheet.style.transition = '';
   sheet.style.transform = '';
   if (scrim) scrim.style.opacity = scrim.style.transition = '';
@@ -95,7 +111,7 @@ function playOut(wrap: HTMLElement, scrollTop: number, reason?: string) {
     // Let go of after a drag, it carries on down at the finger's speed (under reduced motion it fades where it is).
     if (reason === 'drag' && motionOK()) timing = exitTiming(translateYOf(to.transform) - translateYOf(from), fling?.v ?? 0);
     const end = reason === 'drag' && !motionOK() ? from : to.transform;
-    const anims = [sheet.animate([{ transform: from, opacity: 1 }, { transform: end, opacity: to.opacity }], timing)];
+    const anims = [sheet.animate([{ transform: from, opacity: opacityFrom }, { transform: end, opacity: to.opacity }], timing)];
     if (scrim) anims.push(scrim.animate([{ opacity: scrimFrom }, { opacity: getComputedStyle(scrim).opacity }], { duration: timing.duration, easing: reason === 'drag' ? 'linear' : timing.easing }));
     // It leaves from the moment the finger lifted, not from the first frame after the page has caught up with the
     // close (focus, the page behind coming back), so a busy frame shows it further on rather than stalled.
@@ -139,7 +155,10 @@ function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void)
     }
     const at = g.base + dy;
     g.dy = at;
-    sheet.style.transform = `translateY(${at >= 0 ? at : -rubber(-at)}px)`;
+    // It resists above its resting place, or above where she caught it if that was higher (a spring entry
+    // overshooting), so the first move doesn't snap it down from there.
+    const lo = Math.min(0, g.base);
+    sheet.style.transform = `translateY(${at >= lo ? at : lo - rubber(lo - at)}px)`;
     if (scrim) scrim.style.opacity = String(scrimAt(at, g.h));
     g.pts.push([e.timeStamp, e.clientY]);
     if (g.pts.length > 8) g.pts.shift();
@@ -258,6 +277,11 @@ function takeOver(wrap: HTMLElement, card: HTMLElement) {
   const was = ghost.querySelector<HTMLElement>('.sheet');
   const wasScrim = ghost.querySelector<HTMLElement>('.sheet-scrim');
   const top = was?.getBoundingClientRect().top;
+  // A taller sheet still above where this shorter one rests (she closed the log sheet and tapped +): turning it back
+  // from there would lift this one off the foot of the screen, so the tall one slides on out and this one rises in
+  // front of it, as it would from nothing. (Heights and resting places are read without transforms.)
+  if (motionOK() && was && top != null && was.offsetHeight > card.offsetHeight + 1
+    && top < wrap.getBoundingClientRect().top + card.offsetTop - 1) return;
   const opacity = was ? Number(getComputedStyle(was).opacity) : 1;
   const scrimFrom = wasScrim && getComputedStyle(wasScrim).display !== 'none' ? getComputedStyle(wasScrim).opacity : '0';
   flushClosingSheets();
@@ -269,9 +293,10 @@ function takeOver(wrap: HTMLElement, card: HTMLElement) {
   const scrimTiming = scrim ? { duration: ms(getComputedStyle(scrim).transitionDuration) || 320, easing: 'cubic-bezier(.2, .8, .2, 1)' } : null;
   card.style.transition = 'none';
   if (scrim) scrim.style.transition = 'none';
-  const from = Math.max(0, top - card.getBoundingClientRect().top);
+  // A copy closed as its spring entry overshot sits a little above rest; the new sheet settles down from there.
+  const from = top - card.getBoundingClientRect().top;
   try {
-    if (motionOK() && from > 1) card.animate([{ transform: `translateY(${from}px)`, opacity }, { transform: 'none', opacity: 1 }], timing);
+    if (motionOK() && Math.abs(from) > 1) card.animate([{ transform: `translateY(${from}px)`, opacity }, { transform: 'none', opacity: 1 }], timing);
     else card.animate([{ opacity }, { opacity: 1 }], { duration: 200, easing: 'linear' });
     if (scrim && scrimTiming) scrim.animate([{ opacity: scrimFrom }, { opacity: 1 }], scrimTiming);
   } catch { /* drawn where it rests */ }
@@ -301,7 +326,17 @@ interface SheetProps {
 
 /** A bottom sheet on the shared layer stack: scrim, focus trap, Escape and inert page behind it. */
 export function Sheet({ open, onClose, children, label, labelledBy, wide = false, cls = '', modal = true, lock = true, step }: SheetProps) {
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  // React detaches the wrapper's ref before it takes the wrapper out of the page (unmounted, or open turned false), so
+  // this is the last moment its sheet can be read where it is drawn.
+  const setWrap = useCallback((el: HTMLDivElement | null) => {
+    wrapRef.current = el;
+    if (!el) return undefined;
+    return () => {
+      keepLook(el);
+      wrapRef.current = null;
+    };
+  }, []);
   const cardRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -382,7 +417,7 @@ export function Sheet({ open, onClose, children, label, labelledBy, wide = false
 
   if (!open) return null;
   return createPortal(
-    <div ref={wrapRef} className={`sheet-wrap ${cls}${shown || STARTING_STYLE ? ' open' : ''}`} data-closing={undefined}>
+    <div ref={setWrap} className={`sheet-wrap ${cls}${shown || STARTING_STYLE ? ' open' : ''}`} data-closing={undefined}>
       <div className="sheet-scrim" data-close="" onClick={() => onClose('scrim')} />
       <div ref={cardRef} className={`sheet ${wide ? 'sheet--wide' : ''}`.trim()} onScroll={(e) => { scrolled.current = e.currentTarget.scrollTop; }}>
         <div className="sheet-grip" aria-hidden="true" />
