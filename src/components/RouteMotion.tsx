@@ -281,6 +281,9 @@ function onRouteChange(prev: Location, next: Location, action: Action, delta: nu
     if (!transitioning()) clearNames();
     return;
   }
+  // A sheet still sliding away goes before the transition takes its picture of this screen, or it would freeze
+  // half-way down in the old screen as that one leaves.
+  flushClosingSheets();
   void vt(() => {
     flushSync(draw);
     const view = viewEl();
