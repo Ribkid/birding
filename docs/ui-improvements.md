@@ -44,13 +44,16 @@ made while a save was running were dropped without a word: ten quick taps counte
 
 - One writer per outing stores the combined taps through `saveSighting`, `db.put` and `deleteSighting`. Taps that
   cancel out write nothing, and a count that reaches 0 deletes the sighting.
-- A row counted down to 0 holds its place for 4 s, struck through, with its − resting and its + turned to Undo ringed
-  by the time left. Quick taps after the − land on that row, not on the row that used to slide up into its place and
-  lose a count. Undo puts it back exactly as it was (nothing was written yet); then the row folds shut and its
-  sighting goes. Finish, Discard, Done editing and leaving the outing or the app let it go at once.
+- A row counted down to 0 holds its place, struck through, with its − resting and its + turned to Undo ringed by the
+  time left, until 4 s after her last tap on the outing: a tap on any row starts the 4 s again. Quick taps after the −
+  land on that row, not on the row that used to slide up into its place, and while she counts a flock on another row
+  no row folds away and moves the rows under her thumb. Undo puts it back exactly as it was (nothing was written
+  yet); once she stops, the row folds shut and its sighting goes. Finish, Discard, Done editing and leaving the
+  outing or the app let it go at once.
 - If a save fails, the count comes back off the row and a short toast says "That count didn't save".
 - Taps not yet stored are kept when she leaves the outing, the tab goes to the background or the page closes, and they
-  are written at the next start.
+  are written at the next start. A write that lands after she has left builds on the one before it, so a lifer tapped
+  twice just before Back is one sighting of 2, not two of 1.
 - Holding + for about half a second opens a glass chooser of 5, 10, 20 and 50 for a big flock.
 - The number stamps in with each tap and the phone gives a short buzz. Under reduced motion there is no stamp.
 
@@ -83,9 +86,14 @@ full-screen "New for your dex" card, the page went inert and the taps after it w
   flat beside the date line so the title keeps its width.
 - "Outing finished" rests above the finished outing's buttons when its usual place would cover them.
 - Saves made anywhere else (the species page, the + sheet) still get the full card.
+- A + on a bird found with the tally's search keeps the results up until 1.5 s after her last tap (and while a card, a
+  sheet or the flock chooser is up), so a quick burst on any result counts on that bird, not on the tally row that
+  would have moved under her thumb when the results went. A result not on the tally yet keeps room for its − and
+  count, so its first + moves nothing around the +, at any width. Its moment and New band show on that result. Then
+  the search clears, and focus that was on the result goes to the bird's row on the tally.
 
-**See it.** Start an outing, search for a bird you have never logged and tap + five times quickly: the count is 5 and
-nothing pops up. Tap the New band to see the card. Tap Sun in the outing header.
+**See it.** Start an outing, search for a bird you have never logged and tap + five times quickly, on the first
+result or any other: the count is 5 and nothing pops up. Tap the New band to see the card. Tap Sun in the outing header.
 
 **Files.** `src/lib/liveOuting.ts` (new), `src/lib/wakeLock.ts` (new), `src/components/SunToggle.tsx` and
 `sunToggle.css` (new), `src/lib/toast.ts`, `src/screens/lists/Outing.tsx`, `lists.css`, `shared.tsx`,
@@ -122,6 +130,8 @@ through a long dex never sends her back to the top.
 - Tapping the tab she is already on glides to its top.
 - Redirects, map moves and the phone's own edge-swipe Back draw without an extra transition.
 - Under reduced motion, or in a browser without view transitions, places and focus are kept without the motion.
+- A fumbled double tap (a second tap within 400 ms on the spot of a first that changed the screen) opens one screen,
+  with or without motion: it no longer opens a species page's photo viewer, or takes a tab back to its top.
 
 **See it.** Scroll the Dex well down, tap a bird, press Back. Then tap Learn and Dex again. Tap Dex once more.
 
@@ -146,6 +156,8 @@ eye ring or wing bars. Before, landscape photos showed only about half the bird 
 - From the keyboard: Enter or Space on the photo opens it, the arrows move, + and − zoom, Escape closes. A screen
   reader hears "Photo 2 of N, <name>" and the credit. Focus goes back to the photo.
 - It fades instead of flying under reduced motion.
+- Previous and Next sit either side of the count, each a 44 px target. At 200% text the capsule starts clear of
+  Close rather than running under it.
 - It uses only photos the page already has. Offline, a cached photo shows and an uncached one shows the no-photo
   block.
 
@@ -184,7 +196,8 @@ the feedback card pushed the photo off screen, and Next moved every question.
 - Next, the call buttons and Compare stay in one compact dock above the tab bar, in the same spot every question.
 - The header shows a right-and-wrong trail for the round.
 - The rest of the feedback (how to tell them apart, safety, the source) settles below as a card.
-- A resumed question shows its final state without replaying the motion. The verdict is announced.
+- A resumed question shows its final state without replaying the motion. The verdict is announced and takes focus;
+  from the keyboard it shows a ring inside its edge, drawn over the photo footer's glass.
 - Rapid fire and the review deck are unchanged. Scoring and stored Learn data are unchanged.
 - Copy changed on purpose: Next reads "Next" and "See results" on the last question, and the footer leaves out the
   scientific name.
@@ -238,6 +251,8 @@ wide at 130%, 260 at 150%, 195 at 200%.
 - Sheets: from 130% the log sheet's and the Finish sheet's date and time (and count and heard only) stack instead of
   pushing the whole form, and its Save, past the right edge. The map's search box shrinks to fit at 200% instead of
   running off the screen.
+- The live outing's flock chooser sits two by two under 258 px (175% and 200%), so +5, where focus lands, is on the
+  screen. The photo viewer's Previous / count / Next capsule starts clear of Close at 200%.
 - At 390 and 320 px every screen and sheet draws as before. The changes sit in container queries, or wrap only when
   the line no longer fits (the outing's count line, Learn's answer dock, a search box).
 
@@ -306,11 +321,39 @@ only Chrome has it so far.
 
 - With 6,000 sightings on a slow phone, a rare tally tap waits for the shared store to re-read every sighting after a
   write (about 130 ms at 4x CPU). Making that read cheaper is store work for later.
+- At 200% text (195 px) a "Badge earned" toast from a lifer's quiet save sits over the middle of the screen, so the
+  next tap or two of a burst on a + under it take the toast down instead of counting (found while checking the
+  search fix; the toast is item 3's, and a tap on a toast has always taken it down).
 - In about one Back in four on a slow phone, the shrink waits for the tile's photo to decode (up to about 0.6 s). The
   `port-fixes` build does the same. Every Back still lands exactly.
 - Not tried on real hardware: the photo viewer's pinch, double tap, swipe and drag; the sheet flick; the phone's own
   Back swipe, and Android's Back closing the photo viewer. Everything was checked in Chromium under Playwright only, with no real Firefox, WebKit, TalkBack or
   VoiceOver.
+
+## Fixes from the round's review (branch `ui-round-fixes`)
+
+Three reviewers read the whole round. Each finding was reproduced on the build before it was fixed:
+
+1. **Taps made just before leaving an outing.** The tally's writer could build a write on the copy of the outing's
+   rows she left: a lifer tapped twice just before Back became two sightings of 1, and a stored species lost a tap.
+   When the store reads a write back with the outing off screen, its record now takes the write's place in that
+   copy (`tallyQueue.ts` `catchUp`). Tests in `useTally.test.ts`.
+2. **A toast's watch on the page.** "Outing finished" watches `<body>` to stay clear of the outing's buttons; a newer
+   toast that replaced it left that observer running. It now lets go (`toast.ts`). Test in `liveOuting.test.tsx`.
+3. **A row at 0 folding under her thumb.** It folded 4 s after its own last −, whatever she was doing on the rows
+   below it, and the rest of a flock landed on the species that slid up. It now waits for 4 s with no tap on the
+   outing at all (item 2). Test in `liveOuting.test.tsx`.
+4. **A flock found with the search.** The first + cleared the search and the rest of a quick burst landed on the tally
+   row under her thumb, unless the bird was the first result. The results now wait for her to stop (item 3). Tests
+   in `liveOuting.test.tsx`.
+5. **A fumbled double tap under reduced motion** opened the species page and then its photo viewer (item 5). Test in
+   `secondTap.test.tsx`.
+6. **Learn's photo verdict had no visible focus ring**: its glass and glow covered the ring (item 8).
+7. **The flock chooser ran off the left edge** at 175% and 200% (item 10). Test in `flockChooser.test.tsx`.
+8. **The photo viewer's Previous lay over Close** at 200% (items 6 and 10).
+9. **The viewer's Previous and Next were 40 px wide**; they are 44 px (item 6).
+
+Rows 6, 8 and 9 are CSS, checked in the browser at 390, 320, 260, 223 and 195 px, light and dark (and Outdoor for 6).
 
 ## How to check it
 
@@ -334,6 +377,39 @@ for a row counted down to 0 to finish its 4 s hold before checking that the sigh
 checks for the badge in the card and the Finish sheet, Finish straight after a lifer, a band tapped before its save,
 the narrow header, the Screen on icon, the 48 px map Sun, the wake lock taken back in view, "Outing finished" and the
 row held at 0.
+
+**Script update after the round's review.** `tally-queue.mjs`'s check "focus stays on the + she pressed" now expects
+focus on the search result's + while the results stay up after three Enters on it, then on the bird's + on the tally
+once they have gone (finding 4 above). Before, the results went with the first +. The script as it was is kept beside
+it as `tally-queue.before-round-fixes.mjs`.
+
+### Check after the review fixes (30 Oct 2026, branch `ui-round-fixes`)
+
+`npm run build` passed and `npm test` passed (54 files, 437 tests). Every acceptance script was run against the
+branch's build:
+
+| Acceptance script | Result |
+|---|---|
+| fast-dex | 13/13 |
+| tally-queue | 18/18 with the updated focus check (17/18 as it was written: the check above). One later full run had a tap drawn after 128 ms in the stress check; three reruns of that check passed |
+| live-outing | 36/36 |
+| progressive-photo | 45/45 |
+| route-motion | 14/14 |
+| photo-viewer | 41/41 |
+| sheet-gestures | 17/17 |
+| learn-answer-dock | 10/10 |
+| dex-tiers | 26/26 |
+| loose-ends | 26/26 |
+| large-text | 54/54 (without a reference build) |
+
+The reviewers' own repro scripts, run on the branch: two taps on a lifer and Back with 6,000 sightings at 6x CPU give
+one sighting of 2 (it was two of 1); "Outing finished" twice leaves no observer; 20 taps on the row below a row at 0
+all count there, at 300 and 500 ms and under reduced motion; five quick taps on the 2nd or 3rd search result give 5 to
+that bird, at 390, 320 and 300 px and at 4x CPU (at 195 px, see the badge toast under "Loose ends still open"); a
+fumbled double tap on a Dex tile opens the viewer 0 times in 4 (reduced motion, light and dark, 390 and 320, 0
+sightings, and with motion); Learn's verdict ring is drawn in light, dark and Outdoor; the flock chooser is 126 px
+wide and fully on screen at 223 and 195 px; and the viewer's capsule is clear of Close at every width, with 44 x 44
+Previous and Next.
 
 ### Last check (29 Oct 2026, on bc5fddf)
 
