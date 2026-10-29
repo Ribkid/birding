@@ -351,6 +351,85 @@ describe('a row counted down to 0', () => {
   }, 20000);
 });
 
+describe('a bird found with the search', () => {
+  const found = () => [...document.querySelectorAll<HTMLElement>('.tally-list--found [data-inc]')];
+  const tap = (el: HTMLElement) => { el.focus(); fireEvent.click(el); };
+  const onOuting = (id: number) => fake.stores.sightings.filter((s) => s.speciesId === id && s.outingId === 2).map((s) => s.count);
+
+  it('takes a quick burst of taps on any result, not just the first, and the search clears once she stops', async () => {
+    page();
+    await waitFor(() => expect(main('data-inc', ON_OUTING)).toBeTruthy());
+    const box = document.querySelector<HTMLInputElement>('[data-tq]')!;
+    fireEvent.change(box, { target: { value: 'honeyeater' } });
+    expect(found().length).toBeGreaterThan(3);
+    const plus = found()[2]; // the third result: the tally's rows would be under her thumb once the results went
+    const id = Number(plus.getAttribute('data-inc'));
+    for (let k = 0; k < 5; k++) {
+      // Still the same button in the same list after every tap, while she keeps tapping.
+      expect(found()[2]).toBe(plus);
+      tap(plus);
+      await act(() => new Promise((r) => setTimeout(r, 150)));
+    }
+    expect(box.value).toBe('honeyeater');
+    expect(plus.closest('li')?.querySelector('[data-n]')?.textContent).toBe('5');
+    // It joins the tally at once (below the results), with its New band on both rows.
+    expect(main('data-n', id)?.textContent).toBe('5');
+    expect(plus.closest('li')?.querySelector('.lifer-band')).toBeTruthy();
+    // She stops: the search clears and focus goes to the bird's + on the tally.
+    await waitFor(() => expect(box.value).toBe(''), { timeout: 3000 });
+    expect(found()).toEqual([]);
+    expect(document.activeElement).toBe(main('data-inc', id));
+    await waitFor(() => expect(onOuting(id)).toEqual([5]));
+    expect(onOuting(ON_OUTING)).toEqual([2]);
+  });
+
+  it('a + on a tally row with the results up keeps them up while she taps, so the tally does not move under her', async () => {
+    page();
+    await waitFor(() => expect(main('data-inc', ON_OUTING)).toBeTruthy());
+    const box = document.querySelector<HTMLInputElement>('[data-tq]')!;
+    fireEvent.change(box, { target: { value: 'honeyeater' } });
+    const plus = main('data-inc', ON_OUTING)!;
+    for (let k = 0; k < 3; k++) {
+      tap(plus);
+      await act(() => new Promise((r) => setTimeout(r, 600)));
+      expect(found().length).toBeGreaterThan(0);
+    }
+    await waitFor(() => expect(box.value).toBe(''), { timeout: 3000 });
+    await waitFor(() => expect(onOuting(ON_OUTING)).toEqual([5]));
+  });
+
+  it('a result\'s New band opens the card; the results wait for it to close, then focus goes to the band on the tally', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    page();
+    await waitFor(() => expect(main('data-inc', ON_OUTING)).toBeTruthy());
+    const box = document.querySelector<HTMLInputElement>('[data-tq]')!;
+    fireEvent.change(box, { target: { value: byId.get(LIFER)!.name } });
+    tap(document.querySelector<HTMLElement>(`.tally-list--found [data-inc="${LIFER}"]`)!);
+    const band = document.querySelector<HTMLElement>(`.tally-list--found [data-lifer="${LIFER}"]`)!;
+    tap(band);
+    await waitFor(() => expect(document.querySelector('.celebrate')).toBeTruthy());
+    await act(() => new Promise((r) => setTimeout(r, 2000)));
+    expect(box.value).toBe(byId.get(LIFER)!.name); // still there under the card
+    fireEvent.click(document.querySelector('.celebrate [data-dismiss]')!);
+    await waitFor(() => expect(document.querySelector('.celebrate')).toBeNull());
+    expect(document.activeElement).toBe(band);
+    await waitFor(() => expect(box.value).toBe(''), { timeout: 3000 });
+    expect(document.activeElement).toBe(main('data-lifer', LIFER));
+  });
+
+  it('typing a new name after a + keeps what she types', async () => {
+    page();
+    await waitFor(() => expect(main('data-inc', ON_OUTING)).toBeTruthy());
+    const box = document.querySelector<HTMLInputElement>('[data-tq]')!;
+    fireEvent.change(box, { target: { value: 'honeyeater' } });
+    tap(found()[1]);
+    fireEvent.change(box, { target: { value: 'cormorant' } });
+    await act(() => new Promise((r) => setTimeout(r, 2000)));
+    expect(box.value).toBe('cormorant');
+    expect(found().length).toBeGreaterThan(0);
+  });
+});
+
 describe('"Outing finished"', () => {
   it('rests just above the finished outing\'s buttons when its usual place would cover them', () => {
     const vh = 844;

@@ -27,6 +27,11 @@
 .tally-ctl button { touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 /* The number pops from its middle as it stamps in (motion.ts stamp). */
 .tally-ctl .tally-n { transform-origin: 50% 55%; }
+/* A search result not on the tally yet keeps the room its − and count will take (Outing.tsx tallyRow), unseen and
+   unread, so its first + changes nothing around the + under her thumb. */
+.tally-room { display: contents; }
+.tally-room > * { visibility: hidden; }
+.tally-room-b { flex: none; width: var(--tap); height: var(--tap); }
 
 /* Hold + for a flock: a ring fills round the button over the hold. It starts 180 ms in, past the length of an
    ordinary tap (a slower tap of 100 to 150 ms used to flash it), and is full as the chooser opens at 450 ms. */
