@@ -175,6 +175,13 @@ body.is-scrolled .tally-search { top: calc(var(--topbar-h) + env(safe-area-inset
 @media (prefers-reduced-transparency: reduce) { .tally-foot--live { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 .tally-foot .btn { min-height: var(--tap); }
 .tally-foot--live .btn:not(.btn--primary):not(.btn--quiet) { background: var(--surface); box-shadow: none; }
+/* Larger text (a page under 300 px wide): "In progress" drops under the count rather than off the screen, and when
+   Discard and Finish outing no longer fit side by side each takes its own full row. */
+@media (max-width: 299px) {
+  .tally-sum { flex-wrap: wrap; row-gap: var(--sp-1); }
+  .tally-foot--live .btn { flex: 1 1 auto; }
+  .tally-foot--live .spacer { display: none; }
+}
 @media (prefers-reduced-motion: reduce) {
   .tally-ctl button, .lh-stat, .lh-link, .tcard, .pcard, .ocard { transition: none; }
   .tally-ctl button:active, .lh-stat:active, .lh-link:active, .tcard:active, .pcard:active, .ocard:active { scale: none; }

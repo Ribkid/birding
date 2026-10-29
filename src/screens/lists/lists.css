@@ -103,6 +103,15 @@
 @media (prefers-reduced-transparency: reduce) { .outing-tools { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 :root[data-theme="outdoor"] .outing-tools { box-shadow: inset 0 0 0 2px var(--line-strong); }
 :root[data-theme="outdoor"] .outing-tools .tool-tog:not([aria-pressed="true"]) { box-shadow: none; }
+/* Larger text (a page under 300 px wide, Chrome on Android's 150% and 200%): Back and the two toggles, side by side,
+   share the top row, and the outing's name has the whole width under them, so it breaks between words, not inside
+   them. */
+@media (max-width: 299px) {
+  .page-head--back:has(> .outing-tools) { flex-wrap: wrap; row-gap: var(--sp-2); }
+  .page-head--back:has(> .outing-tools) > .lists-head-text { order: 1; flex-basis: 100%; }
+  .page-head.page-head--back:has(> .outing-tools) > .iconbtn { margin-top: 3px; }
+  .outing-tools { display: flex; margin-top: 0; }
+}
 /* A toast on a live outing (a badge, a count that didn't save) sits above the Discard and Finish row, not over it. */
 body:has(.tally-foot--live) .toast { bottom: calc(var(--chrome-bottom) + 84px); }
 
