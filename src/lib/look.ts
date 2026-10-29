@@ -113,13 +113,16 @@ function whiteContrast(h: number, s: number, l: number) {
 
 // ---------- keeping the tint neutral ----------
 // A bird photographed against leaves gives a green or olive tint (the Laughing Kookaburra's page came out olive),
-// and a page behind a species should never read as green. How green a hue reads, from 0 to 1: khaki starts to read
-// olive from 42°, every olive and green from 58° to 170° is all the way, fading out through teal by 195°. Reds,
-// browns, blues and purples are left as they are.
+// and a page behind a species should never read as green. How green a hue reads, from 0 to 1: at the page's depth
+// (36% lightness) a yellow is olive, so khaki starts to read olive past the browns at 38° and is all the way by 48°;
+// every olive and green from there to 170° is all the way, fading out through teal by 195°. Reds, browns, blues and
+// purples are left as they are.
+// The last hue that still reads brown rather than khaki at the page's depth.
+const WARM_EDGE = 38;
 export function greenness(h: number): number {
   const x = ((h % 360) + 360) % 360;
-  if (x <= 42 || x >= 195) return 0;
-  if (x < 58) return (x - 42) / 16;
+  if (x <= WARM_EDGE || x >= 195) return 0;
+  if (x < 48) return (x - WARM_EDGE) / (48 - WARM_EDGE);
   if (x <= 170) return 1;
   return (195 - x) / 25;
 }
@@ -130,8 +133,8 @@ const rgbOf = (h: number, s: number, l: number) => {
   const k = (n: number) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
   return [0, 8, 4].map((n) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)));
 };
-// OKLab (Björn Ottosson), so a part-green hue pulled toward slate passes through grey on the way rather than
-// through a brighter green or a blue it never was.
+// OKLab (Björn Ottosson), so a teal pulled toward slate passes through cyan and grey on the way rather than through
+// a brighter green or a blue it never was.
 const toLin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
 const toGamma = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
 function toLab([r, g, b]: number[]) {
@@ -157,6 +160,10 @@ export function calmTint(h: number, s: number): [number, number] {
   const g = greenness(h);
   if (!g) return [h, s];
   if (g >= 1) return [NEUTRAL_HUE, Math.min(s, NEUTRAL_SAT)];
+  // Khaki, on the warm side: a dull yellow reads olive, and so does a greyed one until it is all but grey (a straight
+  // line to the slate passes the green side of grey), so it keeps the brown it borders and fades toward grey as it
+  // turns olive.
+  if (((h % 360) + 360) % 360 < 90) return [WARM_EDGE, s * (1 - g)];
   const a = toLab(rgbOf(h, s, 0.5)), n = toLab(rgbOf(NEUTRAL_HUE, Math.min(s, NEUTRAL_SAT), 0.5));
   const mixed = fromLab(a.map((v, i) => v + (n[i] - v) * g)).map((c) => c * 255);
   const [h2, s2] = toHsl(mixed);
