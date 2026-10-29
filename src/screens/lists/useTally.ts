@@ -68,7 +68,9 @@ const recovered: Promise<void> = new Promise<void>((resolve) => { setTimeout(res
   .catch(() => {});
 
 const appIO: TallyIO = {
-  create: saveSighting,
+  // Quiet: a first sighting from the tally gets its moment on the row (Outing.tsx), not the card, which would make
+  // the page inert and lose the taps after it.
+  create: (rec) => saveSighting(rec, { quiet: true }),
   update: (rec) => db.put('sightings', rec),
   remove: deleteSighting,
   markActive: (id) => db.kvSet('activeOuting', id),
