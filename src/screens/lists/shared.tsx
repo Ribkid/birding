@@ -268,7 +268,7 @@ export interface AnnounceOptions {
 // The badges each quiet first sighting earned this session, so the card its New band opens, and the Finish sheet,
 // still say them once the toast has gone (memory only: nothing is stored).
 const liferBadgeMap = new Map<number, EarnedBadge[]>();
-let badgeToastDown: (() => void) | null = null;
+let badgeToastDown: ((now?: boolean) => void) | null = null;
 let liferBadgeVersion = 0;
 const liferBadgeSubs = new Set<() => void>();
 const subscribeLiferBadges = (fn: () => void) => {
@@ -292,9 +292,12 @@ export function useLiferBadges(): number {
 const layerOpen = () => typeof document !== 'undefined'
   && !!document.querySelector('.sheet-wrap:not([data-closing]), .celebrate:not(.celebrate--out)');
 
-/** Takes a quiet first sighting's badge toast down early, for the card or sheet that says the badge itself. */
+/**
+ * Takes a quiet first sighting's badge toast down, for the card or sheet that says the badge itself: at once, not
+ * fading, since it sits above them and would draw over their fields as they come up.
+ */
 export function hideBadgeToast(): void {
-  badgeToastDown?.();
+  badgeToastDown?.(true);
   badgeToastDown = null;
 }
 

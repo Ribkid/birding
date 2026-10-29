@@ -51,7 +51,10 @@ const minutesSinceStart = (outing: OutingRow): number | null => {
  * they earned (this session's, which the toast said as she tapped: opening the sheet takes that toast down).
  */
 function OutingLifers({ lifers, live }: { lifers: Species[]; live: boolean }) {
-  useLiferBadges();
+  const badgesIn = useLiferBadges();
+  // The sheet says the badge, so a badge toast that came up as it opened (a save landing between the Finish tap and
+  // the sheet, on a slow phone) goes as the sheet draws, and so does one that comes after.
+  useLayoutEffect(() => { hideBadgeToast(); }, [badgesIn]);
   if (!lifers.length) return null;
   const earned = [...new Map(lifers.flatMap((sp) => liferBadges(sp.id)).map((b) => [b.id, b])).values()];
   return (

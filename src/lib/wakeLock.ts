@@ -41,6 +41,8 @@ export class ScreenWake {
   private sentinel: Sentinel | null = null;
   private timer: unknown = null;
   private asking = false;
+  /** The page asked again while a request was still on its way. */
+  private again = false;
   /** The lock went while the page was in view once already this visit. */
   private lost = false;
   constructor(private env: WakeEnv, private onChange: (on: boolean, why?: 'failed' | 'timeout') => void) {}
@@ -52,29 +54,41 @@ export class ScreenWake {
   };
 
   private async request() {
-    if (this.asking || !this.env.wakeLock) return;
+    if (!this.env.wakeLock) return;
+    // Asked again while an answer is on its way (the page shown again before a request made as it hid has come back):
+    // it is asked once more after that answer, rather than dropped.
+    if (this.asking) { this.again = true; return; }
     this.asking = true;
+    this.again = false;
+    let s: Sentinel;
     try {
-      const s = await this.env.wakeLock.request('screen');
-      if (!this.on) { void s.release().catch(() => {}); return; }
-      this.sentinel = s;
-      s.addEventListener('release', () => {
-        if (this.sentinel !== s) return;
-        this.sentinel = null;
-        // The browser lets go when the page is hidden; visibilitychange asks again on the way back. Let go while she
-        // is still looking (battery saver coming on, say), it is asked for once more, and if it goes again Screen on
-        // turns off and says so, rather than showing on while the screen can sleep.
-        if (!this.on || this.env.doc.visibilityState !== 'visible') return;
-        if (this.lost) { this.stop('failed'); return; }
-        this.lost = true;
-        void this.request();
-      });
+      s = await this.env.wakeLock.request('screen');
     } catch {
-      // A hidden page is refused; it is asked again once it is visible. Anything else turns it off.
-      if (this.env.doc.visibilityState === 'visible' && this.on) this.stop('failed');
-    } finally {
+      const back = this.again;
       this.asking = false;
+      this.again = false;
+      // A hidden page is refused; it is asked again once it is visible, or at once if it came back while this was
+      // asked. Anything else turns it off.
+      if (this.env.doc.visibilityState !== 'visible' || !this.on) return;
+      if (back) void this.request();
+      else this.stop('failed');
+      return;
     }
+    this.asking = false;
+    this.again = false;
+    if (!this.on) { void s.release().catch(() => {}); return; }
+    this.sentinel = s;
+    s.addEventListener('release', () => {
+      if (this.sentinel !== s) return;
+      this.sentinel = null;
+      // The browser lets go when the page is hidden; visibilitychange asks again on the way back. Let go while she
+      // is still looking (battery saver coming on, say), it is asked for once more, and if it goes again Screen on
+      // turns off and says so, rather than showing on while the screen can sleep.
+      if (!this.on || this.env.doc.visibilityState !== 'visible') return;
+      if (this.lost) { this.stop('failed'); return; }
+      this.lost = true;
+      void this.request();
+    });
   }
 
   start() {

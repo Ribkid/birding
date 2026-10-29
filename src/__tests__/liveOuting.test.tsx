@@ -59,6 +59,7 @@ vi.mock('../lib/hooks', async (orig) => ({ ...(await orig<typeof import('../lib/
 import Outing from '../screens/lists/Outing';
 import { SightingSheetHost } from '../components/SightingSheet';
 import { SUN_PREV_KEY, SunToggle, currentTheme, sunStep, toggleSun } from '../components/SunToggle';
+import { saveTheme } from '../screens/progress/theme';
 import { liveOutingId } from '../lib/liveOuting';
 import { ScreenWake, WAKE_MAX_MS, type WakeEnv } from '../lib/wakeLock';
 import { announceSaved, onCelebrate, type SaveOutcome } from '../screens/lists/shared';
@@ -226,15 +227,18 @@ describe('a lifer on the tally', () => {
     await waitFor(() => expect(document.querySelector('.celebrate')).toBeTruthy());
     expect(document.querySelector('.celebrate-badges')?.textContent).toBe('Badge earned: Gardens & parks');
     expect(toastEl.classList.contains('toast--out')).toBe(true);
+    expect(toastEl.isConnected).toBe(false); // gone at once: it sits above the card, so a fade would draw over it
     fireEvent.click(document.querySelector('.celebrate [data-dismiss]')!);
     await waitFor(() => expect(document.querySelector('.celebrate')).toBeNull());
-    // A second toast, then Finish: the sheet says the badge and the toast goes.
+    // A second toast, then Finish: the sheet says the badge and the toast goes at once.
     announceSaved({ speciesId: ON_OUTING, date: today }, { id: 2, isNew: true, newBadges: [{ id: 'garden', name: 'Gardens & parks' }], sightings: [] }, { quiet: true });
     const again = document.querySelector('.toast:not(.toast--out)')!;
     fireEvent.click(document.querySelector('[data-finish]')!);
+    expect(document.querySelector('.toast')).toBeNull();
     const line = await waitFor(() => { const el = document.querySelector('.finish-lifers-badges'); if (!el) throw new Error('no badge line'); return el; });
     expect(line.textContent).toBe('Badge earned: Gardens & parks');
     expect(again.classList.contains('toast--out')).toBe(true);
+    expect(again.isConnected).toBe(false);
   });
 
   it('a badge whose save lands with the Finish sheet already open is said in the sheet, not in a toast over its fields', async () => {
@@ -446,6 +450,110 @@ describe('Sun', () => {
     expect(animate).toHaveBeenCalledTimes(1);
     root.animate = was;
   });
+
+  /** A view transition as the browser runs one: the update a moment later, and finished only when it ends. */
+  function liveReveal() {
+    const root = document.documentElement as HTMLElement & { animate: unknown };
+    const was = root.animate;
+    root.animate = vi.fn();
+    const runs: { finish: () => void; skip: ReturnType<typeof vi.fn> }[] = [];
+    (document as unknown as { startViewTransition: unknown }).startViewTransition = (cb: () => void) => {
+      let finish = () => {};
+      const finished = new Promise<void>((r) => { finish = r; });
+      const run = { finish, skip: vi.fn(() => finish()) };
+      runs.push(run);
+      return { ready: new Promise<void>((r) => setTimeout(r, 5)).then(() => { cb(); }), finished, skipTransition: run.skip };
+    };
+    return {
+      root,
+      runs,
+      done: () => {
+        root.animate = was;
+        delete (document as unknown as { startViewTransition?: unknown }).startViewTransition;
+      },
+    };
+  }
+
+  it('resolves once the theme is stored, even when the reveal puts it on the page a moment later', async () => {
+    const vt = liveReveal();
+    fake.kv.settings = { theme: 'dark', mapLayer: 'sat' };
+    document.documentElement.dataset.theme = 'dark';
+    await act(() => toggleSun({ x: 300, y: 40 }));
+    expect(fake.kv.settings).toEqual({ theme: 'outdoor', mapLayer: 'sat' });
+    vt.runs.forEach((r) => r.finish());
+    vt.done();
+  });
+
+  it('a second tap while the reveal still runs takes her straight back, and the reveal after it keeps its look', async () => {
+    const vt = liveReveal();
+    fake.kv.settings = { theme: 'dark' };
+    document.documentElement.dataset.theme = 'dark';
+    await act(() => toggleSun({ x: 300, y: 40 }));
+    expect(currentTheme()).toBe('outdoor');
+    await act(() => toggleSun({ x: 300, y: 40 }));
+    expect(currentTheme()).toBe('dark');
+    expect(fake.kv.settings).toEqual({ theme: 'dark' });
+    expect(localStorage.getItem(SUN_PREV_KEY)).toBeNull();
+    // The first reveal ending (the browser skips it for the second) leaves the second its data-nav.
+    vt.runs[0].finish();
+    await act(() => new Promise((r) => setTimeout(r, 0)));
+    expect(vt.root.dataset.nav).toBe('sun');
+    vt.runs[1].finish();
+    await act(() => new Promise((r) => setTimeout(r, 0)));
+    expect(vt.root.dataset.nav).toBeUndefined();
+    vt.done();
+  });
+
+  it('a press on the page while the reveal runs ends it, and the tap reaches what is under it', async () => {
+    const vt = liveReveal();
+    document.documentElement.dataset.theme = 'light';
+    const plus = document.body.appendChild(document.createElement('button'));
+    const icon = plus.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'svg'));
+    const counted = vi.fn();
+    plus.addEventListener('click', counted);
+    const doc = document as Document & { elementFromPoint?: unknown };
+    const efp = doc.elementFromPoint;
+    doc.elementFromPoint = () => icon;
+    await act(() => toggleSun({ x: 300, y: 40 }));
+    // The browser aims every tap at <html> while the reveal is one picture over the page.
+    vt.root.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, clientX: 20, clientY: 400 }));
+    expect(vt.runs[0].skip).toHaveBeenCalledTimes(1);
+    // The click the browser aimed at <html> goes no further (the one handed on bubbles through it from the button).
+    const lost = vi.fn();
+    const onRoot = (ev: Event) => { if (ev.target === vt.root) lost(); };
+    vt.root.addEventListener('click', onRoot);
+    vt.root.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 20, clientY: 400 }));
+    expect(counted).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(plus);
+    expect(lost).not.toHaveBeenCalled();
+    // Once it is over, a click on the page itself is left alone.
+    await act(() => new Promise((r) => setTimeout(r, 0)));
+    vt.root.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    vt.root.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(counted).toHaveBeenCalledTimes(1);
+    expect(lost).toHaveBeenCalledTimes(1);
+    expect(currentTheme()).toBe('outdoor');
+    vt.root.removeEventListener('click', onRoot);
+    doc.elementFromPoint = efp;
+    plus.remove();
+    vt.done();
+  });
+
+  it('goes back to the theme Outdoor took over from, however Outdoor came on', async () => {
+    fake.kv.settings = { theme: 'light', colourUnseen: true };
+    document.documentElement.dataset.theme = 'light';
+    await act(() => toggleSun());
+    expect(localStorage.getItem(SUN_PREV_KEY)).toBe('light');
+    // In Settings: Dark, then Outdoor. Sun off goes to Dark, the theme she picked last.
+    await act(() => saveTheme('dark'));
+    expect(localStorage.getItem(SUN_PREV_KEY)).toBeNull();
+    await act(() => saveTheme('outdoor'));
+    expect(localStorage.getItem(SUN_PREV_KEY)).toBe('dark');
+    await act(() => toggleSun());
+    expect(currentTheme()).toBe('dark');
+    expect(fake.kv.settings).toEqual({ theme: 'dark', colourUnseen: true });
+    expect(localStorage.getItem(SUN_PREV_KEY)).toBeNull();
+  });
 });
 
 describe('Screen on', () => {
@@ -548,6 +656,43 @@ describe('Screen on', () => {
     await flush();
     expect(w.on).toBe(true);
     expect(w.held()).toBe(true);
+  });
+
+  it('a page shown again while an earlier ask is still out asks once more, rather than turning off when that one is refused', async () => {
+    const doc = new EventTarget() as EventTarget & { visibilityState: string };
+    doc.visibilityState = 'visible';
+    const asks: { resolve: (s: unknown) => void; reject: (e: unknown) => void }[] = [];
+    const request = vi.fn(() => new Promise((resolve, reject) => { asks.push({ resolve, reject }); }));
+    const e = {
+      wakeLock: { request },
+      doc: doc as unknown as WakeEnv['doc'],
+      setTimer: () => 1,
+      clearTimer: () => {},
+    } as unknown as WakeEnv;
+    const changes: [boolean, string | undefined][] = [];
+    const w = new ScreenWake(e, (on, why) => changes.push([on, why]));
+    w.start();
+    // She switches away and straight back while the first ask is out.
+    doc.visibilityState = 'hidden';
+    doc.dispatchEvent(new Event('visibilitychange'));
+    doc.visibilityState = 'visible';
+    doc.dispatchEvent(new Event('visibilitychange'));
+    expect(request).toHaveBeenCalledTimes(1);
+    asks[0].reject(new Error('NotAllowedError')); // refused: the page was hidden as it was asked
+    await flush();
+    expect(w.on).toBe(true);
+    expect(request).toHaveBeenCalledTimes(2);
+    asks[1].resolve({ released: false, release: async () => {}, addEventListener: () => {} });
+    await flush();
+    expect(w.held()).toBe(true);
+    expect(changes).toEqual([[true, undefined]]);
+    // Refused with the page in view and nothing asked since: it turns off and says so, as before.
+    w.stop();
+    w.start();
+    asks[2].reject(new Error('NotAllowedError'));
+    await flush();
+    expect(w.on).toBe(false);
+    expect(changes.at(-1)).toEqual([false, 'failed']);
   });
 
   it('is not offered where the browser has no wake lock, and is in the header where it has', async () => {

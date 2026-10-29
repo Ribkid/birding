@@ -43,9 +43,10 @@ export function clearOf(rest: { top: number; bottom: number }, clear: { top: num
 /**
  * Shows `msg` for about 4.5 s; screen readers hear `say` (the same words unless a fuller line is given). With `clear`,
  * a toast whose usual place would cover that element rests just above it instead. Returns a function that takes this
- * toast down early (it does nothing once the toast has gone).
+ * toast down early (it does nothing once the toast has gone): with `now`, at once instead of fading, for a sheet or card
+ * that says the same thing as it comes up, which the fade would otherwise draw over.
  */
-export function toast(msg: string, say = msg, { clear }: { clear?: Element | null } = {}): () => void {
+export function toast(msg: string, say = msg, { clear }: { clear?: Element | null } = {}): (now?: boolean) => void {
   announce(say);
   clearTimeout(toastT);
   toastEl?.remove();
@@ -53,13 +54,18 @@ export function toast(msg: string, say = msg, { clear }: { clear?: Element | nul
   t.className = 'toast';
   t.textContent = msg;
   t.setAttribute('aria-hidden', 'true');
-  const hide = () => {
+  const hide = (now = false) => {
+    if (toastEl === t) toastEl = null;
+    if (now) {
+      t.classList.add('toast--out');
+      t.remove();
+      return;
+    }
     if (t.classList.contains('toast--out')) return;
     t.classList.add('toast--out');
-    if (toastEl === t) toastEl = null;
     setTimeout(() => t.remove(), 260);
   };
-  t.addEventListener('click', hide);
+  t.addEventListener('click', () => hide());
   document.body.append(t);
   if (clear?.isConnected) {
     // Its resting place comes from its bottom offset and height, not its box, which the rise-in animation moves.
@@ -67,6 +73,6 @@ export function toast(msg: string, say = msg, { clear }: { clear?: Element | nul
     const at = clearOf({ top: restBottom - t.offsetHeight, bottom: restBottom }, clear.getBoundingClientRect(), innerHeight);
     if (at != null) t.style.bottom = `${at}px`;
   }
-  toastT = window.setTimeout(hide, 4500);
+  toastT = window.setTimeout(() => hide(), 4500);
   return hide;
 }
