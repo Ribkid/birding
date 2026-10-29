@@ -482,19 +482,22 @@ body.has-outing .mapwrap { bottom: calc(var(--tabbar-h) + 62px + env(safe-area-i
 
 /* ---------- tab bar ----------
    The current tab gets a tinted pill behind its icon; the pill is one named element so a route transition can
-   slide it from tab to tab. */
+   slide it from tab to tab. The bar is a size container: with the phone's text turned up, Chrome on Android narrows
+   the page (300 px wide at 130%, 260 at 150%, 195 at 200%), and the tabs share whatever width the bar has instead of
+   pushing Map and Me off the screen (look.css has the narrow steps). */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; justify-content: space-around; align-items: center;
   height: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); padding: 0 4px env(safe-area-inset-bottom);
   background: var(--surface); box-shadow: 0 -1px 0 var(--line), 0 -8px 24px -18px rgba(15, 23, 35, .4);
+  container: tabbar / inline-size;
 }
 /* The plus is v1's link to #/add (TabBar opens the Add sheet in place), so the links' rules draw its glyph too. */
 .tabbar a {
-  flex: 1; display: grid; justify-items: center; gap: 3px; min-height: var(--tap); color: var(--ink-2); text-decoration: none;
+  flex: 1 1 0; min-width: 0; display: grid; justify-items: center; gap: 3px; min-height: var(--tap); color: var(--ink-2); text-decoration: none;
   font-size: .8rem; font-weight: 600; padding: 6px 0;
 }
 .tabbar a svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.tab-ico { position: relative; display: grid; place-items: center; width: 56px; height: 30px; border-radius: var(--r-pill); transition: scale var(--dur-1) var(--ease-out); }
+.tab-ico { position: relative; display: grid; place-items: center; width: min(56px, 100%); height: 30px; border-radius: var(--r-pill); transition: scale var(--dur-1) var(--ease-out); }
 .tab-ico svg { position: relative; z-index: 1; }
 .tabbar a:active .tab-ico { scale: .9; }
 .tabbar a[aria-current=page] { color: var(--ink); font-weight: 700; }

@@ -152,7 +152,8 @@ export function TabBar() {
                   <svg viewBox="0 0 24 24" aria-hidden="true">{tab.icon}</svg>
                 </span>
               )}
-              <span>{tab.label}</span>
+              {/* Visually hidden when larger text leaves the bar too narrow for words (look.css); it still names the link. */}
+              <span className="tab-label">{tab.label}</span>
             </Link>
           );
         })}
