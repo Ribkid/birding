@@ -164,3 +164,26 @@ describe('countIn and tierNote', () => {
     expect(tiers.tierNote(true, true, true)).toBe(', heard only and photographed');
   });
 });
+
+describe('heardOnlySoFar', () => {
+  it("says the species page's 'Heard only so far.' by the Dex's own rule", () => {
+    const all = [
+      sighting(1, 33, { heard: true }), sighting(2, 33, { heard: true }), // only ever heard
+      sighting(3, 21, { heard: true }), sighting(4, 21), // heard, then seen
+      sighting(5, 9), // seen
+      sighting(6, 7, { heard: true, photoId: 3 }), // heard only, with a photo of where it called from
+    ];
+    const ring = tiers.tiersOf(all).heardOnly;
+    for (const id of [33, 21, 9, 7, 50]) expect(tiers.heardOnlySoFar(all, id)).toBe(ring.has(id));
+    expect([33, 21, 9, 7, 50].filter((id) => tiers.heardOnlySoFar(all, id))).toEqual([33, 7]);
+    // One sighting she saw takes it off, wherever it sits in her history; none at all is not "heard only".
+    expect(tiers.heardOnlySoFar([...all, sighting(9, 33)], 33)).toBe(false);
+    expect(tiers.heardOnlySoFar([], 33)).toBe(false);
+  });
+
+  it('reads the species page\'s own history the same as the whole list', () => {
+    const all = [sighting(1, 33, { heard: true }), sighting(2, 5), sighting(3, 33, { heard: true })];
+    expect(tiers.heardOnlySoFar(all.filter((s) => s.speciesId === 33), 33)).toBe(true);
+    expect(tiers.heardOnlySoFar([{ ...sighting(4, 33, { heard: true }), speciesId: '33' }], 33)).toBe(true);
+  });
+});

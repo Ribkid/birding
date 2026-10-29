@@ -24,7 +24,13 @@ export function clearNames() {
 }
 
 let running: any = null;
+// The running transition's new screen is drawn (its update has run), and it has finished and been cleared up.
+let drawn: Promise<void> = Promise.resolve();
+let cleared: Promise<void> = Promise.resolve();
+let endedAt = -Infinity;
 export const transitioning = () => !!running;
+/** How long ago the last transition ended (0 while one runs). */
+export const sinceTransition = () => (running ? 0 : performance.now() - endedAt);
 
 // Run update() inside a same-document view transition. nav ('forward' | 'back' | 'swap') is set on <html> as
 // data-nav for the CSS to pick the animation.
@@ -43,15 +49,30 @@ export function vt(update: () => unknown, { nav = 'swap' }: { nav?: 'forward' | 
   if (!(document as any).startViewTransition || document.hidden || reduce.matches) return direct();
   root.dataset.nav = nav;
   let t: any;
-  try { t = (document as any).startViewTransition(update); } catch (_) { delete root.dataset.nav; return direct(); }
+  let onDrawn = noop;
+  const isDrawn = new Promise<void>((r) => { onDrawn = r; });
+  try { t = (document as any).startViewTransition(() => { try { return update(); } finally { onDrawn(); } }); } catch (_) { delete root.dataset.nav; return direct(); }
   running = t;
+  drawn = isDrawn;
   t.ready.catch(noop);
   t.updateCallbackDone.catch(report);
-  return t.finished.then(noop, noop).finally(() => {
-    if (running === t) running = null;
+  const done = t.finished.then(noop, noop).finally(() => {
+    if (running === t) { running = null; endedAt = performance.now(); }
     if (!running) delete root.dataset.nav;
     clearNames();
   });
+  cleared = done;
+  return done;
+}
+
+/**
+ * Ends the running transition at once. While a view transition runs, the page under it can't be hit (a tap lands on
+ * <html>), so a tap that comes then asks for it to finish: `drawn` resolves once the new screen is in the page and can
+ * be hit, `cleared` once the transition has let go of it, so the next change can run its own.
+ */
+export function cutShort(): { drawn: Promise<void>; cleared: Promise<void> } {
+  if (running) running.skipTransition();
+  return { drawn, cleared };
 }
 
 // ---------- FLIP ----------

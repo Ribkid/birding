@@ -18,6 +18,7 @@ import { monthRates, recordCount, spotsFor } from '../core/seqdata.js';
 import { MONTHS } from '../core/stats.js';
 import { learnReady, masteryOf } from '../core/learn.js';
 import { topLayer } from '../lib/layers';
+import { heardOnlySoFar } from '../lib/tiers';
 import { Icon } from '../components/Icon';
 import { MinePhoto } from '../components/MinePhoto';
 import { PhotoViewer, type ViewerPhoto } from '../components/PhotoViewer';
@@ -130,6 +131,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
   );
   const first = hist[hist.length - 1];
   const seen = hist.length > 0;
+  const heardOnly = useMemo(() => heardOnlySoFar(hist, sp.id), [hist, sp.id]);
   const isBird = sp.kind === 'bird';
   const cardInfo: CardInfo = { seen, firstSeen: fmtDate(first?.date), place: first?.place, count: hist.length };
 
@@ -398,7 +400,7 @@ function SpeciesPage({ sp }: { sp: Species }) {
           <button type="button" className="btn btn--primary btn--grow" ref={logRef} data-log="" onClick={() => openSightingSheet({ speciesId: sp.id })}>{seen ? 'Log another sighting' : 'Log a sighting'}</button>
           {seen && <button type="button" className="btn btn--share" data-sharecard="" aria-label="Share card" onClick={() => void shareCard(sp, cardInfo)}><ShareIcon /></button>}
         </div>
-        {seen && <p className="seen-line">Seen {plural(hist.length, 'time')}. First on {fmtDate(first.date)}{first.place ? ` at ${first.place}` : ''}.</p>}
+        {seen && <p className="seen-line">Seen {plural(hist.length, 'time')}. First on {fmtDate(first.date)}{first.place ? ` at ${first.place}` : ''}.{heardOnly ? ' Heard only so far.' : null}</p>}
 
         <section className="spot" aria-labelledby="spot-h">
           <h2 className="h2" id="spot-h">How to spot it</h2>

@@ -18,7 +18,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { Router, UNSAFE_createHashHistory as createHashHistory, type Location } from 'react-router-dom';
-import { clearNames, motionOK, nameFor, settle, transitioning, vt } from '../lib/motion';
+import { clearNames, cutShort, motionOK, nameFor, settle, sinceTransition, transitioning, vt } from '../lib/motion';
 import { closeAllLayers, findByKey, focusKey, FOCUSABLE } from '../lib/layers';
 import { flushClosingSheets } from './Sheet';
 
@@ -176,6 +176,7 @@ function onPress(e: MouseEvent) {
   const target = e.target as Element | null;
   const control = target?.closest?.(FOCUSABLE);
   pressed = control ? { el: control, at: performance.now() } : null;
+  if (target !== document.documentElement && (e.clientX || e.clientY)) lastTap = { x: e.clientX, y: e.clientY, at: performance.now() };
   if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || !motionOK()) return;
   const a = target?.closest?.('a[href^="#/bird/"]');
   if (!a || a.getAttribute('href') === location.hash) return;
@@ -187,6 +188,38 @@ function onPress(e: MouseEvent) {
   // If no navigation follows (a long press, a cancelled tap), take the name off again.
   setTimeout(() => { if (morph === m) { morph = null; if (!document.documentElement.dataset.nav) el.style.viewTransitionName = ''; } }, 700);
 }
+// ---------- a tap that lands while the screen changes ----------
+// While a view transition runs, the page under it can't be hit: Chromium sends every tap to <html>, so a quick second
+// tap on a tab or a tile (60 to 250 ms after the first) was lost. Such a tap ends the transition at once (a new tap
+// takes over from the motion, as on a phone) and goes to the tab, the tile or card that opens a species, or the
+// screen's own Back link (a species opened by mistake, left at once), under her finger on the screen she can see
+// arriving. Left alone: a second tap on the spot of the first (a fumbled double tap still opens one page), one on the
+// tab or species she is now on, and anything else, which only ends the motion.
+const SECOND_TAP = '.tabbar a[href], a[data-tile], a[href^="#/bird/"], .bird-hero > a.iconbtn--float:not(.iconbtn--right), .page-head--back > a.iconbtn[href]';
+let lastTap: { x: number; y: number; at: number } | null = null;
+/** What a tap that landed during a transition goes to, from what is under it now: a tab, a link to a species, or Back. */
+export function secondTapTarget(hit: Element | null, here: string): HTMLElement | null {
+  const el = hit?.closest?.<HTMLElement>(SECOND_TAP) ?? null;
+  if (!el || el.closest('[inert]')) return null;
+  return el.getAttribute('href') === here || el.getAttribute('aria-current') === 'page' ? null : el;
+}
+function onLostTap(e: MouseEvent) {
+  if (e.button || e.target !== document.documentElement) return;
+  // During a transition, or as one ends between her finger going down and lifting.
+  if (!transitioning() && sinceTransition() > 400) return;
+  const { clientX: x, clientY: y } = e;
+  const now = performance.now();
+  const twice = !!lastTap && now - lastTap.at < 400 && Math.hypot(x - lastTap.x, y - lastTap.y) < 32;
+  lastTap = { x, y, at: now };
+  if (twice) return;
+  const { drawn, cleared } = cutShort();
+  void drawn.then(() => {
+    const el = secondTapTarget(document.elementFromPoint(x, y), location.hash);
+    // Once the transition has let go, so this change runs its own.
+    if (el) void cleared.then(() => { if (el.isConnected) el.click(); });
+  });
+}
+
 const onPointer = () => { keys = false; };
 const onKey = (e: KeyboardEvent) => { if (!e.metaKey && !e.ctrlKey && !e.altKey) keys = true; };
 
@@ -379,6 +412,7 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
     document.addEventListener('click', onPress, true);
+    document.addEventListener('click', onLostTap, true);
     document.addEventListener('pointerdown', onPointer, true);
     document.addEventListener('keydown', onKey, true);
     // Before the router's own popstate listener (added by listen below), so it reads the key given here.
@@ -398,6 +432,7 @@ export function MotionHashRouter({ children }: { children: ReactNode }) {
       stopLanding();
       window.removeEventListener('popstate', keyBrowserEntry, true);
       document.removeEventListener('click', onPress, true);
+      document.removeEventListener('click', onLostTap, true);
       document.removeEventListener('pointerdown', onPointer, true);
       document.removeEventListener('keydown', onKey, true);
     };
@@ -438,6 +473,7 @@ export function forgetPlaces() {
   pending = null;
   returning = null;
   pressed = null;
+  lastTap = null;
   drawnKey = null;
   tabTap = false;
   stopLanding();

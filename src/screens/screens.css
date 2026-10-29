@@ -218,6 +218,22 @@
 .empty-h { margin: 0 0 4px; font-weight: 700; font-size: var(--fs-3); color: var(--ink); }
 .empty .small { max-width: 36ch; margin: 0 auto var(--sp-2); }
 .row--sp .row-main i { font-style: italic; }
+/* A long name or scientific name stays in its own column: the column never grows past its share (a long Latin word
+   used to widen it under the pips), and a word too long for the line breaks where it must instead of running on.
+   On a narrow phone the Dex's pips sit under the names, so the name has the width for whole words (Pygmy-Goose,
+   Oystercatcher); the band and its marks keep their column at the right. */
+.row--sp .row-main { grid-template-columns: minmax(0, 1fr); }
+.row--sp .row-main > * { overflow-wrap: anywhere; }
+@media (max-width: 359px) {
+  .rows--dex .row--sp {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "thumb main band" "thumb pips band";
+    column-gap: 12px; row-gap: 5px;
+  }
+  .rows--dex .row--sp > .row-thumb { grid-area: thumb; }
+  .rows--dex .row--sp > .row-main { grid-area: main; align-self: end; }
+  .rows--dex .row--sp > .pips { grid-area: pips; justify-self: start; align-self: start; }
+  .rows--dex .row--sp > .row-band { grid-area: band; }
+}
 @media (prefers-reduced-motion: reduce) {
   .kind-tab, .today-card, .today .lt, .today .lt-due, .hero-btn, .dex-tools { transition: none; }
   .rings-in .ring-fill { animation: none; }

@@ -624,7 +624,7 @@ export default function Dex() {
   const sci = f.sort === 'dex';
   const item = (s: Species) => ({ id: s.id, seen: seen.has(s.id), heard: tiers.heardOnly.has(s.id), photo: tiers.photographed.has(s.id) });
   const block = (items: Species[]) => (f.layout === 'list'
-    ? <ul className="rows pad-x">{items.map((s) => <RowItem key={s.id} {...item(s)} sci={sci} />)}</ul>
+    ? <ul className="rows rows--dex pad-x">{items.map((s) => <RowItem key={s.id} {...item(s)} sci={sci} />)}</ul>
     : <ul className="dex-grid">{items.map((s) => <TileItem key={s.id} {...item(s)} />)}</ul>);
 
   const noun2 = scopeNoun(f.kind, 2);

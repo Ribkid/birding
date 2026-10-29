@@ -53,7 +53,7 @@
   display: flex; align-items: center; justify-content: center; height: var(--tap);
   pointer-events: none; opacity: var(--pv-ui, 1);
 }
-.pv-close, .pv-count, .pv-credit {
+.pv-close, .pv-count, .pv-nav, .pv-credit {
   color: var(--ink);
   background: var(--glass); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
   box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
@@ -70,6 +70,16 @@
   font: 600 var(--fs-2)/1 var(--stamp); letter-spacing: .05em; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .pv-count b { font-weight: 800; }
+/* Previous and next either side of the count, in one glass capsule where the count was, clear of the photo. */
+.pv-nav { display: flex; align-items: center; height: var(--tap); padding: 0 2px; border-radius: var(--r-pill); pointer-events: auto; }
+.pv-nav .pv-count { padding: 0 2px; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.pv-step {
+  display: grid; place-items: center; width: 40px; height: var(--tap); padding: 0; border: 0; border-radius: var(--r-pill);
+  background: none; color: inherit; cursor: pointer; transition: scale var(--dur-1) var(--ease-out), opacity var(--dur-2) var(--ease-out);
+}
+.pv-step svg { width: 20px; height: 20px; }
+.pv-step:active:not([aria-disabled="true"]) { scale: .88; }
+.pv-step[aria-disabled="true"] { opacity: .32; cursor: default; }
 /* The credit always shows in full: a long one wraps to a second line rather than being cut off. */
 .pv-credit {
   position: absolute; z-index: 2; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); translate: -50% 0;
@@ -80,13 +90,13 @@
 /* Padded so the link is a full-height target; inline, so it wraps with the rest of the line. */
 .pv-credit a { color: inherit; text-decoration: underline; text-underline-offset: 2px; padding: 12px 0; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .pv-close, .pv-count, .pv-credit { background: var(--glass-strong); }
+  .pv-close, .pv-count, .pv-nav, .pv-credit { background: var(--glass-strong); }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .pv-close, .pv-count, .pv-credit { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .pv-close, .pv-count, .pv-nav, .pv-credit { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pv-loading { animation: pv-in var(--dur-2) linear 300ms forwards; }
-  .pv-img, .pv-close { transition: none; }
-  .pv-close:active { scale: none; }
+  .pv-img, .pv-close, .pv-step { transition: none; }
+  .pv-close:active, .pv-step:active:not([aria-disabled="true"]) { scale: none; }
 }

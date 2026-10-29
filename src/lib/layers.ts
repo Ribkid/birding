@@ -1,6 +1,8 @@
 // One stack for everything that sits over the page: sheets, search, the celebration and the welcome.
 // The top layer owns focus and Escape. The page and every lower layer are made inert, so taps, Tab and screen
-// readers stay inside the top one. Closing a layer puts focus back where it was.
+// readers stay inside the top one. Closing a layer puts focus back where it was. A layer opened with `back` also
+// closes on the phone's Back before the page goes back: the platform's close request (a CloseWatcher, as a modal
+// <dialog> gets), so history and the router are never touched; without CloseWatcher, Back leaves as it always did.
 
 export interface Layer {
   el: HTMLElement;
@@ -10,7 +12,15 @@ export interface Layer {
   returnTo: Element | null;
   key: [string, string | null] | null;
   close: (reason?: string) => void;
+  /** The close request watcher a `back` layer holds while it is open. */
+  watcher?: CloseWatcherLike | null;
 }
+
+/** The part of the CloseWatcher API a layer uses (Chrome 126 and later). */
+export interface CloseWatcherLike { onclose: ((e: Event) => void) | null; destroy: () => void }
+type CloseWatcherCtor = new () => CloseWatcherLike;
+const closeWatcher = (): CloseWatcherCtor | null =>
+  (typeof window !== 'undefined' && (window as unknown as { CloseWatcher?: CloseWatcherCtor }).CloseWatcher) || null;
 
 const stack: Layer[] = [];
 const madeInert = new Set<Element>();
@@ -91,8 +101,10 @@ function sync() {
   document.body.classList.toggle('has-sheet', stack.some(l => l.lock));
 }
 
-export function openLayer(el: HTMLElement, { dialog = el, close, label, labelledBy, modal = true, lock = false, returnTo = document.activeElement }: {
+export function openLayer(el: HTMLElement, { dialog = el, close, label, labelledBy, modal = true, lock = false, returnTo = document.activeElement, back = false }: {
   dialog?: HTMLElement; close?: (reason?: string) => void; label?: string; labelledBy?: string; modal?: boolean; lock?: boolean; returnTo?: Element | null;
+  /** The phone's Back closes this layer first, with reason 'back'. */
+  back?: boolean;
 } = {}): Layer {
   const layer: Layer = { el, dialog, modal, lock, returnTo, key: focusKey(returnTo) } as Layer;
   layer.close = close || (() => { el.remove(); closeLayer(layer); });
@@ -106,10 +118,26 @@ export function openLayer(el: HTMLElement, { dialog = el, close, label, labelled
   wireKeys();
   stack.push(layer);
   sync();
+  const Watcher = back ? closeWatcher() : null;
+  if (Watcher) {
+    try {
+      const w = new Watcher();
+      // Escape never gets here: onLayerKey takes it first (and prevents it), so one press closes one layer.
+      w.onclose = () => { if (layer.watcher === w) { layer.watcher = null; layer.close('back'); } };
+      layer.watcher = w;
+    } catch { /* no close request for this one: Back leaves the page as before */ }
+  }
   return layer;
 }
 
+const letGoOfBack = (layer: Layer) => {
+  const w = layer.watcher;
+  layer.watcher = null;
+  w?.destroy();
+};
+
 export function closeLayer(layer: Layer, { restore = true } = {}): boolean {
+  letGoOfBack(layer);
   const i = stack.indexOf(layer);
   if (i < 0) return false;
   stack.splice(i, 1);
@@ -138,7 +166,8 @@ function restoreFocus(layer: Layer) {
 
 export function closeAllLayers(reason = 'nav') {
   for (const l of stack.slice().reverse()) l.close(reason);
-  if (stack.length) { stack.length = 0; sync(); }
+  // A layer whose owner takes it off later (React) lets go of Back now, so a stale one never eats her next Back.
+  if (stack.length) { stack.forEach(letGoOfBack); stack.length = 0; sync(); }
 }
 
 // One document listener for every layer, as v1's boot wired it: Escape must close only the top layer once, however
