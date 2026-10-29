@@ -74,7 +74,7 @@
 .pv-nav { display: flex; align-items: center; height: var(--tap); padding: 0 2px; border-radius: var(--r-pill); pointer-events: auto; }
 .pv-nav .pv-count { padding: 0 2px; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .pv-step {
-  display: grid; place-items: center; width: 40px; height: var(--tap); padding: 0; border: 0; border-radius: var(--r-pill);
+  display: grid; place-items: center; width: var(--tap); height: var(--tap); padding: 0; border: 0; border-radius: var(--r-pill);
   background: none; color: inherit; cursor: pointer; transition: scale var(--dur-1) var(--ease-out), opacity var(--dur-2) var(--ease-out);
 }
 .pv-step svg { width: 20px; height: 20px; }
