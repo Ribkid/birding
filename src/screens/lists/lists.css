@@ -103,6 +103,16 @@
 @media (prefers-reduced-transparency: reduce) { .outing-tools { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 :root[data-theme="outdoor"] .outing-tools { box-shadow: inset 0 0 0 2px var(--line-strong); }
 :root[data-theme="outdoor"] .outing-tools .tool-tog:not([aria-pressed="true"]) { box-shadow: none; }
+/* On a narrow phone the stacked rail took the title down to three lines: there it lies flat beside the date line,
+   and the title keeps the whole width. */
+@media (max-width: 379px) {
+  .page-head--tools { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 6px; row-gap: 4px; align-items: center; }
+  .page-head--tools > .lists-head-text { display: contents; }
+  .page-head--tools > .iconbtn { grid-row: 1; align-self: start; }
+  .page-head--tools h1 { grid-column: 2 / -1; grid-row: 1; }
+  .page-head--tools .lists-head-text > p { grid-column: 2; grid-row: 2; margin: 0; }
+  .page-head--tools > .outing-tools { grid-column: 3; grid-row: 2; display: flex; margin: 0; }
+}
 /* A toast on a live outing (a badge, a count that didn't save) sits above the Discard and Finish row, not over it. */
 body:has(.tally-foot--live) .toast { bottom: calc(var(--chrome-bottom) + 84px); }
 /* The same while the sign-up nudge is up (it was there before the outing started): the row has stepped up over it. */

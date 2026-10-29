@@ -596,7 +596,7 @@ export default function Outing() {
 
   return (
     <>
-      <header className="page-head page-head--back">
+      <header className={`page-head page-head--back${live ? ' page-head--tools' : ''}`}>
         <Link className="iconbtn" to="/lists" aria-label="Back to lists">
           <Icon name="back" />
         </Link>
