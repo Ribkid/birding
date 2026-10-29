@@ -317,6 +317,13 @@ span.bird-photo { display: block; }
 .field input:focus-visible, .field textarea:focus-visible, .field select:focus-visible { outline: 3px solid var(--azure); outline-offset: 1px; border-color: transparent; }
 .field input[type=range] { padding: 0; accent-color: var(--azure); border: 0; background: none; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }
+/* Larger text: a date and a time field side by side need 270 px (Chrome on Android's 130% and up leaves a sheet's form
+   less), so in a narrower form each pair stacks rather than pushing the whole form, and the sheet's Save, off the
+   screen. */
+.form:has(> .grid2) { container: form / inline-size; }
+@container form (width < 270px) {
+  .grid2 { grid-template-columns: minmax(0, 1fr); }
+}
 .check { display: flex; gap: 10px; align-items: center; font-weight: 500; min-height: var(--tap); cursor: pointer; }
 .check input { width: 22px; height: 22px; accent-color: var(--azure); flex: none; }
 .check--card { padding: 10px 12px; border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-1); }

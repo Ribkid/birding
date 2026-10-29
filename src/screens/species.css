@@ -332,6 +332,10 @@ body.has-outing .bird .logbar { bottom: calc(var(--chrome-bottom) + 62px); }
   .bird .hero-cap { position: relative; bottom: auto; margin: calc(30px + env(safe-area-inset-top) + 2 * var(--tap)) 0 24px; }
   .bird .hero-credit { white-space: normal; }
   .bird .model-loading, .bird .model-hint { top: calc(30px + env(safe-area-inset-top) + 2 * var(--tap)); }
+  /* In 3D the model's line (Drag to turn, or a two-line loading or offline note) has that place, so the name block
+     starts under it rather than on it. */
+  .bird .bird-hero--model:has(.model-hint) .hero-cap { margin-top: calc(74px + env(safe-area-inset-top) + 2 * var(--tap)); }
+  .bird .bird-hero--model:has(.model-loading) .hero-cap { margin-top: calc(98px + env(safe-area-inset-top) + 2 * var(--tap)); }
 }
 /* 200%: the switch's segments close up a little so all three fit the screen, each still at least 44 px wide. */
 @container species (width < 220px) {

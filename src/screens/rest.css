@@ -141,8 +141,10 @@
 .pad-x > .empty-inline { margin-top: 10px; }
 
 /* ---------- an outing: the tally ---------- */
-.tally-sum { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-right: 16px; }
-.tally-sum .ocard-live { margin: 0; }
+/* With larger text (a page under about 240 px wide) "In progress" drops under the count instead of running off the
+   screen, lined up with the count's 20 px inset; while the two share a line the margin is spare room, so nothing moves. */
+.tally-sum { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-1) 12px; padding-right: 16px; }
+.tally-sum .ocard-live { margin: 0 0 0 20px; }
 .tally-search { position: sticky; top: 0; z-index: 5; margin: 8px 0 12px; padding: 8px 16px; transition: top var(--dur-3) var(--ease-out); }
 body.is-scrolled .tally-search { top: calc(var(--topbar-h) + env(safe-area-inset-top)); }
 .tally-search svg { left: 30px; }
@@ -175,10 +177,10 @@ body.is-scrolled .tally-search { top: calc(var(--topbar-h) + env(safe-area-inset
 @media (prefers-reduced-transparency: reduce) { .tally-foot--live { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
 .tally-foot .btn { min-height: var(--tap); }
 .tally-foot--live .btn:not(.btn--primary):not(.btn--quiet) { background: var(--surface); box-shadow: none; }
-/* Larger text (a page under 300 px wide): "In progress" drops under the count rather than off the screen, and when
-   Discard and Finish outing no longer fit side by side each takes its own full row. */
-@media (max-width: 299px) {
-  .tally-sum { flex-wrap: wrap; row-gap: var(--sp-1); }
+/* Larger text (the row under 260 px inside, a page under 300 px wide): Discard and Finish outing share the row, and
+   once they no longer fit side by side each takes its own full row. */
+.tally-foot--live { container: tally-foot / inline-size; }
+@container tally-foot (width < 260px) {
   .tally-foot--live .btn { flex: 1 1 auto; }
   .tally-foot--live .spacer { display: none; }
 }

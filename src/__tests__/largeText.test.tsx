@@ -161,7 +161,10 @@ describe('the narrow rules stay out of the default layout', () => {
     ['screens/learn/learn.css', /^\.lh-seg-thumb$/, /translateY/],
     ['screens/learn/learn.css', /^\.lh-modes$/, /minmax\(0, 1fr\)/],
     ['screens/lists/lists.css', /^\.page-head--tools h1$/, /grid-column: 1 \/ -1/],
-    ['screens/rest.css', /^\.tally-sum$/, /flex-wrap: wrap/],
+    ['screens/rest.css', /^\.tally-foot--live \.spacer$/, /display: none/],
+    ['screens/rest.css', /^\.tally-foot--live \.btn$/, /flex: 1 1 auto/],
+    ['screens/species.css', /^\.bird \.bird-hero--model:has\(\.model-(hint|loading)\) \.hero-cap$/, /margin-top/],
+    ['styles/app.css', /^\.grid2$/, /grid-template-columns: minmax\(0, 1fr\)/],
   ];
   it.each(narrowOnly)('%s: %s', (file, sel, body) => {
     const found = rules(css(file)).filter((r) => sel.test(r.sel) && body.test(r.body));
