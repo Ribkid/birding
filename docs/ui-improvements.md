@@ -45,6 +45,10 @@ made while a save was running were dropped without a word: ten quick taps counte
 
 - One writer per outing stores the combined taps through `saveSighting`, `db.put` and `deleteSighting`. Taps that
   cancel out write nothing, and a count that reaches 0 deletes the sighting.
+- A row counted down to 0 holds its place for 4 s, struck through, with its − resting and its + turned to Undo ringed
+  by the time left. Quick taps after the − land on that row, not on the row that used to slide up into its place and
+  lose a count. Undo puts it back exactly as it was (nothing was written yet); then the row folds shut and its
+  sighting goes. Finish, Discard, Done editing and leaving the outing or the app let it go at once.
 - If a save fails, the count comes back off the row and a short toast says "That count didn't save".
 - Taps not yet stored are kept when she leaves the outing, the tab goes to the background or the page closes, and they
   are written at the next start.
@@ -52,11 +56,11 @@ made while a save was running were dropped without a word: ten quick taps counte
 - The number stamps in with each tap and the phone gives a short buzz. Under reduced motion there is no stamp.
 
 **See it.** Open a live outing and tap + ten times as fast as you can: the count goes up by ten. Hold + to see the
-chooser.
+chooser. Tap − three times quickly on a row at 1: that row waits at 0 with Undo and the row below keeps its count.
 
 **Files.** `src/screens/lists/tallyQueue.ts` (new), `useTally.ts` (new), `FlockChooser.tsx` (new), `Outing.tsx`,
 `lists.css`, `src/lib/motion.ts`, `src/lib/store.ts` (one small export, `onStoreChange`). Tests: `useTally.test.ts`,
-`flockChooser.test.tsx`.
+`flockChooser.test.tsx`, and `liveOuting.test.tsx` for the row held at 0.
 
 ## 3. Live outing mode
 
@@ -66,12 +70,17 @@ full-screen "New for your dex" card, the page went inert and the taps after it w
 - On the tally, a lifer's row gets the moment instead: a gold New band clamps onto the photo, its "New for your dex"
   label glows once, the phone buzzes, a screen reader hears "<name>, new for your dex", and focus stays on +.
 - The New band stays on the row as a button that opens the full card when she wants it.
-- The Finish sheet shows the outing's new species as a row of photos. A badge she earns comes as a toast.
+- The Finish sheet shows the outing's new species as a row of photos, their names whole. A badge she earns comes as a
+  toast; the card the New band opens and the Finish sheet both say it too, and opening either takes the toast down,
+  so no toast ever sits over the card or the sheet's fields.
 - The sign-up nudge waits until the outing is finished or discarded, so it never covers Discard and Finish. It also
   no longer covers the map's Map/Satellite switch.
-- A live outing's header has two icon-sized glass toggles. Screen on keeps the phone awake; it is off until she asks
-  and lets go on Finish, on leaving or after two hours. Sun switches to the Outdoor theme and back to the theme she
-  had. The same Sun sits above locate on the map.
+- A live outing's header has two icon-sized glass toggles. Screen on (a phone with an open eye) keeps the phone awake;
+  it is off until she asks and lets go on Finish, on leaving or after two hours, and if the phone takes it back while
+  she is looking it asks once more, then turns off and says so. Sun switches to the Outdoor theme and back to the
+  theme she had. The same Sun sits above locate on the map. Under 380 px the two lie flat beside the date line so the
+  title keeps its width.
+- "Outing finished" rests above the finished outing's buttons when its usual place would cover them.
 - Saves made anywhere else (the species page, the + sheet) still get the full card.
 
 **See it.** Start an outing, search for a bird you have never logged and tap + five times quickly: the count is 5 and
@@ -237,8 +246,6 @@ it).
 - At 320 px in the Dex list layout, "Pygmy-Goose" overlaps the rarity pips. It was like this before item 9.
 - With 6,000 sightings on a slow phone, a rare tally tap waits for the shared store to re-read every sighting after a
   write (about 130 ms at 4x CPU). Making that read cheaper is store work for later.
-- For about 4.5 s after Finish, the "Outing finished" toast can cover the finished outing's last line (Delete outing)
-  when the page is scrolled to the bottom. A tap clears it.
 - In about one Back in four on a slow phone, the shrink waits for the tile's photo to decode (up to about 0.6 s). The
   `port-fixes` build does the same. Every Back still lands exactly.
 - Not tried on real hardware: the photo viewer's pinch, double tap, swipe and drag; the sheet flick; the phone's own
@@ -259,9 +266,12 @@ it).
 5. For a full pass, the scratchpad's `tools` folder has `ui-final-routes.mjs`, `ui-final-flows.mjs`,
    `ui-final-sw.mjs`, `ui-final-extra.mjs` and `ui-final-interact.mjs`, which run against 4600.
 
-**Known script quirk.** `tally-queue.mjs` section 4 still expects the old lifer card on the tally, which item 3 removed
-on purpose, so it reports 17/18. `tools\ui-final-tally-queue.mjs` is a copy with that check updated: a + on a
-never-seen species saves quietly, focus stays on +, and the New band opens the card.
+**Script updates after item 3's review.** `tally-queue.mjs` section 4 now expects what item 3 does on purpose: a + on
+a never-seen species saves quietly, focus stays on +, stored [1], and the New band opens the card. Its section 2 waits
+for a row counted down to 0 to finish its 4 s hold before checking that the sighting has gone. `live-outing.mjs` has
+checks for the badge in the card and the Finish sheet, Finish straight after a lifer, a band tapped before its save,
+the narrow header, the Screen on icon, the 48 px map Sun, the wake lock taken back in view, "Outing finished" and the
+row held at 0.
 
 ### Last check (29 Oct 2026, on bc5fddf)
 

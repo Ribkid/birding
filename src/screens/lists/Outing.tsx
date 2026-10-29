@@ -299,7 +299,7 @@ function liferMoment(row: HTMLElement) {
 // A row counted down to 0 holds its place this long, with Undo where its + was, before it folds away and its sighting
 // goes. The − that took it to 0, and any quick taps after it, land on that row, never on the one that would slide up
 // into its place.
-export const ZERO_HOLD_MS = 4000;
+const ZERO_HOLD_MS = 4000;
 type ZeroState = { zeroed: ReadonlyMap<number, number>; folding: ReadonlySet<number> };
 const NO_ZERO_STATE: ZeroState = { zeroed: new Map(), folding: new Set() };
 
