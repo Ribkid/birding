@@ -251,6 +251,32 @@ describe('dragging a sheet', () => {
     expect(sheet.style.transform).toBe('');
   });
 
+  it('stops under the finger when caught while it springs back, and a drag carries on from there', async () => {
+    render(<Harness />);
+    const sheet = await openSheet();
+    sheet.style.transition = 'transform 320ms';
+    sheet.style.transform = 'translateY(60px)'; // mid-spring
+    pointer('pointerdown', sheet.querySelector('.sheet-grip')!, 420);
+    expect(sheet.style.transition).toBe('none');
+    expect(sheet.style.transform).toBe('translateY(60px)');
+    pointer('pointermove', window, 440, 40);
+    expect(sheet.style.transform).toBe('translateY(80px)');
+    pointer('pointerup', window, 440, 200);
+    expect(sheet.style.transform).toBe('');
+  });
+
+  it('settles again when a sheet caught moving was only tapped', async () => {
+    const onClose = vi.fn();
+    render(<Harness onClose={onClose} />);
+    const sheet = await openSheet();
+    sheet.style.transform = 'translateY(30px)'; // still rising in
+    pointer('pointerdown', sheet.querySelector('.sheet-grip')!, 420);
+    expect(sheet.style.transform).toBe('translateY(30px)');
+    pointer('pointerup', window, 421, 80);
+    expect(sheet.style.transform).toBe('');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('never starts on a field', async () => {
     const onClose = vi.fn();
     render(<Harness onClose={onClose} />);

@@ -115,7 +115,9 @@ function playOut(wrap: HTMLElement, scrollTop: number, reason?: string) {
 function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void) {
   const scrim = wrap.querySelector<HTMLElement>('.sheet-scrim');
   const rubber = (d: number) => 56 * (1 - 1 / (d / 140 + 1));
-  type Grab = { id: number; x: number; y: number; h: number; handle: boolean; on: boolean; dy: number; pts: [number, number][] };
+  // dy is where the sheet is (down from its resting place), base where it was when the finger came down, and caught
+  // whether it was moving then.
+  type Grab = { id: number; x: number; y: number; h: number; handle: boolean; on: boolean; dy: number; base: number; caught: boolean; pts: [number, number][] };
   let g: Grab | null = null;
   let settleT = 0;
   // Moves are followed on the window, so a mouse that leaves the sheet (dragging up past its top) still counts.
@@ -125,24 +127,32 @@ function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void)
     if (!g.on) {
       if (Math.hypot(dx, dy) < 8) return;
       // Sideways is a chip row scrolling; upward in the body is ordinary scrolling.
-      if (Math.abs(dx) > Math.abs(dy) || (!g.handle && (dy < 0 || sheet.scrollTop > 0))) { stop(); return; }
+      if (Math.abs(dx) > Math.abs(dy) || (!g.handle && (dy < 0 || sheet.scrollTop > 0))) { letGo(); return; }
       g.on = true;
+      sheet.getAnimations?.().forEach((a) => a.cancel());
       sheet.style.transition = 'none';
       // The scrim follows the finger too, not its own 320 ms fade behind it.
       if (scrim) scrim.style.transition = 'none';
       wrap.classList.add('sheet-wrap--drag');
     }
-    g.dy = dy;
-    sheet.style.transform = `translateY(${dy >= 0 ? dy : -rubber(-dy)}px)`;
-    if (scrim) scrim.style.opacity = String(scrimAt(dy, g.h));
+    const at = g.base + dy;
+    g.dy = at;
+    sheet.style.transform = `translateY(${at >= 0 ? at : -rubber(-at)}px)`;
+    if (scrim) scrim.style.opacity = String(scrimAt(at, g.h));
     g.pts.push([e.timeStamp, e.clientY]);
     if (g.pts.length > 8) g.pts.shift();
   };
+  // A press that didn't become a drag: a sheet it caught moving settles where it belongs again.
+  const letGo = () => {
+    const caught = g?.caught;
+    stop();
+    if (caught) springBack();
+  };
   const end = (e: PointerEvent) => {
     if (!g || e.pointerId !== g.id) return;
+    if (!g.on) { letGo(); return; }
     const s = g;
     stop();
-    if (!s.on) return;
     // The tap that ends a drag is not a click on whatever is under the finger.
     const swallow = (ev: Event) => { ev.stopPropagation(); ev.preventDefault(); };
     window.addEventListener('click', swallow, true);
@@ -184,7 +194,16 @@ function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void)
     if (!handle && sheet.scrollTop > 0) return;
     // A list scrolled inside the sheet (the avatar picker) scrolls back up rather than dragging the sheet away.
     for (let n: Element | null = target; n && n !== sheet; n = n.parentElement) if (n.scrollTop > 0 && n.scrollHeight > n.clientHeight) return;
-    g = { id: e.pointerId, x: e.clientX, y: e.clientY, h: r.height, handle, on: false, dy: 0, pts: [[e.timeStamp, e.clientY]] };
+    // Caught while it moves (springing back, rising in, a step sliding up), it stops under her finger, and a drag
+    // carries on from there rather than jumping to where the finger is from its resting place.
+    const base = translateYOf(getComputedStyle(sheet).transform);
+    const caught = Math.abs(base) > 0.5;
+    if (caught) {
+      sheet.getAnimations?.().forEach((a) => a.cancel());
+      sheet.style.transition = 'none';
+      sheet.style.transform = `translateY(${base}px)`;
+    }
+    g = { id: e.pointerId, x: e.clientX, y: e.clientY, h: r.height, handle, on: false, dy: base, base, caught, pts: [[e.timeStamp, e.clientY]] };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
