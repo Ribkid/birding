@@ -122,7 +122,10 @@ body.has-sheet .topbar { pointer-events: none; }
 
 /* ---------- big titles ---------- */
 .page-head { padding-top: calc(22px + env(safe-area-inset-top)); }
-.page-head h1 { font-size: clamp(2rem, 8vw, 2.5rem); line-height: 1.04; }
+/* The title is 32 px from 300 px wide up to 400 (8vw beyond). Narrower, with the phone's text at 150% and more (Chrome
+   on Android narrows the page: 260 px at 150%, 195 at 200%), it steps down with the page, so a one-word title such as
+   Leaderboard or Compare stays on the screen: 27 px at 260, 18 px at 195. The back button follows it (app.css). */
+.page-head h1 { font-size: clamp(min(2rem, 2rem + (100vw - 300px) * .13), 8vw, 2.5rem); line-height: 1.04; }
 
 /* ---------- cards and photos ---------- */
 .tile-img { border-radius: var(--r-card); box-shadow: var(--shadow-card); }
