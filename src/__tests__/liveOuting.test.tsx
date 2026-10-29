@@ -378,7 +378,8 @@ describe('a bird found with the search', () => {
     // She stops: the search clears and focus goes to the bird's + on the tally.
     await waitFor(() => expect(box.value).toBe(''), { timeout: 3000 });
     expect(found()).toEqual([]);
-    expect(document.activeElement).toBe(main('data-inc', id));
+    // Focus moves in the effect after the redraw that cleared the box, a moment later on a busy machine.
+    await waitFor(() => expect(document.activeElement).toBe(main('data-inc', id)));
     await waitFor(() => expect(onOuting(id)).toEqual([5]));
     expect(onOuting(ON_OUTING)).toEqual([2]);
   });
@@ -414,7 +415,7 @@ describe('a bird found with the search', () => {
     await waitFor(() => expect(document.querySelector('.celebrate')).toBeNull());
     expect(document.activeElement).toBe(band);
     await waitFor(() => expect(box.value).toBe(''), { timeout: 3000 });
-    expect(document.activeElement).toBe(main('data-lifer', LIFER));
+    await waitFor(() => expect(document.activeElement).toBe(main('data-lifer', LIFER)));
   });
 
   it('a flock picked from the held + of a result waits with the results, and counts on that bird', async () => {
@@ -432,7 +433,7 @@ describe('a bird found with the search', () => {
     fireEvent.click(document.querySelector<HTMLElement>('.tally-chooser button')!); // +5
     expect(document.activeElement).toBe(plus);
     await waitFor(() => expect(box.value).toBe(''), { timeout: 3000 });
-    expect(document.activeElement).toBe(main('data-inc', id));
+    await waitFor(() => expect(document.activeElement).toBe(main('data-inc', id)));
     await waitFor(() => expect(onOuting(id)).toEqual([6]));
   });
 
