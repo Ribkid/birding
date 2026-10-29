@@ -45,7 +45,9 @@
 .lh-stat-img::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(7, 11, 16, .05) 20%, rgba(7, 11, 16, .5) 55%, rgba(7, 11, 16, .86)); }
 .lh-stat-new { max-width: 100%; font-size: var(--fs-1); color: rgba(255, 255, 255, .88); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lh-stat-hint { margin-top: 6px; color: var(--ink-2); white-space: normal; line-height: 1.35; }
-.lh-links { display: flex; gap: 10px; padding: 12px 16px 2px; }
+/* Stats and All sightings share a line; with the phone's text turned up (150% and more) they take a line each
+   instead of pushing the page sideways. */
+.lh-links { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 16px 2px; }
 .lh-link {
   flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: var(--tap); padding: 8px 14px; white-space: nowrap;
   border-radius: var(--r-pill); background: var(--surface); box-shadow: var(--shadow-card); color: var(--ink); font-weight: 700; text-decoration: none;
