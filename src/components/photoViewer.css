@@ -50,7 +50,9 @@
 /* ---------- glass controls (the hero's material) ---------- */
 .pv-top {
   position: absolute; z-index: 2; top: calc(10px + env(safe-area-inset-top)); left: 12px; right: 12px;
-  display: flex; align-items: center; justify-content: center; height: var(--tap);
+  display: flex; align-items: center; height: var(--tap);
+  /* Room for Close on both sides, so the capsule between is centred on the screen and never reaches under Close. */
+  padding: 0 calc(var(--tap) + 8px);
   pointer-events: none; opacity: var(--pv-ui, 1);
 }
 .pv-close, .pv-count, .pv-nav, .pv-credit {
@@ -70,8 +72,10 @@
   font: 600 var(--fs-2)/1 var(--stamp); letter-spacing: .05em; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .pv-count b { font-weight: 800; }
-/* Previous and next either side of the count, in one glass capsule where the count was, clear of the photo. */
-.pv-nav { display: flex; align-items: center; height: var(--tap); padding: 0 2px; border-radius: var(--r-pill); pointer-events: auto; }
+/* Previous and next either side of the count, in one glass capsule where the count was, clear of the photo. Its
+   auto margins centre it, and once the screen is too narrow for that (200% text) it starts just clear of Close and
+   runs on into the room on the right rather than over Close. */
+.pv-nav { flex: none; display: flex; align-items: center; height: var(--tap); margin-inline: auto; padding: 0 2px; border-radius: var(--r-pill); pointer-events: auto; }
 .pv-nav .pv-count { padding: 0 2px; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .pv-step {
   display: grid; place-items: center; width: var(--tap); height: var(--tap); padding: 0; border: 0; border-radius: var(--r-pill);
