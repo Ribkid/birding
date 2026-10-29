@@ -111,11 +111,64 @@ function whiteContrast(h: number, s: number, l: number) {
   return 1.05 / (Y + 0.05);
 }
 
+// ---------- keeping the tint neutral ----------
+// A bird photographed against leaves gives a green or olive tint (the Laughing Kookaburra's page came out olive),
+// and a page behind a species should never read as green. How green a hue reads, from 0 to 1: khaki starts to read
+// olive from 42°, every olive and green from 58° to 170° is all the way, fading out through teal by 195°. Reds,
+// browns, blues and purples are left as they are.
+export function greenness(h: number): number {
+  const x = ((h % 360) + 360) % 360;
+  if (x <= 42 || x >= 195) return 0;
+  if (x < 58) return (x - 42) / 16;
+  if (x <= 170) return 1;
+  return (195 - x) / 25;
+}
+// The app's own neutral: the slate of ink #121821 and paper #F4F6F9 (hue 215), kept soft.
+export const NEUTRAL_HUE = 215;
+export const NEUTRAL_SAT = 0.14;
+const rgbOf = (h: number, s: number, l: number) => {
+  const k = (n: number) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  return [0, 8, 4].map((n) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)));
+};
+// OKLab (Björn Ottosson), so a part-green hue pulled toward slate passes through grey on the way rather than
+// through a brighter green or a blue it never was.
+const toLin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const toGamma = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+function toLab([r, g, b]: number[]) {
+  [r, g, b] = [r, g, b].map(toLin);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+}
+function fromLab([L, A, B]: number[]) {
+  const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
+  const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+  const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+  return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s]
+    .map((c) => Math.min(1, Math.max(0, toGamma(Math.max(0, c)))));
+}
+/**
+ * The hue and saturation a tint is drawn with: a green or olive one is pulled toward the neutral slate by how green
+ * it reads (all the way for a true green or olive), so the page keeps a quiet colour from the photo but never a green
+ * one. Any other hue comes back as it was.
+ */
+export function calmTint(h: number, s: number): [number, number] {
+  const g = greenness(h);
+  if (!g) return [h, s];
+  if (g >= 1) return [NEUTRAL_HUE, Math.min(s, NEUTRAL_SAT)];
+  const a = toLab(rgbOf(h, s, 0.5)), n = toLab(rgbOf(NEUTRAL_HUE, Math.min(s, NEUTRAL_SAT), 0.5));
+  const mixed = fromLab(a.map((v, i) => v + (n[i] - v) * g)).map((c) => c * 255);
+  const [h2, s2] = toHsl(mixed);
+  return [h2, Math.min(s, s2)];
+}
+
 export async function applyTint(el: HTMLElement | null, url: string, fallback: string | null = null) {
   const t = await tintFrom(url);
   if (!el?.isConnected) return;
   if (!t) { if (fallback) el.style.setProperty('--tint', fallback); return; }
-  const [h, s0] = toHsl(t.rgb), s = Math.min(0.75, Math.max(0.28, s0));
+  const [h0, s1] = toHsl(t.rgb);
+  const [h, s] = calmTint(h0, Math.min(0.75, Math.max(0.28, s1)));
   let L = 0.36;
   while (L > 0.18 && whiteContrast(h, s, L) < 4.6) L -= 0.02;
   el.style.setProperty('--tint', hsl(h, s, L));
