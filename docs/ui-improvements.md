@@ -219,8 +219,8 @@ it).
   coordinates on an already saved record is a risk to her data.
 - **React's own `<ViewTransition>` for route changes.** Item 5 uses the router instead, because it keeps commits
   synchronous and needs no screen changes. Worth another look later for tap latency.
-- **The celebration on every save path.** Scan and Listen quick logs (`field/sighting.ts`) still don't call
-  `announceSaved`, so they don't celebrate. The one-time "fresh" stamp on a new Dex tile is not done.
+- **The one-time "fresh" stamp on a new Dex tile** is not done. (Scan and Listen logs already celebrate a new species
+  as every other save path does: both go through the shared Log a sighting form, and match v1 in the browser.)
 - **Map ready for no signal.** Large, and OpenStreetMap and Esri discourage bulk tile downloads. Do v1's "No signal"
   map note first, and the follow-me location dot next.
 - **Lazy routes and code splitting.** A tab swap to a chunk that hasn't loaded would draw an empty screen, and it
@@ -231,10 +231,24 @@ it).
   away and break item 5's morph), filters in the address, Quiz me on these, an end-of-round ledger, and deferred
   drawing for a Log with thousands of sightings.
 
-**Loose ends from the builds:**
+**Loose ends from the builds, done afterwards (branch `ui-loose-ends`):**
 
-- The species page's "Heard only so far." line (item 9's planned follow-up).
-- At 320 px in the Dex list layout, "Pygmy-Goose" overlaps the rarity pips. It was like this before item 9.
+- The species page's seen line ends "Heard only so far." while every sighting is heard only (the Dex's own rule).
+- In the Dex list layout at 320 px, long names (Pygmy-Goose, Oystercatcher) stay in their column: the pips sit under
+  the names below 360 px, and a word too long for its line breaks instead of running under the pips.
+- Scan and Listen logs were checked against v1: both already raise the "New for your dex" card; a test now holds it.
+- A species page's tint from its photo is never green or olive: those hues are pulled to the app's neutral slate
+  (`calmTint` in `lib/look.ts`), and other tints are kept.
+- A quick second tap on a tab or a species tile while the screen is still changing is no longer lost: it ends the
+  transition and goes to what is under her finger. A fumbled double tap still opens one page.
+- The phone's Back closes the photo viewer before it leaves the species page (a CloseWatcher close request, so no
+  history entry; where CloseWatcher is missing, Back leaves as before).
+- The photo viewer has named Previous and Next buttons either side of its count.
+- progressive-photo's "develops in" check serves the large photo from a local stub, so it no longer depends on a
+  live photo host.
+
+**Loose ends still open:**
+
 - With 6,000 sightings on a slow phone, a rare tally tap waits for the shared store to re-read every sighting after a
   write (about 130 ms at 4x CPU). Making that read cheaper is store work for later.
 - For about 4.5 s after Finish, the "Outing finished" toast can cover the finished outing's last line (Delete outing)
