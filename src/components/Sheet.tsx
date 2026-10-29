@@ -5,6 +5,63 @@ import { motionOK } from '../lib/motion';
 
 const STARTING_STYLE = typeof window !== 'undefined' && 'CSSStartingStyleRule' in window;
 const ms = (t: string) => { const v = parseFloat(t); return Number.isFinite(v) ? (/ms$/.test(t.trim()) ? v : v * 1000) : 0; };
+// The first of each list; a timing function such as cubic-bezier(.5, 0, .75, 0) has commas of its own.
+const firstEasing = (t: string, or: string) => /^\s*([a-z-]+(\([^)]*\))?)/i.exec(t)?.[1] || or;
+
+/** How far down a transform moves a sheet, in px: an inline translateY(..px), or a computed matrix() or matrix3d(). */
+export function translateYOf(t: string | null | undefined): number {
+  if (!t || t === 'none') return 0;
+  const nums = (m: RegExpExecArray) => m[1].split(',').map((x) => parseFloat(x));
+  let m = /^matrix3d\(([^)]*)\)/.exec(t);
+  if (m) return nums(m)[13] || 0;
+  m = /^matrix\(([^)]*)\)/.exec(t);
+  if (m) return nums(m)[5] || 0;
+  m = /translateY\(\s*(-?[\d.]+)px\s*\)/.exec(t);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+/**
+ * How fast the finger was moving down when it lifted, in px/ms, from its moves over the last 100 ms. A finger that
+ * rested (no move for 80 ms before it lifted) wasn't flicking, however fast it got there.
+ */
+export function releaseVelocity(pts: [number, number][], upAt: number): number {
+  if (pts.length < 2) return 0;
+  const [tl, yl] = pts[pts.length - 1];
+  if (upAt - tl > 80) return 0;
+  let i = pts.findIndex(([t]) => tl - t <= 100);
+  if (i < 0 || i === pts.length - 1) i = pts.length - 2;
+  const [t0, y0] = pts[i];
+  return (yl - y0) / Math.max(1, tl - t0);
+}
+
+/**
+ * Whether a sheet let go of at `at` px below its resting place (of `h` px) closes: on a flick down (faster than
+ * 0.5 px/ms), or past 30% of its height unless she flicked it back up.
+ */
+export function shouldClose(at: number, h: number, v: number): boolean {
+  return v > 0.5 || (at > h * 0.3 && v > -0.5);
+}
+
+/** The scrim while a sheet is dragged: it clears as the sheet goes down, to a fifth at the sheet's full height. */
+export const scrimAt = (at: number, h: number) => 1 - Math.min(1, Math.max(0, at) / Math.max(1, h)) * 0.8;
+
+/**
+ * The exit after a drag: from where the sheet is to off screen, starting at the finger's speed so it neither stalls
+ * nor jumps as she lets go. It is shorter for less distance and a faster finger (140 to 300 ms), and leaves at no
+ * less than 1.5 px/ms on average, so a sheet let go of at rest doesn't dawdle. The curve's x controls sit at thirds,
+ * so it leaves at 3 * y1 times its average speed (the finger's) and ends at that average.
+ */
+export function exitTiming(remaining: number, v: number): { duration: number; easing: string } {
+  const dist = Math.max(0, remaining);
+  const speed = Math.max(0, v);
+  const duration = Math.round(Math.min(300, Math.max(140, dist / Math.max(speed, 1.5))));
+  const lead = dist ? Math.min(3, (speed * duration) / dist) : 0;
+  return { duration, easing: `cubic-bezier(.3333, ${(lead / 3).toFixed(3)}, .6667, .6667)` };
+}
+
+// How fast each sheet closed by a drag was moving as the finger lifted, and when it lifted, for its exit to carry on
+// from.
+const flung = new WeakMap<HTMLElement, { v: number; at: number }>();
 
 /**
  * v1 closeSheet/exitSheet: a sheet she dismisses (Escape, the scrim, a button) slides back down before it goes, and
@@ -20,22 +77,29 @@ function playOut(wrap: HTMLElement, scrollTop: number, reason?: string) {
   const scrimFrom = scrim?.style.opacity || '1';
   sheet.style.transition = '';
   sheet.style.transform = '';
-  if (scrim) scrim.style.opacity = '';
+  if (scrim) scrim.style.opacity = scrim.style.transition = '';
   wrap.classList.remove('sheet-wrap--drag');
   wrap.setAttribute('data-closing', '');
   wrap.inert = true;
   // A sheet opening as this one leaves may use the same ids.
   wrap.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
   document.body.append(wrap);
+  const fling = reason === 'drag' ? flung.get(wrap) : undefined;
+  flung.delete(wrap);
   try {
     sheet.scrollTop = scrollTop;
     const to = getComputedStyle(sheet);
-    // The first of each list; a timing function such as cubic-bezier(.5, 0, .75, 0) has commas of its own.
-    const easing = /^\s*([a-z-]+(\([^)]*\))?)/i.exec(to.transitionTimingFunction)?.[1] || 'ease-in';
-    const timing = { duration: ms(to.transitionDuration.split(',')[0]) || 200, easing };
+    let timing = { duration: ms(to.transitionDuration.split(',')[0]) || 200, easing: firstEasing(to.transitionTimingFunction, 'ease-in') };
+    // Let go of after a drag, it carries on down at the finger's speed (under reduced motion it fades where it is).
+    if (reason === 'drag' && motionOK()) timing = exitTiming(translateYOf(to.transform) - translateYOf(from), fling?.v ?? 0);
     const end = reason === 'drag' && !motionOK() ? from : to.transform;
     const anims = [sheet.animate([{ transform: from, opacity: 1 }, { transform: end, opacity: to.opacity }], timing)];
-    if (scrim) anims.push(scrim.animate([{ opacity: scrimFrom }, { opacity: getComputedStyle(scrim).opacity }], timing));
+    if (scrim) anims.push(scrim.animate([{ opacity: scrimFrom }, { opacity: getComputedStyle(scrim).opacity }], { duration: timing.duration, easing: reason === 'drag' ? 'linear' : timing.easing }));
+    // It leaves from the moment the finger lifted, not from the first frame after the page has caught up with the
+    // close (focus, the page behind coming back), so a busy frame shows it further on rather than stalled.
+    // Never later than the frame now on screen (a start in the future would leave a frame without it).
+    const now = document.timeline?.currentTime;
+    if (fling && typeof now === 'number' && fling.at - now < 34 && now - fling.at < 120) anims.forEach((a) => { a.startTime = Math.min(fling.at, now); });
     void Promise.race([Promise.allSettled(anims.map((a) => a.finished)), new Promise((r) => setTimeout(r, 450))]).then(() => wrap.remove());
   } catch {
     wrap.remove();
@@ -45,7 +109,8 @@ function playOut(wrap: HTMLElement, scrollTop: number, reason?: string) {
 /**
  * v1 wireSheetDrag: drag a sheet down to dismiss it, from the grip and the top 56px, or from anywhere once it is
  * scrolled to the top. It follows the finger 1:1, resists upward, and closes past 30% of its height or on a quick
- * flick; a shorter drag springs back. Returns the cleanup.
+ * flick; a shorter drag (or one flicked back up) springs back. The scrim, and the blur of the page under it, clear
+ * with the finger. Moves only write styles, so nothing renders per move. Returns the cleanup.
  */
 function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void) {
   const scrim = wrap.querySelector<HTMLElement>('.sheet-scrim');
@@ -63,11 +128,13 @@ function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void)
       if (Math.abs(dx) > Math.abs(dy) || (!g.handle && (dy < 0 || sheet.scrollTop > 0))) { stop(); return; }
       g.on = true;
       sheet.style.transition = 'none';
+      // The scrim follows the finger too, not its own 320 ms fade behind it.
+      if (scrim) scrim.style.transition = 'none';
       wrap.classList.add('sheet-wrap--drag');
     }
     g.dy = dy;
     sheet.style.transform = `translateY(${dy >= 0 ? dy : -rubber(-dy)}px)`;
-    if (scrim) scrim.style.opacity = String(1 - Math.min(1, Math.max(0, dy) / g.h) * 0.8);
+    if (scrim) scrim.style.opacity = String(scrimAt(dy, g.h));
     g.pts.push([e.timeStamp, e.clientY]);
     if (g.pts.length > 8) g.pts.shift();
   };
@@ -80,9 +147,9 @@ function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void)
     const swallow = (ev: Event) => { ev.stopPropagation(); ev.preventDefault(); };
     window.addEventListener('click', swallow, true);
     setTimeout(() => window.removeEventListener('click', swallow, true), 0);
-    const [t0, y0] = s.pts.find(([t]) => e.timeStamp - t <= 100) || s.pts[0];
-    const v = (e.clientY - y0) / Math.max(1, e.timeStamp - t0);
-    if (e.type === 'pointerup' && (s.dy > s.h * 0.3 || v > 0.5)) {
+    const v = releaseVelocity(s.pts, e.timeStamp);
+    if (e.type === 'pointerup' && shouldClose(s.dy, s.h, v)) {
+      flung.set(wrap, { v, at: e.timeStamp });
       close();
       // A sheet whose owner keeps it open (Edit profile's species list goes back a step) settles where it belongs.
       settleT = window.setTimeout(() => { if (wrap.isConnected && !wrap.hasAttribute('data-closing')) springBack(); }, 100);
@@ -91,12 +158,14 @@ function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void)
     springBack();
   };
   const springBack = () => {
+    flung.delete(wrap);
     wrap.classList.remove('sheet-wrap--drag');
     // A step sliding in (Edit profile back from its species list) is left to finish without a second motion.
     const stepping = typeof sheet.getAnimations === 'function' && sheet.getAnimations().length > 0;
     sheet.style.transition = motionOK() && !stepping ? 'transform var(--dur-3) var(--ease-spring)' : 'none';
     sheet.style.transform = '';
-    if (scrim) scrim.style.opacity = '';
+    // The scrim comes back with its own fade.
+    if (scrim) scrim.style.opacity = scrim.style.transition = '';
     clearTimeout(settleT);
     settleT = window.setTimeout(() => { if (!g) sheet.style.transition = ''; }, 400);
   };
@@ -135,7 +204,7 @@ function wireSheetDrag(wrap: HTMLElement, sheet: HTMLElement, close: () => void)
     if (dragged && wrap.isConnected && !wrap.hasAttribute('data-closing')) {
       wrap.classList.remove('sheet-wrap--drag');
       sheet.style.transition = sheet.style.transform = '';
-      if (scrim) scrim.style.opacity = '';
+      if (scrim) scrim.style.opacity = scrim.style.transition = '';
     }
   };
 }

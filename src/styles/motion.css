@@ -86,6 +86,8 @@ html[data-nav="swap"]::view-transition-new(root) { animation: var(--dur-swap) va
 .sheet-wrap[data-closing] .sheet-scrim { opacity: 0; transition: opacity var(--dur-2) var(--ease-in); }
 .sheet-wrap--drag .sheet { -webkit-user-select: none; user-select: none; cursor: grabbing; }
 .sheet-grip { touch-action: none; cursor: grab; }
+/* A swipe on the scrim pans nothing (no pull to refresh behind a sheet); pinch zoom still works. */
+.sheet-scrim { touch-action: pinch-zoom; }
 @media (prefers-reduced-motion: reduce) {
   @starting-style { .sheet-wrap.open .sheet { transform: none; opacity: 0; } }
   .sheet-wrap[data-closing] .sheet { transform: none; opacity: 0; transition: opacity var(--dur-2) linear; }
