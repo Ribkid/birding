@@ -255,6 +255,21 @@
   .rows--dex .row--sp > .pips { grid-area: pips; justify-self: start; align-self: start; }
   .rows--dex .row--sp > .row-band { grid-area: band; }
 }
+/* With the phone's text at 150% and more (Chrome on Android narrows the page, so the list is under 220 px wide) the
+   name had only a sliver between the photo and the band, 12 px at 200%, one letter to a line. There the photo and
+   the band share the top line, and the name, its second line and the pips run the row's full width under them. At
+   300 px and wider nothing changes. */
+.rows--dex { container: dex-rows / inline-size; }
+@container dex-rows (width < 220px) {
+  .rows--dex .row--sp {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "thumb . band" "main main main" "pips pips pips";
+    column-gap: 12px; row-gap: 6px;
+  }
+  .rows--dex .row--sp > .row-thumb { grid-area: thumb; }
+  .rows--dex .row--sp > .row-main { grid-area: main; align-self: start; }
+  .rows--dex .row--sp > .pips { grid-area: pips; justify-self: start; }
+  .rows--dex .row--sp > .row-band { grid-area: band; align-self: start; }
+}
 @media (prefers-reduced-motion: reduce) {
   .kind-tab, .today-card, .today .lt, .today .lt-due, .hero-btn, .dex-tools { transition: none; }
   .rings-in .ring-fill { animation: none; }

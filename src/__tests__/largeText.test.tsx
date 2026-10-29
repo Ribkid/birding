@@ -165,6 +165,7 @@ describe('the narrow rules stay out of the default layout', () => {
     ['screens/rest.css', /^\.tally-foot--live \.btn$/, /flex: 1 1 auto/],
     ['screens/species.css', /^\.bird \.bird-hero--model:has\(\.model-(hint|loading)\) \.hero-cap$/, /margin-top/],
     ['styles/app.css', /^\.grid2$/, /grid-template-columns: minmax\(0, 1fr\)/],
+    ['screens/screens.css', /^\.rows--dex \.row--sp$/, /"main main main"/],
   ];
   it.each(narrowOnly)('%s: %s', (file, sel, body) => {
     const found = rules(css(file)).filter((r) => sel.test(r.sel) && body.test(r.body));
