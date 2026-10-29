@@ -85,11 +85,14 @@ full-screen "New for your dex" card, the page went inert and the taps after it w
   where she tapped instead of being lost. The same Sun sits 10 px above locate on the map. Under 380 px the two lie
   flat beside the date line so the title keeps its width.
 - "Outing finished" rests above the finished outing's buttons when its usual place would cover them.
+- The outing page starts afresh for each outing, so nothing held for one outing (a row at 0, a search) carries over
+  when she opens another.
 - Saves made anywhere else (the species page, the + sheet) still get the full card.
 - A + on a bird found with the tally's search keeps the results up until 1.5 s after her last tap (and while a card, a
   sheet or the flock chooser is up), so a quick burst on any result counts on that bird, not on the tally row that
   would have moved under her thumb when the results went. A result not on the tally yet keeps room for its − and
-  count, so its first + moves nothing around the +, at any width. Its moment and New band show on that result. Then
+  count, so its first + moves nothing around the +, at any width (at 320 px such a result is two lines tall, with its
+  + on the second). Its moment and New band show on that result. Then
   the search clears, and focus that was on the result goes to the bird's row on the tally.
 
 **See it.** Start an outing, search for a bird you have never logged and tap + five times quickly, on the first
@@ -253,8 +256,20 @@ wide at 130%, 260 at 150%, 195 at 200%.
   running off the screen.
 - The live outing's flock chooser sits two by two under 258 px (175% and 200%), so +5, where focus lands, is on the
   screen. The photo viewer's Previous / count / Next capsule starts clear of Close at 200%.
-- At 390 and 320 px every screen and sheet draws as before. The changes sit in container queries, or wrap only when
-  the line no longer fits (the outing's count line, Learn's answer dock, a search box).
+- Found in the last check, which swept every route at 130%, 150%, 175% and 200%, and fixed. These screens were the
+  same in `port-fixes`:
+  - A page's title steps down below 300 px (27 px at 150%, 18 px at 200%), so Leaderboard, Compare and All sightings
+    stay on the screen.
+  - Lists: Stats and All sightings take a line each (they pushed the page 13 px sideways at 150%, 78 px at 200%).
+  - Dex in list layout: the photo and band share the top line and the name runs the row's full width under them (at
+    200% the name had 12 px, one letter to a line).
+  - Stats: the number tiles go one to a row at 200%, and each group's bar takes its own line under its name.
+  - Badges: the trophy card's words go under its ring, and a shelf holds two badges to a row (one at 200%).
+  - Compare: the two photos stay side by side, and each bird's facts take the full width, one card under the other.
+  At 390, 320 and 300 px these screens are the same as before, box for box, in light and dark.
+- At 390 and 320 px every screen and sheet draws as before. The changes sit in container queries, in sizes worked
+  out from the page's width that only change below 300 px (the tab bar's gap, a page's title, Stats' tiles), or wrap
+  only when the line no longer fits (the outing's count line, Learn's answer dock, a search box, Lists' buttons).
 
 **See it.** In Chrome DevTools, use a phone viewport of 195 x 422 (200%), 260 x 563 (150%) or 300 x 649 (130%) and
 open `#/dex`, `#/bird/42`, `#/learn` and a live outing. On an Android phone, turn up the font size in Settings.
@@ -263,7 +278,7 @@ open `#/dex`, `#/bird/42`, `#/learn` and a live outing. On an Android phone, tur
 `src/screens/species.css`, `src/screens/screens.css`, `src/screens/learn/learn.css`, `src/screens/lists/lists.css`,
 `src/screens/rest.css`, and `src/screens/map/MapScreen.tsx` (its search names the results list only while the list
 is there, which axe had flagged). Tests: `largeText.test.tsx` (the tab bar's sizes at every width from 195 to 420 px,
-and the narrow rules kept inside their queries), `shell.test.tsx`.
+and the narrow rules, the Dex's stacked list row among them, kept inside their queries), `shell.test.tsx`.
 
 ## What was left out, and why
 
@@ -317,6 +332,18 @@ only Chrome has it so far.
 - progressive-photo's "develops in" check serves the large photo from a local stub, so it no longer depends on a
   live photo host.
 
+**From the live-outing review, left as they are for you to confirm:**
+
+- A finished outing still shows the gold New band (and its card) on the species that were new for her dex. The brief
+  said "for the rest of the outing", so you may want the band on live outings only.
+- While a row is held at 0, the header's species count leaves it out, as Finish and Discard would.
+- "Outing finished" rests above the buttons, so it can sit over the last row's "New for your dex" line for 4.5 s. No
+  button is covered.
+- A row held at 0 keeps its sighting until the 4 s are up. If the phone kills the page inside those 4 s, the bird
+  stays at 1 (the safe way round), and she taps − again.
+- Under 380 px the live outing's header is about 30 px taller than before the Screen on and Sun toggles (151 against
+  121 px at 320 px). The title keeps two lines.
+
 **Loose ends still open:**
 
 - With 6,000 sightings on a slow phone, a rare tally tap waits for the shared store to re-read every sighting after a
@@ -326,9 +353,17 @@ only Chrome has it so far.
   search fix; the toast is item 3's, and a tap on a toast has always taken it down).
 - In about one Back in four on a slow phone, the shrink waits for the tile's photo to decode (up to about 0.6 s). The
   `port-fixes` build does the same. Every Back still lands exactly.
+- Your call: a replace from her own tap (Stop in a Learn round) still cross-fades, as v1 did, where the plan wanted
+  every replace plain. Item 5 says how to change it.
+- Seen, not changed (it was so before this round): the Lists bento's three tiles run in one row from edge to edge of
+  the screen, without the 16 px margin the rest of the page has, in v1, `port-fixes` and here alike. Learn's
+  `.lh-stats` rule (three columns, no padding) wins over the Lists one in `rest.css` (two columns, the life tile two
+  rows tall). `docs/port-fixes.md` says the bento follows `rest.css`; it doesn't.
+- One unit test, "follows the heading" in `routeFocus.test.tsx`, waits 120 ms. It failed once while the machine was
+  busy and passed on every run after. If it fails again, give it a longer wait.
 - Not tried on real hardware: the photo viewer's pinch, double tap, swipe and drag; the sheet flick; the phone's own
-  Back swipe, and Android's Back closing the photo viewer. Everything was checked in Chromium under Playwright only, with no real Firefox, WebKit, TalkBack or
-  VoiceOver.
+  Back swipe, and Android's Back closing the photo viewer. Everything was checked in Chromium under Playwright only,
+  with no real Firefox, WebKit, TalkBack or VoiceOver.
 
 ## Fixes from the round's review (branch `ui-round-fixes`)
 
@@ -368,8 +403,11 @@ Rows 6, 8 and 9 are CSS, checked in the browser at 390, 320, 260, 223 and 195 px
    screens with it pixel for pixel and element by element.
 4. Every script routes Supabase so only `get_leaderboard`, `get_profile` and public storage reads pass. Nothing signs
    in or writes to the live project.
-5. For a full pass, the scratchpad's `tools` folder has `ui-final-routes.mjs`, `ui-final-flows.mjs`,
-   `ui-final-sw.mjs`, `ui-final-extra.mjs` and `ui-final-interact.mjs`, which run against 4600.
+5. For a full pass, the scratchpad's `tools` folder has `ui-final2-routes.mjs`, `ui-final2-flows.mjs`,
+   `ui-final2-sw.mjs`, `ui-final2-extra.mjs`, `ui-final2-interact.mjs`, `ui-final2-large.mjs` (every route at 150%
+   and 200% text) and `ui-final2-large2.mjs` (130% and 175%), which run against 4600. `sh ui-final2-run.sh` runs the
+   first six in turn, and `sh ui-final2-accept.sh <name>` runs every acceptance script and writes
+   `ui-build\accept\summary.<name>.txt`.
 
 **Script updates after item 3's review.** `tally-queue.mjs` section 4 now expects what item 3 does on purpose: a + on
 a never-seen species saves quietly, focus stays on +, stored [1], and the New band opens the card. Its section 2 waits
@@ -411,51 +449,49 @@ sightings, and with motion); Learn's verdict ring is drawn in light, dark and Ou
 wide and fully on screen at 223 and 195 px; and the viewer's capsule is clear of Close at every width, with 44 x 44
 Previous and Next.
 
-### Last check (29 Oct 2026, on bc5fddf)
+### Last check (30 Oct 2026, on 99c079d)
 
-`npm run build` passed and `npm test` passed (50 files, 362 tests).
+This is `ui-improvements` with all ten items, the live-outing review, the loose ends and the round's review fixes,
+plus the larger-text fixes above. `npm run build` passed and `npm test` passed (54 files, 442 tests).
+
+Every acceptance script passed against 4600 on its first run, before and after the larger-text fixes:
 
 | Acceptance script | Result on 4600 |
 |---|---|
 | fast-dex | 13/13 |
-| tally-queue | 17/18 as written; 18/18 with the updated copy |
-| live-outing | 25/25 |
-| progressive-photo | 44/45, then 45/45 on a second run |
+| tally-queue | 18/18 |
+| live-outing | 36/36 |
+| progressive-photo | 45/45 |
 | route-motion | 14/14 |
 | photo-viewer | 41/41 |
 | sheet-gestures | 17/17 |
-| learn-answer-dock | 9/10, then 10/10 on a second run |
+| learn-answer-dock | 10/10 |
 | dex-tiers | 26/26 |
-
-Item 10 was checked on its own build afterwards, with `ui-improvements` at 4e4d7c2 merged in: `large-text.mjs` passed
-64/64 against a build of 4e4d7c2 as its reference, and the nine scripts above all passed (fast-dex 13/13, tally-queue
-18/18, live-outing 36/36, progressive-photo 45/45, route-motion 14/14, photo-viewer 41/41, sheet-gestures 17/17 on a
-second run after one slow synthetic flick, learn-answer-dock 10/10, dex-tiers 26/26). The sheets, `#/add`, a
-finished outing, the tally's foot, the map's search, Lists and Settings were also compared with 4e4d7c2 at 390 px
-(light and dark) and 320 px: the same, but for the clock in the time fields.
-
-The two first-run misses were timing, not the app:
-
-- progressive-photo's "the large photo develops in" waits 4.2 s for a photo from an outside host (held 2.5 s by
-  the script). The photo did not arrive in time, so there was nothing to develop. It has missed this way in earlier
-  runs too, and passed on the next.
-- learn-answer-dock's "announce-and-tab" once timed out waiting 20 s for the first question. It passed in all 16
-  later runs, and in 12 more cold loads the round's first question was up in under 0.3 s.
+| loose-ends | 26/26 |
+| large-text | 54/54 |
 
 The full regression pass also came back clean:
 
 - Every route (39 of them) in light and dark, at 390 and 320 px, with 0 and 25 sightings: no console errors, no error
   boundary, no sideways scroll, one outing bar and one live region. Focus was on the h1 after every navigation (or in
   the sheet a route opens).
+- Every route (34 of them) with larger text: 130% (300 px) light, 150% (260 px) light, 175% (223 px) dark, and 200%
+  (195 px) light and dark, with 25 sightings, and 200% light with none. No sideways scroll, no console errors, and
+  all five tab bar targets on the screen. Before the fixes above, Lists, the Log, Stats, Badges, Compare and the
+  Leaderboard scrolled sideways at 150% or 200%, and the Dex's list layout put one letter on a line.
+- At 390, 320 and 300 px, Lists, the Log, Stats, Badges, Compare, the Leaderboard, Settings, Targets and the Dex's
+  list layout have every element in the same place and size as before those fixes, in light and dark.
 - Logging from a species page, from the + sheet and by a Dex long press: each is stored with v1's record shape and
   shows in the life list and the Log without a reload.
-- An outing started from +, tallied and finished: the counts are stored with the outing, it ends, and it shows in
-  Lists.
+- An outing started from +, tallied and finished: a seen species found by search counts 2 and the search clears once
+  she stops; five quick taps on the second honeyeater result, new for her dex, count 5 with its New band and no card;
+  three quick − taps from 2 hold the row at 0 with Undo, and Undo puts back 1; one more − and the row folds 4 s later
+  and its sighting goes; Finish keeps the counts with v1's record shape, ends the outing, and it shows in Lists.
 - Photo, Backyard birds and Today's challenge rounds play to their results.
 - Escape closes only the top layer: the map picker over the + sheet or the log sheet, the photo viewer, search.
 - Focus goes to the h1 after the tab bar and links, and Back gives it to the tile she opened.
 - Reduced motion: no view transitions on a tile tap, Back or tabs (four with motion), the photo viewer fades, the
   tally has no stamp, and sheets fade instead of sliding.
-- The service worker installs and takes over. With the network off, the Dex, a species page, Lists, Learn and a
-  Learn round all load.
-- In the route sweep and the flows, no request went to Supabase at all.
+- The service worker installs and takes over. With the network off, the Dex, a species page, Lists, Learn, a cold
+  load of a species page and a Learn round all load.
+- No request went to Supabase in any of these runs.
