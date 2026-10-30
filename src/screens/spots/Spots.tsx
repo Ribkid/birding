@@ -236,7 +236,7 @@ export default function Spots() {
       </div>
 
       <p className="spots-count pad-x" role="status">
-        {waiting ? 'Loading spots…' : `${shown.length} ${plural(shown.length, 'spot')}`}
+        {waiting ? 'Loading spots…' : plural(shown.length, 'spot')}
       </p>
 
       {shown.length ? (
