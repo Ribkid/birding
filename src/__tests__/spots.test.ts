@@ -120,6 +120,15 @@ describe('suggestions', () => {
     expect(suggestSpots(rows(), null, 1)).toHaveLength(1);
     expect(suggestSpots(rows(), null, 0)).toHaveLength(0);
   });
+
+  it('suggests a spot she may not be able to get into only when nothing else fills the list', () => {
+    const shut = buildRows(
+      [hotspot('Locked Lake (some areas restricted access)', -27.5, 153.0, [[3, 9], [4, 9], [5, 9], [6, 9]]), ...HOTSPOTS],
+      null, SEEN, null,
+    );
+    expect(suggestSpots(shut, null, 1)[0].name).toBe('Far Place');
+    expect(suggestSpots(shut, null, 4).map((r) => r.name).at(-1)).toBe('Locked Lake (some areas restricted access)');
+  });
 });
 
 describe('filters and search', () => {

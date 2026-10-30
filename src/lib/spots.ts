@@ -119,9 +119,15 @@ export function sortSpots(rows: SpotRow[], sort: SortKey): SpotRow[] {
   return out;
 }
 
+/** A spot she may not be able to walk into: its name says so, or OpenStreetMap marks it private. */
+export function isRestricted(row: SpotRow): boolean {
+  return /restricted access/i.test(row.name) || !!row.access?.restricted || /restricted/i.test(row.access?.note ?? '');
+}
+
 /**
  * Up to three spots suggested for her: the ones with the most birds she has not seen, and, when her
- * location is known, weighted towards nearby spots (a spot 25 km away counts half as much).
+ * location is known, weighted towards nearby spots (a spot 25 km away counts half as much). Spots she
+ * may not be able to get into come last, so they are suggested only when nothing else fills the three.
  */
 export function suggestSpots(rows: SpotRow[], pos: { lat: number; lng: number } | null, limit = 3): SpotRow[] {
   const scored = rows
@@ -132,6 +138,7 @@ export function suggestSpots(rows: SpotRow[], pos: { lat: number; lng: number } 
     });
   scored.sort(
     (a, b) =>
+      Number(isRestricted(a.row)) - Number(isRestricted(b.row)) ||
       b.score - a.score || b.row.newForYou - a.row.newForYou || b.row.rich - a.row.rich || a.row.name.localeCompare(b.row.name),
   );
   return scored.slice(0, limit).map((x) => x.row);
