@@ -28,6 +28,7 @@ import { announce, toast } from '../../lib/toast';
 import { FIELD, callWho, checkField, fieldJob, fieldJobs, fieldLabel, type FieldKey, type FieldReport, type FieldResult } from './fieldReady';
 import { isInstalled, promptInstall, useCanInstall } from '../../lib/install';
 import { THEMES, saveTheme, storedSettings, type Theme } from './theme';
+import { canSpeak, setDexVoice } from '../dexVoice';
 import './progress.css';
 
 interface AccountUser { id: string; email: string; name: string }
@@ -404,6 +405,7 @@ export default function Settings() {
   useProfile();
   const canInstall = useCanInstall();
   const [theme, setTheme] = useState<Theme>('auto');
+  const [voice, setVoice] = useState(true);
   const [usage, setUsage] = useState('');
   const [persisted, setPersisted] = useState(true);
   const [restore, setRestore] = useState<BackupData | null>(null);
@@ -412,7 +414,7 @@ export default function Settings() {
 
   useEffect(() => {
     let alive = true;
-    void storedSettings().then((s) => { if (alive) setTheme(((s.theme as Theme) || 'auto')); });
+    void storedSettings().then((s) => { if (alive) { setTheme(((s.theme as Theme) || 'auto')); setVoice(s.dexVoice !== false); } });
     (async () => {
       try {
         const est = await navigator.storage.estimate();
@@ -513,6 +515,15 @@ export default function Settings() {
             <button type="button" className="set-row" data-install onClick={() => void promptInstall()}><span className="set-row-l">Install app on this phone</span>{chev}</button>
           ) : (
             <div className="set-row set-row--info"><span className="set-row-l">Install</span><span className="set-row-v">{installed ? 'Installed on this phone' : 'Open the browser menu, then Add to Home screen'}</span></div>
+          )}
+          {canSpeak() && (
+            <label className="set-row">
+              <span className="set-row-l">Dex voice</span>
+              <select className="set-select" data-dexvoice-setting value={voice ? 'on' : 'off'} onChange={(e) => { const on = e.target.value === 'on'; setVoice(on); void setDexVoice(on); }}>
+                <option value="on">Reads new finds aloud</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
           )}
           <button type="button" className="set-row" data-welcome onClick={openWelcome}><span className="set-row-l">Show the welcome screen</span>{chev}</button>
         </div>

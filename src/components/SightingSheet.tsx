@@ -48,6 +48,8 @@ import { Band, SpeciesImage } from './SpeciesImage';
 import { Icon } from './Icon';
 import { LocationPicker, type PickedPlace } from './LocationPicker';
 import { Sheet } from './Sheet';
+import { DexVoiceButton } from './DexVoiceButton';
+import { dexVoiceOn, speakEntry, stopSpeaking } from '../screens/dexVoice';
 import './sightingSheet.css';
 
 const ShareIcon = () => (
@@ -624,7 +626,12 @@ function CelebrationCard({ c, onDone, onCard }: { c: Celebration; onDone: () => 
     // The count lands after the card has sprung in.
     void countUp(nRef.current, got - 1, got, { delay: 420 });
     if (total) void countUp(allRef.current, animalsGot - 1, animalsGot, { delay: 560 });
+    // The dex reads its new entry aloud, unless she turned that off in Settings.
+    let alive = true;
+    void dexVoiceOn().then((on) => { if (alive && on) speakEntry(sp); });
     return () => {
+      alive = false;
+      stopSpeaking();
       if (layerRef.current) { closeLayer(layerRef.current, { restore: false }); layerRef.current = null; }
     };
     // Drawn once for this save.
@@ -641,6 +648,7 @@ function CelebrationCard({ c, onDone, onCard }: { c: Celebration; onDone: () => 
             <h2 id={`${id}-h`}>{sp.name}</h2>
           </div>
           <span className={`band band--${sp.kind} band--on band--big band--clamp`}>{dexCode(sp.id)}</span>
+          <DexVoiceButton sp={sp} className="celebrate-voice" />
         </div>
         <div className="celebrate-body">
           <p className="celebrate-count">
