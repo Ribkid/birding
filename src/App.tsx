@@ -3,6 +3,8 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Dex from './screens/Dex';
 import Bird from './screens/Bird';
 import MapScreen from './screens/map/MapScreen';
+import Spots from './screens/spots/Spots';
+import SpotDetail from './screens/spots/SpotDetail';
 import Scan from './screens/field/Scan';
 import Listen from './screens/field/Listen';
 import Badges from './screens/progress/Badges';
@@ -109,6 +111,9 @@ export default function App() {
           <Route path="/map" element={<MapScreen />} />
           <Route path="/map/sp/:id" element={<MapScreen />} />
           <Route path="/map/at/*" element={<MapScreen />} />
+
+          <Route path="/spots" element={<Spots />} />
+          <Route path="/spot/:idx" element={<SpotDetail />} />
 
           <Route path="/scan" element={<Scan />} />
           <Route path="/listen" element={<Listen />} />

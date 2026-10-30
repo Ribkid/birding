@@ -431,6 +431,14 @@ function MapView() {
     return rows;
   }, [hotOn, focus, seen, seqTick]);
 
+  // A hotspot's popup links to its Spots page (#/spot/:idx): the index is its place in seq.json's list,
+  // which is the id the Spots tab uses.
+  const hotspotIndex = useMemo(() => {
+    const index = new Map<string, number>();
+    (hotspots() as Hotspot[]).forEach((h, i) => index.set(h.name, i));
+    return index;
+  }, [seqTick]);
+
   const focusPoints = useMemo<[number, number, number][]>(() => {
     if (!focus) return [];
     const pts = (pointsFor(focus.id) as [number, number, number][]) ?? [];
@@ -776,6 +784,7 @@ function MapView() {
               };
         const marker = L.circleMarker([view.h.lat, view.h.lng], style);
         hotspotMarkersRef.current.push({ h: view.h, mk: marker });
+        const spotIdx = hotspotIndex.get(view.h.name);
         marker
           .addTo(overlay)
           .bindPopup(
@@ -789,7 +798,9 @@ function MapView() {
                     .join('')}</ul>`
                 : ''
             }
-            <a href="${directionsUrl(view.h.lat, view.h.lng)}" target="_blank" rel="noopener">Directions</a>`,
+            <a href="${directionsUrl(view.h.lat, view.h.lng)}" target="_blank" rel="noopener">Directions</a>${
+              spotIdx != null ? ` · <a href="#/spot/${spotIdx}">Spot details</a>` : ''
+            }`,
             popOpts(map, 260),
           );
         marker.on('popupopen', (event) => {
@@ -859,7 +870,7 @@ function MapView() {
     };
     // atLat/atLng are fixed for this view (MapScreen keys it on the route).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seqTick, patches, groups, hotspotView, focus, focusPoints, hotOn, need, addNote]);
+  }, [seqTick, patches, groups, hotspotView, hotspotIndex, focus, focusPoints, hotOn, need, addNote]);
 
   // Initial view for each route, fitted to the data once.
   useEffect(() => {

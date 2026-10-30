@@ -1,0 +1,118 @@
+/* Spots: the list and one spot's page. Cards are solid for reading in sun; the hero and the credit are the
+   photo-first, glassy pieces, and all colour comes from the shared tokens so light, dark and Outdoor each work. */
+
+.spots-screen { padding-bottom: 20px; container: spots / inline-size; }
+.spots-head { align-items: flex-start; }
+.spots-head > div { min-width: 0; }
+.spots-head p { max-width: 60ch; }
+
+/* ---------- suggested ---------- */
+.spots-suggest {
+  margin: 4px 16px 16px; padding: 14px; border-radius: var(--r-card);
+  background: var(--surface); box-shadow: var(--shadow-card);
+}
+.spots-suggest h2 { margin: 0 0 2px; font: 700 1.1rem/1.25 var(--font); }
+.spots-suggest p { margin: 0; }
+.spot-suggest-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.spot-suggest-card a {
+  display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 8px;
+  border-radius: 12px; background: var(--surface-2); color: var(--ink); text-decoration: none;
+}
+.spot-suggest-card a:active { scale: .99; }
+.spot-suggest-photo {
+  width: 44px; height: 44px; flex: none; border-radius: 10px; overflow: hidden; background: var(--surface);
+}
+.spot-suggest-photo img, .spot-suggest-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+.spot-suggest-main { display: grid; min-width: 0; }
+.spot-suggest-main strong { overflow-wrap: anywhere; line-height: 1.3; }
+.spot-suggest-line { color: var(--ink-2); font-size: var(--fs-2); }
+
+/* ---------- search, sort, filters ---------- */
+.spots-tools { display: grid; gap: 10px; padding: 0 16px; }
+.spots-tools .searchbox { margin: 0; }
+.spots-sort { display: flex; align-items: center; gap: 10px; }
+.spots-sort label { flex: none; font-weight: 600; font-size: var(--fs-2); }
+.spots-sort select { flex: 1 1 auto; min-width: 0; max-width: 100%; }
+.chips--spots { padding: 0; flex-wrap: wrap; }
+.chips--spots .chip--clear { border-style: dashed; background: transparent; color: var(--ink-2); }
+.spots-note { margin: 0; color: var(--ink-2); font-size: var(--fs-2); }
+.spots-try { margin-left: 8px; }
+.spots-count { margin: 14px 0 8px; color: var(--ink-2); font-size: var(--fs-2); }
+
+/* ---------- the 220 cards ---------- */
+.spot-cards { list-style: none; margin: 0; padding: 0 16px; display: grid; gap: 12px; }
+/* Off-screen cards cost no layout or paint; the placeholder keeps the scrollbar steady. */
+.spot-card { content-visibility: auto; contain-intrinsic-size: auto 260px; }
+.spot-card-link {
+  display: grid; gap: 8px; padding: 13px; border-radius: var(--r-card);
+  background: var(--surface); box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none;
+}
+.spot-card-link:active { scale: .995; }
+.spot-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.spot-card-name { min-width: 0; font-size: 1.0625rem; line-height: 1.3; overflow-wrap: anywhere; }
+.spot-card-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--ink-2); font-size: var(--fs-2); }
+.spot-distance { font-weight: 600; color: var(--ink); }
+.spot-new { color: var(--lori); font-weight: 600; }
+
+.spot-score {
+  flex: none; display: inline-flex; align-items: baseline; gap: 1px; padding: 2px 9px;
+  border-radius: var(--r-pill); background: var(--azure-soft); color: var(--azure); font-weight: 700;
+  font-size: var(--fs-2); font-variant-numeric: tabular-nums;
+}
+.spot-score b { font-size: 1rem; }
+.spot-access-unknown { margin: 0; color: var(--ink-2); font-size: var(--fs-2); font-style: italic; }
+
+.spot-badges { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.spot-badge {
+  padding: 3px 9px; border-radius: var(--r-pill); border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--ink-2); font-size: var(--fs-1); line-height: 1.5;
+}
+.spot-photos { list-style: none; margin: 2px 0 0; padding: 0; display: flex; gap: 6px; }
+.spot-photo { flex: 1 1 0; min-width: 0; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--surface-2); }
+.spot-photo img, .spot-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+.spot-credit { color: var(--ink-2); }
+.spots-credit { padding: 18px 16px 8px; }
+
+/* ---------- one spot ---------- */
+.spot-head { align-items: flex-start; }
+.spot-head-text { min-width: 0; }
+.spot-head-text h1 { overflow-wrap: anywhere; }
+.spot-hero {
+  margin: 4px 16px 14px; border-radius: var(--r-card); overflow: hidden;
+  background: var(--surface); box-shadow: var(--shadow-card);
+}
+.spot-hero-photo { aspect-ratio: 16 / 9; background: var(--surface-2); }
+.spot-hero-photo img, .spot-hero-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+.spot-hero figcaption { padding: 8px 12px; font-size: var(--fs-2); color: var(--ink-2); }
+.spot-facts {
+  list-style: none; margin: 0 16px 14px; padding: 12px; display: flex; flex-wrap: wrap; gap: 8px 20px;
+  border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-card);
+}
+.spot-facts li { display: flex; align-items: baseline; gap: 5px; color: var(--ink-2); font-size: var(--fs-2); }
+.spot-facts b { font: 800 1.15rem/1 var(--stamp); color: var(--ink); font-variant-numeric: tabular-nums; }
+.spot-access { margin: 0 16px 14px; padding: 14px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
+.spot-access-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.spot-access h2, .spot-birds h2, .spot-yours h2 { margin: 0 0 6px; font: 700 1.15rem/1.25 var(--font); }
+.spot-reasons { margin: 6px 0; padding-left: 20px; color: var(--ink-2); }
+.spot-reasons li { margin: 2px 0; }
+.spot-access-note { margin: 6px 0 0; color: var(--lori); font-weight: 600; font-size: var(--fs-2); }
+.spot-access .spot-credit { margin: 8px 0 0; }
+.spot-actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 16px 16px; }
+.spot-actions .btn { flex: 1 1 auto; justify-content: center; min-height: 48px; }
+.spot-birds, .spot-yours { padding: 0 16px 16px; }
+.spot-section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.spot-section-head h2 { margin: 0; }
+.spot-bird-list { margin-top: 4px; }
+.spot-yours h2 { margin-top: 4px; }
+
+/* At 150% and 200% text the page is 300–195 px wide: the facts and the actions go one to a line rather than
+   squeezing, and the hero steps down to 4:3 so its caption stays in the first screen. */
+@container spots (width < 300px) {
+  .spot-facts { gap: 6px 12px; }
+  .spot-facts li { flex: 1 1 100%; }
+  .spot-actions .btn { flex: 1 1 100%; }
+}
+@container spots (width < 240px) {
+  .spot-hero-photo { aspect-ratio: 4 / 3; }
+  .spot-hero figcaption { padding: 6px 10px; }
+}

@@ -31,7 +31,7 @@ const RUNTIME_ONLY = ['vendor/', 'photos/'];
 const EXTRA_SHELL = new Set([
   '/data/species-new.json', '/data/tiers.json', '/data/info.json', '/data/gallery.json',
   '/data/seq.json', '/data/birdnet-map.json', '/data/lookalikes.json', '/data/calls.json',
-  '/data/photoid.json', '/data/photoid.bin',
+  '/data/photoid.json', '/data/photoid.bin', '/data/spot-access.json',
   '/models/bioclip/manifest.json',
   // Saved with each release, as in v1, so a signed-in phone still loads it offline after an update.
   '/vendor/supabase/supabase.js',
