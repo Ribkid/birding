@@ -176,7 +176,7 @@ declare
   me uuid := auth.uid();
   hit record;
 begin
-  select ot.uid, ot."date", ot.place, ot.distance_km, ot.duration_min, ot.user_id
+  select ot.uid, ot."date", ot.place, ot.distance_km, ot.duration_min, ot.user_id, pr.display_name
   into hit
   from public.outings ot
   join public.profiles pr on pr.user_id = ot.user_id
@@ -190,6 +190,7 @@ begin
   return (
     select jsonb_build_object(
       'publicId', p_public_id,
+      'displayName', hit.display_name,
       'outingUid', hit.uid::text,
       'date', hit."date",
       'place', hit.place,

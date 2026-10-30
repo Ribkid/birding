@@ -3,10 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import { fetchPublicOuting } from '../../core/outingPhotos.js';
 import { Icon } from '../../components/Icon';
 import { OutingPhotoGrid, type OutingPhoto } from '../../components/OutingPhotos';
+import { fmtDate } from '../lists/shared';
 import '../../components/outingPhotos.css';
 
 interface PublicOutingData {
   publicId: string;
+  displayName?: string | null;
   outingUid: string;
   date?: string;
   place?: string;
@@ -41,7 +43,12 @@ export default function PublicOuting() {
         <Link className="iconbtn" to={`/u/${publicId}`} aria-label="Back to profile"><Icon name="back" /></Link>
         <div className="lists-head-text">
           <h1>{outing?.place || (loading ? 'Outing' : 'Outing unavailable')}</h1>
-          {outing && <p className="muted small">{outing.date || ''}</p>}
+          {outing && (
+            <p className="muted small">
+              {fmtDate(outing.date)}
+              {outing.displayName ? <> · <Link to={`/u/${publicId}`}>{outing.displayName}</Link></> : null}
+            </p>
+          )}
         </div>
       </header>
       {loading && <p className="pad muted" role="status">Loading outing…</p>}
