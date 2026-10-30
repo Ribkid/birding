@@ -9,6 +9,7 @@ import { authSettled } from '../../core/account.js';
 import { applyTint, stagger } from '../../lib/look';
 import { AccountAvatar, AccountCta } from './accountBits';
 import { Count } from './Count';
+import { ProfilePhotoSections } from '../../components/OutingPhotos';
 import { onAccountSheetClosed, openEditProfile } from './AccountSheets';
 import './me.css';
 
@@ -133,6 +134,7 @@ export default function PublicProfile() {
           <dl className="me-stats"><div><dt>Species</dt><Count tag="dd" k={`p-${publicId}:species`} n={row.species || 0} /></div><div><dt>Badges</dt><Count tag="dd" k={`p-${publicId}:badges`} n={row.badges || 0} /></div><div><dt>Outings</dt><Count tag="dd" k={`p-${publicId}:outings`} n={row.outings || 0} /></div></dl>
         </section>
         {isMe && <div className="me-acts me-acts--one"><button type="button" className="me-act me-act--primary" data-edit onClick={openEditProfile}>{edit}<span>Edit profile</span></button></div>}
+        <ProfilePhotoSections publicId={publicId} canLike={!isMe} />
         <section className="me-sec" aria-labelledby="me-found-h">
           <div className="me-sec-h"><h2 id="me-found-h">{isMe ? "Species you've found" : `Species ${first} has found`}</h2></div>
           {dex.length ? (

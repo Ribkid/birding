@@ -7,6 +7,13 @@ import { Sheet } from '../../components/Sheet';
 import { LocationPicker, type PickedPlace } from '../../components/LocationPicker';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { SunToggle } from '../../components/SunToggle';
+import {
+  OutingPhotoAddButton,
+  OutingPhotoGrid,
+  removeLocalOutingPhoto,
+  tagLocalOutingPhoto,
+  useLocalOutingPhotos,
+} from '../../components/OutingPhotos';
 import { announce, toast } from '../../lib/toast';
 import { topLayer } from '../../lib/layers';
 import { countOnTo, countUp, motionOK, stamp } from '../../lib/motion';
@@ -177,6 +184,7 @@ function FinishOuting({
         <h2 className="sheet-title" id="outing-finish-h">{outing.endedAt ? 'Outing details' : 'Finish outing'}</h2>
         <p className="muted">{plural(sightingCount, 'species', 'species')} so far.</p>
         <OutingLifers lifers={lifers} live={!outing.endedAt} />
+        <OutingPhotoAddButton outing={outing} />
         <form className="form" data-form="" onSubmit={save} noValidate>
           <label className="field">
             <span>Place name</span>
@@ -369,6 +377,7 @@ function OutingPage() {
   const settled = useSettled();
 
   const outing = outings.find((row) => row.id === outingId);
+  const outingPhotos = useLocalOutingPhotos(String((outing as OutingRow & { uid?: string } | undefined)?.uid || ''));
 
   const [query, setQuery] = useState('');
   const [editingBirds, setEditingBirds] = useState(false);
@@ -917,6 +926,17 @@ function OutingPage() {
 
       {outing.notes && <p className="pad-x">{outing.notes}</p>}
 
+      <section className="pad-x op-owner-photos" aria-labelledby="op-owner-photos-h">
+        <div className="me-sec-h"><h2 id="op-owner-photos-h">Photos</h2><OutingPhotoAddButton outing={outing} /></div>
+        <OutingPhotoGrid
+          photos={outingPhotos}
+          owner
+          canLike={false}
+          onRemove={removeLocalOutingPhoto}
+          onSpecies={tagLocalOutingPhoto}
+        />
+      </section>
+
       <div ref={foot} className={`tally-foot ${live ? 'tally-foot--live' : ''}`}>
         {/* Keyed so the Finish outing button stays the same element as it becomes Edit details: closing the sheet
             hands focus back to it. v1's restoreFocus did too, but the redraw after Finish then left focus on the
@@ -976,6 +996,7 @@ function OutingPage() {
               await tallied.drop();
               const onIt = (await db.byIndex('sightings', 'outingId', outing.id)) as SightingRow[];
               for (const rec of onIt) await deleteSighting(rec);
+              for (const photo of outingPhotos) await removeLocalOutingPhoto(photo);
               await db.del('outings', outing.id);
               forgetTally(outing.id);
               if (activeOutingId === outing.id) await db.kvSet('activeOuting', null);

@@ -22,6 +22,7 @@ import LearnPlay from './screens/learn/LearnPlay';
 import Me from './screens/me/Me';
 import { AccountSheets } from './screens/me/AccountSheets';
 import PublicProfile from './screens/me/PublicProfile';
+import PublicOuting from './screens/me/PublicOuting';
 import { Placeholder } from './screens/Placeholder';
 import { TabBar } from './components/TabBar';
 import { ScreenBoundary } from './components/ErrorBoundary';
@@ -35,6 +36,7 @@ import { initLook, lookAfterDraw } from './lib/look';
 import { syncTitle, watchTitle } from './lib/title';
 import { initProfile } from './core/profile.js';
 import { initAccount, onStatus, syncStatus } from './core/account.js';
+import { startOutingPhotoSync } from './core/outingPhotos.js';
 import { applySavedTheme } from './screens/progress/theme';
 import { useState } from 'react';
 
@@ -74,6 +76,7 @@ export default function App() {
   useEffect(() => {
     void initProfile();
     void initAccount();
+    startOutingPhotoSync();
     void applySavedTheme();
   }, []);
   useEffect(preloadOnPress, []); // pressing a species starts its large photo (components/SpeciesImage.tsx)
@@ -119,6 +122,7 @@ export default function App() {
           <Route path="/me/signup" element={<Me sub="signup" />} />
           <Route path="/me/signin" element={<Me sub="signin" />} />
           <Route path="/u/:publicId" element={<PublicProfile />} />
+          <Route path="/u/:publicId/outing/:outingUid" element={<PublicOuting />} />
 
           <Route path="/badges" element={<Badges />} />
           <Route path="/compare/:a/:b" element={<Compare />} />
