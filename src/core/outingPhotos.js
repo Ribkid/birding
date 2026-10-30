@@ -81,10 +81,31 @@ export async function syncOutingPhotos(c, userId) {
       w: photo.w,
       h: photo.h,
     };
-    const { error } = await c.from('outing_photos').upsert(row, { onConflict: 'uid' });
+    // Insert once (a row already there keeps its owner and likes), then bring her species tag up to date.
+    const { error } = await c.from('outing_photos').upsert(row, { onConflict: 'uid', ignoreDuplicates: true });
     if (error) throw error;
+    const { error: tagError } = await c.from('outing_photos').update({ species_id: row.species_id })
+      .eq('uid', row.uid).eq('user_id', userId);
+    if (tagError) throw tagError;
     await raw.put('photos', { ...photo, uploadedAt: Date.now(), ownerId: userId });
     notify();
+  }
+}
+
+// Before her account goes. The files are public and SQL can't remove Storage files, so take them down here.
+export async function deleteAllOutingPhotos(c, userId) {
+  const paths = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await c.from('outing_photos').select('path, thumb_path').eq('user_id', userId)
+      .order('uid').range(from, from + 999);
+    if (error) throw error;
+    for (const r of data || []) paths.push(r.path, r.thumb_path);
+    if (!data || data.length < 1000) break;
+  }
+  const mine = paths.filter(p => p && p.startsWith(`${userId}/`));
+  for (let i = 0; i < mine.length; i += 100) {
+    const { error } = await c.storage.from(BUCKET).remove(mine.slice(i, i + 100));
+    if (error) throw error;
   }
 }
 

@@ -40,6 +40,7 @@ import {
   syncOutingPhotos,
   togglePhotoLike,
   updateOutingPhoto,
+  deleteAllOutingPhotos,
 } from '../core/outingPhotos.js';
 
 function fakeSupabase() {
@@ -63,11 +64,35 @@ function fakeSupabase() {
     from: (table: string) => {
       if (table !== 'outing_photos') throw new Error('wrong table');
       return {
+        // The live table only lets her insert once and update the species tag (see the migration's grants).
         upsert: async (row: any, options: any) => {
-          if (options.onConflict !== 'uid') throw new Error('not idempotent by uid');
-          const at = state.rows.findIndex((r) => r.uid === row.uid);
-          if (at < 0) state.rows.push(row); else state.rows[at] = row;
+          if (options.onConflict !== 'uid' || !options.ignoreDuplicates) throw new Error('must insert once by uid');
+          if (!state.rows.some((r) => r.uid === row.uid)) state.rows.push({ ...row, like_count: 0 });
           return { error: null };
+        },
+        update: (patch: any) => {
+          if (Object.keys(patch).some((k) => k !== 'species_id')) throw new Error('only species_id may change');
+          const where: any = {};
+          const query = {
+            eq: (key: string, value: any) => { where[key] = value; return query; },
+            then: (resolve: (value: any) => void) => {
+              for (const r of state.rows) if (Object.entries(where).every(([k, v]) => r[k] === v)) Object.assign(r, patch);
+              return Promise.resolve({ error: null }).then(resolve);
+            },
+          };
+          return query;
+        },
+        select: () => {
+          const where: any = {};
+          const query: any = {
+            eq: (key: string, value: any) => { where[key] = value; return query; },
+            order: () => query,
+            range: async (from: number, to: number) => ({
+              data: state.rows.filter((r) => Object.entries(where).every(([k, v]) => r[k] === v)).slice(from, to + 1),
+              error: null,
+            }),
+          };
+          return query;
         },
         delete: () => {
           const where: any = {};
@@ -117,7 +142,7 @@ describe('upload queue', () => {
     expect(state.rows).toEqual([{
       uid: 'photo-1', user_id: 'user-1', outing_uid: 'outing-1',
       path: 'user-1/outing-1/photo-1.jpg', thumb_path: 'user-1/outing-1/photo-1_t.jpg',
-      taken_at: new Date(photo.takenAt).toISOString(), species_id: 42, w: 2048, h: 1024,
+      taken_at: new Date(photo.takenAt).toISOString(), species_id: 42, w: 2048, h: 1024, like_count: 0,
     }]);
     expect(stored[0]).toMatchObject({ uploadedAt: expect.any(Number), ownerId: 'user-1' });
 
@@ -130,6 +155,29 @@ describe('upload queue', () => {
     stored.push({ ...pendingPhoto(), id: 1, uploadedAt: 100, ownerId: 'user-1' });
     await updateOutingPhoto(stored[0], { speciesId: 7 });
     expect(stored[0]).toMatchObject({ uid: 'photo-1', speciesId: 7, uploadedAt: null });
+  });
+
+  it('sends a re-tagged photo as a species update that keeps its likes', async () => {
+    await addOutingPhotos('outing-1', [pendingPhoto()]);
+    const { client, state } = fakeSupabase();
+    await syncOutingPhotos(client, 'user-1');
+    state.rows[0].like_count = 5;
+    await updateOutingPhoto(stored[0], { speciesId: 7 });
+    await syncOutingPhotos(client, 'user-1');
+    expect(state.rows).toHaveLength(1);
+    expect(state.rows[0]).toMatchObject({ species_id: 7, like_count: 5, user_id: 'user-1' });
+  });
+});
+
+describe('deleting her account', () => {
+  it('takes down every one of her outing photo files, and no one else\'s', async () => {
+    const { client, state } = fakeSupabase();
+    state.rows.push(
+      { uid: 'a', user_id: 'user-1', path: 'user-1/o/a.jpg', thumb_path: 'user-1/o/a_t.jpg' },
+      { uid: 'b', user_id: 'user-2', path: 'user-2/o/b.jpg', thumb_path: 'user-2/o/b_t.jpg' },
+    );
+    await deleteAllOutingPhotos(client, 'user-1');
+    expect(state.removed.flat()).toEqual(['user-1/o/a.jpg', 'user-1/o/a_t.jpg']);
   });
 });
 

@@ -9,6 +9,7 @@ import {
   forgetSync, pendingCount, deleteCloudPhotos,
 } from './sync.js';
 import { deleteAvatars } from './profile.js';
+import { deleteAllOutingPhotos } from './outingPhotos.js';
 
 export const accountsOn = () => configured;
 export { user, syncStatus, onStatus, onRemoteChange, pendingCount, syncNow, schedule, client };
@@ -74,6 +75,7 @@ export async function deleteAccount() {
   const u = user();
   await deleteCloudPhotos(c, u.id);
   await deleteAvatars(c, u.id);
+  await deleteAllOutingPhotos(c, u.id);
   const { error } = await c.rpc('delete_my_account');
   if (error) throw error;
   await signOut();

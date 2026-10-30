@@ -1,6 +1,7 @@
--- Public outing photos and likes. Additive except for replacing delete_my_account so its storage cleanup
--- includes this bucket. Photo JPEGs are re-encoded on the phone before upload; no EXIF or GPS metadata is kept.
--- Public RPCs return only the fields their screens need. In particular, get_public_outing never returns lat/lng.
+-- Public outing photos and likes. Additive only: delete_my_account is unchanged, and the app removes this bucket's
+-- files through the Storage API before calling it (as it does for photos and avatars), because Supabase does not
+-- allow deleting Storage objects with SQL. Photo JPEGs are re-encoded on the phone before upload; no EXIF or GPS
+-- metadata is kept. Public RPCs return only the fields their screens need; get_public_outing never returns lat/lng.
 
 -- ---------------------------------------------------------------- public photo bucket
 
@@ -37,7 +38,10 @@ create table if not exists public.outing_photos (
   w           int,
   h           int,
   like_count  int not null default 0 check (like_count >= 0),
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  -- A row can only point at files in its owner's own folder, never at someone else's photo.
+  constraint outing_photos_own_files check (
+    split_part(path, '/', 1) = user_id::text and split_part(thumb_path, '/', 1) = user_id::text)
 );
 
 create index if not exists outing_photos_user_created on public.outing_photos (user_id, created_at desc);
@@ -74,10 +78,13 @@ create policy "own photo like insert" on public.photo_likes for insert to authen
 create policy "own photo like delete" on public.photo_likes for delete to authenticated
   using (user_id = (select auth.uid()));
 
--- Column privileges keep uid, ownership and like_count from being rewritten through a table update or upsert.
+-- Column privileges keep id, like_count and created_at out of inserts, and uid and ownership out of updates, so no
+-- one can start a photo with likes or rewrite whose it is. The app inserts with ON CONFLICT DO NOTHING, then updates
+-- species_id, so it needs no update right on the locked columns.
 revoke all on public.outing_photos, public.photo_likes from anon, authenticated;
 grant select on public.outing_photos to anon, authenticated;
-grant insert, delete on public.outing_photos to authenticated;
+grant insert (uid, user_id, outing_uid, path, thumb_path, taken_at, species_id, w, h) on public.outing_photos to authenticated;
+grant delete on public.outing_photos to authenticated;
 grant update (outing_uid, path, thumb_path, taken_at, species_id, w, h) on public.outing_photos to authenticated;
 grant insert, delete on public.photo_likes to authenticated;
 
@@ -154,7 +161,9 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- one public outing
--- Only an outing with at least one photo is returned. There are deliberately no coordinate fields in this object.
+-- Only an outing with at least one photo is returned, and only when its owner's profile can be seen: she shows on
+-- the leaderboard, or the viewer is her or shares a group with her (get_profile's rule). There are deliberately no
+-- coordinate fields in this object.
 
 create or replace function public.get_public_outing(p_public_id uuid, p_outing_uid text)
 returns jsonb
@@ -165,26 +174,29 @@ set search_path = ''
 as $$
 declare
   me uuid := auth.uid();
-  o record;
+  hit record;
 begin
-  select o.uid, o."date", o.place, o.distance_km, o.duration_min, o.user_id
-  into o
-  from public.outings o
-  join public.profiles pr on pr.user_id = o.user_id
-  where pr.public_id = p_public_id and o.uid::text = p_outing_uid and o.deleted_at is null
-    and exists (select 1 from public.outing_photos p where p.outing_uid = o.uid::text and p.user_id = o.user_id);
+  select ot.uid, ot."date", ot.place, ot.distance_km, ot.duration_min, ot.user_id
+  into hit
+  from public.outings ot
+  join public.profiles pr on pr.user_id = ot.user_id
+  where pr.public_id = p_public_id and ot.uid::text = p_outing_uid and ot.deleted_at is null
+    and exists (select 1 from public.outing_photos p where p.outing_uid = ot.uid::text and p.user_id = ot.user_id)
+    and (pr.show_on_leaderboard or ot.user_id = me or exists (
+      select 1 from public.group_members a join public.group_members b on a.group_id = b.group_id
+      where a.user_id = me and b.user_id = ot.user_id));
   if not found then return null; end if;
 
   return (
     select jsonb_build_object(
       'publicId', p_public_id,
-      'outingUid', o.uid::text,
-      'date', o."date",
-      'place', o.place,
+      'outingUid', hit.uid::text,
+      'date', hit."date",
+      'place', hit.place,
       'speciesCount', (select count(distinct s.species_id)::int from public.sightings s
-        where s.outing_uid = o.uid and s.deleted_at is null),
-      'distanceKm', o.distance_km,
-      'durationMin', o.duration_min,
+        where s.outing_uid = hit.uid and s.deleted_at is null),
+      'distanceKm', hit.distance_km,
+      'durationMin', hit.duration_min,
       'photos', coalesce((
         select jsonb_agg(jsonb_build_object(
           'id', p.id, 'uid', p.uid, 'outingUid', p.outing_uid,
@@ -194,7 +206,7 @@ begin
           'liked', exists (select 1 from public.photo_likes l where l.photo_id = p.id and l.user_id = me)
         ) order by p.created_at desc, p.id)
         from public.outing_photos p
-        where p.outing_uid = o.uid::text and p.user_id = o.user_id
+        where p.outing_uid = hit.uid::text and p.user_id = hit.user_id
       ), '[]'::jsonb)
     )
   );
@@ -258,32 +270,12 @@ begin
   );
 end $$;
 
--- ---------------------------------------------------------------- delete my account
--- Keep the existing account cleanup and remove this bucket's files too. Table rows and likes cascade from auth.users.
-
-create or replace function public.delete_my_account()
-returns void
-language plpgsql
-security definer
-set search_path = ''
-as $$
-#variable_conflict use_column
-declare me uuid := auth.uid();
-begin
-  if me is null then raise exception 'Sign in first'; end if;
-  delete from public.groups g where g.created_by = me
-    and not exists (select 1 from public.group_members m where m.group_id = g.id and m.user_id <> me);
-  delete from storage.objects where bucket_id = 'outing-photos'
-    and (storage.foldername(name))[1] = me::text;
-  delete from auth.users where id = me;
-end $$;
-
 -- ---------------------------------------------------------------- function permissions
+-- Rows and likes go with the account through on delete cascade from auth.users.
 
 revoke execute on function public.toggle_photo_like(uuid), public.get_public_outing(uuid, text),
-  public.get_profile_photos(uuid), public.delete_my_account(), public.guard_photo_like(),
+  public.get_profile_photos(uuid), public.guard_photo_like(),
   public.update_photo_like_count() from public, anon;
-grant execute on function public.toggle_photo_like(uuid), public.get_profile_photos(uuid),
-  public.delete_my_account() to authenticated;
+grant execute on function public.toggle_photo_like(uuid), public.get_profile_photos(uuid) to authenticated;
 grant execute on function public.get_public_outing(uuid, text) to authenticated, anon;
 revoke execute on function public.guard_photo_like(), public.update_photo_like_count() from authenticated;
