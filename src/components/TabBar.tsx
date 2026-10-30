@@ -42,6 +42,20 @@ const TABS = [
     ),
   },
   {
+    to: '/spots',
+    key: 'spots',
+    label: 'Spots',
+    // A pin with binoculars in it: where to go, and what to look at.
+    icon: (
+      <>
+        <path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" />
+        <circle cx="9.6" cy="9.6" r="1.7" />
+        <circle cx="14.4" cy="9.6" r="1.7" />
+        <path d="M11.3 9.6h1.4" />
+      </>
+    ),
+  },
+  {
     to: '/me',
     key: 'me',
     label: 'Me',
@@ -59,6 +73,7 @@ const TAB_FOR: Record<string, string> = {
   bird: 'dex', dex: 'dex', compare: 'dex', listen: 'dex', scan: 'dex',
   learn: 'learn', quiz: 'learn',
   map: 'map',
+  spots: 'spots', spot: 'spots',
   me: 'me', u: 'me', lists: 'me', list: 'me', patch: 'me', targets: 'me', outing: 'me',
   log: 'me', stats: 'me', badges: 'me', settings: 'me', leaderboard: 'me',
 };

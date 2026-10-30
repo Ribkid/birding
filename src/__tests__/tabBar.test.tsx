@@ -32,19 +32,19 @@ const marks = (path: string) => {
 
 describe('tab bar aria-current', () => {
   it('marks the owning tab "page" and every other link, the + too, "false"', () => {
-    expect(marks('/settings')).toEqual(['/dex false', '/learn false', '#/add false', '/map false', '/me page']);
-    expect(marks('/bird/1')).toEqual(['/dex page', '/learn false', '#/add false', '/map false', '/me false']);
+    expect(marks('/settings')).toEqual(['/dex false', '/learn false', '#/add false', '/map false', '/spots false', '/me page']);
+    expect(marks('/bird/1')).toEqual(['/dex page', '/learn false', '#/add false', '/map false', '/spots false', '/me false']);
   });
 
   it('leaves the + "false" on the #/add page, which no tab owns but the dex', () => {
-    expect(marks('/add')).toEqual(['/dex page', '/learn false', '#/add false', '/map false', '/me false']);
+    expect(marks('/add')).toEqual(['/dex page', '/learn false', '#/add false', '/map false', '/spots false', '/me false']);
   });
 });
 
-// v1 index.html: the four tabs carry data-tab, the + does not.
+// v1 index.html: the tabs carry data-tab, the + does not.
 describe('tab bar data-tab', () => {
   it('names each tab as v1 does', () => {
     const { container } = render(<MemoryRouter initialEntries={['/dex']}><TabBar /></MemoryRouter>);
-    expect([...container.querySelectorAll('.tabbar a')].map((a) => a.getAttribute('data-tab'))).toEqual(['dex', 'learn', null, 'map', 'me']);
+    expect([...container.querySelectorAll('.tabbar a')].map((a) => a.getAttribute('data-tab'))).toEqual(['dex', 'learn', null, 'map', 'spots', 'me']);
   });
 });

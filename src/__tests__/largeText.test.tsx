@@ -2,8 +2,8 @@
 // Larger text (ui-improvements item 10). Chrome on Android narrows the CSS viewport as the phone's text grows: 300 px
 // at 130%, 260 at 150%, 195 at 200%. These tests hold the tab bar's geometry to its promise at every width from 195
 // to 420 px, by working the stylesheets' own numbers: the default layout is the same as before (12 px side gap, 6 px
-// padding, a 58 px + and labels under the icons), every tab keeps a 44 px target while the width allows it, the labels
-// go only when it doesn't, and all four tabs and the + always fit. They also keep the narrow rules out of the default
+// padding, a 58 px + and labels under the icons), every tab keeps a 44 px width while there is room, the labels go
+// only when there isn't, and all five tabs and the + always fit. They also keep the narrow rules out of the default
 // layout, and check that the labels still name the links.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -94,7 +94,7 @@ describe('the tab bar at every text size', () => {
     const pad = px(parts(decl(bar.body, 'padding')!)[1], vw, vars);
     const inner = Math.min(vw - 2 * gap, 560) - 2 * pad;
     const plus = plusSteps.filter((s) => inner < s.below).reduce((size, s) => Math.min(size, s.size), plusDefault);
-    return { gap, pad, inner, plus, tab: (inner - plus) / 4, labels: !(inner < stepWidth(labelStep)) };
+    return { gap, pad, inner, plus, tab: (inner - plus) / 5, labels: !(inner < stepWidth(labelStep)) };
   }
 
   it('keeps --tabbar-h at 64 px', () => {
@@ -102,34 +102,37 @@ describe('the tab bar at every text size', () => {
   });
 
   it('draws the default layout as before: 12 px from the edges, 6 px padding, a 58 px +, labels', () => {
-    for (const vw of [420, 390, 375, 360, 320, 300, 276]) {
+    for (const vw of [420, 390, 375, 360, 320]) {
       const g = geometry(vw);
       expect([g.gap, g.pad, g.plus, g.labels], `${vw} px`).toEqual([12, 6, 58, true]);
     }
-    // The gap and padding hold down to 256 px; only the + and the labels give way between 256 and 276.
+    // The gap and padding hold down to 256 px; only the + and the labels give way below 314.
     for (let vw = 256; vw <= 420; vw += 0.5) expect([geometry(vw).gap, geometry(vw).pad], `${vw} px`).toEqual([12, 6]);
-    expect(geometry(390).tab).toBe(74);
-    expect(geometry(320).tab).toBe(56.5);
+    expect(geometry(390).tab).toBe(59.2);
+    expect(geometry(320).tab).toBe(45.2);
   });
 
-  it('gives every tab and the + a 44 px target down to 232 px, labels and all at 150%', () => {
-    for (let vw = 232; vw <= 420; vw += 0.5) {
+  it('keeps every tab 44 px wide down to 314 px, and all six targets on the screen down to 195', () => {
+    for (let vw = 314; vw <= 420; vw += 0.5) {
       const g = geometry(vw);
       expect(g.tab, `${vw} px`).toBeGreaterThanOrEqual(44);
       expect(g.plus, `${vw} px`).toBeGreaterThanOrEqual(44);
     }
-    expect(geometry(260)).toMatchObject({ plus: 48, tab: 44, labels: true });
+    expect(geometry(314)).toMatchObject({ plus: 58, tab: 44, labels: true });
   });
 
-  it('keeps labels only while a tab is 44 px wide, and fits all five on the screen down to 200%', () => {
+  it('keeps labels only while a tab is 44 px wide, and fits five tabs and the + on the screen down to 200%', () => {
     for (let vw = 195; vw <= 420; vw += 0.5) {
       const g = geometry(vw);
       if (g.labels) expect(g.tab, `${vw} px`).toBeGreaterThanOrEqual(44);
-      expect(2 * g.gap + 2 * g.pad + 4 * g.tab + g.plus, `${vw} px`).toBeLessThanOrEqual(vw + 0.001);
-      expect(g.tab, `${vw} px`).toBeGreaterThanOrEqual(34);
+      expect(2 * g.gap + 2 * g.pad + 5 * g.tab + g.plus, `${vw} px`).toBeLessThanOrEqual(vw + 0.001);
+      // The height is still 64 px (app.css --tabbar-h), so every icon has a tall target even where the width is less.
+      expect(g.tab, `${vw} px`).toBeGreaterThan(27);
     }
-    // 200%: 4 px from the edges, 2 px padding, a 44 px + and four 34.75 px tabs, icons only.
-    expect(geometry(195)).toMatchObject({ gap: 4, pad: 2, plus: 44, tab: 34.75, labels: false });
+    // 200%: 4 px from the edges, 2 px padding, a 44 px + and five 27.8 px tabs, icons only.
+    expect(geometry(195)).toMatchObject({ gap: 4, pad: 2, plus: 44, tab: 27.8, labels: false });
+    // 150%: a 48 px + and five 35.2 px tabs, icons only.
+    expect(geometry(260)).toMatchObject({ gap: 12, pad: 6, plus: 48, tab: 35.2, labels: false });
   });
 
   it('hides the labels only inside the narrow container query, visually (not display: none)', () => {
@@ -187,7 +190,7 @@ describe('the narrow rules stay out of the default layout', () => {
 describe('the tab labels', () => {
   it('sit in .tab-label spans and still name the links', () => {
     const { container } = render(<MemoryRouter initialEntries={['/dex']}><TabBar /></MemoryRouter>);
-    expect([...container.querySelectorAll('.tabbar .tab-label')].map((s) => s.textContent)).toEqual(['Dex', 'Learn', 'Map', 'Me']);
-    for (const name of ['Dex', 'Learn', 'Add a sighting', 'Map', 'Me']) expect(screen.getByRole('link', { name })).toBeTruthy();
+    expect([...container.querySelectorAll('.tabbar .tab-label')].map((s) => s.textContent)).toEqual(['Dex', 'Learn', 'Map', 'Spots', 'Me']);
+    for (const name of ['Dex', 'Learn', 'Add a sighting', 'Map', 'Spots', 'Me']) expect(screen.getByRole('link', { name })).toBeTruthy();
   });
 });

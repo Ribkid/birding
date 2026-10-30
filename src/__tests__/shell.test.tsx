@@ -75,7 +75,7 @@ describe('the static shell', () => {
 
   it('marks the tab TabBar marks, on every kind of address', () => {
     for (const hash of ['', '#/', '#/dex', '#/bird/94', '#/compare/1/2', '#/listen', '#/scan', '#/add', '#/learn', '#/learn/daily',
-      '#/quiz', '#/map', '#/map/at/-27.4,153', '#/me', '#/me/edit', '#/u/abc', '#/lists', '#/list/life', '#/patch/1', '#/targets?near=1',
+      '#/quiz', '#/map', '#/map/at/-27.4,153', '#/spots', '#/spot/12', '#/me', '#/me/edit', '#/u/abc', '#/lists', '#/list/life', '#/patch/1', '#/targets?near=1',
       '#/outing/2', '#/log', '#/stats', '#/badges', '#/settings', '#/leaderboard', '#/nope']) {
       const shell = shellOn(hash).querySelector('nav.tabbar')!;
       const app = drawTabBar(hash || '#/');
