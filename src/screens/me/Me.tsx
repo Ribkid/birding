@@ -16,6 +16,7 @@ import { applyTint } from '../../lib/look';
 import { toast } from '../../lib/toast';
 import { AccountAvatar as Avatar, useProfile } from './accountBits';
 import { Count } from './Count';
+import { LocalProfilePhotoSections } from '../../components/OutingPhotos';
 import { onAccountSheetClosed, openEditProfile, openSignIn, type AccountSheet } from './AccountSheets';
 import { openGroups } from '../progress/Leaderboard';
 import './me.css';
@@ -288,6 +289,8 @@ export default function Me({ sub }: { sub?: AccountSheet }) {
             <button type="button" className="me-act" data-groups onClick={() => openGroups(navigate)}><svg viewBox="0 0 24 24" aria-hidden="true">{I.people}</svg><span>Groups</span></button>
           </nav>
         )}
+
+        <LocalProfilePhotoSections publicId={m?.publicId} outings={outings} />
 
         <section className="me-sec" data-ckey="lists" aria-labelledby="me-lists-h">
           <div className="me-sec-h"><h2 id="me-lists-h">My lists</h2><Link to="/lists">Open lists</Link></div>

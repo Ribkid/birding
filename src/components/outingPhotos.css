@@ -1,0 +1,74 @@
+/* Public outing photos: the same paper, glass and firm Outdoor edges as the rest of BirdyDex. */
+.op-grid {
+  list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px;
+  container-type: inline-size;
+}
+.op-tile { min-width: 0; display: grid; justify-items: center; align-content: start; gap: 4px; }
+.op-thumb {
+  position: relative; display: block; width: 100%; aspect-ratio: 1; min-height: 44px; padding: 0; overflow: hidden;
+  border: 0; border-radius: 16px; background: var(--surface-2); box-shadow: var(--shadow-card); cursor: pointer;
+}
+.op-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.op-thumb:active { scale: .97; }
+.op-wait { display: block; width: 100%; height: 100%; background: var(--surface-2); }
+.op-like {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 44px; min-height: 44px; padding: 7px 9px;
+  border: 0; border-radius: var(--r-pill); background: transparent; color: var(--ink-2); cursor: pointer;
+  font-size: var(--fs-2); font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.op-like svg { width: 21px; height: 21px; fill: transparent; stroke: currentColor; stroke-width: 1.9; stroke-linejoin: round; }
+.op-like.is-liked { color: var(--lori); }
+.op-like.is-liked svg, .op-heart svg.is-liked { fill: currentColor; }
+.op-like[aria-disabled="true"] { opacity: .65; }
+.op-like--static { cursor: default; }
+.op-heart { display: grid; place-items: center; }
+@media (prefers-reduced-motion: no-preference) {
+  .op-like.is-liked .op-heart { animation: op-heart-pop 280ms var(--ease-spring); }
+  @keyframes op-heart-pop { 0% { scale: .65; } 65% { scale: 1.22; } 100% { scale: 1; } }
+  .op-thumb { transition: scale var(--dur-1) var(--ease-out); }
+}
+@container (width < 240px) { .op-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.op-credit { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 8px; }
+.op-credit-species { flex-basis: 100%; font-weight: 700; }
+.op-credit .op-like { color: inherit; }
+.op-credit-action {
+  min-height: 44px; padding: 8px 4px; border: 0; background: transparent; color: inherit; cursor: pointer;
+  font-size: var(--fs-1); font-weight: 600; text-decoration: underline; text-underline-offset: 2px;
+}
+.op-credit-remove { color: inherit; }
+
+.op-add { gap: 7px; }
+.op-add svg { width: 20px; height: 20px; }
+.op-pick-count { margin: -4px 0 12px; color: var(--ink-2); font-weight: 600; }
+.op-public-note {
+  margin: 0 0 14px; padding: 12px 14px; border-radius: var(--r-2); background: var(--azure-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--azure) 20%, transparent); font-size: var(--fs-2);
+}
+.op-public-note p { margin: 0; }
+.op-public-note p + p { margin-top: 6px; }
+.op-pick-grid { list-style: none; margin: 0 0 14px; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.op-pick { position: relative; display: block; min-width: 44px; min-height: 44px; cursor: pointer; }
+.op-pick img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 14px; }
+.op-pick input {
+  position: absolute; z-index: 1; right: 6px; top: 6px; width: 28px; height: 28px; margin: 0; accent-color: var(--azure);
+}
+.op-pick input::before { content: ''; position: absolute; inset: -8px; }
+.op-pick:has(input:not(:checked)) img { opacity: .5; filter: grayscale(.4); }
+.op-pick:has(input:checked) img { box-shadow: 0 0 0 3px var(--azure); }
+
+.op-outings { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.op-outing-link {
+  display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 8px; border-radius: var(--r-card);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-card); text-decoration: none;
+}
+.op-outing-link img { flex: none; width: 60px; height: 60px; border-radius: 12px; object-fit: cover; background: var(--surface-2); }
+.op-outing-link > span { min-width: 0; display: grid; gap: 2px; }
+.op-outing-link strong { overflow-wrap: anywhere; }
+.op-outing-link > span > span { color: var(--ink-2); font-size: var(--fs-2); }
+
+.op-public-facts { margin: 4px 16px 0; color: var(--ink-2); font-weight: 600; }
+.op-public-photos { padding: 0 16px 20px; }
+.op-public-photos .op-grid { margin-top: 12px; }
+:root[data-theme="outdoor"] .op-thumb, :root[data-theme="outdoor"] .op-outing-link { box-shadow: var(--shadow-1); }
+@media (prefers-reduced-motion: reduce) { .op-thumb:active { scale: none; } }
