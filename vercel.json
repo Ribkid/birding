@@ -16,5 +16,5 @@
     },
     { "source": "/(.*)", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }] }
   ],
-  "rewrites": [{ "source": "/((?!assets|models|data|icons|fonts|vendor|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }]
+  "rewrites": [{ "source": "/((?!api|assets|models|data|icons|fonts|vendor|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }]
 }
