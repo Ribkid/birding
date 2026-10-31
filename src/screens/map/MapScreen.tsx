@@ -23,6 +23,8 @@ import { SpeciesImage } from '../../components/SpeciesImage';
 import { SunToggle } from '../../components/SunToggle';
 import { announce, toast as appToast } from '../../lib/toast';
 import { localPlaceMatches, myPlaces, searchAddress } from '../../lib/places';
+import { loadSpotData, nearestEbirdSpot } from '../../lib/ebird';
+import type { HotspotLike } from '../../lib/spots';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -325,6 +327,7 @@ function MapView() {
   const toggleNeed = () => { chipTapped(); mapF.need = !mapF.need; setNeedState(mapF.need); };
   const [layer, setLayer] = useState<Layer>('map');
   const [seqTick, setSeqTick] = useState(0);
+  const [ebirdSpots, setEbirdSpots] = useState<HotspotLike[] | null | undefined>(undefined);
 
   // Search state.
   const [q, setQ] = useState('');
@@ -431,13 +434,15 @@ function MapView() {
     return rows;
   }, [hotOn, focus, seen, seqTick]);
 
-  // A hotspot's popup links to its Spots page (#/spot/:idx): the index is its place in seq.json's list,
-  // which is the id the Spots tab uses.
-  const hotspotIndex = useMemo(() => {
-    const index = new Map<string, number>();
-    (hotspots() as Hotspot[]).forEach((h, i) => index.set(h.name, i));
-    return index;
-  }, [seqTick]);
+  // With an eBird snapshot, only a hotspot within 400 m gets a details link. ALA keeps its numeric links.
+  const hotspotSpotIds = useMemo(() => {
+    const links = new Map<string, string | null>();
+    (hotspots() as Hotspot[]).forEach((h, i) => {
+      if (!ebirdSpots) links.set(h.name, String(i));
+      else links.set(h.name, nearestEbirdSpot(ebirdSpots, h)?.locId ?? null);
+    });
+    return links;
+  }, [seqTick, ebirdSpots]);
 
   const focusPoints = useMemo<[number, number, number][]>(() => {
     if (!focus) return [];
@@ -692,6 +697,9 @@ function MapView() {
     void loadSeq().then(() => {
       if (alive) setSeqTick((tick) => tick + 1);
     });
+    void loadSpotData([]).then((result) => {
+      if (alive) setEbirdSpots(result.source === 'eBird' ? result.spots : null);
+    });
     return () => {
       alive = false;
     };
@@ -784,7 +792,7 @@ function MapView() {
               };
         const marker = L.circleMarker([view.h.lat, view.h.lng], style);
         hotspotMarkersRef.current.push({ h: view.h, mk: marker });
-        const spotIdx = hotspotIndex.get(view.h.name);
+        const spotId = hotspotSpotIds.get(view.h.name);
         marker
           .addTo(overlay)
           .bindPopup(
@@ -799,7 +807,7 @@ function MapView() {
                 : ''
             }
             <a href="${directionsUrl(view.h.lat, view.h.lng)}" target="_blank" rel="noopener">Directions</a>${
-              spotIdx != null ? ` · <a href="#/spot/${spotIdx}">Spot details</a>` : ''
+              spotId != null ? ` · <a href="#/spot/${spotId}">Spot details</a>` : ''
             }`,
             popOpts(map, 260),
           );
@@ -870,7 +878,7 @@ function MapView() {
     };
     // atLat/atLng are fixed for this view (MapScreen keys it on the route).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seqTick, patches, groups, hotspotView, hotspotIndex, focus, focusPoints, hotOn, need, addNote]);
+  }, [seqTick, patches, groups, hotspotView, hotspotSpotIds, focus, focusPoints, hotOn, need, addNote]);
 
   // Initial view for each route, fitted to the data once.
   useEffect(() => {
