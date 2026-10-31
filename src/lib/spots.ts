@@ -1,16 +1,21 @@
-// The Spots tab's data: the 220 SEQ hotspots from seq.json joined to the access facts baked from
-// OpenStreetMap (public/data/spot-access.json), her seen set and, when she allows it, her last fix.
+// The Spots tab's data: eBird hotspots when their snapshot exists, otherwise the ALA hotspots from
+// seq.json, joined to OpenStreetMap access facts, her seen set and, when allowed, her last fix.
 //
 // Everything that decides what she sees is pure and lives here so it can be tested without a browser:
 // the sorts, the suggestions, the filter chips and the name search.
 import { haversineKm } from '../core/stats.js';
 
 export interface HotspotLike {
+  locId?: string;
   name: string;
   lat: number;
   lng: number;
   rich: number;
   sp: [number, number][];
+  checklists?: number;
+  latestObsDt?: string | null;
+  region?: string;
+  hasList?: boolean;
 }
 
 /** One hotspot's access record, as scripts/build-spot-access.mjs writes it. */
@@ -31,11 +36,11 @@ export interface SpotAccess {
   fee: 'yes' | 'no' | null;
 }
 
-export type SortKey = 'rich' | 'records' | 'access' | 'nearest' | 'new';
+export type SortKey = 'rich' | 'records' | 'recent' | 'access' | 'nearest' | 'new';
 
 export interface SpotRow extends HotspotLike {
   idx: number;
-  /** Sum of the records of every bird at this hotspot. */
+  /** ALA record sum, or eBird all-time checklists. */
   records: number;
   /** How many of its birds she has never logged. */
   newForYou: number;
@@ -49,13 +54,15 @@ export interface SpotFilters {
   parking: boolean;
   birdHide: boolean;
   wheelchair: boolean;
+  birdedWeek: boolean;
 }
 
-export const NO_FILTERS: SpotFilters = { toilets: false, parking: false, birdHide: false, wheelchair: false };
+export const NO_FILTERS: SpotFilters = { toilets: false, parking: false, birdHide: false, wheelchair: false, birdedWeek: false };
 
 export const SORTS: { key: SortKey; label: string }[] = [
   { key: 'rich', label: 'Most species' },
   { key: 'records', label: 'Most sightings' },
+  { key: 'recent', label: 'Recently birded' },
   { key: 'access', label: 'Easiest access' },
   { key: 'nearest', label: 'Nearest' },
   { key: 'new', label: 'New for you' },
@@ -80,16 +87,13 @@ export function buildRows(
   pos: { lat: number; lng: number } | null,
 ): SpotRow[] {
   return hotspots.map((h, idx) => ({
+    ...h,
     idx,
-    name: h.name,
-    lat: h.lat,
-    lng: h.lng,
-    rich: h.rich,
-    sp: h.sp,
-    records: recordsOf(h),
+    hasList: h.hasList ?? true,
+    records: h.checklists ?? recordsOf(h),
     newForYou: newForYouOf(h, seen),
     distanceKm: pos ? haversineKm(pos, h) : null,
-    access: access?.[String(idx)] ?? null,
+    access: access?.[h.locId ?? String(idx)] ?? null,
   }));
 }
 
@@ -101,6 +105,9 @@ export function sortSpots(rows: SpotRow[], sort: SortKey): SpotRow[] {
     case 'records':
       out.sort((a, b) => b.records - a.records || b.rich - a.rich || byName(a, b));
       break;
+    case 'recent':
+      out.sort((a, b) => (b.latestObsDt ?? '').localeCompare(a.latestObsDt ?? '') || b.rich - a.rich || byName(a, b));
+      break;
     case 'access':
       // Unknown access is not ranked as hard: it sits after every known score.
       out.sort((a, b) => (b.access?.score ?? -1) - (a.access?.score ?? -1) || b.rich - a.rich || byName(a, b));
@@ -109,7 +116,7 @@ export function sortSpots(rows: SpotRow[], sort: SortKey): SpotRow[] {
       out.sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity) || b.rich - a.rich || byName(a, b));
       break;
     case 'new':
-      out.sort((a, b) => b.newForYou - a.newForYou || b.rich - a.rich || byName(a, b));
+      out.sort((a, b) => Number(b.hasList) - Number(a.hasList) || b.newForYou - a.newForYou || b.rich - a.rich || byName(a, b));
       break;
     case 'rich':
     default:
@@ -125,16 +132,17 @@ export function isRestricted(row: SpotRow): boolean {
 }
 
 /**
- * Up to three spots suggested for her: the ones with the most birds she has not seen, and, when her
- * location is known, weighted towards nearby spots (a spot 25 km away counts half as much). Spots she
- * may not be able to get into come last, so they are suggested only when nothing else fills the three.
+ * Up to three spots suggested for her: new birds, weighted towards nearby spots and eBird spots
+ * active in the last month. Restricted-access spots come last.
  */
-export function suggestSpots(rows: SpotRow[], pos: { lat: number; lng: number } | null, limit = 3): SpotRow[] {
+export function suggestSpots(rows: SpotRow[], pos: { lat: number; lng: number } | null, limit = 3, now = Date.now()): SpotRow[] {
   const scored = rows
     .filter((row) => row.newForYou > 0)
     .map((row) => {
       const nearby = pos && row.distanceKm != null ? 1 / (1 + row.distanceKm / 25) : 1;
-      return { row, score: row.newForYou * nearby };
+      const latest = row.latestObsDt ? new Date(row.latestObsDt.replace(' ', 'T')).getTime() : NaN;
+      const active = Number.isFinite(latest) && now - latest >= 0 && now - latest <= 31 * 86400000 ? 3 : 1;
+      return { row, score: row.newForYou * nearby * active };
     });
   scored.sort(
     (a, b) =>
@@ -144,13 +152,19 @@ export function suggestSpots(rows: SpotRow[], pos: { lat: number; lng: number } 
   return scored.slice(0, limit).map((x) => x.row);
 }
 
-/** The filter chips, all of which must hold. A spot with no OSM data fails every filter. */
-export function matchesFilters(row: SpotRow, filters: SpotFilters): boolean {
+/** The filter chips, all of which must hold. A spot with no OSM data fails every access filter. */
+export function matchesFilters(row: SpotRow, filters: SpotFilters, now: number | Date = Date.now()): boolean {
   const a = row.access;
   if (filters.toilets && !(a && a.toilets > 0)) return false;
   if (filters.parking && !(a && a.parkingM != null)) return false;
   if (filters.birdHide && !(a && a.birdHides > 0)) return false;
   if (filters.wheelchair && !(a && (a.wheelchair === 'yes' || a.wheelchair === 'limited'))) return false;
+  if (filters.birdedWeek) {
+    if (!row.latestObsDt) return false;
+    const latest = new Date(row.latestObsDt.replace(' ', 'T')).getTime();
+    const time = now instanceof Date ? now.getTime() : now;
+    if (!Number.isFinite(latest) || time - latest < 0 || time - latest > 7 * 86400000) return false;
+  }
   return true;
 }
 
@@ -162,8 +176,12 @@ export function matchesSearch(row: SpotRow, query: string): boolean {
   return words.every((word) => name.includes(word));
 }
 
-export function filterSpots(rows: SpotRow[], filters: SpotFilters, query: string): SpotRow[] {
-  return rows.filter((row) => matchesFilters(row, filters) && matchesSearch(row, query));
+export function filterSpots(rows: SpotRow[], filters: SpotFilters, query: string, now: number | Date = Date.now()): SpotRow[] {
+  return rows.filter((row) => matchesFilters(row, filters, now) && matchesSearch(row, query));
+}
+
+export function applySpotVisibility(rows: SpotRow[], query: string, showAll: boolean): SpotRow[] {
+  return showAll || query.trim() ? rows : rows.filter((row) => row.rich >= 40);
 }
 
 /** "800 m" under a kilometre, then "1.2 km". */
@@ -193,29 +211,30 @@ export function accessBadges(access: SpotAccess | null): string[] {
 // The baked file
 // ---------------------------------------------------------------------------
 
-let baked: Record<string, SpotAccess> | null = null;
-let loading: Promise<Record<string, SpotAccess>> | null = null;
+export type AccessSource = 'ala' | 'ebird';
+const baked: Record<AccessSource, Record<string, SpotAccess> | null> = { ala: null, ebird: null };
+const loading: Record<AccessSource, Promise<Record<string, SpotAccess>> | null> = { ala: null, ebird: null };
 
 /** The access records already read (empty until the file lands). */
-export const spotAccess = (): Record<string, SpotAccess> => baked ?? {};
+export const spotAccess = (source: AccessSource = 'ala'): Record<string, SpotAccess> => baked[source] ?? {};
 
 /**
- * Reads public/data/spot-access.json once. Offline before it has ever been read it resolves to no
- * records, and every spot says "Access not known yet" rather than failing the screen.
+ * Reads the ALA or eBird access file once. Offline it resolves to no records rather than failing the screen.
  */
-export function loadSpotAccess(): Promise<Record<string, SpotAccess>> {
-  if (baked) return Promise.resolve(baked);
-  loading ??= fetch('/data/spot-access.json')
+export function loadSpotAccess(source: AccessSource = 'ala'): Promise<Record<string, SpotAccess>> {
+  const current = baked[source];
+  if (current) return Promise.resolve(current);
+  loading[source] ??= fetch(source === 'ebird' ? '/data/spot-access-ebird.json' : '/data/spot-access.json')
     .then((response) => (response.ok ? response.json() : { spots: {} }))
     .then((json: { spots?: Record<string, SpotAccess> }) => {
-      baked = json.spots ?? {};
-      return baked;
+      baked[source] = json.spots ?? {};
+      return baked[source];
     })
     .catch(() => {
-      baked = {};
-      return baked;
+      baked[source] = {};
+      return baked[source];
     });
-  return loading;
+  return loading[source];
 }
 
 /** The ODbL credit, used wherever access appears. */
