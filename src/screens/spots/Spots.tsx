@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { hotspots } from '../../core/seqdata.js';
+import { haversineKm } from '../../core/stats.js';
 import { Icon } from '../../components/Icon';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { byId, type Species } from '../../lib/data';
 import { useSeen } from '../../lib/hooks';
 import { getLastPos, setLastPos } from '../../lib/lastPos';
 import { useSeqReady } from '../../lib/seq';
+import { EBIRD_CREDIT, loadSpotData, type NotableBird, type SpotData } from '../../lib/ebird';
 import {
+  applySpotVisibility,
   buildRows,
   distanceLabel,
   filterSpots,
@@ -41,17 +44,17 @@ const FILTERS: { key: keyof SpotFilters; label: string }[] = [
 function SpotCard({ row }: { row: SpotRow }) {
   return (
     <li className="spot-card">
-      <Link className="spot-card-link" to={`/spot/${row.idx}`}>
+      <Link className="spot-card-link" to={`/spot/${row.locId ?? row.idx}`}>
         <span className="spot-card-top">
           <strong className="spot-card-name">{row.name}</strong>
           <AccessScore access={row.access} />
         </span>
         <span className="spot-card-meta">
           {row.distanceKm != null && <span className="spot-distance">{distanceLabel(row.distanceKm)}</span>}
-          <span>
-            {plural(row.rich, 'species')}
+          <span>{plural(row.rich, 'species')}</span>
+          <span className="spot-new">
+            {row.hasList === false ? 'Full list not baked yet' : row.newForYou ? `${row.newForYou} new for you` : 'All seen'}
           </span>
-          <span className="spot-new">{row.newForYou ? `${row.newForYou} new for you` : 'All seen'}</span>
         </span>
         <AccessBadges access={row.access} />
         <SpotPhotos sp={row.sp} />
@@ -65,7 +68,7 @@ function SuggestCard({ row }: { row: SpotRow }) {
   const sp = byId.get(row.sp[0]?.[0] ?? -1) as Species | undefined;
   return (
     <li className="spot-suggest-card">
-      <Link to={`/spot/${row.idx}`}>
+      <Link to={`/spot/${row.locId ?? row.idx}`}>
         <span className="spot-suggest-photo">{sp && <SpeciesImage sp={sp} />}</span>
         <span className="spot-suggest-main">
           <strong>{row.name}</strong>
@@ -79,34 +82,62 @@ function SuggestCard({ row }: { row: SpotRow }) {
   );
 }
 
+function RareBirds({ items, pos, spotIds }: { items: NotableBird[]; pos: { lat: number; lng: number } | null; spotIds: Set<string> }) {
+  const nearest = useMemo(() => items.map((item) => ({
+    item,
+    distance: pos ? haversineKm(pos, item) : null,
+  })).sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity) || b.item.date.localeCompare(a.item.date)).slice(0, 6), [items, pos]);
+  if (!nearest.length) return null;
+  return (
+    <section className="spots-rare" aria-labelledby="spots-rare-title">
+      <h2 id="spots-rare-title">Rare birds around</h2>
+      <p className="muted small">Notable eBird sightings from the last seven days.</p>
+      <ul>
+        {nearest.map(({ item, distance }) => {
+          const bird = byId.get(item.id);
+          return (
+            <li key={`${item.loc}:${item.id}:${item.date}`}>
+              <span className="spots-rare-main">
+                {bird ? <Link to={`/bird/${bird.id}`}>{bird.name}</Link> : <strong>{item.name}</strong>}
+                <span className="small muted">
+                  {spotIds.has(item.loc) ? <Link to={`/spot/${item.loc}`}>{item.where}</Link> : item.where}
+                  {' · '}{new Date(item.date.replace(' ', 'T')).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                  {' · '}{plural(item.n, 'bird')}
+                  {distance != null ? ` · ${distanceLabel(distance)} away` : ''}
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export default function Spots() {
   const seqReady = useSeqReady();
   const seen = useSeen();
+  const [data, setData] = useState<SpotData | null>(null);
   const [access, setAccess] = useState(() => spotAccess());
   const [query, setQuery] = useState('');
+  const [showAll, setShowAll] = useState(false);
   const [sort, setSort] = useState<SortKey>(savedSort);
   const [filters, setFilters] = useState<SpotFilters>(NO_FILTERS);
   const [pos, setPos] = useState(() => getLastPos());
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
-  // The regional data is fetched at boot; this redraws the list when it lands.
-  const all = useMemo(() => hotspots() as HotspotLike[], [seqReady]);
-  // ... and if the data is never there (a broken copy offline), stop saying "Loading" after the boot wait.
-  const [settled, setSettled] = useState(false);
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSettled(true), 1600);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
+    if (!seqReady) return;
     let alive = true;
-    void loadSpotAccess().then((records) => {
-      if (alive) setAccess(records);
+    void loadSpotData(hotspots() as HotspotLike[]).then(async (result) => {
+      const records = await loadSpotAccess(result.source === 'eBird' ? 'ebird' : 'ala');
+      if (!alive) return;
+      setAccess(records);
+      setData(result);
     });
-    return () => {
-      alive = false;
-    };
-  }, []);
+    return () => { alive = false; };
+  }, [seqReady]);
 
   const askLocation = useCallback(() => {
     if (locating) return;
@@ -132,14 +163,17 @@ export default function Spots() {
     if (next === 'nearest' && !pos) askLocation();
   };
 
+  const source = data?.source ?? 'ALA';
+  const all = data?.spots ?? [];
   const rows = useMemo(() => buildRows(all, access, seen, pos), [all, access, seen, pos]);
   const suggested = useMemo(() => suggestSpots(rows, pos, 3), [rows, pos]);
   const shown = useMemo(
-    () => sortSpots(filterSpots(rows, filters, query), sort),
-    [rows, filters, query, sort],
+    () => sortSpots(filterSpots(applySpotVisibility(rows, query, showAll), filters, query), sort),
+    [rows, filters, query, showAll, sort],
   );
+  const spotIds = useMemo(() => new Set(all.flatMap((spot) => spot.locId ? [spot.locId] : [])), [all]);
   const filtering = query.trim() !== '' || Object.values(filters).some(Boolean);
-  const waiting = !settled && all.length === 0;
+  const waiting = !data;
 
   return (
     <div className="spots-screen">
@@ -149,6 +183,8 @@ export default function Spots() {
           <p className="muted small">Birding hotspots across South East Queensland, with how easy each is to get into.</p>
         </div>
       </header>
+
+      {source === 'eBird' && <RareBirds items={data?.notable ?? []} pos={pos} spotIds={spotIds} />}
 
       <section className="spots-suggest" aria-labelledby="spots-suggest-title">
         <h2 id="spots-suggest-title">Suggested for you</h2>
@@ -189,16 +225,21 @@ export default function Spots() {
             value={sort}
             onChange={(event) => chooseSort(event.target.value as SortKey)}
           >
-            {SORTS.map((option) => (
+            {SORTS.filter((option) => source === 'eBird' || option.key !== 'recent').map((option) => (
               <option key={option.key} value={option.key}>
-                {option.label}
+                {option.key === 'records' && source === 'eBird' ? 'Most visited' : option.label}
               </option>
             ))}
           </select>
         </div>
 
+        <label className="spots-show-all">
+          <input type="checkbox" checked={showAll} onChange={(event) => setShowAll(event.target.checked)} />
+          <span>Show all spots</span>
+        </label>
+
         <div className="chips chips--spots" role="group" aria-label="Filter spots">
-          {FILTERS.map(({ key, label }) => (
+          {[...FILTERS, ...(source === 'eBird' ? [{ key: 'birdedWeek' as const, label: 'Birded this week' }] : [])].map(({ key, label }) => (
             <button
               key={key}
               type="button"
@@ -242,7 +283,7 @@ export default function Spots() {
       {shown.length ? (
         <ul className="spot-cards">
           {shown.map((row) => (
-            <SpotCard key={row.idx} row={row} />
+            <SpotCard key={row.locId ?? row.idx} row={row} />
           ))}
         </ul>
       ) : (
@@ -251,11 +292,18 @@ export default function Spots() {
         </p>
       )}
 
-      <p className="spot-credit spots-credit small">
-        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">
-          Access data © OpenStreetMap contributors
-        </a>
-      </p>
+      <div className="spots-credit">
+        {source === 'eBird' && (
+          <p className="spot-credit small">
+            <a href="https://ebird.org" target="_blank" rel="noopener">{EBIRD_CREDIT}</a>
+          </p>
+        )}
+        <p className="spot-credit small">
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">
+            Access data © OpenStreetMap contributors
+          </a>
+        </p>
+      </div>
     </div>
   );
 }

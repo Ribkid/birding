@@ -27,19 +27,30 @@
 .spot-suggest-main strong { overflow-wrap: anywhere; line-height: 1.3; }
 .spot-suggest-line { color: var(--ink-2); font-size: var(--fs-2); }
 
+.spots-rare { margin: 4px 16px 16px; padding: 14px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
+.spots-rare h2 { margin: 0 0 2px; font: 700 1.1rem/1.25 var(--font); }
+.spots-rare > p { margin: 0; }
+.spots-rare ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; }
+.spots-rare li { padding: 9px 0; border-top: 1px solid var(--line); }
+.spots-rare-main { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.spots-rare-main > a { width: fit-content; font-weight: 700; }
+.spots-rare-main .small { line-height: 1.45; }
+
 /* ---------- search, sort, filters ---------- */
 .spots-tools { display: grid; gap: 10px; padding: 0 16px; }
 .spots-tools .searchbox { margin: 0; }
 .spots-sort { display: flex; align-items: center; gap: 10px; }
 .spots-sort label { flex: none; font-weight: 600; font-size: var(--fs-2); }
 .spots-sort select { flex: 1 1 auto; min-width: 0; max-width: 100%; }
+.spots-show-all { display: flex; align-items: center; gap: 10px; min-height: var(--tap); width: fit-content; font-size: var(--fs-2); font-weight: 600; }
+.spots-show-all input { width: 20px; height: 20px; margin: 0; accent-color: var(--azure); }
 .chips--spots { padding: 0; flex-wrap: wrap; }
 .chips--spots .chip--clear { border-style: dashed; background: transparent; color: var(--ink-2); }
 .spots-note { margin: 0; color: var(--ink-2); font-size: var(--fs-2); }
 .spots-try { margin-left: 8px; }
 .spots-count { margin: 14px 0 8px; color: var(--ink-2); font-size: var(--fs-2); }
 
-/* ---------- the 220 cards ---------- */
+/* ---------- spot cards ---------- */
 .spot-cards { list-style: none; margin: 0; padding: 0 16px; display: grid; gap: 12px; }
 /* Off-screen cards cost no layout or paint; the placeholder keeps the scrollbar steady. */
 .spot-card { content-visibility: auto; contain-intrinsic-size: auto 260px; }
@@ -77,6 +88,7 @@
 .spot-head { align-items: flex-start; }
 .spot-head-text { min-width: 0; }
 .spot-head-text h1 { overflow-wrap: anywhere; }
+.spot-last { margin: 4px 0 0; color: var(--ink-2); font-weight: 600; }
 .spot-hero {
   margin: 4px 16px 14px; border-radius: var(--r-card); overflow: hidden;
   background: var(--surface); box-shadow: var(--shadow-card);

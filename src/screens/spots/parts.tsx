@@ -61,7 +61,7 @@ export function AccessBlock({ access }: { access: SpotAccess | null }) {
   );
 }
 
-/** Four or five photos of the birds most recorded at a spot. */
+/** Four or five photos of birds recorded at a spot. */
 export function SpotPhotos({ sp, count = 5 }: { sp: [number, number][]; count?: number }) {
   const species = sp
     .slice(0, count)
@@ -69,7 +69,7 @@ export function SpotPhotos({ sp, count = 5 }: { sp: [number, number][]; count?: 
     .filter((s): s is Species => Boolean(s));
   if (!species.length) return null;
   return (
-    <ul className="spot-photos" aria-label="Most recorded birds">
+    <ul className="spot-photos" aria-label="Birds recorded here">
       {species.map((s) => (
         <li key={s.id} className="spot-photo">
           <SpeciesImage sp={s} />
