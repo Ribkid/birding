@@ -11,3 +11,6 @@ tsconfig.tsbuildinfo
 public/data/ebird/
 .cache/
 .superpowers/
+# Local-only browser check helpers and their screenshots (they use the machine's global Playwright).
+scripts/dev/
+out-photos/
