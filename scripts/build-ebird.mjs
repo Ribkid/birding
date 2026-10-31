@@ -89,10 +89,18 @@ export function compactSnapshot({ byCode, hotspots, lists, recent, notable, buil
   }
   for (const rows of Object.values(compactRecent)) rows.sort((a, b) => b[1].localeCompare(a[1]) || a[0] - b[0]);
 
-  const compactNotable = notable
+  // A hotspot near a region border comes back from both region feeds, so the same sighting can
+  // arrive twice; keep the first.
+  const notableBySighting = new Map();
+  for (const obs of notable) {
+    const id = byCode.get(obs.speciesCode);
+    if (id == null) continue;
+    notableBySighting.set(`${obs.locId}:${id}:${obs.obsDt}`, obs);
+  }
+
+  const compactNotable = [...notableBySighting.values()]
     .map((obs) => {
       const id = byCode.get(obs.speciesCode);
-      if (id == null) return null;
       return {
         id,
         name: obs.comName,
@@ -104,7 +112,6 @@ export function compactSnapshot({ byCode, hotspots, lists, recent, notable, buil
         n: obs.howMany ?? 1,
       };
     })
-    .filter(Boolean)
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
   return { built, source: 'eBird', spots, lists: compactLists, recent: compactRecent, notable: compactNotable, codes: Object.fromEntries(byCode) };

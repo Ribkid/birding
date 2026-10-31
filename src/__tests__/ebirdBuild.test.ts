@@ -49,6 +49,8 @@ describe('compact eBird snapshots', () => {
       notable: [
         { locId: 'L1', locName: 'Rich', speciesCode: 'birren', comName: 'Renamed Bird', lat: -28, lng: 152, obsDt: '2026-10-30 09:00', howMany: 3 },
         { locId: 'L2', locName: 'Small', speciesCode: 'unknown', comName: 'Unknown', lat: -27, lng: 153, obsDt: '2026-10-29', howMany: 1 },
+        // The same sighting can arrive from two neighbouring region feeds.
+        { locId: 'L1', locName: 'Rich', speciesCode: 'birren', comName: 'Renamed Bird', lat: -28, lng: 152, obsDt: '2026-10-30 09:00', howMany: 3 },
       ],
       built: '2026-11-01T00:00:00.000Z',
     });
