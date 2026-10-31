@@ -1,0 +1,13 @@
+name: Refresh eBird spots
+
+on:
+  schedule:
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the Vercel deploy hook
+        run: curl --fail --silent --show-error -X POST "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
