@@ -34,10 +34,21 @@ It runs as part of `npm run build`, before `vite build` (so `dist/` gets the fil
 
 **API basics**
 - Base URL: `https://api.ebird.org/v2/`, with the key in the header `X-eBirdApiToken`.
-- At most 4 requests a second.
+- Every request start is at least 400 ms after the previous one (never more than 4 requests a second).
 - On 429 or 5xx, retry with backoff (3 tries).
 - On anything else, stop and keep the previous files.
 - Set a User-Agent: `BirdyDex build (seqbirding.com)`.
+
+**Speed (added in review, 1 Nov 2026):** eBird takes 6–7 seconds to answer one species list, and a
+Vercel build is capped at 45 minutes, so a full 500-list build could not ship. Therefore:
+- Only the **top 150 hotspots by species** get a baked list. The rest of the spots use the live
+  `/api/ebird?list=` route on their page.
+- At most **3 species-list requests in flight**, starts still 400 ms apart.
+- Each list is cached in `node_modules/.cache/birdydex-ebird/lists/<locId>.json` for **7 days**.
+  Vercel keeps `node_modules/.cache` between builds, so a warm build refetches nothing. Lists left
+  in the old `.cache/ebird-lists/` folder are moved across on the first run.
+- Hotspots, region recent, notable and taxonomy are still fetched every build (about 35 calls).
+- The script prints its duration and the cache hits and misses.
 
 **Regions:** `AU-QLD-BRI, AU-QLD-GOL, AU-QLD-IPS, AU-QLD-LOV, AU-QLD-LOG, AU-QLD-MRB, AU-QLD-RED, AU-QLD-SCE, AU-QLD-SOM, AU-QLD-SUN, AU-QLD-TOO`.
 
@@ -48,7 +59,7 @@ It runs as part of `npm run build`, before `vite build` (so `dist/` gets the fil
 2. **Hotspots:** `ref/hotspot/{region}?fmt=json` for each region.
    - Keep `locId, locName, lat, lng, numSpeciesAllTime, numChecklistsAllTime, latestObsDt, subnational2Code`.
    - Keep only hotspots with 10 or more species.
-3. **Species lists:** `product/spplist/{locId}` for the top 500 hotspots by species, mapped to app ids, unknown codes dropped.
+3. **Species lists:** `product/spplist/{locId}` for the top 150 hotspots by species, mapped to app ids, unknown codes dropped, cached for seven days.
 4. **Recent sightings per region:** `data/obs/{region}/recent?back=30&hotspot=true`, plus `data/obs/{region}/recent/notable?back=7&detail=simple`. These give "seen lately" and "rare birds around".
 
 **Output:** `public/data/ebird/spots.json`, gitignored and compact:

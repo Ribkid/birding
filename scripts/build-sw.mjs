@@ -15,6 +15,7 @@
 //
 // Run after `vite build` (npm run build does). No dependencies.
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join, relative, extname, sep } from 'node:path';
 
 const DIST = new URL('../dist/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
@@ -31,11 +32,12 @@ const RUNTIME_ONLY = ['vendor/', 'photos/'];
 const EXTRA_SHELL = new Set([
   '/data/species-new.json', '/data/tiers.json', '/data/info.json', '/data/gallery.json',
   '/data/seq.json', '/data/birdnet-map.json', '/data/lookalikes.json', '/data/calls.json',
-  '/data/photoid.json', '/data/photoid.bin', '/data/spot-access.json',
+  '/data/photoid.json', '/data/photoid.bin', '/data/spot-access.json', '/data/spot-access-ebird.json',
   '/models/bioclip/manifest.json',
   // Saved with each release, as in v1, so a signed-in phone still loads it offline after an update.
   '/vendor/supabase/supabase.js',
 ]);
+if (existsSync(join(DIST, 'data', 'ebird', 'spots.json'))) EXTRA_SHELL.add('/data/ebird/spots.json');
 // The 93 MB int4 vision model (the two .bin parts) is deliberately NOT precached: src/core/photoid.js
 // downloads it on demand with progress and stores the joined model in 'birddex-models'. Precaching it
 // here too would download it before first use and keep a second 93 MB copy on the phone.

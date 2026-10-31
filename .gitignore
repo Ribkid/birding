@@ -8,3 +8,6 @@ playwright-report/
 tsconfig.tsbuildinfo
 .vercel
 .env*
+public/data/ebird/
+.cache/
+.superpowers/
