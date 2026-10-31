@@ -8,11 +8,11 @@ const text = (h1: Element, strip: string) => {
   return (c.textContent || '').replace(/\s+/g, ' ').trim();
 };
 
-/** v1: the heading without its <small> line, or "Sarah's BirdyDex" when there is none or it already says so. */
+/** v1: the heading without its <small> line; the Dex's own wordmark ("Tom's BirdyDex") as it is; "BirdyDex" with none. */
 export function titleFor(view: ParentNode | null): string {
   const h1 = view?.querySelector('h1');
   const t = h1 ? text(h1, 'small') : '';
-  return !t || /BirdyDex/.test(t) ? "Sarah's BirdyDex" : `${t} – BirdyDex`;
+  return !t ? 'BirdyDex' : /BirdyDex/.test(t) ? t : `${t} – BirdyDex`;
 }
 
 let lastH1: Element | null = null;

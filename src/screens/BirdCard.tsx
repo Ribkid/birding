@@ -4,6 +4,7 @@
 import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { KINDS, RARITY, dexCode, type Species } from '../lib/data';
+import { dexTitle, myFirstName } from '../lib/dexName';
 import { sized } from '../core/media.js';
 import { closeLayer, openLayer, type Layer } from '../lib/layers';
 
@@ -179,7 +180,7 @@ export async function shareCard(sp: Species, info: CardInfo) {
   if (!blob) return;
   const file = new File([blob], `${sp.name.replace(/\W+/g, '-')}.png`, { type: 'image/png' });
   if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: sp.name, text: `${sp.name}, number ${dexCode(sp.id)} in Sarah's BirdyDex` }); } catch { /* cancelled */ }
+    try { await navigator.share({ files: [file], title: sp.name, text: `${sp.name}, number ${dexCode(sp.id)} in ${dexTitle(myFirstName())}` }); } catch { /* cancelled */ }
     return;
   }
   const a = document.createElement('a');

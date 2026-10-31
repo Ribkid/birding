@@ -25,8 +25,10 @@ import { likelihood, seq, spotsFor } from '../core/seqdata.js';
 import { relRate } from '../core/quiz.js';
 import { photoIdInfo } from '../core/scan.js';
 import { onAuth } from '../core/cloud.js';
-import { onStatus, syncStatus } from '../core/account.js';
+import { authSettled, onStatus, syncStatus } from '../core/account.js';
 import { avatarUrl, getMyCloud, getProfile, myName, signedIn } from '../core/profile.js';
+import { dexTitle, myFirstName, rememberFirstName, storedFirstName } from '../lib/dexName';
+import { useProfile } from './me/accountBits';
 import { currentStreak, dayStr, dueCards, getDaily, getLearn, learnReady, monthName } from '../core/learn.js';
 import { openSearch } from './DexSearch';
 import { openSightingSheet } from '../components/SightingSheet';
@@ -273,6 +275,20 @@ const TodayRail = memo(function TodayRail({ kind, day }: { kind: string; day: Da
   );
 });
 
+/** "Tom's BirdyDex" once someone is signed in with a name; plain "BirdyDex" before then and for everyone else. */
+function Wordmark() {
+  useProfile();
+  const known = myFirstName();
+  const [stored, setStored] = useState(storedFirstName);
+  useEffect(() => {
+    if (known) { rememberFirstName(known); return; }
+    let alive = true;
+    void authSettled.then(() => { if (alive && !signedIn()) { rememberFirstName(''); setStored(''); } });
+    return () => { alive = false; };
+  }, [known]);
+  return <h1 className="wordmark">{dexTitle(known || stored)}<small>South East Queensland</small></h1>;
+}
+
 /**
  * Today's pick full-bleed with the wordmark and her count. It follows the photo index on its own (useMedia), so a
  * better photo arriving redraws the hero, not the dex.
@@ -315,7 +331,7 @@ const DexHero = memo(function DexHero({ day, got, n, kind, photo, heard }: {
         </div>
       </div>
       <div className="dex-hero-foot">
-        <h1 className="wordmark">Sarah's BirdyDex<small>South East Queensland</small></h1>
+        <Wordmark />
         <p className="dex-cap glass">
           <Ring p={got / n} cls="dex-cap-ring" />
           <span className="dex-cap-txt">

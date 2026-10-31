@@ -41,5 +41,5 @@ export async function promptInstall() {
   const r = await p.userChoice.catch(() => null);
   held = null;
   notify();
-  if (r?.outcome === 'accepted') toast("Installed. Find Sarah's BirdyDex on your home screen.");
+  if (r?.outcome === 'accepted') toast('Installed. Find BirdyDex on your home screen.');
 }

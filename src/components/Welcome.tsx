@@ -5,6 +5,7 @@ import { ANIMALS, BIRDS, byId, ofKind, type Species } from '../lib/data';
 import { db } from '../core/db.js';
 import { sized } from '../core/media.js';
 import { configured, signedIn } from '../core/profile.js';
+import { myFirstName } from '../lib/dexName';
 import { closeLayer, openLayer, type Layer } from '../lib/layers';
 import { useMedia } from '../lib/hooks';
 import { promptInstall, useCanInstall } from '../lib/install';
@@ -79,12 +80,13 @@ export function Welcome() {
   };
 
   if (!open) return null;
+  const first = myFirstName();
   return createPortal(
     <div ref={ovRef} className={`welcome${out ? ' welcome--out' : ''}`} data-closing={out ? '' : undefined} inert={out}>
       <div ref={cardRef} className="welcome-card">
         <div className="welcome-hero">
           <SpeciesImage sp={robin} size="large" />
-          <h1>Hi Sarah</h1>
+          <h1>{first ? `Hi ${first}` : 'Welcome to BirdyDex'}</h1>
         </div>
         <div className="welcome-body">
           <p>

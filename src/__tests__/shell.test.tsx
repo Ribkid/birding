@@ -111,7 +111,16 @@ describe('the static shell', () => {
     expect(main?.getAttribute('tabindex')).toBe('-1');
     expect(main?.nextElementSibling?.matches('nav.tabbar')).toBe(true);
     // Its heading is the Dex's own wordmark, and the capsule waiting for her count is hidden from screen readers.
-    expect(main?.querySelector('h1.wordmark')?.textContent).toBe("Sarah's BirdyDexSouth East Queensland");
+    expect(main?.querySelector('h1.wordmark')?.textContent).toBe('BirdyDexSouth East Queensland');
     expect(main?.querySelector('.dex-cap')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it("says whose dex it is before React runs, from the first name kept at sign-in", () => {
+    localStorage.setItem('birddex-name', 'Tom');
+    const root = shellOn('#/dex');
+    expect(root.querySelector('h1.wordmark')?.textContent).toBe("Tom's BirdyDexSouth East Queensland");
+    expect(document.title).toBe("Tom's BirdyDex");
+    localStorage.clear();
+    expect(shellOn('#/dex').querySelector('h1.wordmark')?.textContent).toBe('BirdyDexSouth East Queensland');
   });
 });

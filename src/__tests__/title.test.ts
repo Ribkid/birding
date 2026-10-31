@@ -14,9 +14,10 @@ const view = (html: string) => {
 
 describe('page title (v1 afterDraw)', () => {
   it('drops the <small> line and keeps the app name alone on the Dex', () => {
-    expect(titleFor(view('<h1><img alt=""><span>Sarah\'s BirdyDex<small>South East Queensland</small></span></h1>'))).toBe("Sarah's BirdyDex");
+    expect(titleFor(view('<h1><img alt=""><span>BirdyDex<small>South East Queensland</small></span></h1>'))).toBe('BirdyDex');
+    expect(titleFor(view("<h1><span>Tom's BirdyDex<small>South East Queensland</small></span></h1>"))).toBe("Tom's BirdyDex");
     expect(titleFor(view('<h1>  Life\n  list </h1>'))).toBe('Life list – BirdyDex');
-    expect(titleFor(view('<p>No heading</p>'))).toBe("Sarah's BirdyDex");
+    expect(titleFor(view('<p>No heading</p>'))).toBe('BirdyDex');
   });
 
   it('follows a heading that renders or changes after the route change', async () => {
@@ -26,7 +27,7 @@ describe('page title (v1 afterDraw)', () => {
     bar.innerHTML = '<span class="topbar-title"></span>';
     document.body.append(bar);
     const stop = watchTitle(v);
-    expect(document.title).toBe("Sarah's BirdyDex");
+    expect(document.title).toBe('BirdyDex');
     v.innerHTML = '<h1>Outing</h1>';
     await Promise.resolve();
     expect(document.title).toBe('Outing – BirdyDex');

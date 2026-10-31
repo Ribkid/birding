@@ -20,7 +20,7 @@ describe('install offer (v1 promptInstall)', () => {
     await promptInstall();
     expect(e.prompt).toHaveBeenCalledTimes(1);
     expect(canInstall()).toBe(false);
-    expect(toastText()).toBe("Installed. Find Sarah's BirdyDex on your home screen.");
+    expect(toastText()).toBe('Installed. Find BirdyDex on your home screen.');
   });
 
   it('points to the browser menu when there is no offer', async () => {
