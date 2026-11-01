@@ -43,8 +43,17 @@ export function useEbirdSnapshot(): EbirdSnapshot | null | undefined {
 }
 
 /** True while the browser says it has a connection; changes to offline/online redraw callers. */
+function startsOnline(): boolean {
+  try {
+    return typeof navigator === 'undefined' ? false : navigator.onLine !== false;
+  } catch {
+    // A stubbed or unusual webview navigator can reject onLine; treat it as connected and let requests decide.
+    return true;
+  }
+}
+
 export function useOnline(): boolean {
-  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? false : navigator.onLine));
+  const [online, setOnline] = useState(startsOnline);
   useEffect(() => {
     const up = () => setOnline(true);
     const down = () => setOnline(false);

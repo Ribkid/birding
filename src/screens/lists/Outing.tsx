@@ -21,6 +21,7 @@ import { useScreenWake } from '../../lib/wakeLock';
 import { CountKey } from './hubParts';
 import { FlockChooser, useHold } from './FlockChooser';
 import { buzz, forgetTally, useTally } from './useTally';
+import LikelyHere from './LikelyHere';
 import {
   ConfirmDialog,
   celebrate,
@@ -845,6 +846,11 @@ function OutingPage() {
   const ordered = tallied.rows.map((row) => byId.get(row.speciesId)).filter((sp): sp is Species => !!sp);
   // Rows at 0 still hold their place, but no longer count.
   const onTally = tallied.rows.filter((r) => !zeroState.zeroed.has(r.speciesId) && !zeroState.folding.has(r.speciesId)).length;
+  const countedIds = new Set(
+    tallied.rows
+      .filter((r) => !zeroState.zeroed.has(r.speciesId) && !zeroState.folding.has(r.speciesId))
+      .map((r) => r.speciesId),
+  );
   // The sightings Discard removes: the stored ones, less those counted down to 0, plus species not stored yet.
   const sightingTotal =
     recs.length - [...counts.keys()].filter((id) => !tallied.get(id)).length + tallied.rows.filter((row) => !counts.has(row.speciesId)).length;
@@ -890,6 +896,17 @@ function OutingPage() {
         </p>
         {live && <span className="ocard-live">In progress</span>}
       </div>
+
+      {live && outing.lat != null && outing.lng != null && (
+        <LikelyHere
+          live={live}
+          lat={outing.lat}
+          lng={outing.lng}
+          seen={seenOutside}
+          counted={countedIds}
+          onAdd={add}
+        />
+      )}
 
       {editing && (
         <>
