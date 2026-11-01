@@ -12,15 +12,35 @@ export interface NotableBird {
   date: string;
   n: number;
 }
+export interface EbirdRegion {
+  name: string;
+  ids: number[];
+}
 export interface EbirdSnapshot {
   built: string;
   source: 'eBird';
   spots: EbirdSpotTuple[];
   lists: Record<string, number[]>;
+  regions?: Record<string, EbirdRegion>;
   recent: Record<string, [number, string][]>;
   notable: NotableBird[];
   codes?: Record<string, number>;
 }
+
+/** The eleven South East Queensland council areas, keyed by their eBird subnational2 suffix. */
+export const REGION_NAMES: Record<string, string> = {
+  BRI: 'Brisbane',
+  GOL: 'Gold Coast',
+  IPS: 'Ipswich',
+  LOV: 'Lockyer Valley',
+  LOG: 'Logan',
+  MRB: 'Moreton Bay',
+  RED: 'Redland',
+  SCE: 'Scenic Rim',
+  SOM: 'Somerset',
+  SUN: 'Sunshine Coast',
+  TOO: 'Toowoomba',
+};
 export interface LiveRecent {
   code: string;
   sci: string;

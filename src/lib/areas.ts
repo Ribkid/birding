@@ -1,0 +1,69 @@
+// Council-area dexes: a sighting belongs to the nearest eBird hotspot within 3 km, whose subnational2 code is the
+// council area. Pure, so the assignment and the ring counts can be tested without IndexedDB.
+import { haversineKm } from '../core/stats.js';
+import { REGION_NAMES, type EbirdSnapshot } from './ebird';
+
+export interface SightingPoint {
+  speciesId: number;
+  lat?: number | null;
+  lng?: number | null;
+}
+
+export interface AreaProgress {
+  code: string;
+  name: string;
+  seen: number;
+  total: number;
+}
+
+const REGION_ORDER = Object.keys(REGION_NAMES);
+
+/** The council code of the closest eBird hotspot, or null when no hotspot is within the radius. */
+export function assignSightingArea(
+  sighting: Pick<SightingPoint, 'lat' | 'lng'>,
+  snapshot: EbirdSnapshot,
+  withinKm = 3,
+): string | null {
+  const lat = Number(sighting.lat);
+  const lng = Number(sighting.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  let code: string | null = null;
+  let best = withinKm;
+  for (const [, , spotLat, spotLng, , , , region] of snapshot.spots) {
+    if (!region) continue;
+    const distance = haversineKm({ lat, lng }, { lat: spotLat, lng: spotLng });
+    if (distance <= best) {
+      code = region;
+      best = distance;
+    }
+  }
+  return code;
+}
+
+/** Seen and total species for every council area list in the snapshot. */
+export function areaProgress(sightings: SightingPoint[], snapshot: EbirdSnapshot): AreaProgress[] {
+  const regions = snapshot.regions ?? {};
+  const seen = new Map<string, Set<number>>();
+  for (const code of Object.keys(regions)) seen.set(code, new Set());
+
+  for (const sighting of sightings) {
+    const code = assignSightingArea(sighting, snapshot);
+    if (!code) continue;
+    const region = regions[code];
+    if (!region || !region.ids.includes(sighting.speciesId)) continue;
+    seen.get(code)?.add(sighting.speciesId);
+  }
+
+  return Object.entries(regions)
+    .sort(([a], [b]) => {
+      const ai = REGION_ORDER.indexOf(a);
+      const bi = REGION_ORDER.indexOf(b);
+      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.localeCompare(b);
+    })
+    .map(([code, region]) => ({
+      code,
+      name: region.name || REGION_NAMES[code] || code,
+      seen: seen.get(code)?.size ?? 0,
+      total: region.ids.length,
+    }));
+}

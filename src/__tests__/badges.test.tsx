@@ -15,6 +15,7 @@ vi.mock('../core/cloud.js', () => ({ configured: true }));
 // No sightings or outings: Badges reads them itself, so it knows when they are in before the count stamps up.
 vi.mock('../core/db.js', () => ({ db: { all: async () => [], onChange: () => () => {} } }));
 vi.mock('../lib/hooks', () => ({ normaliseSighting: <T,>(row: T) => row }));
+vi.mock('../lib/useEbird', () => ({ useEbirdSnapshot: () => null }));
 
 import Badges from '../screens/progress/Badges';
 

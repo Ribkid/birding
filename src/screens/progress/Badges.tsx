@@ -5,6 +5,8 @@ import { learnReady, learnStats } from '../../core/learn.js';
 import { configured } from '../../core/cloud.js';
 import { db } from '../../core/db.js';
 import { normaliseSighting, type Outing, type Sighting } from '../../lib/hooks';
+import { useEbirdSnapshot } from '../../lib/useEbird';
+import { areaProgress } from '../../lib/areas';
 import { countUp, motionOK } from '../../lib/motion';
 import { Icon } from '../../components/Icon';
 import './progress.css';
@@ -92,6 +94,7 @@ function useRows() {
 
 export default function Badges() {
   const rows = useRows();
+  const snapshot = useEbirdSnapshot();
   // Bumped when learning progress has loaded, so the memo below recomputes (v1 redraws).
   const [learnTick, learnLoaded] = useReducer((n: number) => n + 1, 0);
   // v1: the trophy ring fills in only on the first visit of the session.
@@ -113,11 +116,16 @@ export default function Badges() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const areaStats = useMemo(
+    () => (snapshot ? areaProgress(rows?.sightings ?? [], snapshot) : null),
+    [snapshot, rows],
+  );
+
   const list = useMemo(() => {
     let learning: Record<string, number> = {};
     try { learning = (learnStats() || {}) as Record<string, number>; } catch { /* not loaded yet */ }
-    return badges(rows?.sightings ?? [], rows?.outings ?? [], learning) as Badge[];
-  }, [rows, learnTick]);
+    return badges(rows?.sightings ?? [], rows?.outings ?? [], learning, areaStats) as Badge[];
+  }, [rows, learnTick, areaStats]);
 
   const earned = list.filter((b) => b.done).length;
   const loaded = rows != null;

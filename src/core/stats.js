@@ -71,7 +71,10 @@ export function targets({ seen, month, habitat, score, rel, kinds = ['bird'] }) 
 // ---------- Badges ----------
 const placeKey = s => s.lat != null ? `${s.lat.toFixed(2)},${s.lng.toFixed(2)}` : (s.place || '').trim().toLowerCase();
 
-export function badges(sightings, outings, learning = {}) {
+/**
+ * @param {Array<{ seen?: number }>|null} [areas]
+ */
+export function badges(sightings, outings, learning = {}, areas = null) {
   const life = speciesList(sightings);
   const seen = new Set(life.keys());
   const seenAll = [...seen].map(id => byId.get(id)).filter(Boolean);
@@ -164,6 +167,15 @@ export function badges(sightings, outings, learning = {}) {
     const total = SPECIES.filter(s => s.group === g).length;
     if (!total) continue;
     add(`grp-${g}`, label, total === 1 ? `See the ${label.toLowerCase()}` : `See all ${total} ${label.toLowerCase()}`, seenAll.filter(s => s.group === g).length, total, 'group');
+  }
+
+  // Council-area dexes, added after every existing badge so earned badges keep their ids and order.
+  if (Array.isArray(areas) && areas.length) {
+    const started = areas.filter(area => Number(area.seen) > 0).length;
+    const bestArea = Math.max(0, ...areas.map(area => Number(area.seen) || 0));
+    add('area100', '100 in one area', 'See 100 species inside one SEQ council area', bestArea, 100);
+    add('areas5', 'Five areas', 'See birds in five SEQ council areas', started, 5);
+    add('areasall', 'Every SEQ area', `See birds in all ${areas.length} SEQ council areas`, started, areas.length);
   }
   return list;
 }

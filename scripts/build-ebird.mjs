@@ -21,6 +21,19 @@ const REGIONS = [
   'AU-QLD-BRI', 'AU-QLD-GOL', 'AU-QLD-IPS', 'AU-QLD-LOV', 'AU-QLD-LOG', 'AU-QLD-MRB',
   'AU-QLD-RED', 'AU-QLD-SCE', 'AU-QLD-SOM', 'AU-QLD-SUN', 'AU-QLD-TOO',
 ];
+export const REGION_NAMES = {
+  BRI: 'Brisbane',
+  GOL: 'Gold Coast',
+  IPS: 'Ipswich',
+  LOV: 'Lockyer Valley',
+  LOG: 'Logan',
+  MRB: 'Moreton Bay',
+  RED: 'Redland',
+  SCE: 'Scenic Rim',
+  SOM: 'Somerset',
+  SUN: 'Sunshine Coast',
+  TOO: 'Toowoomba',
+};
 
 /** How many hotspots get a baked species list. The rest fall back to the live list route. */
 export const LIST_LIMIT = 150;
@@ -53,7 +66,7 @@ export function snapshotIsCurrent(snapshot, now = new Date()) {
   return snapshot?.source === 'eBird' && String(snapshot.built).slice(0, 10) === now.toISOString().slice(0, 10);
 }
 
-export function compactSnapshot({ byCode, hotspots, lists, recent, notable, built }) {
+export function compactSnapshot({ byCode, hotspots, lists, regionLists = {}, recent, notable, built }) {
   const deduped = new Map();
   for (const spot of hotspots) {
     if (spot.numSpeciesAllTime < 10) continue;
@@ -73,6 +86,14 @@ export function compactSnapshot({ byCode, hotspots, lists, recent, notable, buil
   const compactLists = {};
   for (const [locId, codes] of Object.entries(lists)) {
     compactLists[locId] = [...new Set(codes.map((code) => byCode.get(code)).filter((id) => id != null))];
+  }
+
+  const compactRegions = {};
+  for (const [code, codes] of Object.entries(regionLists)) {
+    compactRegions[code] = {
+      name: REGION_NAMES[code] ?? code,
+      ids: [...new Set(codes.map((speciesCode) => byCode.get(speciesCode)).filter((id) => id != null))],
+    };
   }
 
   const latest = new Map();
@@ -114,7 +135,16 @@ export function compactSnapshot({ byCode, hotspots, lists, recent, notable, buil
     })
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
 
-  return { built, source: 'eBird', spots, lists: compactLists, recent: compactRecent, notable: compactNotable, codes: Object.fromEntries(byCode) };
+  return {
+    built,
+    source: 'eBird',
+    spots,
+    lists: compactLists,
+    regions: compactRegions,
+    recent: compactRecent,
+    notable: compactNotable,
+    codes: Object.fromEntries(byCode),
+  };
 }
 
 async function loadLocalEnv() {
@@ -340,6 +370,19 @@ async function build() {
     }
   });
 
+  const regionLists = {};
+  let regionListsFailed = 0;
+  await pool(REGIONS, LIST_CONCURRENCY, async (region) => {
+    try {
+      const codes = await ebird(`product/spplist/${region}`);
+      if (!Array.isArray(codes)) throw new Error('Region species list was not an array');
+      regionLists[region.replace(/^AU-QLD-/, '')] = codes;
+    } catch (error) {
+      regionListsFailed++;
+      console.warn(`Region list for ${region} skipped: ${error instanceof Error ? error.message : error}`);
+    }
+  });
+
   const recent = [];
   const notable = [];
   for (const region of REGIONS) {
@@ -347,7 +390,15 @@ async function build() {
     notable.push(...await ebird(`data/obs/${region}/recent/notable?back=7&detail=simple`));
   }
 
-  const snapshot = compactSnapshot({ byCode, hotspots, lists, recent, notable, built: new Date().toISOString() });
+  const snapshot = compactSnapshot({
+    byCode,
+    hotspots,
+    lists,
+    regionLists,
+    recent,
+    notable,
+    built: new Date().toISOString(),
+  });
   await mkdir(new URL('public/data/ebird/', ROOT), { recursive: true });
   await writeFile(OUT, `${JSON.stringify(snapshot)}\n`);
 
@@ -356,6 +407,7 @@ async function build() {
   console.log(`Species lists: ${Object.keys(snapshot.lists).length} of ${picked.length} (${hits} cached, ${misses} fetched${failed ? `, ${failed} failed` : ''})`);
   console.log(`spots: ${snapshot.spots.length}`);
   console.log(`lists: ${Object.keys(snapshot.lists).length}`);
+  console.log(`region lists: ${Object.keys(snapshot.regions).length} of ${REGIONS.length}${regionListsFailed ? `, ${regionListsFailed} failed` : ''}`);
   console.log(`recent: ${recentCount} species-days at ${Object.keys(snapshot.recent).length} spots`);
   console.log(`notable: ${snapshot.notable.length}`);
   console.log(`unmatched app birds: ${unmatched.length}${unmatched.length ? ` — ${unmatched.map((bird) => `${bird.name} (${bird.sci})`).join(', ')}` : ''}`);

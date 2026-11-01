@@ -15,6 +15,7 @@ import {
   type SightingRow,
 } from './shared';
 import { ChanceBar, CountKey, HubIcon, QuietImage, targetChances, useStoreRows } from './hubParts';
+import AreaDexes from './AreaDexes';
 import './lists.css';
 
 interface Totals {
@@ -140,6 +141,7 @@ export default function Lists() {
               <Icon name="list" /> All sightings
             </Link>
           </div>
+          <AreaDexes />
 
           <section className="block lh-sec">
             <div className="block-h">
