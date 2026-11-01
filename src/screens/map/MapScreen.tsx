@@ -26,11 +26,12 @@ import { localPlaceMatches, myPlaces, searchAddress } from '../../lib/places';
 import { loadSpotData, nearestEbirdSpot } from '../../lib/ebird';
 import type { HotspotLike } from '../../lib/spots';
 import {
+  boundsKey,
   buildOverpassQuery,
   PLACE_KINDS,
   PLACE_LABELS,
   placesFromElements,
-  roundedBoundsKey,
+  snapBounds,
   type MapPlace,
   type OverpassElement,
   type PlaceKind,
@@ -474,6 +475,8 @@ function MapView() {
   const toggleHotFocus = () => { chipTapped(); mapF.hotFocus = !mapF.hotFocus; setHotFocusState(mapF.hotFocus); };
   const toggleNeed = () => { chipTapped(); mapF.need = !mapF.need; setNeedState(mapF.need); };
   const [placesOn, setPlacesOnState] = useState(mapF.places);
+  // Overpass can take half a minute to answer, so the map says it is still looking.
+  const [placesLoading, setPlacesLoading] = useState(false);
   const togglePlaces = () => { chipTapped(); mapF.places = !mapF.places; setPlacesOnState(mapF.places); };
   const [layer, setLayer] = useState<Layer>('map');
   const [zoom, setZoom] = useState(mapView?.z ?? (atLat != null && atLng != null ? PLACE_ZOOM : SEQ_ZOOM));
@@ -863,6 +866,7 @@ function MapView() {
       timer = null;
       controller?.abort();
       controller = null;
+      setPlacesLoading(false);
     };
 
     const draw = (rows: MapPlace[]) => {
@@ -888,13 +892,13 @@ function MapView() {
       timer = null;
       if (!alive || !placesOn || map.getZoom() < PLACE_ZOOM || !navigator.onLine) return;
       const visible = map.getBounds();
-      const box = {
+      const box = snapBounds({
         south: visible.getSouth(),
         west: visible.getWest(),
         north: visible.getNorth(),
         east: visible.getEast(),
-      };
-      const key = roundedBoundsKey(box);
+      });
+      const key = boundsKey(box);
       const cached = placeCache.get(key);
       if (cached) {
         draw(cached);
@@ -904,6 +908,7 @@ function MapView() {
       controller?.abort();
       const request = new AbortController();
       controller = request;
+      setPlacesLoading(true);
       void fetch(OVERPASS_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
@@ -922,7 +927,9 @@ function MapView() {
         })
         .catch(() => {})
         .finally(() => {
-          if (controller === request) controller = null;
+          if (controller !== request) return;
+          controller = null;
+          setPlacesLoading(false);
         });
     };
 
@@ -1649,7 +1656,7 @@ function MapView() {
           placesOn={placesOn && zoom >= PLACE_ZOOM}
         />
 
-        {(noSignal || (placesOn && zoom < PLACE_ZOOM)) && (
+        {(noSignal || (placesOn && (zoom < PLACE_ZOOM || placesLoading))) && (
           <div className="map-note-stack">
             {noSignal && (
               <div className="map-note map-note--tiles">
@@ -1665,6 +1672,11 @@ function MapView() {
             {placesOn && zoom < PLACE_ZOOM && (
               <div className="map-note map-note--places">
                 <p>Zoom in to see huts, toilets and lookouts</p>
+              </div>
+            )}
+            {placesOn && placesLoading && zoom >= PLACE_ZOOM && (
+              <div className="map-note map-note--places" role="status">
+                <p>Finding huts, toilets and lookouts…</p>
               </div>
             )}
           </div>

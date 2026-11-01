@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOverpassQuery, placesFromElements, roundedBoundsKey } from '../lib/mapPlaces';
+import { boundsKey, buildOverpassQuery, placesFromElements, snapBounds } from '../lib/mapPlaces';
 
 const bounds = { south: -27.50124, west: 152.99456, north: -27.48987, east: 153.01234 };
 
@@ -13,7 +13,7 @@ describe('map Places', () => {
     expect(query).toContain('["amenity"="toilets"]');
     expect(query).toContain('["amenity"="drinking_water"]');
     expect(query).toContain('["tourism"="picnic_site"]');
-    expect(query).toContain('["leisure"="picnic_table"]');
+    expect(query).not.toContain('picnic_table');
     expect(query).toContain('["amenity"="bbq"]');
     expect(query).toContain('["tourism"="viewpoint"]');
     expect(query).toContain('["leisure"="bird_hide"]');
@@ -23,11 +23,10 @@ describe('map Places', () => {
     expect(query).toContain('out center 300;');
   });
 
-  it('rounds the bounding box for a stable session cache key', () => {
-    expect(roundedBoundsKey(bounds)).toBe('-27.50,152.99,-27.49,153.01');
-    expect(roundedBoundsKey({ ...bounds, south: -27.50125, west: 152.99457 })).toBe(
-      '-27.50,152.99,-27.49,153.01',
-    );
+  it('grows the visible area out to a 2 km grid, so small pans share one cached answer that covers the screen', () => {
+    const box = snapBounds(bounds);
+    expect(box).toEqual({ south: -27.52, west: 152.98, north: -27.48, east: 153.02 });
+    expect(boundsKey(snapBounds({ ...bounds, south: -27.505, east: 153.015 }))).toBe(boundsKey(box));
   });
 
   it('turns nodes and way centres into named places with plain fallback labels', () => {

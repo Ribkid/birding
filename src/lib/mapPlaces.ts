@@ -62,6 +62,7 @@ export const PLACE_LABELS: Record<PlaceKind, string> = {
   camp: 'Camp site',
 };
 
+// Single picnic tables are left out: a park can have dozens, and they bury the huts and toilets.
 export function buildOverpassQuery(bounds: MapBounds): string {
   const box = `${bounds.south},${bounds.west},${bounds.north},${bounds.east}`;
   const selectors = [
@@ -70,7 +71,6 @@ export function buildOverpassQuery(bounds: MapBounds): string {
     '["amenity"="toilets"]',
     '["amenity"="drinking_water"]',
     '["tourism"="picnic_site"]',
-    '["leisure"="picnic_table"]',
     '["amenity"="bbq"]',
     '["tourism"="viewpoint"]',
     '["leisure"="bird_hide"]',
@@ -81,7 +81,15 @@ export function buildOverpassQuery(bounds: MapBounds): string {
   return `[out:json][timeout:25];(\n${selectors.map((selector) => `  nwr${selector}(${box});`).join('\n')}\n);\nout center 300;`;
 }
 
-export function roundedBoundsKey(bounds: MapBounds): string {
+// Places are fetched for the visible area grown out to a 0.02° grid (about 2 km), so small pans reuse one
+// answer and a cached answer always covers everything on screen.
+export function snapBounds(bounds: MapBounds, step = 0.02): MapBounds {
+  const down = (value: number) => Number((Math.floor(value / step) * step).toFixed(4));
+  const up = (value: number) => Number((Math.ceil(value / step) * step).toFixed(4));
+  return { south: down(bounds.south), west: down(bounds.west), north: up(bounds.north), east: up(bounds.east) };
+}
+
+export function boundsKey(bounds: MapBounds): string {
   return [bounds.south, bounds.west, bounds.north, bounds.east]
     .map((value) => value.toFixed(2))
     .join(',');
