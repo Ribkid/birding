@@ -132,7 +132,11 @@ Two GET routes. Both send `Cache-Control: s-maxage=3600, stale-while-revalidate=
 
 **Access:**
 - Re-run the OpenStreetMap access build for eBird spots: extend `scripts/build-spot-access.mjs` to take the eBird spots and key results by `locId`.
-- Cover the top 800 by species, writing `public/data/spot-access-ebird.json`. OSM data may be committed (ODbL, credited as now).
+- Goal: the top 800 by species, writing `public/data/spot-access-ebird.json`. OSM data may be committed (ODbL, credited as now).
+- `--limit=N` caps a run. The first real run (1 Nov 2026) used `--limit=400` because Overpass
+  answered one batch of 12 hotspots in 20–60 s (and returned 502/429 when busy); it finished 400
+  spots, 236 with access known. `node scripts/build-spot-access.mjs --ebird` (default 800) resumes
+  from the cached batches whenever Rhys wants the last 400.
 - Spots outside it show "Access not known yet".
 
 **Map:** the hotspot popup's "Spot details" link goes to the nearest eBird spot within 400 m, and is hidden if there's none. Nothing else on the map changes in this round.

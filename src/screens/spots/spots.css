@@ -37,7 +37,10 @@
 .spots-rare-main .small { line-height: 1.45; }
 
 /* ---------- search, sort, filters ---------- */
-.spots-tools { display: grid; gap: 10px; padding: 0 16px; }
+/* One full-width column that may shrink: on a 195 px screen the search box, the sort select and
+   the chips would otherwise hold the grid open at their min-content width. */
+.spots-tools { display: grid; gap: 10px; padding: 0 16px; grid-template-columns: minmax(0, 1fr); }
+.spots-tools > *, .spots-tools .searchbox input, .chips--spots { min-width: 0; }
 .spots-tools .searchbox { margin: 0; }
 .spots-sort { display: flex; align-items: center; gap: 10px; }
 .spots-sort label { flex: none; font-weight: 600; font-size: var(--fs-2); }
@@ -53,7 +56,8 @@
 /* ---------- spot cards ---------- */
 .spot-cards { list-style: none; margin: 0; padding: 0 16px; display: grid; gap: 12px; }
 /* Off-screen cards cost no layout or paint; the placeholder keeps the scrollbar steady. */
-.spot-card { content-visibility: auto; contain-intrinsic-size: auto 260px; }
+/* min-width:0 lets a card shrink below the 260px placeholder on a narrow phone. */
+.spot-card { min-width: 0; content-visibility: auto; contain-intrinsic-size: auto 260px; }
 .spot-card-link {
   display: grid; gap: 8px; padding: 13px; border-radius: var(--r-card);
   background: var(--surface); box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none;

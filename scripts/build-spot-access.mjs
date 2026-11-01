@@ -1,11 +1,15 @@
-// Bakes each SEQ hotspot's access facts from OpenStreetMap into public/data/spot-access.json.
+// Bakes hotspot access facts from OpenStreetMap into public/data/spot-access.json.
+// Add --ebird to cover the top eBird spots in public/data/spot-access-ebird.json instead, and
+// --limit=400 to stop early when Overpass is slow (the default is the top 800).
 //
 // Run by hand, not by `npm run build`:
 //   node scripts/build-spot-access.mjs
+//   node scripts/build-spot-access.mjs --ebird
+//   node scripts/build-spot-access.mjs --ebird --limit=400
 //
-// The 220 hotspots in public/data/seq.json are sent to Overpass a batch at a time (each with a
-// 400 m radius), with a pause between requests and a descriptive User-Agent. The raw answers are
-// cached in the system temp folder, so a resumed run never asks twice for the same batch.
+// Hotspots are sent to Overpass a batch at a time (each with a 400 m radius), with a pause between
+// requests and a descriptive User-Agent. Raw answers are cached in the system temp folder, so a
+// resumed run never asks twice for the same batch.
 //
 // The access score itself is a pure function, `scoreAccess`, so a vitest test can work it:
 //   node scripts/build-spot-access.mjs --dry-run   (no network; prints a few sample scores)
@@ -16,8 +20,11 @@ import { pathToFileURL } from 'node:url';
 
 const ROOT = new URL('../', import.meta.url);
 const SEQ = new URL('public/data/seq.json', ROOT);
+const EBIRD = new URL('public/data/ebird/spots.json', ROOT);
 const OUT = new URL('public/data/spot-access.json', ROOT);
+const EBIRD_OUT = new URL('public/data/spot-access-ebird.json', ROOT);
 const CACHE = join(tmpdir(), 'birdydex-spot-access');
+const EBIRD_CACHE = join(tmpdir(), 'birdydex-spot-access-ebird');
 
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -29,6 +36,13 @@ const BATCH = 12;           // 12 hotspots x 6 clauses per request: small enough
 const PAUSE_MS = 5000;      // polite: one request every 5 s
 const ATTEMPTS = 3;         // per endpoint, with exponential backoff (the server asks for it when at capacity)
 const EARTH_M = 6371008.8;
+
+export function ebirdAccessSpots(snapshot, limit = 800) {
+  return snapshot.spots
+    .map(([locId, name, lat, lng, rich]) => ({ locId, name, lat, lng, rich }))
+    .sort((a, b) => b.rich - a.rich || a.name.localeCompare(b.name))
+    .slice(0, limit);
+}
 
 // ---------------------------------------------------------------------------
 // The scoring (pure; tested in src/__tests__/spotAccessBuild.test.ts)
@@ -220,9 +234,9 @@ function queryFor(spots) {
   return `[out:json][timeout:180];\n(\n  ${clauses.join('\n  ')}\n);\nout center tags;`;
 }
 
-async function fetchBatch(spots, index) {
-  await mkdir(CACHE, { recursive: true });
-  const cached = join(CACHE, `batch-${index}.json`);
+async function fetchBatch(spots, index, cacheDir = CACHE) {
+  await mkdir(cacheDir, { recursive: true });
+  const cached = join(cacheDir, `batch-${index}.json`);
   try {
     return JSON.parse(await readFile(cached, 'utf8'));
   } catch {
@@ -268,13 +282,15 @@ async function fetchBatch(spots, index) {
   throw new Error(`Overpass is unreachable (both endpoints failed): ${lastError}`);
 }
 
-export async function build({ dryRun = false } = {}) {
-  const seq = JSON.parse(await readFile(SEQ, 'utf8'));
-  const spots = seq.hotspots || [];
+export async function build({ dryRun = false, ebird = false, limit = 800 } = {}) {
+  const input = JSON.parse(await readFile(ebird ? EBIRD : SEQ, 'utf8'));
+  const spots = ebird ? ebirdAccessSpots(input, limit) : input.hotspots || [];
+  const outUrl = ebird ? EBIRD_OUT : OUT;
+  const cacheDir = ebird ? EBIRD_CACHE : CACHE;
   if (dryRun) {
     for (const [index, h] of spots.slice(0, 5).entries()) {
       const summary = summarise([], h.lat, h.lng);
-      console.log(index, h.name, scoreAccess(summary, h.name));
+      console.log(h.locId ?? index, h.name, scoreAccess(summary, h.name));
     }
     return null;
   }
@@ -284,12 +300,12 @@ export async function build({ dryRun = false } = {}) {
     const batch = spots.slice(start, start + BATCH);
     const index = Math.floor(start / BATCH);
     console.log(`Batch ${index + 1}/${Math.ceil(spots.length / BATCH)}: hotspots ${start}–${start + batch.length - 1}`);
-    const json = await fetchBatch(batch, index);
+    const json = await fetchBatch(batch, index, cacheDir);
 
     // Each element may fall within 400 m of several hotspots in the same batch.
     for (let i = 0; i < batch.length; i++) {
       const h = batch[i];
-      out[start + i] = spotRecord(h.name, summarise(json.elements, h.lat, h.lng));
+      out[h.locId ?? start + i] = spotRecord(h.name, summarise(json.elements, h.lat, h.lng));
     }
     if (start + BATCH < spots.length) await sleep(PAUSE_MS);
   }
@@ -301,15 +317,20 @@ export async function build({ dryRun = false } = {}) {
     radiusM: RADIUS_M,
     spots: out,
   };
-  await writeFile(OUT, `${JSON.stringify(built, null, 1)}\n`);
+  await writeFile(outUrl, `${JSON.stringify(built, null, 1)}\n`);
   const known = Object.values(out).filter((s) => s.score != null).length;
-  console.log(`Wrote ${Object.keys(out).length} spots (${known} with access known) to public/data/spot-access.json`);
+  console.log(`Wrote ${Object.keys(out).length} spots (${known} with access known) to ${ebird ? 'public/data/spot-access-ebird.json' : 'public/data/spot-access.json'}`);
   return built;
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
-  build({ dryRun: process.argv.includes('--dry-run') }).catch((error) => {
+  const limitArg = process.argv.find((arg) => arg.startsWith('--limit='));
+  build({
+    dryRun: process.argv.includes('--dry-run'),
+    ebird: process.argv.includes('--ebird'),
+    limit: limitArg ? Number(limitArg.slice('--limit='.length)) : 800,
+  }).catch((error) => {
     console.error(`\nStopped: ${error instanceof Error ? error.message : error}`);
     process.exitCode = 1;
   });

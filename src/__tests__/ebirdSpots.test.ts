@@ -55,4 +55,9 @@ describe('eBird spot rows', () => {
     const rows = buildRows(ROWS, null, new Set(), null);
     expect(suggestSpots(rows, null, 1, new Date('2026-11-01T12:00:00Z').getTime())[0].locId).toBe('L2');
   });
+
+  it('never suggests a spot whose list is not baked, so it ranks after the listed ones', () => {
+    const rows = buildRows(ROWS, null, new Set(), null);
+    expect(suggestSpots(rows, null, 4).map((row) => row.locId)).not.toContain('L4');
+  });
 });
