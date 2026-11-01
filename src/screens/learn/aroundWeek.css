@@ -1,0 +1,49 @@
+/* Around this week: a photo-first glass card on the Learn hub, filled from the seven-day eBird snapshot. */
+.around-week { container: around-week / inline-size; }
+.around-week .lh-sec-h { margin-bottom: 8px; }
+.around-week-card {
+  display: grid; grid-template-columns: 106px minmax(0, 1fr); align-items: stretch; min-height: 118px;
+  border-radius: var(--r-card); overflow: hidden; text-decoration: none; color: var(--ink);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-card);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .around-week-card { background: var(--glass-strong); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .around-week-card { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+.around-week-card:active { scale: .985; }
+.around-week-photo { display: block; min-height: 118px; background: var(--surface-2); overflow: hidden; }
+.around-week-photo img, .around-week-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+.around-week-main { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 14px; min-width: 0; }
+.around-week-main strong { font: 700 var(--fs-3)/1.28 var(--font); overflow-wrap: anywhere; }
+.around-week-main .small { line-height: 1.35; }
+.around-week-play {
+  margin-top: auto; display: inline-flex; align-items: center; gap: 4px;
+  color: var(--azure); font-size: var(--fs-2); font-weight: 700;
+}
+.around-week-credit { margin: 6px 0 0; }
+.around-week-credit a { color: var(--ink-2); }
+.around-week-skeleton {
+  display: grid; grid-template-columns: 106px minmax(0, 1fr); gap: 0; min-height: 118px;
+  border-radius: var(--r-card); overflow: hidden; background: var(--surface-2);
+}
+.around-week-skeleton span:first-child { background: var(--surface-2); }
+.around-week-skeleton span:last-child {
+  background-image: linear-gradient(100deg, transparent 20%, color-mix(in srgb, #fff 40%, transparent) 50%, transparent 80%);
+  background-size: 220% 100%; animation: around-week-shimmer 1.3s linear infinite;
+}
+@keyframes around-week-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@container around-week (width < 300px) {
+  .around-week-card, .around-week-skeleton { grid-template-columns: 88px minmax(0, 1fr); }
+  .around-week-main { padding: 10px 12px; }
+  .around-week-main strong { font-size: var(--fs-2); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .around-week-card { transition: none; }
+  .around-week-card:active { scale: none; }
+  .around-week-skeleton span:last-child { animation: none; }
+}

@@ -21,8 +21,8 @@ describe('quiz engine', () => {
     await Q.loadLookalikes();
   });
 
-  it('ships 19 packs, each with a name and question types', () => {
-    expect(Q.PACKS).toHaveLength(19);
+  it('ships 20 packs, each with a name and question types', () => {
+    expect(Q.PACKS).toHaveLength(20);
     for (const pack of Q.PACKS) {
       expect(pack.key).toBeTruthy();
       expect(pack.name).toBeTruthy();

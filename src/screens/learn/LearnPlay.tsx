@@ -9,6 +9,7 @@ import { db } from '../../core/db.js';
 import { loadSeq } from '../../core/seqdata.js';
 import { loadExtras } from '../../core/gallery.js';
 import { cachedIndex } from '../../core/media.js';
+import { ensureAroundWeek } from '../../lib/aroundWeek';
 import {
   learnReady, newPracticeRound, newDailyRound, newDeckRound, answer as recordAnswer, finishRound,
   roundNote, testSet, allCards, dueCards, boxes, nextDue, addCards, gradeCard, dayStr, monthName,
@@ -621,6 +622,8 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
       }
       const seenNow = new Set(((await db.all('sightings')) as { speciesId: number }[]).map((s) => s.speciesId));
       if (!alive) return;
+      if (pack === 'around') await ensureAroundWeek();
+      if (!alive) return;
       const r = testId
         ? await newPracticeRound('quick', { ids: testSet(testId), testId, seen: seenNow } as any)
         : await newPracticeRound(pack, { seen: seenNow } as any);
@@ -707,6 +710,7 @@ export default function LearnPlay({ fixedPack }: { fixedPack?: string }) {
     stopInline();
     await Promise.all([learnReady(), loadSeq(), loadExtras(), cachedIndex()]);
     const testId = pack === 'test' ? Number(params.id) : null;
+    if (pack === 'around') await ensureAroundWeek();
     const r = isDaily ? newDailyRound() : testId
       ? await newPracticeRound('quick', {
         ids: testSet(testId),

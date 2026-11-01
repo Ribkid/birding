@@ -8,6 +8,7 @@ import { countUp, motionOK } from '../../lib/motion';
 import { useTint } from '../../components/Motion';
 import { FadeImage } from '../../components/SpeciesImage';
 import { toast } from '../../lib/toast';
+import AroundWeek from './AroundWeek';
 import { faceSrc, heroFace, modeFaces, packCovers, tintable } from './hubPhotos';
 import * as Q from '../../core/quiz.js';
 import {
@@ -118,7 +119,7 @@ export default function Learn() {
   // The card is there once the hub is drawn, so the tint waits for that too.
   const tintRef = useTint<HTMLAnchorElement>(drawn ? hero?.tint ?? null : null, null);
 
-  const packs = useMemo(() => (ready ? packProgress().filter((p: { total: number }) => p.total >= 5) : []), [ready, L?.packs]);
+  const packs = useMemo(() => (ready ? packProgress().filter((p: { key: string; total: number }) => p.key !== 'around' && p.total >= 5) : []), [ready, L?.packs]);
   const packN = packs.length;
   const packsDone = packs.filter((p: { plays: number }) => p.plays > 0).length;
   const mastered = ready ? Object.keys(L?.cards || {}).filter((id) => isMastered(Number(id))).length : 0;
@@ -221,6 +222,8 @@ export default function Learn() {
             <span className="lh-go">{doneToday ? 'See how you went' : picks.length ? 'Carry on' : 'Start'}</span>
           </span>
         </Link>
+
+        <AroundWeek />
 
         <section className="lh-sec" aria-labelledby="lh-packs-h">
           <div className="lh-sec-h"><h2 id="lh-packs-h">Quiz packs</h2></div>

@@ -568,6 +568,15 @@ export function snakeQ(sp, o = {}) {
 // ---------- quiz packs: built from rules over the species data, not hand-typed lists ----------
 const inGroups = (...gs) => s => gs.includes(s.group);
 const birdIn = h => s => s.kind === 'bird' && s.habitats.includes(h);
+// “Around this week” is filled from the eBird snapshot at runtime; it stays empty (and hidden) without recent birds.
+const aroundIds = new Set();
+export function setAroundSpecies(ids = []) {
+  aroundIds.clear();
+  for (const id of ids) {
+    const sp = byId.get(id);
+    if (sp?.kind === 'bird') aroundIds.add(id);
+  }
+}
 export const PACKS = [
   { key: 'backyard', name: 'Backyard birds', kind: 'bird', blurb: 'Garden and park regulars', test: s => birdIn('g')(s) && s.rarity <= 2, types: ['photo', 'call', 'silhouette', 'native', 'zoom', 'whoami'] },
   { key: 'mammals', name: 'Mammals of SEQ', kind: 'mammal', blurb: 'Marsupials, bats and the ones at sea', test: s => s.kind === 'mammal', types: ['photo', 'silhouette', 'daynight', 'where', 'bigger', 'whoami'] },
@@ -588,6 +597,7 @@ export const PACKS = [
   { key: 'nightshift', name: 'Night shift', kind: null, blurb: 'Everything that comes out after dark', test: s => s.nocturnal, types: ['photo', 'silhouette', 'call', 'where', 'whoami'] },
   { key: 'seasonal', name: 'Seasonal visitors', kind: null, blurb: 'Here for part of the year', test: s => s.kind !== 'plant' && !!s.season, types: ['photo', 'when', 'call', 'whoami'] },
   { key: 'rare', name: 'Rare finds', kind: null, blurb: 'Scarce and rare across every kind', test: s => s.rarity >= 4, types: ['photo', 'zoom', 'silhouette', 'whoami'] },
+  { key: 'around', name: 'Around this week', kind: 'bird', blurb: 'Birds reported near you in the last seven days', test: s => aroundIds.has(s.id), types: ['photo', 'call', 'when', 'where', 'whoami'] },
 ];
 export const PACK_BY = Object.fromEntries(PACKS.map(p => [p.key, p]));
 export const packSpecies = key => (PACK_BY[key] ? SPECIES.filter(PACK_BY[key].test) : []);
