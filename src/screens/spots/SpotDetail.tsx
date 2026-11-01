@@ -25,6 +25,7 @@ import {
   type SpotAccess,
 } from '../../lib/spots';
 import { AccessBlock } from './parts';
+import LatestVisits from './LatestVisits';
 import './spots.css';
 
 const directionsUrl = (lat: number, lng: number) =>
@@ -217,6 +218,8 @@ export default function SpotDetail() {
           ) : <p className="empty-inline">No recent sightings of dex birds are saved for this spot.</p>}
         </section>
       )}
+
+      {locId && <LatestVisits locId={locId} />}
 
       <section className="spot-birds" aria-labelledby="spot-birds-title">
         <div className="spot-section-head">

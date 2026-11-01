@@ -1,6 +1,7 @@
 const BASE = 'https://api.ebird.org/v2/';
 const LOC_ID = /^L\d{1,10}$/;
 const SPECIES_CODE = /^[a-z0-9]{4,8}$/;
+const SUB_ID = /^S\d{4,12}$/;
 // Keep each upstream request short: a stalled eBird call is "not available right now", never a held-open screen.
 export const TIMEOUT_MS = 8000;
 
@@ -16,6 +17,8 @@ const CACHE = {
   species: 's-maxage=1800, stale-while-revalidate=86400',
   near: 's-maxage=600, stale-while-revalidate=86400',
   notable: 's-maxage=600, stale-while-revalidate=86400',
+  visits: 's-maxage=900, stale-while-revalidate=86400',
+  checklist: 's-maxage=3600, stale-while-revalidate=86400',
 };
 const ROUTES = Object.keys(CACHE);
 
@@ -34,6 +37,12 @@ function requireSpeciesCode(value) {
   const code = text(value);
   if (!code || !SPECIES_CODE.test(code)) throw new BadRequest('Invalid species code');
   return code;
+}
+
+function requireSubId(value) {
+  const sub = text(value);
+  if (!sub || !SUB_ID.test(sub)) throw new BadRequest('Invalid checklist id');
+  return sub;
 }
 
 function numberInRange(value, min, max) {
@@ -165,6 +174,45 @@ async function notable(query) {
   return nearbyObservations(query, true);
 }
 
+function dateAndTime(value, time) {
+  const stamp = String(value ?? '');
+  const [date, embedded] = stamp.split(/\s+/);
+  if (!date) throw new Error('Unexpected eBird date');
+  return { date, time: String(time ?? embedded ?? '') };
+}
+
+async function visits(query) {
+  const locId = requireLocId(query.loc);
+  const data = await ebirdArray(`product/lists/${locId}?maxResults=10`);
+  return data.map((row) => {
+    if (!row || typeof row !== 'object' || !row.subId) throw new Error('Unexpected eBird checklist');
+    const { date, time } = dateAndTime(row.obsDt, row.obsTime);
+    const species = Number(row.numSpecies);
+    if (!Number.isFinite(species)) throw new Error('Unexpected eBird checklist count');
+    return { sub: String(row.subId), date, time, species };
+  });
+}
+
+async function checklist(query) {
+  const sub = requireSubId(query.sub);
+  const data = await ebirdJson(`product/checklist/view/${sub}`);
+  if (!data || typeof data !== 'object' || !Array.isArray(data.obs)) {
+    throw new Error('Unexpected eBird checklist');
+  }
+  const { date, time } = dateAndTime(data.obsDt ?? data.creationDt, data.obsTime);
+  const species = data.obs.map((row) => {
+    if (!row || typeof row !== 'object' || !row.speciesCode) throw new Error('Unexpected eBird observation');
+    const raw = row.howManyStr ?? row.howMany ?? row.howManyAtleast ?? 1;
+    const n = Number(raw);
+    return {
+      code: String(row.speciesCode),
+      name: String(row.comName ?? row.speciesCode),
+      n: Number.isFinite(n) ? n : 1,
+    };
+  });
+  return { sub, date, time, loc: String(data.locId ?? ''), species };
+}
+
 async function nearest(query) {
   const code = requireSpeciesCode(query.sp);
   const { lat, lng } = requireSeqPoint(query);
@@ -195,7 +243,9 @@ export default async function handler(req, res) {
       : route === 'species' ? await species(query)
         : route === 'near' ? await near(query)
           : route === 'notable' ? await notable(query)
-            : await recentOrList(query, route);
+            : route === 'visits' ? await visits(query)
+              : route === 'checklist' ? await checklist(query)
+                : await recentOrList(query, route);
     return res.status(200).json(body);
   } catch (error) {
     if (error instanceof BadRequest) return res.status(400).json({ error: 'Invalid query' });

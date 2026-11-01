@@ -61,6 +61,19 @@ export interface SpeciesSightings {
   total: number;
   sightings: EbirdObservation[];
 }
+export interface EbirdVisit {
+  sub: string;
+  date: string;
+  time: string;
+  species: number;
+}
+export interface EbirdChecklist {
+  sub: string;
+  date: string;
+  time: string;
+  loc: string;
+  species: { code: string; name: string; n: number }[];
+}
 export interface SpotData {
   source: 'eBird' | 'ALA';
   spots: HotspotLike[];
