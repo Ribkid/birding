@@ -15,6 +15,7 @@ const CACHE = {
   nearest: 's-maxage=600, stale-while-revalidate=86400',
   species: 's-maxage=1800, stale-while-revalidate=86400',
   near: 's-maxage=600, stale-while-revalidate=86400',
+  notable: 's-maxage=600, stale-while-revalidate=86400',
 };
 const ROUTES = Object.keys(CACHE);
 
@@ -160,6 +161,10 @@ async function near(query) {
   return nearbyObservations(query);
 }
 
+async function notable(query) {
+  return nearbyObservations(query, true);
+}
+
 async function nearest(query) {
   const code = requireSpeciesCode(query.sp);
   const { lat, lng } = requireSeqPoint(query);
@@ -189,7 +194,8 @@ export default async function handler(req, res) {
     const body = route === 'nearest' ? await nearest(query)
       : route === 'species' ? await species(query)
         : route === 'near' ? await near(query)
-          : await recentOrList(query, route);
+          : route === 'notable' ? await notable(query)
+            : await recentOrList(query, route);
     return res.status(200).json(body);
   } catch (error) {
     if (error instanceof BadRequest) return res.status(400).json({ error: 'Invalid query' });
