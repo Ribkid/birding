@@ -28,6 +28,19 @@ export interface LiveRecent {
   date: string;
   n: number;
 }
+/** A compact eBird observation as every round-2 route returns it. */
+export interface EbirdObservation extends LiveRecent {
+  loc: string;
+  where: string;
+  lat: number;
+  lng: number;
+  sub?: string | null;
+  distanceKm?: number;
+}
+export interface SpeciesSightings {
+  total: number;
+  sightings: EbirdObservation[];
+}
 export interface SpotData {
   source: 'eBird' | 'ALA';
   spots: HotspotLike[];
@@ -79,6 +92,69 @@ export async function fetchLiveEbird(
   } catch {
     return null;
   }
+}
+
+/** A small private-function call: enforces the 8 s client wait and treats every failure as no data. */
+export async function fetchEbirdQuery<T>(
+  query: Record<string, string | number | boolean>,
+  fetcher: typeof fetch = fetch,
+  online = typeof navigator !== 'undefined' ? navigator.onLine : false,
+): Promise<T | null> {
+  if (!online) return null;
+  try {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) params.set(key, String(value));
+    const response = await fetcher(`/api/ebird?${params.toString()}`, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return null;
+    const data: unknown = await response.json();
+    return data && typeof data === 'object' ? data as T : null;
+  } catch {
+    return null;
+  }
+}
+
+/** eBird hotspot names use a double hyphen and a parenthetical access caveat; our screens use neither. */
+export function tidySpotName(name: string): { name: string; restricted: boolean } {
+  let restricted = false;
+  const tidy = String(name || '')
+    .replace(/\s*\((?:some areas\s+)?restricted access\)/gi, () => {
+      restricted = true;
+      return '';
+    })
+    .replace(/\s*--\s*/g, ' – ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { name: tidy || 'eBird hotspot', restricted };
+}
+
+/** A fix is sent only to two decimal places (about 1 km). */
+export function roughCoord(value: number): number | null {
+  return Number.isFinite(value) ? Math.round(value * 100) / 100 : null;
+}
+
+export function roughLatLng(point: { lat: number; lng: number } | null | undefined): { lat: number; lng: number } | null {
+  if (!point) return null;
+  const lat = roughCoord(Number(point.lat));
+  const lng = roughCoord(Number(point.lng));
+  return lat == null || lng == null ? null : { lat, lng };
+}
+
+const dayNumber = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000;
+
+/** The quiet relative-time wording used on cards: today, yesterday, 2 days ago, last week. */
+export function relativeDay(value: string | null | undefined, now = new Date()): string {
+  if (!value) return '';
+  const when = new Date(String(value).replace(' ', 'T'));
+  if (!Number.isFinite(when.getTime())) return '';
+  const days = Math.round(dayNumber(now) - dayNumber(when));
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return 'last week';
+  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+  if (days < 365) return `${Math.floor(days / 30)} months ago`;
+  const years = Math.floor(days / 365);
+  return years === 1 ? 'last year' : `${years} years ago`;
 }
 
 export function mapLiveRecent(rows: LiveRecent[], birds: { id: number; sci: string }[]) {

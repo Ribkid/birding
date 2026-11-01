@@ -29,6 +29,7 @@ import { CallsSection, PauseIcon, PlayIcon, hasCalls, useCallPlayer } from './Bi
 import { CardOverlay, askMotion, shareCard, type CardInfo } from './BirdCard';
 import { openSearch } from './DexSearch';
 import { openSightingSheet } from '../components/SightingSheet';
+import WhereToFind from '../components/WhereToFind';
 import { toast } from '../lib/toast';
 import type { SightingRow } from './lists/shared';
 import './species.css';
@@ -430,6 +431,8 @@ function SpeciesPage({ sp }: { sp: Species }) {
           </ul>
           <Link className="btn spot-test" to={`/learn/test/${sp.id}`}><LearnIcon /><span>Test me on this</span></Link>
         </section>
+
+        <WhereToFind sp={sp} />
 
         <div data-confuse="" data-curated={curated.length ? '' : undefined}>
           {confuse.length > 0 && (
