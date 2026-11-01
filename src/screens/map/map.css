@@ -1,7 +1,6 @@
 /*
- * Map slice styles. Everything that already exists in v1 lives in src/styles/app.css,
- * rest.css and look.css; these rules only pin the map to v1's geometry and hide the
- * screen-reader summary.
+ * Map slice styles. Shared v1 rules live in src/styles/app.css, rest.css and look.css;
+ * this file pins the map geometry and screen-reader summary, and styles the map key and Places.
  */
 
 .map-screen {
@@ -71,3 +70,76 @@
 }
 .mapwrap .map-sun[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #2A2000, var(--shadow-float); }
 body.has-outing .mapwrap .map-sun { bottom: calc(var(--chrome-bottom) + 242px); }
+
+/* Places: the visible mark is 30 px, inside Leaflet's 44 px icon target. */
+.map-place-icon { display: grid; place-items: center; border: 0; background: none; }
+.map-place {
+  display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--k-frog); color: var(--surface); box-shadow: 0 0 0 2px #fff, 0 3px 9px rgba(7, 11, 16, .45);
+  pointer-events: none;
+}
+.map-place svg { width: 18px; height: 18px; }
+.map-place-icon:focus-visible .map-place { outline: 3px solid var(--azure); outline-offset: 3px; }
+.mapwrap .leaflet-popup .pop-sub, .mapwrap .leaflet-popup .pop-src { color: var(--ink-2); }
+
+/* Key joins the right-hand stack above Sun; its panel opens into the free space above the controls. */
+.map-key { position: absolute; z-index: 530; right: 12px; bottom: calc(var(--chrome-bottom) + 242px); }
+body.has-outing .map-key { bottom: calc(var(--chrome-bottom) + 304px); }
+.map-key-button {
+  min-width: 58px; min-height: var(--tap); padding: 8px 15px; border: 0; border-radius: var(--r-pill);
+  background: var(--glass); color: var(--ink); font: inherit; font-size: var(--fs-2); font-weight: 700; cursor: pointer;
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+}
+.map-key-button[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
+.map-key-panel {
+  position: absolute; right: 0; bottom: calc(100% + 10px); width: min(326px, calc(100vw - 24px));
+  max-height: max(180px, calc(100dvh - var(--chrome-bottom) - 330px)); padding: 8px 0 10px; overflow: auto;
+  overscroll-behavior: contain; border-radius: var(--r-card); background: var(--glass-strong); color: var(--ink);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-float);
+}
+.map-key-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px 4px 16px; }
+.map-key-head h2 { margin: 0; font-size: var(--fs-4); line-height: 1.25; }
+.map-key-head .iconbtn { flex: none; }
+.map-key-list { list-style: none; display: grid; gap: 8px; margin: 0; padding: 0 14px 10px; }
+.map-key-list li { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 8px; font-size: var(--fs-2); line-height: 1.3; }
+.map-key-symbol { display: flex; align-items: center; justify-content: center; width: 38px; min-height: 30px; }
+.map-key-hotspot { width: 17px; height: 17px; min-height: 17px; margin: auto; border-radius: 50%; background: var(--gold); box-shadow: inset 0 0 0 1.5px #3A2A00; }
+.map-key-hotspots--need { gap: 4px; }
+.map-key-hotspots--need i { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--gold); box-shadow: inset 0 0 0 1px #3A2A00; }
+.map-key-hotspots--need i + i { width: 22px; height: 22px; background: var(--lori); }
+.map-key-sightings { display: grid; grid-template-columns: repeat(3, 10px); gap: 4px; }
+.map-key-sightings i { width: 10px; height: 10px; border-radius: 50%; background: var(--azure); box-shadow: 0 0 0 1.5px #fff; }
+.map-key-sightings .map-key-kind--bird { background: var(--k-bird); }
+.map-key-sightings .map-key-kind--mammal { background: var(--k-mammal); }
+.map-key-sightings .map-key-kind--reptile { background: var(--k-reptile); }
+.map-key-sightings .map-key-kind--frog { background: var(--k-frog); }
+.map-key-sightings .map-key-kind--butterfly { background: var(--k-butterfly); }
+.map-key-sightings .map-key-kind--plant { background: var(--k-plant); }
+.map-key-patch { width: 25px; height: 25px; min-height: 25px; margin: auto; border: 2px dashed var(--lori); border-radius: 50%; background: color-mix(in srgb, var(--lori) 8%, transparent); }
+.map-key-square { width: 24px; height: 24px; min-height: 24px; margin: auto; background: color-mix(in srgb, var(--lori) 65%, transparent); }
+.map-key-me { width: 15px; height: 15px; min-height: 15px; margin: auto; border-radius: 50%; background: var(--lori); box-shadow: 0 0 0 3px #fff; }
+.map-key-symbol img { width: 18px; height: 29px; }
+.map-key-places { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 10px; margin: 0 14px; padding: 12px 0 2px; border-top: 1px solid var(--line); }
+.map-key-places li { display: grid; grid-template-columns: 30px minmax(0, 1fr); align-items: center; gap: 7px; font-size: var(--fs-1); line-height: 1.2; }
+.map-key-places .map-place { box-shadow: 0 0 0 1px #fff, 0 0 0 2px var(--line-strong); }
+
+/* The two map notes share one stack rather than covering each other. */
+.map-note-stack { position: absolute; z-index: 510; top: calc(134px + env(safe-area-inset-top)); left: var(--sp-4); right: var(--sp-4); display: grid; gap: 8px; pointer-events: none; }
+.map-note-stack .map-note { position: relative; inset: auto; width: 100%; pointer-events: auto; }
+.map-note-stack .map-note--places { padding: 10px var(--sp-4); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .map-key-panel { animation: map-key-in var(--dur-2) var(--ease-out) both; }
+}
+@keyframes map-key-in { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) {
+  .map-key-panel { animation: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .map-key-button, .map-key-panel { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .map-key-button, .map-key-panel { background: var(--glass-strong); }
+}

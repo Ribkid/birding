@@ -25,6 +25,16 @@ import { announce, toast as appToast } from '../../lib/toast';
 import { localPlaceMatches, myPlaces, searchAddress } from '../../lib/places';
 import { loadSpotData, nearestEbirdSpot } from '../../lib/ebird';
 import type { HotspotLike } from '../../lib/spots';
+import {
+  buildOverpassQuery,
+  PLACE_KINDS,
+  PLACE_LABELS,
+  placesFromElements,
+  roundedBoundsKey,
+  type MapPlace,
+  type OverpassElement,
+  type PlaceKind,
+} from '../../lib/mapPlaces';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,15 +48,18 @@ type MapOuting = Outing & { lat?: number | null; lng?: number | null };
 // v1 keeps these on `state` for the session, so leaving the map and coming back finds it as she left it:
 // the chips (state.mapF), where the map was (state.mapView), and whether tiles failed with no signal
 // (state.tilesOffline) or she hid that note (state.mapNoteHidden).
-const mapF: { show: Show; hot: boolean; hotFocus: boolean; need: boolean } = {
+const mapF: { show: Show; hot: boolean; hotFocus: boolean; need: boolean; places: boolean } = {
   show: 'all',
   hot: true,
   hotFocus: false,
   need: false,
+  places: true,
 };
 let mapView: { c: L.LatLng; z: number } | null = null;
 let tilesOffline = false;
 let mapNoteHidden = false;
+let mapKeyOpen = false;
+const placeCache = new Map<string, MapPlace[]>();
 
 interface Patch {
   id: number;
@@ -235,6 +248,34 @@ const searchPinIcon = () =>
     shadowSize: [41, 41],
   });
 
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const PLACE_ZOOM = 15;
+
+const PLACE_GLYPHS: Record<PlaceKind, string> = {
+  hut: '<path d="m4 11 8-7 8 7M6 10v9h12v-9M10 19v-5h4v5M16 5v3"/>',
+  shelter: '<path d="m3 10 9-6 9 6M5 10v9m14-9v9M4 19h16M8 13h8"/>',
+  toilets: '<circle cx="8" cy="5" r="2"/><circle cx="16" cy="5" r="2"/><path d="M5 20v-6l1-5h4l1 5v6M14 20v-6l1-5h3v11M8 14v6m8-6v6"/>',
+  water: '<path d="M12 3S6 10 6 14a6 6 0 0 0 12 0c0-4-6-11-6-11Z"/><path d="M9 15a3 3 0 0 0 3 3"/>',
+  picnic: '<path d="M5 9h14M7 9l-3 10m13-10 3 10M4 14h16M8 14l3 5m5-5-3 5"/>',
+  viewpoint: '<path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+  birdHide: '<path d="M4 15c4 0 7-3 7-7 3 1 5 3 5 6 3 0 5 1 6 3-3 3-7 4-11 2-4-1-6-2-7-4Z"/><path d="m16 14 4-1M8 19l-1 2m5-2 1 2"/>',
+  parking: '<path d="M8 20V4h6a5 5 0 0 1 0 10H8M8 5h6"/>',
+  information: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>',
+  camp: '<path d="m3 20 9-16 9 16H3ZM12 4l3 16M8 20l4-7 4 7"/>',
+};
+
+const placeIcon = (kind: PlaceKind): string =>
+  `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${PLACE_GLYPHS[kind]}</svg>`;
+
+const placeDivIcon = (place: MapPlace) =>
+  L.divIcon({
+    className: 'map-place-icon',
+    html: `<span class="map-place map-place--${place.kind}" aria-hidden="true">${placeIcon(place.kind)}</span>`,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    popupAnchor: [0, -18],
+  });
+
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
@@ -303,6 +344,113 @@ export default function MapScreen() {
   return <MapView key={routeKey} />;
 }
 
+interface MapKeyProps {
+  hotspotsOn: boolean;
+  need: boolean;
+  sightingsOn: boolean;
+  patchesOn: boolean;
+  focusOn: boolean;
+  located: boolean;
+  searchPin: boolean;
+  placesOn: boolean;
+}
+
+function MapKey({ hotspotsOn, need, sightingsOn, patchesOn, focusOn, located, searchPin, placesOn }: MapKeyProps) {
+  const [open, setOpen] = useState(mapKeyOpen);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  const close = useCallback(() => {
+    mapKeyOpen = false;
+    setOpen(false);
+    buttonRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!panelRef.current?.contains(target) && !buttonRef.current?.contains(target)) close();
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [open, close]);
+
+  const toggle = () => {
+    mapKeyOpen = !open;
+    setOpen(mapKeyOpen);
+  };
+
+  return (
+    <div className="map-key">
+      {open && (
+        <section ref={panelRef} id="map-key-panel" className="map-key-panel" aria-labelledby="map-key-title">
+          <div className="map-key-head">
+            <h2 id="map-key-title">Map key</h2>
+            <button type="button" className="iconbtn" aria-label="Close map key" onClick={close}>
+              {closeIcon}
+            </button>
+          </div>
+          <ul className="map-key-list">
+            {hotspotsOn && (
+              <li>
+                {need ? (
+                  <span className="map-key-symbol map-key-hotspots--need" aria-hidden="true"><i /><i /></span>
+                ) : (
+                  <span className="map-key-symbol map-key-hotspot" aria-hidden="true" />
+                )}
+                <span>{need ? 'Hotspots. Size and gold-to-dark colour show birds you still need.' : 'Hotspots. Bigger circles mean more species.'}</span>
+              </li>
+            )}
+            {sightingsOn && (
+              <li>
+                <span className="map-key-symbol map-key-sightings" aria-hidden="true">
+                  {['bird', 'mammal', 'reptile', 'frog', 'butterfly', 'plant'].map((kind) => <i key={kind} className={`map-key-kind--${kind}`} />)}
+                </span>
+                <span>Your sightings in kind colours with white rings. Bigger dots mean more species at that place.</span>
+              </li>
+            )}
+            {patchesOn && <li><span className="map-key-symbol map-key-patch" aria-hidden="true" /><span>Your patches.</span></li>}
+            {focusOn && <li><span className="map-key-symbol map-key-square" aria-hidden="true" /><span>Reports for this species in one-kilometre squares. Darker means more records.</span></li>}
+            {located && <li><span className="map-key-symbol map-key-me" aria-hidden="true" /><span>You are here.</span></li>}
+            {searchPin && <li><span className="map-key-symbol"><img src={markerIcon} alt="" /></span><span>Place from your search.</span></li>}
+          </ul>
+          {placesOn && (
+            <ul className="map-key-places" aria-label="Place icons">
+              {PLACE_KINDS.map((kind) => (
+                <li key={kind}>
+                  <span className={`map-place map-place--${kind}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: placeIcon(kind) }} />
+                  <span>{PLACE_LABELS[kind]}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+      <button
+        ref={buttonRef}
+        type="button"
+        className="map-key-button"
+        aria-expanded={open}
+        aria-controls="map-key-panel"
+        onClick={toggle}
+      >
+        Key
+      </button>
+    </div>
+  );
+}
+
 function MapView() {
   const { pathname } = useLocation();
   const params = useParams();
@@ -325,7 +473,10 @@ function MapView() {
   const toggleHot = () => { chipTapped(); mapF.hot = !mapF.hot; setHotState(mapF.hot); };
   const toggleHotFocus = () => { chipTapped(); mapF.hotFocus = !mapF.hotFocus; setHotFocusState(mapF.hotFocus); };
   const toggleNeed = () => { chipTapped(); mapF.need = !mapF.need; setNeedState(mapF.need); };
+  const [placesOn, setPlacesOnState] = useState(mapF.places);
+  const togglePlaces = () => { chipTapped(); mapF.places = !mapF.places; setPlacesOnState(mapF.places); };
   const [layer, setLayer] = useState<Layer>('map');
+  const [zoom, setZoom] = useState(mapView?.z ?? (atLat != null && atLng != null ? PLACE_ZOOM : SEQ_ZOOM));
   const [seqTick, setSeqTick] = useState(0);
   const [ebirdSpots, setEbirdSpots] = useState<HotspotLike[] | null | undefined>(undefined);
 
@@ -347,6 +498,8 @@ function MapView() {
   const [notes, setNotes] = useState<Note[]>([]);
   // Locate feedback, as v1: the fab dims while it waits, an error shows as a toast.
   const [locating, setLocating] = useState(false);
+  const [located, setLocated] = useState(false);
+  const [hasSearchPin, setHasSearchPin] = useState(false);
   // v1's "No signal" note (mapNote('tiles')): tiles failed with no connection and she has not hidden it.
   const [noSignal, setNoSignal] = useState(false);
   const noSignalRef = useRef(false);
@@ -355,6 +508,7 @@ function MapView() {
   const mapRef = useRef<L.Map | null>(null);
   const overlayRef = useRef<L.LayerGroup | null>(null);
   const meRef = useRef<L.LayerGroup | null>(null);
+  const placeLayerRef = useRef<L.LayerGroup | null>(null);
   const osmRef = useRef<L.TileLayer | null>(null);
   const satRef = useRef<L.LayerGroup | null>(null);
   const hotspotMarkersRef = useRef<{ h: Hotspot; mk: L.CircleMarker }[]>([]);
@@ -601,15 +755,18 @@ function MapView() {
     if (!navigator.onLine && tilesOffline) showNoSignal();
     map.on('moveend', () => {
       mapView = { c: map.getCenter(), z: map.getZoom() };
+      setZoom(map.getZoom());
     });
 
     const overlay = L.layerGroup().addTo(map);
     const me = L.layerGroup().addTo(map);
+    const placeLayer = L.layerGroup().addTo(map);
     mapRef.current = map;
     osmRef.current = osm;
     satRef.current = sat;
     overlayRef.current = overlay;
     meRef.current = me;
+    placeLayerRef.current = placeLayer;
     // A fresh instance has not framed the data yet. Resetting here also makes the
     // effect resilient to StrictMode's mount → clean up → mount cycle.
     focusFittedRef.current = false;
@@ -669,6 +826,7 @@ function MapView() {
       mapRef.current = null;
       overlayRef.current = null;
       meRef.current = null;
+      placeLayerRef.current = null;
       osmRef.current = null;
       satRef.current = null;
       map.remove();
@@ -690,6 +848,107 @@ function MapView() {
     }
     map.getContainer().classList.toggle('map--sat', layer === 'sat');
   }, [layer]);
+
+  // Places are a live OpenStreetMap overlay, not bundled data: no connection is needed to open the map.
+  useEffect(() => {
+    const map = mapRef.current;
+    const placeLayer = placeLayerRef.current;
+    if (!map || !placeLayer) return;
+    let alive = true;
+    let timer: number | null = null;
+    let controller: AbortController | null = null;
+
+    const cancel = () => {
+      if (timer != null) window.clearTimeout(timer);
+      timer = null;
+      controller?.abort();
+      controller = null;
+    };
+
+    const draw = (rows: MapPlace[]) => {
+      if (!alive || mapRef.current !== map) return;
+      placeLayer.clearLayers();
+      for (const place of rows) {
+        const title = place.name || place.label;
+        const html = `<span class="pop-h">${esc(title)}</span>${
+          place.details ? `<p class="pop-sub">${esc(place.details)}</p>` : ''
+        }<a href="${directionsUrl(place.lat, place.lng)}" target="_blank" rel="noopener">Directions</a><p class="pop-src">© OpenStreetMap contributors</p>`;
+        const marker = L.marker([place.lat, place.lng], {
+          icon: placeDivIcon(place),
+          title,
+          alt: title,
+          bubblingMouseEvents: false,
+        });
+        marker.addTo(placeLayer).bindPopup(html, popOpts(map, 260));
+        marker.on('popupopen', () => addNote(`place:${place.id}`, html, place.lat, place.lng));
+      }
+    };
+
+    const load = () => {
+      timer = null;
+      if (!alive || !placesOn || map.getZoom() < PLACE_ZOOM || !navigator.onLine) return;
+      const visible = map.getBounds();
+      const box = {
+        south: visible.getSouth(),
+        west: visible.getWest(),
+        north: visible.getNorth(),
+        east: visible.getEast(),
+      };
+      const key = roundedBoundsKey(box);
+      const cached = placeCache.get(key);
+      if (cached) {
+        draw(cached);
+        return;
+      }
+
+      controller?.abort();
+      const request = new AbortController();
+      controller = request;
+      void fetch(OVERPASS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: new URLSearchParams({ data: buildOverpassQuery(box) }),
+        signal: request.signal,
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error('Places unavailable');
+          return response.json() as Promise<{ elements?: OverpassElement[] }>;
+        })
+        .then((data) => {
+          if (!alive || request.signal.aborted) return;
+          const rows = placesFromElements(Array.isArray(data.elements) ? data.elements : []);
+          placeCache.set(key, rows);
+          draw(rows);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (controller === request) controller = null;
+        });
+    };
+
+    const update = () => {
+      cancel();
+      if (!placesOn || map.getZoom() < PLACE_ZOOM) {
+        placeLayer.clearLayers();
+        return;
+      }
+      if (navigator.onLine) timer = window.setTimeout(load, 600);
+    };
+
+    map.on('movestart', cancel);
+    map.on('moveend', update);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', cancel);
+    update();
+    return () => {
+      alive = false;
+      cancel();
+      map.off('movestart', cancel);
+      map.off('moveend', update);
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', cancel);
+    };
+  }, [placesOn, addNote]);
 
   // Regional data is fetched once; the tick rebuilds the hotspot layers when it lands.
   useEffect(() => {
@@ -1062,6 +1321,7 @@ function MapView() {
     }
     tempMarkerRef.current?.remove();
     tempMarkerRef.current = null;
+    setHasSearchPin(false);
     setQ('');
     setSearchStatus('idle');
     setSearchMsg('');
@@ -1096,6 +1356,7 @@ function MapView() {
       .addTo(map)
       .bindPopup(popupHtml, popOpts(map));
     tempMarkerRef.current = marker;
+    setHasSearchPin(true);
     addNote(`search:${result.lat},${result.lng}`, popupHtml, result.lat, result.lng);
     window.setTimeout(() => {
       if (mapRef.current === map && marker.getElement()) marker.openPopup();
@@ -1129,6 +1390,7 @@ function MapView() {
           fillColor: cssVar('--lori'),
           fillOpacity: 1,
         }).addTo(me);
+        setLocated(true);
       },
       (error) => {
         setLocating(false);
@@ -1276,7 +1538,7 @@ function MapView() {
               {focus.name} <span aria-hidden="true">✕</span>
             </Link>
           )}
-          {/* data-hot/data-need/data-mshow draw each chip's map colour (rest.css), as in v1. */}
+          {/* Each chip carries the colour of its marks on the map (rest.css), as in v1. */}
           {!noHot && (
             <button
               type="button"
@@ -1291,6 +1553,15 @@ function MapView() {
               Hotspots
             </button>
           )}
+          <button
+            type="button"
+            className={`chip ${placesOn ? 'chip--on' : ''}`}
+            data-places=""
+            aria-pressed={placesOn}
+            onClick={togglePlaces}
+          >
+            Places
+          </button>
           {!focus && (
             <button
               type="button"
@@ -1367,15 +1638,35 @@ function MapView() {
           </button>
         </div>
 
-        {noSignal && (
-          <div className="map-note map-note--tiles">
-            <p>
-              <strong>No signal.</strong> Areas you haven&apos;t opened before stay blank. Hotspots and your
-              sightings still show.
-            </p>
-            <button type="button" className="iconbtn" aria-label="Hide this message" onClick={hideNote}>
-              {closeIcon}
-            </button>
+        <MapKey
+          hotspotsOn={hotOn && hotspotView.length > 0}
+          need={need && !focus}
+          sightingsOn={groups.length > 0}
+          patchesOn={patches.length > 0}
+          focusOn={Boolean(focus && focusPoints.length)}
+          located={located}
+          searchPin={hasSearchPin}
+          placesOn={placesOn && zoom >= PLACE_ZOOM}
+        />
+
+        {(noSignal || (placesOn && zoom < PLACE_ZOOM)) && (
+          <div className="map-note-stack">
+            {noSignal && (
+              <div className="map-note map-note--tiles">
+                <p>
+                  <strong>No signal.</strong> Areas you haven&apos;t opened before stay blank. Hotspots and your
+                  sightings still show.
+                </p>
+                <button type="button" className="iconbtn" aria-label="Hide this message" onClick={hideNote}>
+                  {closeIcon}
+                </button>
+              </div>
+            )}
+            {placesOn && zoom < PLACE_ZOOM && (
+              <div className="map-note map-note--places">
+                <p>Zoom in to see huts, toilets and lookouts</p>
+              </div>
+            )}
           </div>
         )}
       </div>
