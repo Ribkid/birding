@@ -1,40 +1,70 @@
-/* Spots: the list and one spot's page. Cards are solid for reading in sun; the hero and the credit are the
-   photo-first, glassy pieces, and all colour comes from the shared tokens so light, dark and Outdoor each work. */
+/* Spots: the list and one spot's page. Photo-first and glassy: a bird she could find leads each card, with the name on
+   frosted glass over it; everything else is quiet. Colour comes from the shared tokens, so light, dark and Outdoor all
+   work, and "new for you" is always the gold of the app's highlights, never a warning red. */
 
 .spots-screen { padding-bottom: 20px; container: spots / inline-size; }
 .spots-head { align-items: flex-start; }
 .spots-head > div { min-width: 0; }
 .spots-head p { max-width: 60ch; }
 
-/* ---------- suggested ---------- */
-.spots-suggest {
-  margin: 4px 16px 16px; padding: 14px; border-radius: var(--r-card);
-  background: var(--surface); box-shadow: var(--shadow-card);
+/* ---------- shared bits ---------- */
+.pill-new {
+  display: inline-flex; align-items: center; width: fit-content; padding: 2px 9px; border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--gold) 22%, var(--surface)); color: var(--gold-ink);
+  font-size: var(--fs-1); font-weight: 700; line-height: 1.6; white-space: nowrap;
 }
-.spots-suggest h2 { margin: 0 0 2px; font: 700 1.1rem/1.25 var(--font); }
-.spots-suggest p { margin: 0; }
-.spot-suggest-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.spot-tag {
+  display: inline-flex; align-items: center; padding: 0 7px; border-radius: var(--r-pill);
+  border: 1px solid var(--line-strong); color: var(--ink-2); font-size: var(--fs-1); font-weight: 700; line-height: 1.6;
+}
+/* Rows of cards she can swipe, snapping to each; the card's gutter stays clear at both ends. */
+.rare-cards, .spot-suggest-list {
+  list-style: none; margin: 10px -14px 0; padding: 0 14px 4px; display: flex; gap: 10px;
+  overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scroll-padding-inline: 14px;
+  scrollbar-width: none;
+}
+.rare-cards::-webkit-scrollbar, .spot-suggest-list::-webkit-scrollbar { display: none; }
+.spot-suggest-glass, .spot-card-glass, .spot-hero-glass {
+  background: color-mix(in srgb, var(--surface) 74%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3);
+}
+
+/* ---------- rare birds and suggestions ---------- */
+.spots-rare, .spots-suggest {
+  margin: 4px 16px 16px; padding: 14px; border-radius: var(--r-card);
+  background: var(--surface); box-shadow: var(--shadow-card); overflow: hidden;
+}
+.spots-rare h2, .spots-suggest h2 { margin: 0 0 2px; font: 700 1.1rem/1.25 var(--font); }
+.spots-rare > p, .spots-suggest > p { margin: 0; }
+
+.rare-card { flex: none; width: min(13.5rem, 62%); scroll-snap-align: start; }
+.rare-card > a, .rare-card > div {
+  display: grid; height: 100%; border-radius: 14px; overflow: hidden; background: var(--surface-2);
+  color: var(--ink); text-decoration: none;
+}
+.rare-card > a:active { scale: .99; }
+.rare-card-photo { display: block; aspect-ratio: 3 / 2; background: var(--surface-2); }
+.rare-card-photo img, .rare-card-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+.rare-card-text { display: grid; gap: 2px; padding: 9px 11px 11px; align-content: start; }
+.rare-card-text .pill-new { margin-bottom: 2px; }
+.rare-card-text strong { line-height: 1.25; overflow-wrap: anywhere; }
+.rare-card-where { color: var(--ink); font-size: var(--fs-2); overflow-wrap: anywhere; }
+.rare-card-when { color: var(--ink-2); font-size: var(--fs-1); }
+
+.spot-suggest-card { flex: none; width: min(16rem, 76%); scroll-snap-align: start; }
 .spot-suggest-card a {
-  display: flex; align-items: center; gap: 10px; min-height: var(--tap); padding: 8px;
-  border-radius: 12px; background: var(--surface-2); color: var(--ink); text-decoration: none;
+  position: relative; display: block; aspect-ratio: 16 / 11; border-radius: 16px; overflow: hidden;
+  background: var(--surface-2); color: var(--ink); text-decoration: none;
 }
 .spot-suggest-card a:active { scale: .99; }
-.spot-suggest-photo {
-  width: 44px; height: 44px; flex: none; border-radius: 10px; overflow: hidden; background: var(--surface);
+.spot-suggest-photo, .spot-suggest-photo img, .spot-suggest-photo .img-missing {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%;
 }
-.spot-suggest-photo img, .spot-suggest-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
-.spot-suggest-main { display: grid; min-width: 0; }
-.spot-suggest-main strong { overflow-wrap: anywhere; line-height: 1.3; }
-.spot-suggest-line { color: var(--ink-2); font-size: var(--fs-2); }
-
-.spots-rare { margin: 4px 16px 16px; padding: 14px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
-.spots-rare h2 { margin: 0 0 2px; font: 700 1.1rem/1.25 var(--font); }
-.spots-rare > p { margin: 0; }
-.spots-rare ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; }
-.spots-rare li { padding: 9px 0; border-top: 1px solid var(--line); }
-.spots-rare-main { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
-.spots-rare-main > a { width: fit-content; font-weight: 700; }
-.spots-rare-main .small { line-height: 1.45; }
+.spot-suggest-glass {
+  position: absolute; left: 8px; right: 8px; bottom: 8px; display: grid; gap: 4px; padding: 8px 10px; border-radius: 12px;
+}
+.spot-suggest-glass strong { line-height: 1.25; overflow-wrap: anywhere; }
+.spot-suggest-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--ink-2); font-size: var(--fs-1); }
 
 /* ---------- search, sort, filters ---------- */
 /* One full-width column that may shrink: on a 195 px screen the search box, the sort select and
@@ -55,36 +85,45 @@
 
 /* ---------- spot cards ---------- */
 .spot-cards { list-style: none; margin: 0; padding: 0 16px; display: grid; gap: 12px; }
-/* Off-screen cards cost no layout or paint; the placeholder keeps the scrollbar steady. */
-/* min-width:0 lets a card shrink below the 260px placeholder on a narrow phone. */
-.spot-card { min-width: 0; content-visibility: auto; contain-intrinsic-size: auto 260px; }
+/* Off-screen cards cost no layout or paint; the placeholder keeps the scrollbar steady. min-width:0 lets a card
+   shrink below it on a narrow phone. */
+.spot-card { min-width: 0; content-visibility: auto; contain-intrinsic-size: auto 120px; }
+.spot-card--photo { contain-intrinsic-size: auto 290px; }
 .spot-card-link {
-  display: grid; gap: 8px; padding: 13px; border-radius: var(--r-card);
+  display: grid; border-radius: var(--r-card); overflow: hidden;
   background: var(--surface); box-shadow: var(--shadow-card); color: var(--ink); text-decoration: none;
 }
 .spot-card-link:active { scale: .995; }
-.spot-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.spot-card-photo { position: relative; display: block; aspect-ratio: 16 / 9; background: var(--surface-2); }
+.spot-card-photo img, .spot-card-photo .img-missing {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%;
+}
+.spot-card-glass {
+  position: absolute; left: 10px; right: 10px; bottom: 10px; display: grid; gap: 2px; padding: 9px 12px; border-radius: 14px;
+}
+.spot-card-head { display: grid; gap: 2px; padding: 13px 14px 0; }
+.spot-card-head:last-child { padding-bottom: 13px; }
 .spot-card-name { min-width: 0; font-size: 1.0625rem; line-height: 1.3; overflow-wrap: anywhere; }
-.spot-card-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; color: var(--ink-2); font-size: var(--fs-2); }
-.spot-distance { font-weight: 600; color: var(--ink); }
-.spot-new { color: var(--lori); font-weight: 600; }
+.spot-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; color: var(--ink-2); font-size: var(--fs-2); }
+.spot-card-body { display: grid; gap: 7px; padding: 11px 14px 13px; }
+.spot-card-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.spot-allseen { color: var(--ink-2); font-size: var(--fs-1); font-weight: 600; }
+.spot-could {
+  color: var(--ink-2); font-size: var(--fs-2); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
 
+.spot-badges { display: contents; }
 .spot-score {
-  flex: none; display: inline-flex; align-items: baseline; gap: 1px; padding: 2px 9px;
+  flex: none; display: inline-flex; align-items: baseline; gap: 1px; padding: 1px 8px;
   border-radius: var(--r-pill); background: var(--azure-soft); color: var(--azure); font-weight: 700;
-  font-size: var(--fs-2); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-1); line-height: 1.6; font-variant-numeric: tabular-nums;
 }
-.spot-score b { font-size: 1rem; }
-.spot-access-unknown { margin: 0; color: var(--ink-2); font-size: var(--fs-2); font-style: italic; }
-
-.spot-badges { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.spot-score b { font-size: var(--fs-2); }
 .spot-badge {
-  padding: 3px 9px; border-radius: var(--r-pill); border: 1px solid var(--line);
-  background: var(--surface-2); color: var(--ink-2); font-size: var(--fs-1); line-height: 1.5;
+  padding: 1px 8px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--ink-2);
+  font-size: var(--fs-1); line-height: 1.6;
 }
-.spot-photos { list-style: none; margin: 2px 0 0; padding: 0; display: flex; gap: 6px; }
-.spot-photo { flex: 1 1 0; min-width: 0; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--surface-2); }
-.spot-photo img, .spot-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
 .spot-credit { color: var(--ink-2); }
 .spots-credit { padding: 18px 16px 8px; }
 
@@ -92,14 +131,19 @@
 .spot-head { align-items: flex-start; }
 .spot-head-text { min-width: 0; }
 .spot-head-text h1 { overflow-wrap: anywhere; }
-.spot-last { margin: 4px 0 0; color: var(--ink-2); font-weight: 600; }
+.spot-head-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 4px 0 0; color: var(--ink-2); }
+.spot-last { font-weight: 600; }
 .spot-hero {
-  margin: 4px 16px 14px; border-radius: var(--r-card); overflow: hidden;
-  background: var(--surface); box-shadow: var(--shadow-card);
+  position: relative; margin: 4px 16px 14px; border-radius: var(--r-card); overflow: hidden;
+  background: var(--surface-2); box-shadow: var(--shadow-card);
 }
-.spot-hero-photo { aspect-ratio: 16 / 9; background: var(--surface-2); }
-.spot-hero-photo img, .spot-hero-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
-.spot-hero figcaption { padding: 8px 12px; font-size: var(--fs-2); color: var(--ink-2); }
+.spot-hero-photo { aspect-ratio: 4 / 3; max-height: 46svh; width: 100%; }
+.spot-hero-photo img, .spot-hero-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; }
+.spot-hero-glass {
+  position: absolute; left: 10px; bottom: 10px; display: grid; gap: 1px; max-width: calc(100% - 20px);
+  padding: 8px 12px; border-radius: 14px; color: var(--ink-2); font-size: var(--fs-1); font-weight: 600;
+}
+.spot-hero-glass a { color: var(--ink); font-size: var(--fs-3); font-weight: 700; text-decoration: none; overflow-wrap: anywhere; }
 .spot-facts {
   list-style: none; margin: 0 16px 14px; padding: 12px; display: flex; flex-wrap: wrap; gap: 8px 20px;
   border-radius: var(--r-2); background: var(--surface); box-shadow: var(--shadow-card);
@@ -107,11 +151,13 @@
 .spot-facts li { display: flex; align-items: baseline; gap: 5px; color: var(--ink-2); font-size: var(--fs-2); }
 .spot-facts b { font: 800 1.15rem/1 var(--stamp); color: var(--ink); font-variant-numeric: tabular-nums; }
 .spot-access { margin: 0 16px 14px; padding: 14px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
+.spot-access-none { margin: -4px 16px 14px; color: var(--ink-2); }
+.spot-access-none a { color: inherit; }
 .spot-access-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .spot-access h2, .spot-birds h2, .spot-yours h2 { margin: 0 0 6px; font: 700 1.15rem/1.25 var(--font); }
 .spot-reasons { margin: 6px 0; padding-left: 20px; color: var(--ink-2); }
 .spot-reasons li { margin: 2px 0; }
-.spot-access-note { margin: 6px 0 0; color: var(--lori); font-weight: 600; font-size: var(--fs-2); }
+.spot-access-note { margin: 6px 0 0; color: var(--ink); font-weight: 600; font-size: var(--fs-2); }
 .spot-access .spot-credit { margin: 8px 0 0; }
 .spot-actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 16px 16px; }
 .spot-actions .btn { flex: 1 1 auto; justify-content: center; min-height: 48px; }
@@ -121,14 +167,28 @@
 .spot-bird-list { margin-top: 4px; }
 .spot-yours h2 { margin-top: 4px; }
 
+/* Under reduced transparency the glass is solid, so text never sits on a busy photo. */
+@media (prefers-reduced-transparency: reduce) {
+  .spot-suggest-glass, .spot-card-glass, .spot-hero-glass { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
 /* At 150% and 200% text the page is 300–195 px wide: the facts and the actions go one to a line rather than
-   squeezing, and the hero steps down to 4:3 so its caption stays in the first screen. */
+   squeezing, and the photos step down so the names on them stay in view. */
 @container spots (width < 300px) {
   .spot-facts { gap: 6px 12px; }
   .spot-facts li { flex: 1 1 100%; }
   .spot-actions .btn { flex: 1 1 100%; }
+  .spot-card-photo { aspect-ratio: 4 / 3; }
+  .rare-card, .spot-suggest-card { width: 86%; }
 }
+/* Narrower still, the glass moves under the photo instead of over it. */
 @container spots (width < 240px) {
-  .spot-hero-photo { aspect-ratio: 4 / 3; }
-  .spot-hero figcaption { padding: 6px 10px; }
+  .spot-hero-photo { aspect-ratio: 1; }
+  .spot-card-glass, .spot-suggest-glass {
+    position: static; border-radius: 0; background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  .spot-card-photo, .spot-suggest-card a { aspect-ratio: auto; }
+  .spot-card-photo img, .spot-card-photo .img-missing { position: static; display: block; aspect-ratio: 16 / 9; }
+  .spot-suggest-photo { position: static; display: block; aspect-ratio: 16 / 9; }
+  .spot-suggest-photo img, .spot-suggest-photo .img-missing { position: static; }
 }

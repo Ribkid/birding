@@ -1,80 +1,59 @@
-import { byId, type Species } from '../../lib/data';
-import { SpeciesImage } from '../../components/SpeciesImage';
 import { accessBadges, OSM_CREDIT, OSM_URL, type SpotAccess } from '../../lib/spots';
 
-/** The access score as "3/5", or "Not known" when OSM has nothing. */
+/** The access score as "3/5". Nothing at all when OpenStreetMap knows nothing, rather than saying so on every card. */
 export function AccessScore({ access }: { access: SpotAccess | null }) {
-  if (!access || access.score == null) return <span className="spot-access-unknown">Access not known yet</span>;
+  if (!access || access.score == null) return null;
   return (
-    <span className="spot-score" aria-label={`Access score ${access.score} out of 5`}>
+    <span className="spot-score" aria-label={`Access ${access.score} out of 5`}>
       <b>{access.score}</b>
       <span aria-hidden="true">/5</span>
     </span>
   );
 }
 
-/** Small pills for what is there. `max` keeps a card down to its most useful three. */
+/** The access score and small pills for what is there; `max` keeps a card to its most useful few. Nothing when unknown. */
 export function AccessBadges({ access, max = 3 }: { access: SpotAccess | null; max?: number }) {
   const badges = accessBadges(access);
-  if (!badges.length) return <p className="spot-access-unknown">Access not known yet</p>;
+  if (!badges.length && (!access || access.score == null)) return null;
   return (
-    <ul className="spot-badges" aria-label="Access">
+    <span className="spot-badges" role="list" aria-label="Access">
+      <AccessScore access={access} />
       {badges.slice(0, max).map((badge) => (
-        <li key={badge} className="spot-badge">
+        <span key={badge} role="listitem" className="spot-badge">
           {badge}
-        </li>
+        </span>
       ))}
-    </ul>
+    </span>
   );
 }
 
-/** The full access block on a spot's page: the score, its reasons, any caveat, and the ODbL credit. */
+/** The access block on a spot's page: the score, its reasons, any caveat and the ODbL credit; one quiet line when unknown. */
 export function AccessBlock({ access }: { access: SpotAccess | null }) {
+  if (!access || access.score == null) {
+    return (
+      <p className="spot-access-none small">
+        Access: nothing mapped nearby yet (<a href={OSM_URL} target="_blank" rel="noopener">OpenStreetMap</a>)
+      </p>
+    );
+  }
   return (
     <section className="spot-access" aria-labelledby="spot-access-title">
       <div className="spot-access-head">
         <h2 id="spot-access-title">Access</h2>
         <AccessScore access={access} />
       </div>
-      {access && access.score != null ? (
-        <>
-          <ul className="spot-reasons">
-            {access.reasons.map((reason) => (
-              <li key={reason}>{reason}</li>
-            ))}
-            {access.fee === 'yes' && !access.reasons.includes('Entry fee') && <li>Entry fee</li>}
-          </ul>
-          {access.note && <p className="spot-access-note">{access.note}</p>}
-        </>
-      ) : (
-        <p className="muted small">
-          No parking, toilets, paths or hides are mapped near this spot yet. It is listed, just not ranked as
-          easy or hard.
-        </p>
-      )}
+      <ul className="spot-reasons">
+        {access.reasons.map((reason) => (
+          <li key={reason}>{reason}</li>
+        ))}
+        {access.fee === 'yes' && !access.reasons.includes('Entry fee') && <li>Entry fee</li>}
+      </ul>
+      {access.note && <p className="spot-access-note">{access.note}</p>}
       <p className="spot-credit small">
         <a href={OSM_URL} target="_blank" rel="noopener">
           {OSM_CREDIT}
         </a>
       </p>
     </section>
-  );
-}
-
-/** Four or five photos of birds recorded at a spot. */
-export function SpotPhotos({ sp, count = 5 }: { sp: [number, number][]; count?: number }) {
-  const species = sp
-    .slice(0, count)
-    .map(([id]) => byId.get(id))
-    .filter((s): s is Species => Boolean(s));
-  if (!species.length) return null;
-  return (
-    <ul className="spot-photos" aria-label="Birds recorded here">
-      {species.map((s) => (
-        <li key={s.id} className="spot-photo">
-          <SpeciesImage sp={s} />
-        </li>
-      ))}
-    </ul>
   );
 }
