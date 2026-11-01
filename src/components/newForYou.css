@@ -1,0 +1,18 @@
+/* Gold means new for you, everywhere. #D4A72C at 18% with ink chosen for light and dark surfaces. */
+.new-for-you {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 1px 8px;
+  border-radius: var(--r-pill);
+  background: rgba(212, 167, 44, .18);
+  color: #7A5A0A;
+  font-size: var(--fs-1);
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="outdoor"]) .new-for-you { color: #F2D27A; }
+}
+:root[data-theme="dark"] .new-for-you { color: #F2D27A; }

@@ -1,0 +1,76 @@
+/* The hunt list on Targets: photo-first rows inside one glass card, quiet enough to sit above the existing filters. */
+.hunt-list {
+  container: hunt / inline-size;
+  margin: 4px 16px 18px;
+  padding: 14px;
+  border-radius: var(--r-card);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-card);
+  min-width: 0;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .hunt-list { background: var(--glass-strong); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .hunt-list { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+.hunt-list-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px; }
+.hunt-list h2 { margin: 0; font: 700 1.1rem/1.25 var(--font); }
+.hunt-list-head p { flex: 1 1 100%; margin: 0; }
+.hunt-list-locate { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.hunt-list-locate p { flex: 1 1 190px; margin: 0; }
+.hunt-list-count { margin: 10px 0 0; color: var(--ink-2); font-size: var(--fs-2); font-weight: 600; }
+.hunt-list-note { margin: 8px 0 0; color: var(--ink-2); font-size: var(--fs-2); }
+.hunt-list-rows { list-style: none; margin: 4px 0 0; padding: 0; display: grid; }
+.hunt-list-rows li {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr); column-gap: 10px;
+  padding: 10px 0; border-top: 1px solid var(--line); min-width: 0;
+}
+.hunt-list-bird {
+  grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 10px; min-width: 0;
+  color: var(--ink); text-decoration: none;
+}
+.hunt-list-photo {
+  flex: none; width: 52px; height: 52px; border-radius: 14px; overflow: hidden; background: var(--surface-2);
+}
+.hunt-list-photo img, .hunt-list-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+.hunt-list-main { display: grid; gap: 1px; min-width: 0; }
+.hunt-list-main strong { font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.hunt-list-meta { color: var(--ink-2); font-size: var(--fs-2); }
+.hunt-list-place-row {
+  grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 3px 8px; min-width: 0; margin-top: 3px;
+}
+.hunt-list-place { color: var(--ink); font-size: var(--fs-2); font-weight: 600; text-decoration: none; overflow-wrap: anywhere; }
+.hunt-list-place[href]:hover { text-decoration: underline; text-underline-offset: .16em; }
+.hunt-list-restricted {
+  flex: none; padding: 0 7px; min-height: 20px; display: inline-flex; align-items: center;
+  border: 1px solid var(--line-strong); border-radius: var(--r-pill); color: var(--ink-2);
+  background: var(--surface-2); font-size: var(--fs-1); font-weight: 700;
+}
+.hunt-list-privacy { margin: 12px 0 0; }
+.hunt-list-credit { margin: 4px 0 0; }
+.hunt-list-credit a { color: var(--ink-2); }
+.hunt-list-skeleton { display: grid; gap: 8px; margin-top: 10px; }
+.hunt-list-skeleton span {
+  height: 54px; border-radius: 14px; background: var(--surface-2);
+  background-image: linear-gradient(100deg, transparent 20%, color-mix(in srgb, #fff 40%, transparent) 50%, transparent 80%);
+  background-size: 220% 100%;
+  animation: hunt-list-shimmer 1.3s linear infinite;
+}
+.hunt-list-skeleton span:nth-child(2) { width: 86%; }
+.hunt-list-skeleton span:nth-child(3) { width: 68%; }
+@keyframes hunt-list-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@container hunt (width < 280px) {
+  .hunt-list { padding: 12px; }
+  .hunt-list-locate .btn { flex: 1 1 100%; }
+  .hunt-list-place-row { grid-column: 1 / -1; }
+}
+@container hunt (width < 220px) {
+  .hunt-list-photo { width: 44px; height: 44px; border-radius: 12px; }
+  .hunt-list-rows li { grid-template-columns: 44px minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hunt-list-skeleton span { animation: none; }
+}

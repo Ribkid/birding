@@ -14,6 +14,7 @@ const CACHE = {
   list: 's-maxage=3600, stale-while-revalidate=86400',
   nearest: 's-maxage=600, stale-while-revalidate=86400',
   species: 's-maxage=1800, stale-while-revalidate=86400',
+  near: 's-maxage=600, stale-while-revalidate=86400',
 };
 const ROUTES = Object.keys(CACHE);
 
@@ -47,6 +48,23 @@ function requireSeqPoint(query) {
   const lat = numberInRange(query.lat, -29.2, -25.8);
   const lng = numberInRange(query.lng, 151.0, 153.6);
   return { lat, lng };
+}
+
+function requiredInteger(value, min, max) {
+  const raw = text(value);
+  if (raw == null || !/^\d+$/.test(raw)) throw new BadRequest('Invalid number');
+  const number = Number(raw);
+  if (number < min || number > max) throw new BadRequest('Invalid number');
+  return number;
+}
+
+const toRad = (degrees) => degrees * Math.PI / 180;
+function distanceKm(a, b) {
+  const radius = 6371;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * radius * Math.asin(Math.sqrt(h));
 }
 
 async function ebirdJson(path) {
@@ -116,6 +134,32 @@ async function recentOrList(query, route) {
   return ebirdArray(`product/spplist/${locId}`);
 }
 
+async function nearbyObservations(query, notable = false) {
+  const point = requireSeqPoint(query);
+  const dist = requiredInteger(query.dist, 1, 50);
+  const back = requiredInteger(query.back, 1, 30);
+  const params = new URLSearchParams({
+    lat: String(point.lat),
+    lng: String(point.lng),
+    dist: String(dist),
+    back: String(back),
+    hotspot: 'false',
+    maxResults: notable ? '100' : '200',
+  });
+  const path = notable ? 'data/obs/geo/recent/notable' : 'data/obs/geo/recent';
+  const data = await ebirdArray(`${path}?${params.toString()}`);
+  return data.map((row) => {
+    const item = observation(row);
+    const away = distanceKm(point, item);
+    return { ...item, distanceKm: Number.isFinite(away) ? Number(away.toFixed(2)) : null };
+  }).filter((item) => item.distanceKm != null)
+    .sort((a, b) => a.distanceKm - b.distanceKm || b.date.localeCompare(a.date));
+}
+
+async function near(query) {
+  return nearbyObservations(query);
+}
+
 async function nearest(query) {
   const code = requireSpeciesCode(query.sp);
   const { lat, lng } = requireSeqPoint(query);
@@ -144,7 +188,8 @@ export default async function handler(req, res) {
   try {
     const body = route === 'nearest' ? await nearest(query)
       : route === 'species' ? await species(query)
-        : await recentOrList(query, route);
+        : route === 'near' ? await near(query)
+          : await recentOrList(query, route);
     return res.status(200).json(body);
   } catch (error) {
     if (error instanceof BadRequest) return res.status(400).json({ error: 'Invalid query' });

@@ -27,6 +27,7 @@ import {
 } from '../../lib/spots';
 import { getPosition, plural } from '../lists/shared';
 import { AccessBadges, AccessScore, SpotPhotos } from './parts';
+import HuntChip from './HuntChip';
 import './spots.css';
 
 // v1 kept the map's chips and Targets' filters in a session object; the sort she picks holds the same way, so
@@ -123,6 +124,8 @@ export default function Spots() {
   const [showAll, setShowAll] = useState(false);
   const [sort, setSort] = useState<SortKey>(savedSort);
   const [filters, setFilters] = useState<SpotFilters>(NO_FILTERS);
+  const [huntActive, setHuntActive] = useState(false);
+  const [huntLocations, setHuntLocations] = useState<Set<string> | null>(null);
   const [pos, setPos] = useState(() => getLastPos());
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
@@ -167,12 +170,12 @@ export default function Spots() {
   const all = data?.spots ?? [];
   const rows = useMemo(() => buildRows(all, access, seen, pos), [all, access, seen, pos]);
   const suggested = useMemo(() => suggestSpots(rows, pos, 3), [rows, pos]);
-  const shown = useMemo(
-    () => sortSpots(filterSpots(applySpotVisibility(rows, query, showAll), filters, query), sort),
-    [rows, filters, query, showAll, sort],
-  );
+  const shown = useMemo(() => {
+    const listed = sortSpots(filterSpots(applySpotVisibility(rows, query, showAll), filters, query), sort);
+    return huntLocations ? listed.filter((row) => row.locId != null && huntLocations.has(row.locId)) : listed;
+  }, [rows, filters, query, showAll, sort, huntLocations]);
   const spotIds = useMemo(() => new Set(all.flatMap((spot) => spot.locId ? [spot.locId] : [])), [all]);
-  const filtering = query.trim() !== '' || Object.values(filters).some(Boolean);
+  const filtering = query.trim() !== '' || Object.values(filters).some(Boolean) || huntActive;
   const waiting = !data;
 
   return (
@@ -250,6 +253,11 @@ export default function Spots() {
               {label}
             </button>
           ))}
+          <HuntChip
+            active={huntActive}
+            onActive={setHuntActive}
+            onLocations={setHuntLocations}
+          />
           {filtering && (
             <button
               type="button"
@@ -257,6 +265,8 @@ export default function Spots() {
               onClick={() => {
                 setFilters(NO_FILTERS);
                 setQuery('');
+                setHuntActive(false);
+                setHuntLocations(null);
               }}
             >
               Clear

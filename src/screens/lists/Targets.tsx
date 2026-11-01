@@ -16,6 +16,7 @@ import {
   type SightingRow,
 } from './shared';
 import { ChanceBar, CountKey, targetChances, useStoreRows } from './hubParts';
+import HuntList from './HuntList';
 import './lists.css';
 
 type Scope = 'life' | 'year' | 'near';
@@ -178,6 +179,7 @@ export default function Targets() {
         </Link>
         <h1>Targets</h1>
       </header>
+      <HuntList />
       {sightingRows != null && seqIn && (
         <>
           <div className="chips">
