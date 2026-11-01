@@ -24,6 +24,7 @@ import {
   type HotspotLike,
   type SpotAccess,
 } from '../../lib/spots';
+import { featureBird, tidySpotName } from '../../lib/spotLook';
 import { AccessBlock } from './parts';
 import LatestVisits from './LatestVisits';
 import './spots.css';
@@ -109,7 +110,9 @@ export default function SpotDetail() {
   }, [spot, liveList, locId]);
   const notSeen = useMemo(() => birds.filter(({ sp }) => !seen.has(sp.id)).length, [birds, seen]);
   const shownBirds = notSeenOnly ? birds.filter(({ sp }) => !seen.has(sp.id)) : birds;
-  const top = birds[0]?.sp;
+  const recentIds = liveRecent?.map((row) => row.id) ?? (locId ? snapshot?.recent[locId]?.map(([id]) => id) : undefined) ?? [];
+  // Without a full list, a bird seen there lately leads the page instead.
+  const top = spot ? featureBird(birds.length ? birds.map(({ sp }) => sp.id) : recentIds, seen, spot.locId ?? String(index)) : undefined;
   const recent: RecentRow[] = liveRecent ?? (locId ? snapshot?.recent[locId]?.map(([id, date]) => ({ id, date, n: null })) : []) ?? [];
 
   const near = useMemo<NearSighting[]>(() => {
@@ -144,6 +147,7 @@ export default function SpotDetail() {
   }
 
   const lastBirded = birdedLabel(spot.latestObsDt);
+  const { name, restricted } = tidySpotName(spot.name);
 
   return (
     <div className="spots-screen spot-page">
@@ -152,22 +156,21 @@ export default function SpotDetail() {
           <Icon name="back" />
         </Link>
         <div className="spot-head-text">
-          <h1>{spot.name}</h1>
-          <p className="muted small">
-            {spot.lat.toFixed(3)}, {spot.lng.toFixed(3)}
-            {distanceKm != null ? ` · ${distanceLabel(distanceKm)} away` : ''}
+          <h1>{name}</h1>
+          <p className="spot-head-meta small">
+            {restricted && <span className="spot-tag">Restricted</span>}
+            {lastBirded && <span className="spot-last">{lastBirded}</span>}
+            {distanceKm != null && <span>{distanceLabel(distanceKm)} away</span>}
           </p>
-          {lastBirded && <p className="spot-last small">{lastBirded}</p>}
         </div>
       </header>
 
       {top && (
         <figure className="spot-hero">
-          <div className="spot-hero-photo"><SpeciesImage sp={top} size="large" eager /></div>
-          <figcaption>
-            {locId ? 'Recorded here: ' : 'Top bird here: '}
+          <div className="spot-hero-photo"><SpeciesImage sp={top} size="large" alt="" eager /></div>
+          <figcaption className="spot-hero-glass">
+            {seen.has(top.id) ? 'Recorded here' : 'Look for it here'}
             <Link to={`/bird/${top.id}`}>{top.name}</Link>
-            {!locId && spot.sp[0] ? ` · ${spot.sp[0][1].toLocaleString('en-AU')} records` : ''}
           </figcaption>
         </figure>
       )}
@@ -175,7 +178,7 @@ export default function SpotDetail() {
       <ul className="spot-facts" aria-label="At a glance">
         <li><b>{spot.rich}</b> species</li>
         <li><b>{(locId ? spot.checklists ?? 0 : spot.sp.reduce((sum, [, count]) => sum + count, 0)).toLocaleString('en-AU')}</b> {locId ? 'checklists' : 'records'}</li>
-        <li><b>{notSeen}</b> new for you</li>
+        {birds.length > 0 && <li><b>{notSeen}</b> new for you</li>}
         {distanceKm != null && <li><b>{distanceLabel(distanceKm)}</b> away</li>}
       </ul>
 
@@ -186,7 +189,6 @@ export default function SpotDetail() {
           <Icon name="pin" /> Show on map
         </Link>
         <a className="btn" href={directionsUrl(spot.lat, spot.lng)} target="_blank" rel="noopener">Directions</a>
-        {locId && <a className="btn" href={`https://ebird.org/hotspot/${locId}`} target="_blank" rel="noopener">Open in eBird</a>}
       </div>
 
       {locId && (
@@ -285,6 +287,8 @@ export default function SpotDetail() {
 
       {locId && (
         <p className="spot-credit spots-credit small">
+          <a href={`https://ebird.org/hotspot/${locId}`} target="_blank" rel="noopener">View this spot on eBird</a>
+          {' · '}
           <a href="https://ebird.org" target="_blank" rel="noopener">{EBIRD_CREDIT}</a>
         </p>
       )}

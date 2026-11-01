@@ -26,7 +26,8 @@ import {
   type SpotRow,
 } from '../../lib/spots';
 import { getPosition, plural } from '../lists/shared';
-import { AccessBadges, AccessScore, SpotPhotos } from './parts';
+import { birdsToFind, featureBird, seenAgo, tidySpotName } from '../../lib/spotLook';
+import { AccessBadges } from './parts';
 import HuntChip from './HuntChip';
 import RareNearby from './RareNearby';
 import TodayInSeq from './TodayInSeq';
@@ -44,41 +45,69 @@ const FILTERS: { key: keyof SpotFilters; label: string }[] = [
   { key: 'wheelchair', label: 'Wheelchair friendly' },
 ];
 
-/** One card: the name, the numbers, access badges and five of its birds. */
-function SpotCard({ row }: { row: SpotRow }) {
+/**
+ * One card. With a known bird list it leads with a photo of a bird she could find there, the name on glass over it;
+ * then what's new for her, how easy it is to get into (only when OpenStreetMap knows), and a few birds to look for.
+ */
+function SpotCard({ row, seen }: { row: SpotRow; seen: Set<number> }) {
+  const key = row.locId ?? String(row.idx);
+  const { name, restricted } = tidySpotName(row.name);
+  const ids = row.sp.map(([id]) => id);
+  const listed = row.hasList !== false && ids.length > 0;
+  const lead = listed ? featureBird(ids, seen, key) : undefined;
+  const toFind = listed ? birdsToFind(ids, seen, key).slice(0, 3) : [];
+  const known = row.access != null && row.access.score != null;
+  const head = (
+    <>
+      <strong className="spot-card-name">{name}</strong>
+      <span className="spot-card-meta">
+        <span>{plural(row.rich, 'species')}</span>
+        {row.distanceKm != null && <span>{distanceLabel(row.distanceKm)}</span>}
+        {restricted && <span className="spot-tag">Restricted</span>}
+      </span>
+    </>
+  );
   return (
-    <li className="spot-card">
-      <Link className="spot-card-link" to={`/spot/${row.locId ?? row.idx}`}>
-        <span className="spot-card-top">
-          <strong className="spot-card-name">{row.name}</strong>
-          <AccessScore access={row.access} />
-        </span>
-        <span className="spot-card-meta">
-          {row.distanceKm != null && <span className="spot-distance">{distanceLabel(row.distanceKm)}</span>}
-          <span>{plural(row.rich, 'species')}</span>
-          <span className="spot-new">
-            {row.hasList === false ? 'Full list not baked yet' : row.newForYou ? `${row.newForYou} new for you` : 'All seen'}
+    <li className={`spot-card${lead ? ' spot-card--photo' : ''}`}>
+      <Link className="spot-card-link" to={`/spot/${key}`}>
+        {lead ? (
+          <span className="spot-card-photo">
+            <SpeciesImage sp={lead} alt="" />
+            <span className="spot-card-glass">{head}</span>
           </span>
-        </span>
-        <AccessBadges access={row.access} />
-        <SpotPhotos sp={row.sp} />
+        ) : (
+          <span className="spot-card-head">{head}</span>
+        )}
+        {(listed || known) && (
+          <span className="spot-card-body">
+            <span className="spot-card-row">
+              {listed && (row.newForYou > 0
+                ? <span className="pill-new">{row.newForYou} new for you</span>
+                : <span className="spot-allseen">All seen</span>)}
+              <AccessBadges access={row.access} max={3} />
+            </span>
+            {toFind.length > 0 && <span className="spot-could">Look for {toFind.map((s) => s.name).join(', ')}</span>}
+          </span>
+        )}
       </Link>
     </li>
   );
 }
 
-/** A suggested spot: one line, one thumb, the birds she hasn't met. */
-function SuggestCard({ row }: { row: SpotRow }) {
-  const sp = byId.get(row.sp[0]?.[0] ?? -1) as Species | undefined;
+/** A suggested spot, as a photo card in a row she can swipe: the bird to find there, the name and the count on glass. */
+function SuggestCard({ row, seen }: { row: SpotRow; seen: Set<number> }) {
+  const key = row.locId ?? String(row.idx);
+  const { name } = tidySpotName(row.name);
+  const lead = featureBird(row.sp.map(([id]) => id), seen, key);
   return (
     <li className="spot-suggest-card">
-      <Link to={`/spot/${row.locId ?? row.idx}`}>
-        <span className="spot-suggest-photo">{sp && <SpeciesImage sp={sp} />}</span>
-        <span className="spot-suggest-main">
-          <strong>{row.name}</strong>
+      <Link to={`/spot/${key}`}>
+        <span className="spot-suggest-photo">{lead && <SpeciesImage sp={lead} alt="" />}</span>
+        <span className="spot-suggest-glass">
+          <strong>{name}</strong>
           <span className="spot-suggest-line">
-            {row.newForYou} birds new for you
-            {row.distanceKm != null ? ` · ${distanceLabel(row.distanceKm)}` : ''}
+            <span className="pill-new">{row.newForYou} new for you</span>
+            {row.distanceKm != null && <span>{distanceLabel(row.distanceKm)}</span>}
           </span>
         </span>
       </Link>
@@ -86,30 +115,39 @@ function SuggestCard({ row }: { row: SpotRow }) {
   );
 }
 
-function RareBirds({ items, pos, spotIds }: { items: NotableBird[]; pos: { lat: number; lng: number } | null; spotIds: Set<string> }) {
+/** This week's rare birds as photo cards, nearest first when her location is known. Each opens its spot (or the bird). */
+function RareBirds({ items, pos, spotIds, seen }: {
+  items: NotableBird[]; pos: { lat: number; lng: number } | null; spotIds: Set<string>; seen: Set<number>;
+}) {
   const nearest = useMemo(() => items.map((item) => ({
     item,
     distance: pos ? haversineKm(pos, item) : null,
-  })).sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity) || b.item.date.localeCompare(a.item.date)).slice(0, 6), [items, pos]);
+  })).sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity) || b.item.date.localeCompare(a.item.date)).slice(0, 8), [items, pos]);
   if (!nearest.length) return null;
   return (
     <section className="spots-rare" aria-labelledby="spots-rare-title">
       <h2 id="spots-rare-title">Rare birds around</h2>
-      <p className="muted small">Notable eBird sightings from the last seven days.</p>
-      <ul>
+      <p className="muted small">Notable eBird sightings this week.</p>
+      <ul className="rare-cards">
         {nearest.map(({ item, distance }) => {
           const bird = byId.get(item.id);
-          return (
-            <li key={`${item.loc}:${item.id}:${item.date}`}>
-              <span className="spots-rare-main">
-                {bird ? <Link to={`/bird/${bird.id}`}>{bird.name}</Link> : <strong>{item.name}</strong>}
-                <span className="small muted">
-                  {spotIds.has(item.loc) ? <Link to={`/spot/${item.loc}`}>{item.where}</Link> : item.where}
-                  {' · '}{new Date(item.date.replace(' ', 'T')).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
-                  {' · '}{plural(item.n, 'bird')}
-                  {distance != null ? ` · ${distanceLabel(distance)} away` : ''}
+          const to = spotIds.has(item.loc) ? `/spot/${item.loc}` : bird ? `/bird/${bird.id}` : null;
+          const body = (
+            <>
+              <span className="rare-card-photo">{bird && <SpeciesImage sp={bird} alt="" />}</span>
+              <span className="rare-card-text">
+                {bird && !seen.has(bird.id) && <span className="pill-new">New for you</span>}
+                <strong>{bird?.name ?? item.name}</strong>
+                <span className="rare-card-where">{tidySpotName(item.where).name}</span>
+                <span className="rare-card-when">
+                  {seenAgo(item.date)}{item.n > 1 ? ` · ${item.n} birds` : ''}{distance != null ? ` · ${distanceLabel(distance)}` : ''}
                 </span>
               </span>
+            </>
+          );
+          return (
+            <li key={`${item.loc}:${item.id}:${item.date}`} className="rare-card">
+              {to ? <Link to={to}>{body}</Link> : <div>{body}</div>}
             </li>
           );
         })}
@@ -190,7 +228,7 @@ export default function Spots() {
         </div>
       </header>
 
-      {source === 'eBird' && <RareBirds items={data?.notable ?? []} pos={pos} spotIds={spotIds} />}
+      {source === 'eBird' && <RareBirds items={data?.notable ?? []} pos={pos} spotIds={spotIds} seen={seen} />}
       <RareNearby pos={pos} />
       <TodayInSeq />
       <OnThisDay />
@@ -202,7 +240,7 @@ export default function Spots() {
             <p className="muted small">The most birds you haven't seen yet, nearer ones first.</p>
             <ul className="spot-suggest-list">
               {suggested.map((row) => (
-                <SuggestCard key={row.idx} row={row} />
+                <SuggestCard key={row.idx} row={row} seen={seen} />
               ))}
             </ul>
           </>
@@ -299,7 +337,7 @@ export default function Spots() {
       {shown.length ? (
         <ul className="spot-cards">
           {shown.map((row) => (
-            <SpotCard key={row.locId ?? row.idx} row={row} />
+            <SpotCard key={row.locId ?? row.idx} row={row} seen={seen} />
           ))}
         </ul>
       ) : (
