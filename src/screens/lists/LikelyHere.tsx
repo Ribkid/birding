@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { Species } from '../../lib/data';
 import { useEbirdSnapshot, useLiveEbird, useOnline } from '../../lib/useEbird';
 import { EBIRD_CREDIT, tidySpotName, type LiveRecent } from '../../lib/ebird';
-import { liveLikely, nearestHotspotWithin, snapshotLikely } from '../../lib/likelyHere';
+import { liveLikely, nearestHotspotWithin, nearestSavedHotspotWithin, snapshotLikely } from '../../lib/likelyHere';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import NewForYou from '../../components/NewForYou';
 import './likelyHere.css';
@@ -42,6 +42,10 @@ export default function LikelyHere({ live, lat, lng, seen, counted, onAdd }: Pro
     () => (snapshot && point ? nearestHotspotWithin(snapshot, point) : null),
     [snapshot, point],
   );
+  const savedNear = useMemo(
+    () => (snapshot && point ? nearestSavedHotspotWithin(snapshot, point) : null),
+    [snapshot, point],
+  );
   const locId = near?.spot[0] ?? '';
   const feed = useLiveEbird<LiveRecent[]>({ recent: '', loc: locId }, !!near && online);
 
@@ -51,20 +55,23 @@ export default function LikelyHere({ live, lat, lng, seen, counted, onAdd }: Pro
   if (feed.loading) return <Skeleton place={tidySpotName(near.spot[1]).name} />;
 
   const liveRows = feed.data?.length ? liveLikely(feed.data, snapshot, seen, counted) : [];
-  const savedRows = snapshotLikely(snapshot, locId, seen, counted);
-  const rows = liveRows.length ? liveRows : savedRows;
+  const savedSpot = savedNear ?? near;
+  const savedRows = snapshotLikely(snapshot, savedSpot.spot[0], seen, counted);
+  const usingLive = liveRows.length > 0;
+  const rows = usingLive ? liveRows : savedRows;
   if (!rows.length) return null;
+  const shown = usingLive ? near : savedSpot;
 
-  const place = tidySpotName(near.spot[1]);
+  const place = tidySpotName(shown.spot[1]);
   return (
     <section className="likely-here" aria-labelledby="likely-here-title">
       <header>
         <h2 id="likely-here-title">Likely here</h2>
         <p className="small muted">
           Near <strong>{place.name}</strong>{place.restricted && <span className="likely-here-restricted">Restricted</span>}
-          {' '}· {near.distanceKm < 0.1 ? 'right here' : `${near.distanceKm.toFixed(1)} km away`}
+          {' '}· {shown.distanceKm < 0.1 ? 'right here' : `${shown.distanceKm.toFixed(1)} km away`}
         </p>
-        <p className="small muted">{liveRows.length ? 'Reported there in the last 30 days.' : 'Saved eBird species list for this hotspot.'}</p>
+        <p className="small muted">{usingLive ? 'Reported there in the last 30 days.' : 'Saved eBird reports for this hotspot.'}</p>
       </header>
       <ul className="likely-here-rail">
         {rows.map((sp) => (

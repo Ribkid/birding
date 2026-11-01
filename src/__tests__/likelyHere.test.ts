@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BIRDS } from '../lib/data';
 import type { EbirdSnapshot, LiveRecent } from '../lib/ebird';
-import { liveLikely, nearestHotspotWithin, rankLikely, snapshotLikely } from '../lib/likelyHere';
+import { liveLikely, nearestHotspotWithin, nearestSavedHotspotWithin, rankLikely, snapshotLikely } from '../lib/likelyHere';
 
 const ids = BIRDS.slice(0, 6).map((bird) => bird.id);
 
@@ -26,6 +26,21 @@ describe('likely here', () => {
     expect(near?.spot[0]).toBe('LNEAR');
     expect(near?.distanceKm).toBeLessThan(1);
     expect(nearestHotspotWithin(SNAPSHOT, { lat: -27.6, lng: 153.12 })).toBeNull();
+  });
+
+  it('falls back to the nearest hotspot inside one kilometre that actually has saved data', () => {
+    const withBlank = {
+      ...SNAPSHOT,
+      spots: [
+        ['LBLANK', 'Blank Park', -27.5001, 153.02, 100, 500, '2026-10-31', 'BRI'],
+        ['LSAVED', 'Saved Park', -27.5005, 153.0205, 80, 400, '2026-10-31', 'BRI'],
+      ],
+      lists: { LSAVED: [ids[0]] },
+      recent: {},
+    } as unknown as EbirdSnapshot;
+    const point = { lat: -27.5, lng: 153.02 };
+    expect(nearestHotspotWithin(withBlank, point)?.spot[0]).toBe('LBLANK');
+    expect(nearestSavedHotspotWithin(withBlank, point)?.spot[0]).toBe('LSAVED');
   });
 
   it('puts birds she has never seen first and leaves out ones already on the tally', () => {

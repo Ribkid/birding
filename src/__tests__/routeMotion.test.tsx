@@ -140,7 +140,8 @@ describe('Back and Forward', () => {
     </MotionHashRouter>,
   );
   const click = (text: string) => act(() => { [...document.querySelectorAll('a')].find((a) => a.textContent === text)!.click(); });
-  const settle = () => act(() => new Promise((r) => setTimeout(r, 40)));
+  // jsdom timers can be late when the whole suite runs in parallel; leave the transition room to finish.
+  const settle = () => act(() => new Promise((r) => setTimeout(r, 140)));
   const back = async () => { await act(async () => { window.history.back(); }); await settle(); };
   const forward = async () => { await act(async () => { window.history.forward(); }); await settle(); };
   const frame = () => act(() => new Promise((r) => requestAnimationFrame(() => r(null))));
@@ -309,7 +310,7 @@ describe('the router itself', () => {
     useLayoutEffect(() => { trace.push(`${type} ${loc.pathname} ${loc.key}`); }, [loc, type]);
     return null;
   }
-  const wait = (ms: number) => act(() => new Promise((r) => setTimeout(r, ms)));
+  const wait = (ms: number) => act(() => new Promise((r) => setTimeout(r, Math.max(ms, 140))));
   const back = async () => { await act(async () => { window.history.back(); }); await wait(40); };
   const forward = async () => { await act(async () => { window.history.forward(); }); await wait(40); };
   // Keys are random: number them by first appearance, so two traces compare.

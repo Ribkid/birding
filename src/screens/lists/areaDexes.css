@@ -41,7 +41,7 @@
 }
 .area-dex-ring b { position: relative; font: 800 var(--fs-2)/1 var(--stamp); color: var(--ink); font-variant-numeric: tabular-nums; }
 .area-dex-tile-main { display: grid; min-width: 0; gap: 1px; }
-.area-dex-tile-main strong { font-size: var(--fs-2); line-height: 1.25; overflow-wrap: anywhere; }
+.area-dex-tile-main strong { font-size: var(--fs-2); line-height: 1.25; overflow-wrap: break-word; }
 .area-dex-tile-main span { color: var(--ink-2); font-size: var(--fs-1); font-variant-numeric: tabular-nums; }
 .area-dex-panel {
   margin-top: 12px; padding: 12px; border-radius: var(--r-2); background: var(--surface);
@@ -83,7 +83,7 @@
   background-size: 220% 100%; animation: area-dex-shimmer 1.3s linear infinite;
 }
 @keyframes area-dex-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
-@container area-dex (width < 260px) {
+@container area-dex (width < 300px) {
   .area-dex-grid { grid-template-columns: minmax(0, 1fr); }
   .area-dex-panel { padding: 10px; }
 }

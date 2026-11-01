@@ -23,6 +23,31 @@ export function nearestHotspotWithin(
   return best;
 }
 
+function hasSavedSpecies(snapshot: EbirdSnapshot, locId: string, now: Date): boolean {
+  if ((snapshot.lists?.[locId]?.length ?? 0) > 0) return true;
+  const cutoff = now.getTime() - 30 * DAY;
+  return (snapshot.recent?.[locId] ?? []).some((row) => {
+    const time = Date.parse(`${String(row[1]).slice(0, 10)}T00:00:00`);
+    return Number.isFinite(time) && time >= cutoff;
+  });
+}
+
+/** For an offline fallback, the closest hotspot within the radius that actually has saved species. */
+export function nearestSavedHotspotWithin(
+  snapshot: EbirdSnapshot,
+  point: { lat: number; lng: number },
+  maxKm = 1,
+  now = new Date(),
+): NearHotspot | null {
+  let best: NearHotspot | null = null;
+  for (const spot of snapshot.spots) {
+    if (!hasSavedSpecies(snapshot, spot[0], now)) continue;
+    const distanceKm = haversineKm(point, { lat: spot[2], lng: spot[3] });
+    if (distanceKm <= maxKm && (!best || distanceKm < best.distanceKm)) best = { spot, distanceKm };
+  }
+  return best;
+}
+
 /** Dex birds in report order, with never-seen birds first and anything already on the tally left out. */
 export function rankLikely(
   ids: number[],

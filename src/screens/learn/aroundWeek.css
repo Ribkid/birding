@@ -1,5 +1,5 @@
 /* Around this week: a photo-first glass card on the Learn hub, filled from the seven-day eBird snapshot. */
-.around-week { container: around-week / inline-size; }
+.around-week { container: around-week / inline-size; padding-bottom: 4px; }
 .around-week .lh-sec-h { margin-bottom: 8px; }
 .around-week-card {
   display: grid; grid-template-columns: 106px minmax(0, 1fr); align-items: stretch; min-height: 118px;
