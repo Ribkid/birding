@@ -1,0 +1,46 @@
+/* Top eBirders in Brisbane today: a quiet glass list below the app's own leaderboard. No people links. */
+.top-ebirders {
+  margin: 0 16px 20px;
+  padding: 14px;
+  border-radius: var(--r-card);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-card);
+  min-width: 0;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .top-ebirders { background: var(--glass-strong); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .top-ebirders { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+.top-ebirders header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.top-ebirders h2 { margin: 0; font: 700 1.12rem/1.25 var(--font); overflow-wrap: anywhere; }
+.eg-credit { flex: none; color: var(--ink-2); font-size: var(--fs-1); font-weight: 600; }
+.top-ebirders-sub { margin: 2px 0 8px; }
+.top-ebirders-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.top-ebirders-list li {
+  display: grid; grid-template-columns: 2ch minmax(0, 1fr) auto; align-items: center; gap: 8px;
+  min-height: 46px; padding: 7px 0; border-top: 1px solid var(--line); min-width: 0;
+}
+.top-ebirders-rank { color: var(--ink-2); font: 700 var(--fs-1)/1 var(--stamp); font-variant-numeric: tabular-nums; }
+.top-ebirders-name { color: var(--ink); font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
+.top-ebirders-count { display: flex; align-items: baseline; gap: 4px; color: var(--ink-2); font-size: var(--fs-1); }
+.top-ebirders-count b { color: var(--ink); font: 800 var(--fs-3)/1 var(--stamp); font-variant-numeric: tabular-nums; }
+.top-ebirders-credit { margin: 8px 0 0; }
+.top-ebirders-credit a { color: var(--ink-2); }
+.top-ebirders-skeleton { display: grid; gap: 8px; margin-top: 10px; }
+.top-ebirders-skeleton span {
+  height: 46px; border-radius: 12px; background: var(--surface-2);
+  background-image: linear-gradient(100deg, transparent 20%, color-mix(in srgb, #fff 40%, transparent) 50%, transparent 80%);
+  background-size: 220% 100%; animation: top-ebirders-shimmer 1.3s linear infinite;
+}
+@keyframes top-ebirders-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+@media (width < 260px) {
+  .top-ebirders { margin-inline: 12px; padding: 12px; }
+  .top-ebirders header { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .top-ebirders-skeleton span { animation: none; }
+}

@@ -21,6 +21,7 @@ const CACHE = {
   checklist: 's-maxage=3600, stale-while-revalidate=86400',
   stats: 's-maxage=600, stale-while-revalidate=86400',
   historic: 's-maxage=3600, stale-while-revalidate=86400',
+  top: 's-maxage=900, stale-while-revalidate=86400',
 };
 const ROUTES = Object.keys(CACHE);
 
@@ -268,6 +269,25 @@ async function historic(query) {
   };
 }
 
+async function top(query) {
+  const region = requireRegion(query.region);
+  const date = requireDate(query.date);
+  const [year, month, day] = date.split('-').map(Number);
+  const data = await ebirdArray(`product/top100/${region}/${year}/${month}/${day}?rankedBy=spp&maxResults=10`);
+  return data.map((row) => {
+    if (!row || typeof row !== 'object' || typeof row.userDisplayName !== 'string' || !row.userDisplayName.trim()) {
+      throw new Error('Unexpected eBird leader');
+    }
+    const species = finiteCount(row.numSpecies);
+    if (species == null) throw new Error('Unexpected eBird leader count');
+    return {
+      name: row.userDisplayName,
+      species,
+      checklists: finiteCount(row.numChecklists) ?? 0,
+    };
+  });
+}
+
 async function nearest(query) {
   const code = requireSpeciesCode(query.sp);
   const { lat, lng } = requireSeqPoint(query);
@@ -304,6 +324,7 @@ export default async function handler(req, res) {
       case 'checklist': body = await checklist(query); break;
       case 'stats': body = await stats(query); break;
       case 'historic': body = await historic(query); break;
+      case 'top': body = await top(query); break;
       default: body = await recentOrList(query, route);
     }
     return res.status(200).json(body);

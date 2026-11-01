@@ -78,6 +78,11 @@ export interface HistoricDay {
   date: string;
   sightings: EbirdObservation[];
 }
+export interface EbirdTopBirder {
+  name: string;
+  species: number;
+  checklists: number;
+}
 export interface EbirdChecklist {
   sub: string;
   date: string;

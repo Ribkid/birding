@@ -13,6 +13,7 @@ import { Icon } from '../../components/Icon';
 import { AccountAvatar } from '../me/accountBits';
 import { ConfirmDialog } from '../lists/shared';
 import { toast } from '../../lib/toast';
+import TopEbirders from './TopEbirders';
 import './progress.css';
 
 type Period = 'life' | 'year' | 'month';
@@ -486,6 +487,8 @@ export default function Leaderboard() {
           </p>
         )}
       </section>
+
+      <TopEbirders />
 
       <section className="block" id="groups" data-groups ref={groupsRef}>
         <h2 className="h2">Groups</h2>
