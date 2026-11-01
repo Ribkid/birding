@@ -1,0 +1,101 @@
+/* “This day last year”: a photo-led card on Spots and a snap card in the Dex Today rail, with the unseen list in a sheet. */
+.on-this-day {
+  margin: 4px 16px 16px;
+  padding: 4px;
+  border-radius: var(--r-card);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: inset 0 0 0 1px var(--glass-edge), var(--shadow-card);
+  min-width: 0;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .on-this-day { background: var(--glass-strong); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .on-this-day { background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+.on-this-day-card,
+.on-this-day-rail {
+  width: 100%;
+  min-height: 84px;
+  padding: 10px;
+  border: 0;
+  border-radius: calc(var(--r-card) - 4px);
+  background: transparent;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.on-this-day-rail {
+  flex: none;
+  width: 232px;
+  height: auto;
+  min-height: 118px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  scroll-snap-align: start;
+}
+.on-this-day-photo {
+  flex: none; width: 56px; height: 56px; border-radius: 15px; overflow: hidden; background: var(--surface-2);
+}
+.on-this-day-rail .on-this-day-photo { width: 48px; height: 48px; border-radius: 13px; }
+.on-this-day-photo img, .on-this-day-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+.on-this-day-main { display: grid; justify-items: start; gap: 2px; min-width: 0; }
+.on-this-day-kicker { color: var(--ink-2); font-size: var(--fs-1); font-weight: 700; }
+.on-this-day-main strong { font-weight: 700; line-height: 1.28; overflow-wrap: anywhere; }
+.on-this-day-rail .on-this-day-main strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+.on-this-day-card:active, .on-this-day-rail:active { scale: .98; }
+.on-this-day-skeleton {
+  min-height: 92px;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+.on-this-day-skeleton.on-this-day-rail { width: 232px; min-height: 118px; }
+.on-this-day-skeleton span { display: block; border-radius: 12px; background: var(--surface-2); height: 42px; }
+.on-this-day-skeleton span:last-child {
+  height: 50px;
+  background-image: linear-gradient(100deg, transparent 20%, color-mix(in srgb, #fff 40%, transparent) 50%, transparent 80%);
+  background-size: 220% 100%; animation: on-this-day-shimmer 1.3s linear infinite;
+}
+@keyframes on-this-day-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+.on-this-day-sub { margin: 0 0 10px; }
+.on-this-day-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.on-this-day-list li {
+  display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 8px 0; border-bottom: 1px solid var(--line); min-width: 0;
+}
+.on-this-day-list li:last-child { border-bottom: 0; }
+.on-this-day-row-photo { width: 46px; height: 46px; border-radius: 12px; overflow: hidden; background: var(--surface-2); }
+.on-this-day-row-photo img, .on-this-day-row-photo .img-missing { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; }
+.on-this-day-row-main { display: grid; gap: 1px; min-width: 0; }
+.on-this-day-row-main a { color: var(--ink); font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; text-decoration: none; }
+.on-this-day-row-main a:hover { text-decoration: underline; text-underline-offset: .16em; }
+.on-this-day-row-main .small { overflow-wrap: anywhere; }
+.on-this-day-restricted {
+  padding: 0 7px; min-height: 20px; display: inline-flex; align-items: center;
+  border: 1px solid var(--line-strong); border-radius: var(--r-pill);
+  background: var(--surface-2); color: var(--ink-2); font-size: var(--fs-1); font-weight: 700;
+}
+.on-this-day-privacy { margin: 10px 0 0; }
+.on-this-day-credit { margin: 4px 0 12px; }
+.on-this-day-credit a { color: var(--ink-2); }
+@media (width < 260px) {
+  .on-this-day { margin-inline: 12px; }
+  .on-this-day-list li { grid-template-columns: 44px minmax(0, 1fr); }
+  .on-this-day-restricted { grid-column: 2; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .on-this-day-card, .on-this-day-rail { transition: none; }
+  .on-this-day-card:active, .on-this-day-rail:active { scale: none; }
+  .on-this-day-skeleton span:last-child { animation: none; }
+}

@@ -30,6 +30,7 @@ import { AccessBadges, AccessScore, SpotPhotos } from './parts';
 import HuntChip from './HuntChip';
 import RareNearby from './RareNearby';
 import TodayInSeq from './TodayInSeq';
+import OnThisDay from '../../components/OnThisDay';
 import './spots.css';
 
 // v1 kept the map's chips and Targets' filters in a session object; the sort she picks holds the same way, so
@@ -192,6 +193,7 @@ export default function Spots() {
       {source === 'eBird' && <RareBirds items={data?.notable ?? []} pos={pos} spotIds={spotIds} />}
       <RareNearby pos={pos} />
       <TodayInSeq />
+      <OnThisDay />
 
       <section className="spots-suggest" aria-labelledby="spots-suggest-title">
         <h2 id="spots-suggest-title">Suggested for you</h2>

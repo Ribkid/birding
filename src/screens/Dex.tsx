@@ -32,6 +32,7 @@ import { useProfile } from './me/accountBits';
 import { currentStreak, dayStr, dueCards, getDaily, getLearn, learnReady, monthName } from '../core/learn.js';
 import { openSearch } from './DexSearch';
 import { openSightingSheet } from '../components/SightingSheet';
+import OnThisDay from '../components/OnThisDay';
 import { ICON, Photo, Ring } from './dexParts';
 import { promptInstall, useCanInstall } from '../lib/install';
 import { landingScroll } from '../components/RouteMotion';
@@ -260,6 +261,7 @@ const TodayRail = memo(function TodayRail({ kind, day }: { kind: string; day: Da
       <Link className="today-card today-tool" to="/listen">{todayTool(<Icon name="mic" />, lt, ls)}</Link>
       <ScanCard kind={kind} />
       <LearnTeaser />
+      <OnThisDay variant="rail" />
       {day ? (
         <Link className={`today-card today-day kind--${day.sp.kind}`} to={`/bird/${day.sp.id}`}>
           <span className="botd-img"><Photo sp={day.sp} /></span>{' '}

@@ -20,6 +20,7 @@ const CACHE = {
   visits: 's-maxage=900, stale-while-revalidate=86400',
   checklist: 's-maxage=3600, stale-while-revalidate=86400',
   stats: 's-maxage=600, stale-while-revalidate=86400',
+  historic: 's-maxage=3600, stale-while-revalidate=86400',
 };
 const ROUTES = Object.keys(CACHE);
 
@@ -67,6 +68,12 @@ function requireDate(value) {
 function finiteCount(value) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function requireRegion(value) {
+  const region = text(value);
+  if (!region || !REGIONS.has(region)) throw new BadRequest('Invalid region');
+  return region;
 }
 
 function numberInRange(value, min, max) {
@@ -249,6 +256,18 @@ async function stats(query) {
   return { date, checklists: checklists ?? 0, birders: birders ?? 0, species: species ?? 0 };
 }
 
+async function historic(query) {
+  const region = requireRegion(query.region);
+  const date = requireDate(query.date);
+  const [year, month, day] = date.split('-').map(Number);
+  const data = await ebirdArray(`data/obs/${region}/historic/${year}/${month}/${day}?rank=mrec&detail=simple`);
+  return {
+    region: region.replace(/^AU-QLD-/, ''),
+    date,
+    sightings: data.map(observation),
+  };
+}
+
 async function nearest(query) {
   const code = requireSpeciesCode(query.sp);
   const { lat, lng } = requireSeqPoint(query);
@@ -284,6 +303,7 @@ export default async function handler(req, res) {
       case 'visits': body = await visits(query); break;
       case 'checklist': body = await checklist(query); break;
       case 'stats': body = await stats(query); break;
+      case 'historic': body = await historic(query); break;
       default: body = await recentOrList(query, route);
     }
     return res.status(200).json(body);

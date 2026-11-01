@@ -40,6 +40,25 @@ export function assignSightingArea(
   return code;
 }
 
+/** The council area of the closest eBird hotspot to a rough fix, or null without a fix. */
+export function nearestRegionCode(
+  snapshot: EbirdSnapshot,
+  point: { lat: number; lng: number } | null | undefined,
+): string | null {
+  if (!point) return null;
+  let code: string | null = null;
+  let best = Infinity;
+  for (const [, , spotLat, spotLng, , , , region] of snapshot.spots) {
+    if (!region) continue;
+    const distance = haversineKm(point, { lat: spotLat, lng: spotLng });
+    if (distance < best) {
+      code = region;
+      best = distance;
+    }
+  }
+  return code;
+}
+
 /** Seen and total species for every council area list in the snapshot. */
 export function areaProgress(sightings: SightingPoint[], snapshot: EbirdSnapshot): AreaProgress[] {
   const regions = snapshot.regions ?? {};

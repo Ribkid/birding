@@ -73,6 +73,11 @@ export interface RegionalStats {
   birders: number;
   species: number;
 }
+export interface HistoricDay {
+  region: string;
+  date: string;
+  sightings: EbirdObservation[];
+}
 export interface EbirdChecklist {
   sub: string;
   date: string;
@@ -194,6 +199,15 @@ export function relativeDay(value: string | null | undefined, now = new Date()):
   if (days < 365) return `${Math.floor(days / 30)} months ago`;
   const years = Math.floor(days / 365);
   return years === 1 ? 'last year' : `${years} years ago`;
+}
+
+/** The same calendar date a year earlier, clamping 29 February to 28 February. */
+export function sameDayLastYear(date = new Date()): string {
+  const year = date.getFullYear() - 1;
+  const month = date.getMonth();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const day = Math.min(date.getDate(), lastDay);
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 export function mapLiveRecent(rows: LiveRecent[], birds: { id: number; sci: string }[]) {
