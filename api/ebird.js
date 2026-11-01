@@ -19,6 +19,7 @@ const CACHE = {
   notable: 's-maxage=600, stale-while-revalidate=86400',
   visits: 's-maxage=900, stale-while-revalidate=86400',
   checklist: 's-maxage=3600, stale-while-revalidate=86400',
+  stats: 's-maxage=600, stale-while-revalidate=86400',
 };
 const ROUTES = Object.keys(CACHE);
 
@@ -43,6 +44,29 @@ function requireSubId(value) {
   const sub = text(value);
   if (!sub || !SUB_ID.test(sub)) throw new BadRequest('Invalid checklist id');
   return sub;
+}
+
+/** A real calendar date from 2000 through today in Brisbane (the app's birding day). */
+function requireDate(value) {
+  const raw = text(value);
+  if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) throw new BadRequest('Invalid date');
+  const [year, month, day] = raw.split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  if (
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) throw new BadRequest('Invalid date');
+  const utcToday = new Date().toISOString().slice(0, 10);
+  const brisbaneToday = new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const latest = brisbaneToday > utcToday ? brisbaneToday : utcToday;
+  if (raw < '2000-01-01' || raw > latest) throw new BadRequest('Invalid date');
+  return raw;
+}
+
+function finiteCount(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
 function numberInRange(value, min, max) {
@@ -213,6 +237,18 @@ async function checklist(query) {
   return { sub, date, time, loc: String(data.locId ?? ''), species };
 }
 
+async function stats(query) {
+  const date = requireDate(query.date);
+  const [year, month, day] = date.split('-').map(Number);
+  const data = await ebirdJson(`product/stats/AU-QLD/${year}/${month}/${day}`);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Unexpected eBird stats');
+  const checklists = finiteCount(data.numChecklists ?? data.checklists);
+  const birders = finiteCount(data.numContributors ?? data.contributors ?? data.numBirders);
+  const species = finiteCount(data.numSpecies ?? data.spp ?? data.species);
+  if (checklists == null && birders == null && species == null) throw new Error('Unexpected eBird stats');
+  return { date, checklists: checklists ?? 0, birders: birders ?? 0, species: species ?? 0 };
+}
+
 async function nearest(query) {
   const code = requireSpeciesCode(query.sp);
   const { lat, lng } = requireSeqPoint(query);
@@ -239,13 +275,17 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', CACHE[route]);
 
   try {
-    const body = route === 'nearest' ? await nearest(query)
-      : route === 'species' ? await species(query)
-        : route === 'near' ? await near(query)
-          : route === 'notable' ? await notable(query)
-            : route === 'visits' ? await visits(query)
-              : route === 'checklist' ? await checklist(query)
-                : await recentOrList(query, route);
+    let body;
+    switch (route) {
+      case 'nearest': body = await nearest(query); break;
+      case 'species': body = await species(query); break;
+      case 'near': body = await near(query); break;
+      case 'notable': body = await notable(query); break;
+      case 'visits': body = await visits(query); break;
+      case 'checklist': body = await checklist(query); break;
+      case 'stats': body = await stats(query); break;
+      default: body = await recentOrList(query, route);
+    }
     return res.status(200).json(body);
   } catch (error) {
     if (error instanceof BadRequest) return res.status(400).json({ error: 'Invalid query' });

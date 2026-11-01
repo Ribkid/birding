@@ -67,6 +67,12 @@ export interface EbirdVisit {
   time: string;
   species: number;
 }
+export interface RegionalStats {
+  date: string;
+  checklists: number;
+  birders: number;
+  species: number;
+}
 export interface EbirdChecklist {
   sub: string;
   date: string;
