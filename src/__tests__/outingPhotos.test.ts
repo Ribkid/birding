@@ -35,7 +35,7 @@ import {
   addOutingPhotos,
   fetchProfilePhotos,
   fetchPublicOuting,
-  photoUrl,
+  signedPhotoUrl,
   removeOutingPhoto,
   syncOutingPhotos,
   togglePhotoLike,
@@ -244,6 +244,24 @@ describe('public reads', () => {
       ['get_public_outing', { p_public_id: 'public-1', p_outing_uid: 'outing-1' }],
       ['get_profile_photos', { p_public_id: 'public-1' }],
     ]);
-    expect(photoUrl('user-1/outing 1/photo.jpg')).toBe('https://example.supabase.co/storage/v1/object/public/outing-photos/user-1/outing%201/photo.jpg');
+  });
+
+  it('shows outing photos through signed URLs (the bucket is private)', async () => {
+    const { client } = await import('../core/cloud.js');
+    let askedBucket = '';
+    let askedPaths: string[] = [];
+    (client as any).mockResolvedValue({
+      storage: { from: (bucket: string) => { askedBucket = bucket; return {
+        createSignedUrls: async (paths: string[], ttl: number) => {
+          askedPaths = paths;
+          expect(ttl).toBeGreaterThan(0);
+          return { data: paths.map((p) => ({ path: p, signedUrl: `https://signed.test/${p}?token=abc`, error: null })), error: null };
+        },
+      }; } },
+    });
+    const url = await signedPhotoUrl('user-1/outing-1/photo.jpg');
+    expect(askedBucket).toBe('outing-photos');
+    expect(askedPaths).toEqual(['user-1/outing-1/photo.jpg']);
+    expect(url).toBe('https://signed.test/user-1/outing-1/photo.jpg?token=abc');
   });
 });
