@@ -324,6 +324,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (url.origin !== self.location.origin) return; // other third-party requests go straight to the network
+  // Vercel Web Analytics' script: always the network's copy, never kept (offline it just fails to load).
+  if (url.pathname.startsWith('/_vercel/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(navigation(event, url));
