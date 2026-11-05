@@ -2,7 +2,6 @@
 // Local records remain usable with no account and no connection; every remote write is idempotent by uid.
 import { db, raw } from './db.js';
 import { client, user, onAuth } from './cloud.js';
-import { SUPABASE_URL } from './config.js';
 import { saveOutingPhotos } from './outingPhotoFiles.js';
 
 const BUCKET = 'outing-photos';
@@ -147,7 +146,39 @@ export async function fetchProfilePhotos(publicId, suppliedClient) {
   return data || { mostLiked: [], outings: [] };
 }
 
-export const photoUrl = path => path ? `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path.split('/').map(encodeURIComponent).join('/')}` : '';
+// The outing-photos bucket is private, so photos are shown through short-lived signed URLs. Storage RLS
+// (can_read_outing_photo) decides whose photos can be signed: the owner, her group, or anyone when she is on the
+// leaderboard — the same gate as get_public_outing. Signed URLs are cached until shortly before they expire so a
+// grid or a reopened viewer does not re-sign every path.
+const SIGN_TTL = 3600;
+const signCache = new Map(); // path -> { url, exp }
+
+export async function signedPhotoUrls(paths) {
+  const now = Date.now();
+  const wanted = [...new Set((paths || []).filter(Boolean))];
+  const stale = wanted.filter(p => { const hit = signCache.get(p); return !hit || hit.exp <= now; });
+  if (stale.length) {
+    try {
+      const c = await client();
+      for (let i = 0; i < stale.length; i += 100) {
+        const part = stale.slice(i, i + 100);
+        const { data, error } = await c.storage.from(BUCKET).createSignedUrls(part, SIGN_TTL);
+        if (error) continue;
+        (data || []).forEach((row, idx) => {
+          if (row && row.signedUrl && !row.error) signCache.set(part[idx], { url: row.signedUrl, exp: now + (SIGN_TTL - 300) * 1000 });
+        });
+      }
+    } catch { /* offline or signed-out: leave these paths unsigned, the frame just stays empty */ }
+  }
+  const out = new Map();
+  for (const p of wanted) { const hit = signCache.get(p); if (hit) out.set(p, hit.url); }
+  return out;
+}
+
+export async function signedPhotoUrl(path) {
+  if (!path) return '';
+  return (await signedPhotoUrls([path])).get(path) || '';
+}
 
 // ---------- background retries ----------
 let started = false;

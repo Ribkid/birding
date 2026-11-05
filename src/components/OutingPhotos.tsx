@@ -6,7 +6,8 @@ import {
   addOutingPhotos,
   fetchProfilePhotos,
   onOutingPhotosChange,
-  photoUrl,
+  signedPhotoUrl,
+  signedPhotoUrls,
   removeOutingPhoto,
   togglePhotoLike,
   updateOutingPhoto,
@@ -94,25 +95,52 @@ function LikeCount({ photo }: { photo: OutingPhoto }) {
 function usePhotoUrls(photos: OutingPhoto[]) {
   const [urls, setUrls] = useState(() => new Map<string, { full: string; small: string }>());
   useEffect(() => {
+    let alive = true;
+    const objectUrls: string[] = [];
     const next = new Map<string, { full: string; small: string }>();
+    const toSign: string[] = [];
     for (const photo of photos) {
-      if (photo.blob) next.set(photo.uid, {
-        full: URL.createObjectURL(photo.blob),
-        small: photo.thumb ? URL.createObjectURL(photo.thumb) : URL.createObjectURL(photo.blob),
-      });
-      else if (photo.path) next.set(photo.uid, { full: photoUrl(photo.path), small: photoUrl(photo.thumbPath || photo.path) });
-    }
-    setUrls(next);
-    return () => {
-      for (const photo of photos) {
-        const url = next.get(photo.uid);
-        if (!photo.blob || !url) continue;
-        URL.revokeObjectURL(url.full);
-        URL.revokeObjectURL(url.small);
+      if (photo.blob) {
+        const full = URL.createObjectURL(photo.blob);
+        const small = photo.thumb ? URL.createObjectURL(photo.thumb) : full;
+        objectUrls.push(full);
+        if (photo.thumb) objectUrls.push(small);
+        next.set(photo.uid, { full, small });
+      } else if (photo.path) {
+        toSign.push(photo.path, photo.thumbPath || photo.path);
       }
+    }
+    // Remote photos are shown through signed URLs (the bucket is private); local blobs stay as object URLs.
+    const build = async () => {
+      if (toSign.length) {
+        const signed = await signedPhotoUrls(toSign);
+        if (!alive) return;
+        for (const photo of photos) {
+          if (photo.blob || !photo.path) continue;
+          next.set(photo.uid, { full: signed.get(photo.path) || '', small: signed.get(photo.thumbPath || photo.path) || '' });
+        }
+      }
+      if (alive) setUrls(next);
+    };
+    void build();
+    return () => {
+      alive = false;
+      for (const url of objectUrls) URL.revokeObjectURL(url);
     };
   }, [photos]);
   return urls;
+}
+
+/** One <img> shown through a signed URL (outing-photo covers). Nothing is drawn until the URL is signed. */
+function SignedImg({ path, alt = '' }: { path?: string | null; alt?: string }) {
+  const [src, setSrc] = useState('');
+  useEffect(() => {
+    let alive = true;
+    if (!path) { setSrc(''); return; }
+    void signedPhotoUrl(path).then(url => { if (alive) setSrc(url); });
+    return () => { alive = false; };
+  }, [path]);
+  return src ? <img src={src} alt={alt} /> : null;
 }
 
 export function OutingPhotoGrid({
@@ -377,7 +405,7 @@ export function ProfilePhotoSections({ publicId, canLike = true }: { publicId: s
             {data.outings.map(outing => (
               <li key={outing.outingUid}>
                 <Link to={`/u/${publicId}/outing/${outing.outingUid}`} className="op-outing-link">
-                  {outing.coverThumb && <img src={photoUrl(outing.coverThumb)} alt="" />}
+                  <SignedImg path={outing.coverThumb} />
                   <span><strong>{outing.place || 'Outing'}</strong><span>{dateText(outing.date)} · {outing.photoCount} {outing.photoCount === 1 ? 'photo' : 'photos'}</span></span>
                 </Link>
               </li>
@@ -442,11 +470,15 @@ function LocalOutingLink({ outing, cover, publicId, children }: { outing: LocalO
   const [small, setSmall] = useState('');
   const shared = !!(cover.path || cover.uploadedAt);
   useEffect(() => {
-    if (cover.path) { setSmall(photoUrl(cover.thumbPath || cover.path)); return; }
+    let alive = true;
+    if (cover.path) {
+      void signedPhotoUrl(cover.thumbPath || cover.path).then(url => { if (alive) setSmall(url); });
+      return () => { alive = false; };
+    }
     if (!cover.thumb && !cover.blob) { setSmall(''); return; }
     const url = URL.createObjectURL(cover.thumb || cover.blob!);
     setSmall(url);
-    return () => URL.revokeObjectURL(url);
+    return () => { alive = false; URL.revokeObjectURL(url); };
   }, [cover.uid, cover.path, cover.thumbPath, cover.thumb, cover.blob]);
   const to = publicId && shared ? `/u/${publicId}/outing/${outing.uid}` : `/outing/${outing.id}`;
   return <Link to={to} className="op-outing-link">{small && <img src={small} alt="" />}{children}</Link>;
