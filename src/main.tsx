@@ -24,6 +24,7 @@ import './screens/map/map.css';
 import './screens/progress/progress.css';
 import App from './App';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { registerServiceWorker } from './lib/sw';
 
 const root = document.getElementById('root');
@@ -40,6 +41,8 @@ const draw = () => createRoot(root).render(
     </MotionHashRouter>
     {/* Vercel Web Analytics: page views and visitor counts only, no cookies (see public/privacy.html). */}
     <Analytics />
+    {/* Vercel Speed Insights: web vitals monitoring for performance optimization. */}
+    <SpeedInsights />
   </StrictMode>,
 );
 void booted.then(draw, draw);
