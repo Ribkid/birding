@@ -7,6 +7,9 @@ import { sized } from '../core/media.js';
 import { configured, signedIn } from '../core/profile.js';
 import { myFirstName } from '../lib/dexName';
 import { REGION } from '../lib/region';
+import { chooseRegion, hasStoredRegion, preselected, usablePacks } from '../lib/regionPick';
+import { getLastPos } from '../lib/lastPos';
+import { RegionCards } from './RegionCards';
 import { closeLayer, openLayer, type Layer } from '../lib/layers';
 import { useMedia } from '../lib/hooks';
 import { promptInstall, useCanInstall } from '../lib/install';
@@ -33,6 +36,10 @@ export function Welcome() {
   useMedia();
   const [open, setOpen] = useState(false);
   const [out, setOut] = useState(false);
+  // 'region' is the first step on a new install with more than one region to pick from; 'tour' is the card below.
+  const [step, setStep] = useState<'region' | 'tour'>('tour');
+  const [packs] = useState(usablePacks);
+  const [pick, setPick] = useState(() => preselected(getLastPos(), packs));
   const ovRef = useRef<HTMLDivElement>(null);
   const startRef = useRef<HTMLButtonElement>(null);
   const layerRef = useRef<Layer | null>(null);
@@ -43,11 +50,19 @@ export function Welcome() {
 
   useEffect(() => {
     let alive = true;
-    void db.kvGet('welcomed').then((value: unknown) => { if (alive && !value) setOpen(true); }).catch(() => {});
-    const fn = () => { if (!layerRef.current) { setOut(false); setOpen(true); } };
+    void (async () => {
+      if (await db.kvGet('welcomed')) return;
+      // Only a fresh install picks a region: one with a saved region (including after the picker's own reload) or with
+      // sightings already stays where it is.
+      const fresh = packs.length > 1 && !hasStoredRegion() && !((await db.all('sightings')) as unknown[]).length;
+      if (!alive) return;
+      setStep(fresh ? 'region' : 'tour');
+      setOpen(true);
+    })().catch(() => {});
+    const fn = () => { if (!layerRef.current) { setOut(false); setStep('tour'); setOpen(true); } };
     listeners.add(fn);
     return () => { alive = false; listeners.delete(fn); };
-  }, []);
+  }, [packs]);
 
   // Escape, Back and Start exploring all mean the same thing: she has seen it.
   const done = (reason = 'button') => {
@@ -67,11 +82,19 @@ export function Welcome() {
     if (!ov || !card) return;
     const layer = openLayer(ov, { dialog: card, close: (reason) => doneRef.current(reason) });
     layerRef.current = layer;
-    startRef.current?.focus({ preventScroll: true });
     return () => {
       if (layerRef.current === layer) { closeLayer(layer, { restore: false }); layerRef.current = null; }
     };
   }, [open, cardRef]);
+
+  useEffect(() => { if (open) startRef.current?.focus({ preventScroll: true }); }, [open, step]);
+
+  // Saves the region. A different one reloads the app; Welcome is not done yet, so it opens again on the tour.
+  const chosen = () => {
+    chooseRegion(pick);
+    // The tour's counts are the old region's until the reload lands; if there is no reload (no storage), carry on anyway.
+    if (pick === REGION.code) setStep('tour'); else setTimeout(() => setStep('tour'), 1500);
+  };
 
   const installNow = async () => {
     await promptInstall();
@@ -87,8 +110,16 @@ export function Welcome() {
       <div ref={cardRef} className="welcome-card">
         <div className="welcome-hero">
           <SpeciesImage sp={robin} size="large" />
-          <h1>{first ? `Hi ${first}` : 'Welcome to BirdyDex'}</h1>
+          <h1>{step === 'region' ? 'Where do you go birding?' : first ? `Hi ${first}` : 'Welcome to BirdyDex'}</h1>
         </div>
+        {step === 'region' ? (
+          <div className="welcome-body">
+            <RegionCards packs={packs} value={pick} onChange={setPick} label="Where do you go birding?" />
+            <div className="row-center">
+              <button ref={startRef} type="button" className="btn btn--primary" onClick={chosen}>Continue</button>
+            </div>
+          </div>
+        ) : (
         <div className="welcome-body">
           <p>
             This is your BirdyDex: {BIRDS.length} {REGION.name} birds to find
@@ -114,6 +145,7 @@ export function Welcome() {
             </div>
           )}
         </div>
+        )}
       </div>
     </div>,
     document.body,

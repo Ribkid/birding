@@ -1,12 +1,14 @@
 // BirdyDex species catalogue: every species in any region. Which of them are in this install's dex, and how common
 // each is there, comes from the region pack (src/regions/<code>.js).
-// Bird ids are their position in RAW (1–181), so never reorder or remove entries; sightings depend on them.
+// Bird ids 1–181 are their position in RAW, so never reorder or remove entries; sightings depend on them.
+// Birds added later (336 up) live in birds-more.js with fixed ids. Ids 182–335 are the other kinds (species-new.json).
 // h = habitats: g gardens & parks, w wetlands & lakes, c coast & mangroves, f forest & woodland,
 //               r rainforest, o open country (paddocks & grassland)
 // s = season: 's' mainly spring–summer visitor, 'w' mainly autumn–winter visitor
 // n = active at night
 // wiki = Wikipedia article to use when the scientific name doesn't resolve
 import { REGION } from '../regions/index.js';
+import MORE_BIRDS from './birds-more.js';
 
 export const GROUPS = {
   landfowl:   'Brush-turkey & quail',
@@ -28,6 +30,9 @@ export const GROUPS = {
   magpies:    'Magpies, crows & butcherbirds',
   songbirds:  'Finches, swallows & other songbirds',
 };
+
+// A region can rename a group to fit its own birds (Melbourne has quail but no brush-turkey).
+Object.assign(GROUPS, REGION.groups ?? {});
 
 export const HABITATS = {
   g: 'Gardens & parks',
@@ -471,8 +476,14 @@ export function parseSize(text) {
   return { cm: Math.round(cm * 10) / 10, measure };
 }
 
-const BIRDS_ = RAW.map((b, i) => ({
-  id: i + 1,
+// Dex order: each later bird goes after the last bird of its group, so relatives sit together.
+const ORDERED = RAW.map((b, i) => ({ ...b, id: i + 1 }));
+for (const b of MORE_BIRDS) {
+  const last = ORDERED.findLastIndex(x => x.g === b.g);
+  ORDERED.splice(last < 0 ? ORDERED.length : last + 1, 0, b);
+}
+const BIRDS_ = ORDERED.map(b => ({
+  id: b.id,
   kind: 'bird',
   name: b.name,
   sci: b.sci,
@@ -481,10 +492,10 @@ const BIRDS_ = RAW.map((b, i) => ({
   size: b.size,
   sizeCm: b.size,
   sizeText: `${b.size} cm`,
-  rarity: rarityHere(i + 1),
+  rarity: rarityHere(b.id),
   season: b.s || null,
   nocturnal: !!b.n,
-  notes: REGION.notes[i + 1] ?? b.notes,
+  notes: REGION.notes[b.id] ?? b.notes,
   wiki: b.wiki || null,
 }));
 
@@ -501,7 +512,7 @@ const extra = typeof window !== 'undefined' ? await loadExtra() : { list: [] };
 
 const firstNumber = t => { const m = String(t ?? '').match(/\d+(\.\d+)?/); return m ? Number(m[0]) : null; };
 const OTHERS = extra.list
-  .filter(x => x && x.id > 181 && KINDS[x.kind] && x.kind !== 'bird' && x.name && x.sci)
+  .filter(x => x && x.id > 181 && x.id < 336 && KINDS[x.kind] && x.kind !== 'bird' && x.name && x.sci)
   .sort((a, b) => a.id - b.id)
   .map(x => {
     const g = `${x.kind}:${x.group || 'other'}`;
@@ -538,7 +549,7 @@ export const ofKind = k => SPECIES.filter(s => s.kind === k);
 export const byId = new Map(ALL_SPECIES.map(s => [s.id, s]));
 export const kindsPresent = Object.keys(KINDS).filter(k => SPECIES.some(s => s.kind === k));
 
-// Dex number shown on bands: birds 001–181, others per kind (M01, R01, F01, B01, P01…).
+// Dex number shown on bands: birds 001… in this region's order, others per kind (M01, R01, F01, B01, P01…).
 const codeById = new Map();
 for (const k of Object.keys(KINDS)) {
   const list = ofKind(k);

@@ -252,11 +252,13 @@ async function readJson(url) {
   try { return JSON.parse(await readFile(url, 'utf8')); } catch { return null; }
 }
 
-export async function build({ region, dryRun = false }) {
+// `only`: rebuild just these ids and keep everything else in the region's rates.json (its other species, effort and
+// hotspots), e.g. to fix one bad match without rebuilding a region whose file also holds other kinds.
+export async function build({ region, dryRun = false, only = null }) {
   const pack = PACKS[region];
   if (!pack) throw new Error(`No region pack "${region}" (have: ${Object.keys(PACKS).join(', ')})`);
   const byId = new Map(ALL_BIRDS.map((b) => [b.id, b]));
-  const birds = Object.keys(pack.species).map(Number).map((id) => byId.get(id)).filter(Boolean);
+  const birds = Object.keys(pack.species).map(Number).filter((id) => !only || only.includes(id)).map((id) => byId.get(id)).filter(Boolean);
   console.log(`[${region}] ${birds.length} birds, box ${pack.map.bbox.join(', ')}`);
   if (dryRun) return null;
 
@@ -301,6 +303,17 @@ export async function build({ region, dryRun = false }) {
     console.log(`${String(bird.id).padStart(3)} ${bird.name.padEnd(32)} ${best.name.padEnd(36)} ${String(total).padStart(7)}`);
   }
 
+  const file = new URL(`public/data/regions/${region}/rates.json`, ROOT);
+  if (only) {
+    const old = await readJson(file);
+    if (!old) throw new Error(`--only needs an existing rates.json for ${region}`);
+    Object.assign(old.species, species);
+    await writeFile(file, JSON.stringify(old));
+    console.log(`[${region}] replaced ${Object.keys(species).join(', ') || 'nothing'}; unresolved: ${unresolved.join(', ') || 'none'}`);
+    console.log(Object.entries(species).map(([id, sp]) => `${id}: ${sp.n} records, band ${rarityBand(sp.n)}`).join('\n'));
+    return old;
+  }
+
   const ranked = [...cells].sort((a, b) => b[1].size - a[1].size || [...b[1].values()].reduce((s, c) => s + c, 0) - [...a[1].values()].reduce((s, c) => s + c, 0));
   const named = [];
   for (const [label] of ranked.slice(0, 320)) {
@@ -318,7 +331,6 @@ export async function build({ region, dryRun = false }) {
     species,
     hotspots,
   };
-  const file = new URL(`public/data/regions/${region}/rates.json`, ROOT);
   await mkdir(new URL('./', file), { recursive: true });
   await writeFile(file, JSON.stringify(out));
   console.log(`[${region}] unresolved: ${unresolved.length ? unresolved.join(', ') : 'none'}`);
@@ -333,10 +345,12 @@ const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv
 if (isMain) {
   const region = process.argv.find((a) => a.startsWith('--region='))?.slice('--region='.length);
   if (!region) {
-    console.error('Usage: node scripts/build-rates.mjs --region=<code> [--dry-run]');
+    console.error('Usage: node scripts/build-rates.mjs --region=<code> [--only=<id,id>] [--dry-run]');
     process.exitCode = 1;
   } else {
-    build({ region, dryRun: process.argv.includes('--dry-run') }).catch((error) => {
+    const onlyArg = process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length);
+    const only = onlyArg ? onlyArg.split(',').map(Number).filter(Boolean) : null;
+    build({ region, dryRun: process.argv.includes('--dry-run'), only }).catch((error) => {
       console.error(`Stopped: ${error instanceof Error ? error.message : error}`);
       process.exitCode = 1;
     });

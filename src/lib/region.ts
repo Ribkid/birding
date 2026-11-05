@@ -23,11 +23,14 @@ export interface RegionPack {
   };
   species: Record<number, number>;
   notes: Record<number, string>;
+  /** Group names that replace the shared ones in species.js GROUPS for this region. */
+  groups?: Record<string, string>;
 }
 
 export const PACKS = core.PACKS as unknown as Record<string, RegionPack>;
 export const REGION = core.REGION as unknown as RegionPack;
 export const REGION_KEY = core.REGION_KEY;
+export const canUse = core.canUse as (code: string) => boolean;
 export const storedRegion = core.storedRegion as () => string | null;
 export const regionFile = core.regionFile as (name: string, code?: string) => string;
 export const ebirdRegion = core.ebirdRegion as (council: string, pack?: RegionPack) => string;

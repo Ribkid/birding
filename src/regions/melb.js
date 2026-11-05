@@ -1,12 +1,20 @@
 // Greater Melbourne region pack. See docs/plans/2026-11-05-melbourne-region-design.md.
-// Not launched: it can only be picked in a dev build (see src/regions/index.js). Step 2 of the design: the 103 birds
-// already in the app that are regular around Melbourne. The ~78 Melbourne-only birds come in step 3.
+// Launched (step 4 of the design): picked on Welcome or in Settings. 213 birds: 118 already in the app and 95
+// Melbourne birds added in src/core/birds-more.js (ids 336–430).
 export default {
   code: 'melb',
   name: 'Greater Melbourne',
   short: 'Melbourne',
-  launched: false,
+  launched: true,
   timeZone: 'Australia/Melbourne',
+  // Group names that fit Melbourne's birds better than SEQ's (src/core/species.js GROUPS).
+  groups: {
+    landfowl: 'Quail',
+    herons: 'Herons, ibis & cranes',
+    rainforest: 'Lyrebirds, bowerbirds & whipbirds',
+    wrens: 'Fairywrens, thornbills & pardalotes',
+    whistlers: 'Whistlers, fantails & flycatchers',
+  },
   map: {
     center: [-37.81, 144.96],
     zoom: 9,
@@ -87,6 +95,18 @@ export default {
     110: 1, 111: 4, 118: 3, 121: 3, 122: 1, 125: 1, 126: 1, 127: 1, 131: 1, 132: 3, 133: 1, 134: 1, 135: 2, 144: 1,
     145: 1, 146: 2, 147: 2, 148: 1, 149: 3, 152: 1, 153: 1, 154: 3, 158: 1, 160: 1, 162: 1, 163: 1, 165: 1, 166: 2,
     167: 1, 169: 1, 170: 2, 171: 3, 172: 1, 173: 1, 174: 1, 175: 2, 176: 1, 180: 1, 181: 2,
+    // Step 3: 15 more app birds and the 95 new ones (336–430), banded the same way, then a hand pass where ALA's
+    // count misleads: records piled up at a few sites (Hooded Plover, Cape Barren Goose, Brolga, White-fronted Chat,
+    // the terns, Banded Stilt, Rufous Bristlebird, Australasian Gannet) or split across names (Musk, Purple-crowned
+    // Lorikeet, Collared Sparrowhawk, Black-fronted Dotterel), checked against how many councils reported it in the
+    // last 30 days. Swift Parrot is rare (5): a threatened winter visitor seen in one council this month.
+    23: 4, 30: 4, 33: 4, 34: 4, 36: 3, 40: 4, 51: 2, 52: 3, 55: 4, 90: 3, 99: 4, 112: 4, 129: 4, 136: 3, 140: 4, 336: 1,
+    337: 1, 338: 1, 339: 1, 340: 1, 341: 1, 342: 1, 343: 2, 344: 1, 345: 1, 346: 2, 347: 2, 348: 1, 349: 2, 350: 2, 351: 3, 352: 2,
+    353: 2, 354: 2, 355: 2, 356: 2, 357: 3, 358: 2, 359: 2, 360: 2, 361: 2, 362: 2, 363: 2, 364: 2, 365: 2, 366: 3, 367: 3, 368: 3,
+    369: 2, 370: 2, 371: 3, 372: 2, 373: 2, 374: 4, 375: 3, 376: 3, 377: 3, 378: 2, 379: 3, 380: 3, 381: 3, 382: 3, 383: 3, 384: 2,
+    385: 2, 386: 3, 387: 3, 388: 3, 389: 4, 390: 4, 391: 3, 392: 3, 393: 3, 394: 3, 395: 3, 396: 4, 397: 4, 398: 4, 399: 4, 400: 4,
+    401: 3, 402: 3, 403: 3, 404: 3, 405: 4, 406: 3, 407: 4, 408: 3, 409: 3, 410: 4, 411: 2, 412: 3, 413: 1, 414: 3, 415: 3, 416: 3,
+    417: 5, 418: 4, 419: 4, 420: 4, 421: 4, 422: 4, 423: 4, 424: 3, 425: 3, 426: 4, 427: 4, 428: 4, 429: 4, 430: 4,
   },
   // Region-specific ID notes that replace the shared note in species.js, where the shared one names SEQ places.
   notes: {

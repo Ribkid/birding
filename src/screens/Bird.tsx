@@ -307,8 +307,11 @@ function SpeciesPage({ sp }: { sp: Species }) {
   const mastery = masteryOf(sp.id) as number;
   const snaps = hist.filter((h) => h.photoId);
   const kindWord = KINDS[sp.kind].label.toLowerCase();
-  const prev = [...SPECIES].reverse().find((s) => s.kind === sp.kind && s.id < sp.id);
-  const next = SPECIES.find((s) => s.kind === sp.kind && s.id > sp.id);
+  // Neighbours in dex order (later birds sit inside their group, so ids aren't in order).
+  const sameKind = SPECIES.filter((s) => s.kind === sp.kind);
+  const at = sameKind.findIndex((s) => s.id === sp.id);
+  const prev = at > 0 ? sameKind[at - 1] : undefined;
+  const next = at >= 0 ? sameKind[at + 1] : undefined;
 
   // How to spot it: the field notes as short marks, the call words, size, when, group, habitats and a quick test.
   const cw = callWords(sp) as { words: string; sentence: string } | null;

@@ -1,12 +1,13 @@
 import { byId } from './data';
 import { EBIRD_SNAPSHOT_URL, type EbirdSnapshot } from './ebird';
 import { setAroundSpecies } from '../core/quiz.js';
+import { REGION } from './region';
 
 const DAY = 24 * 60 * 60 * 1000;
 let cached: number[] | null = null;
 let pending: Promise<number[]> | null = null;
 
-/** Species reported in the baked seven-day window, once each, newest report first. */
+/** This region's dex birds reported in the baked seven-day window, once each, newest report first. */
 export function recentWeekSpecies(snapshot: EbirdSnapshot, now = new Date()): number[] {
   const cutoff = now.getTime() - 7 * DAY;
   const latest = new Map<number, string>();
@@ -17,7 +18,7 @@ export function recentWeekSpecies(snapshot: EbirdSnapshot, now = new Date()): nu
       const date = String(row[1]).slice(0, 10);
       const time = Date.parse(`${date}T00:00:00`);
       if (!Number.isFinite(time) || time < cutoff || time > now.getTime() + DAY) continue;
-      if (byId.get(id)?.kind !== 'bird') continue;
+      if (byId.get(id)?.kind !== 'bird' || REGION.species[id] == null) continue;
       const previous = latest.get(id);
       if (!previous || date > previous) latest.set(id, date);
     }

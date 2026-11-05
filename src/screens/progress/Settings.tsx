@@ -12,6 +12,8 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import { byId } from '../../lib/data';
 import { REGION } from '../../lib/region';
+import { chooseRegion, usablePacks } from '../../lib/regionPick';
+import { RegionCards } from '../../components/RegionCards';
 import { db } from '../../core/db.js';
 import { toEbirdCsv } from '../../core/ebird.js';
 import { onAuth, user } from '../../core/cloud.js';
@@ -411,6 +413,9 @@ export default function Settings() {
   const [persisted, setPersisted] = useState(true);
   const [restore, setRestore] = useState<BackupData | null>(null);
   const [wipeAsk, setWipeAsk] = useState(false);
+  const [packs] = useState(usablePacks);
+  const [regionAsk, setRegionAsk] = useState(false);
+  const [regionPick, setRegionPick] = useState<string>(REGION.code);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -526,6 +531,9 @@ export default function Settings() {
               </select>
             </label>
           )}
+          {packs.length > 1 && (
+            <button type="button" className="set-row" data-region onClick={() => { setRegionPick(REGION.code); setRegionAsk(true); }}><span className="set-row-l">Region</span><span className="set-row-v">{REGION.name}</span>{chev}</button>
+          )}
           <button type="button" className="set-row" data-welcome onClick={openWelcome}><span className="set-row-l">Show the welcome screen</span>{chev}</button>
         </div>
       </Card>
@@ -549,6 +557,16 @@ export default function Settings() {
       <Card id="over-h" title="Start over">
         <div className="set-list"><button type="button" className="set-row set-row--danger" data-wipe onClick={() => setWipeAsk(true)}><span className="set-row-l">Delete all my sightings</span></button></div>
       </Card>
+      {regionAsk && (
+        <Modal title="Region" onClose={() => setRegionAsk(false)}>
+          <RegionCards packs={packs} value={regionPick} onChange={setRegionPick} label="Region" />
+          {regionPick !== REGION.code && <p className="region-note">Your sightings come with you.</p>}
+          <div className="row-end">
+            <button type="button" className="btn" onClick={() => setRegionAsk(false)}>Cancel</button>
+            {regionPick !== REGION.code && <button type="button" className="btn btn--primary" data-region-confirm onClick={() => chooseRegion(regionPick)}>Switch region</button>}
+          </div>
+        </Modal>
+      )}
       {restore && (
         <ConfirmDialog
           title="Restore this backup?"

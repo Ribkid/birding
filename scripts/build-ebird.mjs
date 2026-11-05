@@ -40,6 +40,8 @@ export const SCI_ALIASES = {
   'Hypotaenidia philippensis': 'Gallirallus philippensis', // Buff-banded Rail
   'Elseyornis melanops': 'Thinornis melanops', // Black-fronted Dotterel
   'Parvipsitta pusilla': 'Psitteuteles pusillus', // Little Lorikeet
+  'Parvipsitta porphyrocephala': 'Psitteuteles porphyrocephalus', // Purple-crowned Lorikeet
+  'Glossopsitta concinna': 'Trichoglossus concinnus', // Musk Lorikeet
   // eBird lumps Eastern Osprey into (Western) Osprey; every Australian osprey is the eastern one.
   'Pandion cristatus': 'Pandion haliaetus',
 };

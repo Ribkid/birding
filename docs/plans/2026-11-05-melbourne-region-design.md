@@ -1,6 +1,6 @@
 # Adding Greater Melbourne: design
 
-Date: 2026-11-05. Status: design agreed, not started.
+Date: 2026-11-05. Status: built and launched 2026-11-06 (see "as built" under section 9).
 Companion: [draft Melbourne bird list](2026-11-05-melbourne-bird-candidates.md).
 
 ## Decisions
@@ -167,6 +167,20 @@ Steps 1 and 3a (curation and research) can run in parallel. Step 2 needs step 1.
 - **Spot access:** `regions/melb/spot-access.json` covers the 220 ALA hotspots, 110 with access known (SEQ: 125). The Western Treatment Plant spots there have no score, because their ALA names don't say "restricted access" and OpenStreetMap has no tags near them. `spot-access-ebird.json` covers the top 564 eBird hotspots by species, 342 with access known (SEQ: 236 of its top 400), because Overpass kept timing out with HTTP 504 past that point. The eBird names of the Western Treatment Plant spots say "(restricted access)", and the app reads that from the name (`isRestricted` in `src/lib/spots.ts`), so they show as restricted. To cover all 800 later, rerun `node scripts/build-spot-access.mjs --region=melb --ebird`; it resumes from cached batches.
 - **Offline:** region files are no longer precached. The app asks for its own region's files once the worker controls the page (`warmRegionFiles` in `src/lib/sw.ts`), and they live in the runtime cache, which outlives releases. "Ready for the field" sends the file list with `shell-status` / `shell-fill`, so they count and can be fetched. `offline-check.mjs` takes `--region=<code>`.
 - **Found on the way:** SEQ's `rates.json` has the same Magpie Goose bug: id 3 holds all 428,715 waterfowl records, so its month graph and target score are wrong. It is left alone here so SEQ is unchanged. The fix is to replace that one entry: rerunning `build-rates.mjs` for SEQ would drop SEQ's other kinds and `effortByKind`, which it doesn't build.
+
+### Steps 3 and 4 as built (branch `region-packs`, 2026-11-06)
+
+- **List:** 213 birds. That is the 103 from step 2, plus 15 app birds that are regular in Melbourne (Red-capped Plover, Black-fronted Dotterel, Pacific Koel, Scarlet Myzomela, White-bellied Sea-Eagle, Azure Kingfisher, Eastern Barn Owl, Owlet-nightjar, Little Lorikeet, Noisy Friarbird, White-throated Gerygone, Brush Cuckoo, Wonga Pigeon, White-throated Needletail, Far Eastern Curlew). It also has 95 new birds: the draft's 78, plus Eurasian Tree Sparrow, Black-tailed Nativehen, Satin Flycatcher, Swift Parrot, Lewin's Rail, Pink Robin, Pallid Cuckoo, Black-faced Cormorant, Jacky Winter, Ruddy Turnstone, Little Penguin, White-winged Triller, Olive Whistler, Brush Bronzewing, Song Thrush, Red-browed Treecreeper and Rufous Bristlebird. Orange-bellied Parrot was left out: no Melbourne council has reported it this month.
+- **Catalogue:** the new birds are in `src/core/birds-more.js` with fixed ids 336–430. `species.js` slots each one after the last bird of its group, so relatives sit together in the dex. Bird ids are no longer in dex order, so the Bird page's previous/next follow the dex list. A pack can rename groups (`groups`); Melbourne uses "Quail", "Herons, ibis & cranes" and three more.
+- **Rarity:** the rates bands, then a hand pass where ALA's count misleads. The pass used how many councils reported each bird in the last 30 days. Records piled up at a few sites: Hooded Plover, the terns, Brolga, Rufous Bristlebird. Other birds are split across names: Musk Lorikeet is common (1), not uncommon. Swift Parrot is the one rare (5). The mix is 66 common, 55 fairly common, 58 uncommon, 33 scarce and 1 rare.
+- **Rates and calls:** `build-rates.mjs --region=melb` resolves all 213. ALA has no clips for 19 of the new birds, so call questions skip those. `--only=<ids>` rebuilds named birds and keeps the rest; it fixed SEQ's Magpie Goose (now its own 18,452 records).
+- **eBird:** two more name fixes (Purple-crowned and Musk Lorikeet). All 276 catalogue birds match.
+- **Gallery:** `scripts/build-gallery.mjs` adds 5 iNaturalist photos (via ALA, open licences) per bird with none. ALA matches iNaturalist's newer names only to the genus, so it falls back to the name the observer recorded. Every Melbourne bird has photos.
+- **Look-alikes:** 63 new pairs. **3D colours:** all 95 in `palettes.js`. **BirdNET:** `scripts/build-birdnet-map.mjs` maps 77 of the 95; the rest aren't in BirdNET's label set.
+- **Photo ID:** candidates are now limited to the region's dex. The 95 new birds aren't in the photo model, because its build script is still missing (see risks). Photo ID covers the 118 shared birds in Melbourne.
+- **Spot access:** all 800 top eBird hotspots, 497 with access known.
+- **Launch:** `launched: true`. A fresh install is asked "Where do you go birding?" on Welcome, with the closer region preselected from a known location. Existing installs stay on SEQ without being asked. Settings has a Region row. The static shell, meta description and manifest name both regions. `species_kinds` gets rows for 336–430 (migration `20261106090000`), so the leaderboard counts the new birds as birds.
+- **Not done:** `home_region` and a per-region leaderboard. The board stays shared, which is fine because a sighting counts everywhere. Also not done: a neutral domain and name, and the Melbourne ad.
 
 ## Risks and open questions
 

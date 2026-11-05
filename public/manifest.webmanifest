@@ -1,7 +1,7 @@
 {
   "name": "BirdyDex",
   "short_name": "BirdyDex",
-  "description": "A collectable field guide to the birds, native animals and plants of South East Queensland.",
+  "description": "A collectable field guide to the birds of South East Queensland and Greater Melbourne.",
   "start_url": "./#/dex",
   "scope": "./",
   "display": "standalone",

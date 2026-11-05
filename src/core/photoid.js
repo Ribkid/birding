@@ -23,6 +23,7 @@
 //   wide / wideF     the box grown 1.3x around its centre (kept inside the photo), then 224x224
 // Whole-photo views first reduce the photo so its short side is at most 1600 px (Pillow bicubic).
 import { byId } from './species.js';
+import { REGION } from '../regions/index.js';
 import { loadSeq, monthRates } from './seqdata.js';
 
 const BASE = new URL('/', location.href);
@@ -458,7 +459,8 @@ export async function identifyPhoto(src, opts = {}) {
   await loadPhotoModel(fraction => say({ phase: 'model', fraction }));
   if ((data.j.prior?.month || 0) > 0) await loadSeq();
   const t0 = performance.now();
-  const sel = data.kindOf.map((k, r) => (k && (!kinds?.length || kinds.includes(k)) ? r : -1)).filter(r => r >= 0);
+  // Only this region's dex: a Melbourne phone is never offered a Wompoo Fruit-Dove.
+  const sel = data.kindOf.map((k, r) => (k && REGION.species[data.ids[r]] != null && (!kinds?.length || kinds.includes(k)) ? r : -1)).filter(r => r >= 0);
   if (!sel.length) throw new Error('Photo ID doesn\'t cover that kind yet.');
   const vs = data.j.views || {};
   const names = (crop ? vs.crop || ['box', 'boxF'] : vs.whole || ['pad', 'padF']);

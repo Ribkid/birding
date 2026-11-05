@@ -6,7 +6,7 @@
     <title>BirdyDex</title>
     <meta
       name="description"
-      content="A collectable field guide to the birds, native animals and plants of South East Queensland: log sightings, identify calls and photos, earn badges."
+      content="A collectable field guide to the birds of South East Queensland and Greater Melbourne: log sightings, identify calls and photos, earn badges."
     />
     <!-- Both schemes, so the browser's own first canvas is already dark on a dark phone, never a white flash. -->
     <meta name="color-scheme" content="light dark" />
@@ -45,8 +45,8 @@
             </div>
           </div>
           <div class="dex-hero-foot">
-            <h1 class="wordmark">BirdyDex<small>South East Queensland</small></h1>
-            <p class="dex-cap glass" aria-hidden="true"><svg class="ring dex-cap-ring ring--zero" viewBox="0 0 36 36"><circle class="ring-track" cx="18" cy="18" r="15"></circle></svg><span class="shell-ghost"><b>00</b> of 291 animals seen</span></p>
+            <h1 class="wordmark">BirdyDex<small data-shell-region>South East Queensland</small></h1>
+            <p class="dex-cap glass" aria-hidden="true"><svg class="ring dex-cap-ring ring--zero" viewBox="0 0 36 36"><circle class="ring-track" cx="18" cy="18" r="15"></circle></svg><span class="shell-ghost" data-shell-count><b>00</b> of 291 animals seen</span></p>
           </div>
         </header>
         <div class="dex-sheet"></div>
@@ -58,6 +58,11 @@
       (function (s) { var t = /^(learn|quiz)$/.test(s) ? 'learn' : s === 'map' ? 'map' : /^(spots?)$/.test(s) ? 'spots' : /^(me|u|lists?|patch|targets|outing|log|stats|badges|settings|leaderboard)$/.test(s) ? 'me' : 'dex';
         document.querySelectorAll('#root [data-tab]').forEach(function (a) { a.setAttribute('aria-current', a.getAttribute('data-tab') === t ? 'page' : 'false'); });
         if (s !== 'dex') document.querySelector('#root [data-shell]').textContent = ''; })(location.hash.split(/[/?]/)[1] || 'dex');
+      // The placeholder names the region this phone is set to (src/regions; the count is replaced on first render).
+      (function () { var r = null; try { r = localStorage.getItem('birddex-region'); } catch (e) {}
+        var shells = { melb: ['Greater Melbourne', 'birds'] }, x = shells[r]; if (!x) return;
+        var n = document.querySelector('#root [data-shell-region]'); if (n) n.textContent = x[0];
+        var c = document.querySelector('#root [data-shell-count]'); if (c) c.innerHTML = '<b>00</b> ' + x[1] + ' seen'; })();
       // Whose dex it is, from the first name the app kept when she signed in (lib/dexName.ts).
       try { var who = localStorage.getItem('birddex-name'); if (who) { var w = document.querySelector('#root [data-shell] .wordmark'); if (w) w.firstChild.nodeValue = who + "'s BirdyDex"; document.title = who + "'s BirdyDex"; } } catch (e) {}
     </script>

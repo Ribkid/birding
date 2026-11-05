@@ -35,11 +35,11 @@ describe('the SEQ region pack', () => {
     }
   });
 
-  it('is the region when none is saved, and the dex is the whole catalogue', () => {
+  it('is the region when none is saved, and the dex is the catalogue minus the Melbourne-only birds', () => {
     expect(REGION.code).toBe('seq');
     expect(BIRDS).toHaveLength(181);
-    expect(ALL_BIRDS).toHaveLength(181);
-    expect(SPECIES.map((s) => s.id)).toEqual(ALL_SPECIES.map((s) => s.id));
+    expect(ALL_BIRDS).toHaveLength(276);
+    expect(SPECIES.map((s) => s.id)).toEqual(ALL_SPECIES.filter((s) => s.id < 336).map((s) => s.id));
     expect(RARITY[1].hint).toBe('Reported all the time across SEQ');
     expect(RARITY[5].hint).toBe('A genuine find in SEQ');
   });
@@ -53,9 +53,10 @@ describe('the SEQ region pack', () => {
 });
 
 describe('the Melbourne region pack', () => {
-  it('holds the 103 app birds that are regular around Melbourne, each with a rarity of 1–5', () => {
+  it('holds the 213 birds that are regular around Melbourne (95 of them new to the app), each with a rarity of 1–5', () => {
     const ids = Object.keys(melb.species).map(Number);
-    expect(ids).toHaveLength(103);
+    expect(ids).toHaveLength(213);
+    expect(ids.filter((id) => id >= 336)).toHaveLength(95);
     for (const id of ids) expect(byId.get(id)?.kind).toBe('bird');
     expect(Object.values(melb.species).every((r) => Number.isInteger(r) && r >= 1 && r <= 5)).toBe(true);
     // Common in both cities, and none of the northern birds that barely reach Melbourne.
@@ -79,9 +80,17 @@ describe('the Melbourne region pack', () => {
     expect(zoneOf('MPE', melb)).toBe('peninsula');
   });
 
-  it('can only be picked in a dev build until it launches', () => {
-    expect(canUse('melb', false)).toBe(false);
+  it('is launched, and a pack that is not launched can only be picked in a dev build', () => {
+    expect(canUse('melb', false)).toBe(true);
     expect(canUse('melb', true)).toBe(true);
+    const pack = melb as { launched: boolean };
+    try {
+      pack.launched = false;
+      expect(canUse('melb', false)).toBe(false);
+      expect(canUse('melb', true)).toBe(true);
+    } finally {
+      pack.launched = true;
+    }
     expect(canUse('seq', false)).toBe(true);
     expect(canUse('atlantis', true)).toBe(false);
   });
@@ -111,10 +120,10 @@ describe('the Melbourne region pack', () => {
 });
 
 describe('eBird names for app birds', () => {
-  it('match the six birds whose eBird name differs, Eastern Osprey to eBird’s Osprey', () => {
+  it('match the eight birds whose eBird name differs, Eastern Osprey to eBird’s Osprey', () => {
     const taxonomy = Object.entries(SCI_ALIASES).map(([, ebird], i) => ({ speciesCode: `code${i}`, sciName: ebird }));
     const { byCode } = mapTaxonomy(taxonomy, ALL_BIRDS);
-    expect(byCode.size).toBe(6);
+    expect(byCode.size).toBe(8);
     const osprey = ALL_BIRDS.find((b) => b.name === 'Eastern Osprey')!;
     expect(SCI_ALIASES[osprey.sci]).toBe('Pandion haliaetus');
     expect([...byCode.values()]).toContain(osprey.id);
