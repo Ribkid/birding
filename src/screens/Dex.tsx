@@ -13,6 +13,7 @@ import {
 import { useDexReady, useKindCounts, useLastSeen, useMedia, useSeen } from '../lib/hooks';
 import { countIn, tierNote, useTiers } from '../lib/tiers';
 import { seqSettled } from '../lib/seq';
+import { REGION } from '../lib/region';
 import { keepFocus } from '../lib/layers';
 import { countUp, flip, motionOK } from '../lib/motion';
 import { applyTint, stagger, tintFrom } from '../lib/look';
@@ -288,7 +289,7 @@ function Wordmark() {
     void authSettled.then(() => { if (alive && !signedIn()) { rememberFirstName(''); setStored(''); } });
     return () => { alive = false; };
   }, [known]);
-  return <h1 className="wordmark">{dexTitle(known || stored)}<small>South East Queensland</small></h1>;
+  return <h1 className="wordmark">{dexTitle(known || stored)}<small>{REGION.name}</small></h1>;
 }
 
 /**

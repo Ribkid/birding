@@ -6,6 +6,7 @@ import { db } from '../core/db.js';
 import { sized } from '../core/media.js';
 import { configured, signedIn } from '../core/profile.js';
 import { myFirstName } from '../lib/dexName';
+import { REGION } from '../lib/region';
 import { closeLayer, openLayer, type Layer } from '../lib/layers';
 import { useMedia } from '../lib/hooks';
 import { promptInstall, useCanInstall } from '../lib/install';
@@ -90,7 +91,7 @@ export function Welcome() {
         </div>
         <div className="welcome-body">
           <p>
-            This is your BirdyDex: {BIRDS.length} South East Queensland birds to find
+            This is your BirdyDex: {BIRDS.length} {REGION.name} birds to find
             {ANIMALS.length > BIRDS.length ? `, plus ${ANIMALS.length - BIRDS.length} other native animals` : ''}
             {plants ? ` and ${plants} native plants` : ''}, starting with this {robin.name}.
           </p>

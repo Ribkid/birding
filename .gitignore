@@ -9,6 +9,7 @@ tsconfig.tsbuildinfo
 .vercel
 .env*
 public/data/ebird/
+public/data/regions/*/ebird.json
 .cache/
 .superpowers/
 # Local-only browser check helpers and their screenshots (they use the machine's global Playwright).

@@ -8,6 +8,7 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { GROUPS, HABITATS, KINDS, RARITY, SPECIES, byId, dexCode, type Species } from '../lib/data';
 import { mediaSettled, useMedia, useSightings } from '../lib/hooks';
 import { useSeqReady } from '../lib/seq';
+import { REGION } from '../lib/region';
 import { lookAfterDraw } from '../lib/look';
 import { heroShown, type Drawn } from './heroShown';
 import { galleryFor, infoFor, loadExtras } from '../core/gallery.js';
@@ -44,8 +45,8 @@ const fmtDate = (d?: string | null) => {
 const dexNo = (id: number) => dexCode(id);
 const article = (w: string) => (/^[aeiou]/i.test(w) ? 'an' : 'a');
 // Non-bird tiers rank each kind against itself, so the line says so.
-const rarityText = (sp: Species) => (sp.kind === 'bird' ? `${RARITY[sp.rarity].label} in SEQ`
-  : `${RARITY[sp.rarity].label} for ${article(KINDS[sp.kind].one)} ${KINDS[sp.kind].one} in SEQ`);
+const rarityText = (sp: Species) => (sp.kind === 'bird' ? `${RARITY[sp.rarity].label} in ${REGION.short}`
+  : `${RARITY[sp.rarity].label} for ${article(KINDS[sp.kind].one)} ${KINDS[sp.kind].one} in ${REGION.short}`);
 function seasonText(sp: Species) {
   if (sp.kind === 'plant') return sp.season === 's' ? 'Mostly spring to summer' : sp.season === 'w' ? 'Mostly autumn to winter' : 'Year round';
   return sp.season === 's' ? (sp.kind === 'bird' ? 'Mostly September to April' : 'Most active September to April') : sp.season === 'w' ? 'Mostly April to September' : 'All year';
@@ -465,10 +466,10 @@ function SpeciesPage({ sp }: { sp: Species }) {
             <div className="season-labels" aria-hidden="true">
               {[...'JFMAMJJASOND'].map((c, i) => <span key={i} className={i === now ? 'now' : undefined}>{c}</span>)}
             </div>
-            <p className="small muted">How often it's reported in SEQ each month, from {(recordCount(sp.id) as number).toLocaleString('en-AU')} records since 2016 in the Atlas of Living Australia.</p>
+            <p className="small muted">How often it's reported in {REGION.short} each month, from {(recordCount(sp.id) as number).toLocaleString('en-AU')} records since 2016 in the Atlas of Living Australia.</p>
             {spots.length > 0 && (
               <>
-                <h3 className="h3">{near ? 'Places near its records' : 'Best places in SEQ'}</h3>
+                <h3 className="h3">{near ? 'Places near its records' : `Best places in ${REGION.short}`}</h3>
                 <ul className="spots">{spots.map(({ h, c }) => <li key={h.name}><span>{h.name}</span><span className="num">{c.toLocaleString('en-AU')}</span></li>)}</ul>
                 <p className="small muted">{near ? 'Named places within 3 km of where it has been recorded, with the number of records around each.' : 'Number of records at each spot.'}</p>
               </>

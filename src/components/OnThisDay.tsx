@@ -15,6 +15,7 @@ import {
   type EbirdObservation,
   type HistoricDay,
 } from '../lib/ebird';
+import { REGION, councilName, ebirdRegion } from '../lib/region';
 import { SpeciesImage } from './SpeciesImage';
 import { Sheet } from './Sheet';
 import NewForYou from './NewForYou';
@@ -32,9 +33,10 @@ export default function OnThisDay({ variant = 'card' }: Props) {
   const rough = useRoughLocation();
   const date = sameDayLastYear();
   const point = roughLatLng(rough.pos);
-  const region = snapshot ? (nearestRegionCode(snapshot, point) ?? 'BRI') : 'BRI';
+  const fallback = REGION.ebird.fallbackCouncil;
+  const region = snapshot ? (nearestRegionCode(snapshot, point) ?? fallback) : fallback;
   const live = useLiveEbird<HistoricDay>(
-    { historic: '', region: `AU-QLD-${region}`, date },
+    { historic: '', region: ebirdRegion(region), date },
     online && snapshot !== undefined,
   );
   const [open, setOpen] = useState(false);
@@ -119,7 +121,7 @@ export default function OnThisDay({ variant = 'card' }: Props) {
             <p className="empty-inline">You have seen every species reported that day.</p>
           )}
           <p className="small muted on-this-day-privacy">
-            {rough.pos ? 'Uses your rough location to choose the nearest area, never saved.' : 'Brisbane is shown until a rough location is available.'}
+            {rough.pos ? 'Uses your rough location to choose the nearest area, never saved.' : `${councilName(fallback)} is shown until a rough location is available.`}
           </p>
           <p className="small on-this-day-credit"><a href="https://ebird.org" target="_blank" rel="noopener">{EBIRD_CREDIT}</a></p>
           <button type="button" className="btn btn--block" onClick={() => setOpen(false)}>Done</button>

@@ -1,5 +1,5 @@
 import { byId } from './data';
-import type { EbirdSnapshot } from './ebird';
+import { EBIRD_SNAPSHOT_URL, type EbirdSnapshot } from './ebird';
 import { setAroundSpecies } from '../core/quiz.js';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -44,7 +44,7 @@ export function ensureAroundWeek(fetcher: typeof fetch = fetch, now = new Date()
   if (pending) return pending;
   pending = (async () => {
     try {
-      const response = await fetcher('/data/ebird/spots.json', { signal: AbortSignal.timeout(8000) });
+      const response = await fetcher(EBIRD_SNAPSHOT_URL, { signal: AbortSignal.timeout(8000) });
       if (!response.ok) throw new Error('eBird snapshot unavailable');
       const snapshot = await response.json() as EbirdSnapshot;
       if (!snapshot || typeof snapshot !== 'object' || !snapshot.recent) throw new Error('Unexpected eBird snapshot');

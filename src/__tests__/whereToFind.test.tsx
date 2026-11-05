@@ -25,7 +25,7 @@ beforeEach(() => {
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes('/data/ebird/spots.json')) return new Response(JSON.stringify(SNAPSHOT), { status: 200 });
+    if (url.includes('/data/regions/seq/ebird.json')) return new Response(JSON.stringify(SNAPSHOT), { status: 200 });
     if (url.includes('species=')) {
       return new Response(JSON.stringify({
         total: 12,

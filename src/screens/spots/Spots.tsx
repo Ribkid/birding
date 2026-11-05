@@ -5,6 +5,7 @@ import { haversineKm } from '../../core/stats.js';
 import { Icon } from '../../components/Icon';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import { byId, type Species } from '../../lib/data';
+import { REGION } from '../../lib/region';
 import { useSeen } from '../../lib/hooks';
 import { getLastPos, setLastPos } from '../../lib/lastPos';
 import { useSeqReady } from '../../lib/seq';
@@ -224,7 +225,7 @@ export default function Spots() {
       <header className="page-head spots-head">
         <div>
           <h1>Spots</h1>
-          <p className="muted small">Birding hotspots across South East Queensland, with how easy each is to get into.</p>
+          <p className="muted small">Birding hotspots across {REGION.name}, with how easy each is to get into.</p>
         </div>
       </header>
 

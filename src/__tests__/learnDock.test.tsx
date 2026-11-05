@@ -27,7 +27,7 @@ beforeAll(async () => {
   const pub = (...parts: string[]) => join(process.cwd(), 'public', ...parts);
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input);
-    const file = url.includes('seq.json') ? pub('data', 'seq.json')
+    const file = url.includes('/regions/seq/rates.json') ? pub('data', 'regions', 'seq', 'rates.json')
       : url.includes('lookalikes.json') ? pub('data', 'lookalikes.json')
       : url.includes('calls.json') ? pub('data', 'calls.json') : '';
     if (!file) return new Response('{}', { status: 404 });

@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { inPatch, speciesList, totals, yearTotals } from '../../core/stats.js';
 import { byId, RARITY, type Species } from '../../lib/data';
+import { REGION } from '../../lib/region';
 import { stagger } from '../../lib/look';
 import { Icon } from '../../components/Icon';
 import {
@@ -148,7 +149,7 @@ export default function Lists() {
               <h2 className="h2">Targets for {monthName}</h2>
               <Link to="/targets">See all</Link>
             </div>
-            <p className="muted small">Birds you haven&apos;t seen that are most often reported in SEQ this month.</p>
+            <p className="muted small">Birds you haven&apos;t seen that are most often reported in {REGION.short} this month.</p>
             {tg.length ? (
               <ul className="tcar" aria-label={`Targets for ${monthName}`}>
                 {tg.map((s) => (

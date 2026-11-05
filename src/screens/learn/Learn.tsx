@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { KINDS, kindsPresent } from '../../lib/data';
 import { mediaSettled, useMedia, useSightings } from '../../lib/hooks';
 import { useSeqReady } from '../../lib/seq';
+import { REGION } from '../../lib/region';
 import { stagger } from '../../lib/look';
 import { countUp, motionOK } from '../../lib/motion';
 import { useTint } from '../../components/Motion';
@@ -175,7 +176,7 @@ export default function Learn() {
   const isIn = (key: string) => (grownIn.includes(key) ? ' is-in' : '');
 
   // The heading is there from the start, so the route's focus lands on it while the hub waits for its data.
-  const head = <header className="page-head lh-head"><h1 className="lh-title">Learn</h1><p className="lh-lede">Quizzes on the birds, wildlife and plants of South East Queensland.</p></header>;
+  const head = <header className="page-head lh-head"><h1 className="lh-title">Learn</h1><p className="lh-lede">Quizzes on the birds, wildlife and plants of {REGION.name}.</p></header>;
   if (!drawn) return <>{head}<div className="learn learn--loading" aria-busy="true" /></>;
 
   const set = (patch: Record<string, unknown>) => { setPrefs(patch); force(); };

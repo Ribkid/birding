@@ -17,6 +17,7 @@
 import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, relative, extname, sep } from 'node:path';
+import { PACKS } from '../src/regions/index.js';
 
 const DIST = new URL('../dist/', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const SHELL_EXT = new Set(['.html', '.js', '.css', '.woff2', '.svg', '.png', '.webmanifest']);
@@ -30,14 +31,20 @@ const RUNTIME_ONLY = ['vendor/', 'photos/'];
  * calls route.
  */
 const EXTRA_SHELL = new Set([
-  '/data/species-new.json', '/data/tiers.json', '/data/info.json', '/data/gallery.json',
-  '/data/seq.json', '/data/birdnet-map.json', '/data/lookalikes.json', '/data/calls.json',
-  '/data/photoid.json', '/data/photoid.bin', '/data/spot-access.json', '/data/spot-access-ebird.json',
+  '/data/species-new.json', '/data/info.json', '/data/gallery.json',
+  '/data/birdnet-map.json', '/data/lookalikes.json', '/data/calls.json',
+  '/data/photoid.json', '/data/photoid.bin',
   '/models/bioclip/manifest.json',
   // Saved with each release, as in v1, so a signed-in phone still loads it offline after an update.
   '/vendor/supabase/supabase.js',
 ]);
-if (existsSync(join(DIST, 'data', 'ebird', 'spots.json'))) EXTRA_SHELL.add('/data/ebird/spots.json');
+// Each region's own files. While SEQ is the only region they are all precached; once a second region ships these move
+// to cache-on-first-use so nobody downloads another city's data (docs/plans/2026-11-05-melbourne-region-design.md).
+for (const code of Object.keys(PACKS)) {
+  for (const name of ['rates.json', 'spot-access.json', 'spot-access-ebird.json', 'ebird.json']) {
+    if (existsSync(join(DIST, 'data', 'regions', code, name))) EXTRA_SHELL.add(`/data/regions/${code}/${name}`);
+  }
+}
 // The 93 MB int4 vision model (the two .bin parts) is deliberately NOT precached: src/core/photoid.js
 // downloads it on demand with progress and stores the joined model in 'birddex-models'. Precaching it
 // here too would download it before first use and keep a second 93 MB copy on the phone.

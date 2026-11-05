@@ -1,5 +1,6 @@
 import { useOnline, useLiveEbird } from '../../lib/useEbird';
 import { EBIRD_CREDIT, type RegionalStats } from '../../lib/ebird';
+import { REGION } from '../../lib/region';
 import './todayInSeq.css';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -7,22 +8,22 @@ const dateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1
 
 function Skeleton() {
   return (
-    <section className="today-qld" aria-label="Today in Queensland" aria-busy="true">
-      <h2>Today in Queensland</h2>
+    <section className="today-qld" aria-label={`Today in ${REGION.ebird.stateName}`} aria-busy="true">
+      <h2>Today in {REGION.ebird.stateName}</h2>
       <div className="today-qld-skeleton" aria-hidden="true"><span /><span /><span /></div>
     </section>
   );
 }
 
-/** The day's eBird totals for Queensland, with yesterday's line when it is available. */
+/** The day's eBird totals for the region's state (Queensland for SEQ), with yesterday's line when it is available. */
 export default function TodayInSeq() {
   const online = useOnline();
   const now = new Date();
   const today = dateKey(now);
   const previous = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
   const yesterday = dateKey(previous);
-  const current = useLiveEbird<RegionalStats>({ stats: '', date: today });
-  const before = useLiveEbird<RegionalStats>({ stats: '', date: yesterday });
+  const current = useLiveEbird<RegionalStats>({ stats: '', date: today, in: REGION.code });
+  const before = useLiveEbird<RegionalStats>({ stats: '', date: yesterday, in: REGION.code });
 
   if (!online) return null;
   if (current.loading) return <Skeleton />;
@@ -31,7 +32,7 @@ export default function TodayInSeq() {
   return (
     <section className="today-qld" aria-labelledby="today-qld-title">
       <header>
-        <h2 id="today-qld-title">Today in Queensland</h2>
+        <h2 id="today-qld-title">Today in {REGION.ebird.stateName}</h2>
         <p className="small muted">eBird checklists submitted so far today.</p>
       </header>
       <dl className="today-qld-stats">

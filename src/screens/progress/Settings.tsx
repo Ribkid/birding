@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { byId } from '../../lib/data';
+import { REGION } from '../../lib/region';
 import { db } from '../../core/db.js';
 import { toEbirdCsv } from '../../core/ebird.js';
 import { onAuth, user } from '../../core/cloud.js';
@@ -542,7 +543,7 @@ export default function Settings() {
       </Card>
       <Card id="about-h" title="About">
         <p className="small">Photos come from Wikipedia, Wikimedia Commons and iNaturalist contributors (via the Atlas of Living Australia), each credited on its page. Each species' write-up lists the sources it is based on. Calls are from iNaturalist (via the ALA) and Wikimedia Commons. The clips saved for offline are shortened, level-matched copies of iNaturalist recordings, each credited where it plays. Maps &copy; OpenStreetMap contributors; satellite imagery &copy; Esri, Maxar and Earthstar Geographics.</p>
-        <p className="small">Hotspots, seasons and rarity come from Atlas of Living Australia records for SEQ since 2016 (including eBird and BirdLife Australia data). Birds: 40,000+ records is Common, 15,000+ Fairly common, 4,000+ Uncommon, 800+ Scarce and fewer is Rare. Other animals and plants are recorded far less often than birds, so each kind is ranked against its own kind: the most-recorded fifth of that kind is Common, the next fifth Fairly common, and so on down to Rare. Seasons are also compared within each kind. Record counts lean towards easy-to-see species and popular spots, so treat rarity as a guide.</p>
+        <p className="small">Hotspots, seasons and rarity come from Atlas of Living Australia records for {REGION.short} since 2016 (including eBird and BirdLife Australia data). Birds: 40,000+ records is Common, 15,000+ Fairly common, 4,000+ Uncommon, 800+ Scarce and fewer is Rare. Other animals and plants are recorded far less often than birds, so each kind is ranked against its own kind: the most-recorded fifth of that kind is Common, the next fifth Fairly common, and so on down to Rare. Seasons are also compared within each kind. Record counts lean towards easy-to-see species and popular spots, so treat rarity as a guide.</p>
         <p className="small muted">Version 3.0</p>
       </Card>
       <Card id="over-h" title="Start over">

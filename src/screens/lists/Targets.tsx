@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { periodFilter } from '../../core/stats.js';
 import { nearbyTargets, seq } from '../../core/seqdata.js';
 import { HABITATS, KINDS, RARITY, byId, kindsPresent, type Species } from '../../lib/data';
+import { REGION } from '../../lib/region';
 import { getLastPos, setLastPos, type Fix } from '../../lib/lastPos';
 import { Icon } from '../../components/Icon';
 import { Pips, SpeciesImage } from '../../components/SpeciesImage';
@@ -291,7 +292,7 @@ export default function Targets() {
           ) : (
             <>
               <p className="muted small pad-x">
-                {KINDS[f.kind]?.label ?? 'Species'} you still need that are reported in SEQ in {monthName}. The most
+                {KINDS[f.kind]?.label ?? 'Species'} you still need that are reported in {REGION.short} in {monthName}. The most
                 often reported come first.
               </p>
               <p className="list-count">

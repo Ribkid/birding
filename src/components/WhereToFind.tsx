@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import type { Species } from '../lib/data';
 import { haversineKm } from '../core/stats.js';
+import { REGION } from '../lib/region';
 import { distanceLabel } from '../lib/spots';
 import {
   EBIRD_CREDIT,
@@ -46,7 +47,7 @@ export default function WhereToFind({ sp }: { sp: Species }) {
     lat: queryPoint.lat,
     lng: queryPoint.lng,
   }, !!code && !!point);
-  const recent = useLiveEbird<SpeciesSightings>({ species: '', sp: code || 'none' }, !!code);
+  const recent = useLiveEbird<SpeciesSightings>({ species: '', sp: code || 'none', in: REGION.code }, !!code);
 
   const spots = useMemo(
     () => new Map((snapshot?.spots ?? []).map((row) => [row[0], row[1]])),
@@ -120,12 +121,12 @@ export default function WhereToFind({ sp }: { sp: Species }) {
       </div>
 
       <div className="where-find-block">
-        <h3>Recent in SEQ</h3>
+        <h3>Recent in {REGION.short}</h3>
         {recent.loading ? (
           <LoadingRows />
         ) : recent.data && recent.data.total > 0 ? (
           <>
-            <p className="where-find-count">Reported {recent.data.total} times in SEQ in the last 30 days.</p>
+            <p className="where-find-count">Reported {recent.data.total} times in {REGION.short} in the last 30 days.</p>
             <ol className="where-find-places">
               {places.map((row) => {
                 const place = tidySpotName(row.where);

@@ -9,6 +9,7 @@ import { localPlaceMatches, myPlaces, nearestPlaceName, reverseGeocode, searchAd
 import { ensureSeq } from '../lib/seq';
 import { useOutingRows, usePatches, useSightingRows } from '../screens/lists/shared';
 import { Icon } from './Icon';
+import { REGION } from '../lib/region';
 
 export interface PickedPlace { lat: number; lng: number; place: string }
 
@@ -71,7 +72,7 @@ export function LocationPicker({ init, onDone }: { init: { lat?: number | null; 
     // With no spot yet, it starts where she last was found (Targets' Near me, Listen), as v1's state.lastPos did.
     const had = init.lat != null && init.lng != null;
     const last = had ? null : getLastPos();
-    const start: L.LatLngTuple = had ? [init.lat as number, init.lng as number] : last ? [last.lat, last.lng] : [-27.47, 153.02];
+    const start: L.LatLngTuple = had ? [init.lat as number, init.lng as number] : last ? [last.lat, last.lng] : REGION.map.center;
     const map = L.map(el, { zoomControl: false }).setView(start, had || last ? 15 : 10);
     mapRef.current = map;
     L.control.zoom({ position: 'bottomright' }).addTo(map);

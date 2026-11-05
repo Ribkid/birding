@@ -1,4 +1,5 @@
 import { haversineKm } from '../core/stats.js';
+import { REGION, regionFile } from './region';
 import type { HotspotLike } from './spots';
 
 export type EbirdSpotTuple = [string, string, number, number, number, number, string | null, string];
@@ -27,20 +28,10 @@ export interface EbirdSnapshot {
   codes?: Record<string, number>;
 }
 
-/** The eleven South East Queensland council areas, keyed by their eBird subnational2 suffix. */
-export const REGION_NAMES: Record<string, string> = {
-  BRI: 'Brisbane',
-  GOL: 'Gold Coast',
-  IPS: 'Ipswich',
-  LOV: 'Lockyer Valley',
-  LOG: 'Logan',
-  MRB: 'Moreton Bay',
-  RED: 'Redland',
-  SCE: 'Scenic Rim',
-  SOM: 'Somerset',
-  SUN: 'Sunshine Coast',
-  TOO: 'Toowoomba',
-};
+/** This region's council areas, keyed by their eBird subnational2 suffix, in display order. */
+export const REGION_NAMES: Record<string, string> = REGION.ebird.councils;
+/** The baked eBird snapshot for this region (scripts/build-ebird.mjs). */
+export const EBIRD_SNAPSHOT_URL = regionFile('ebird.json');
 export interface LiveRecent {
   code: string;
   sci: string;
@@ -115,7 +106,7 @@ export function decodeEbirdSnapshot(snapshot: EbirdSnapshot) {
 
 export async function loadSpotData(ala: HotspotLike[], fetcher: typeof fetch = fetch): Promise<SpotData> {
   try {
-    const response = await fetcher('/data/ebird/spots.json');
+    const response = await fetcher(EBIRD_SNAPSHOT_URL);
     if (!response.ok) throw new Error('No eBird snapshot');
     const snapshot = await response.json() as EbirdSnapshot;
     if (!Array.isArray(snapshot.spots)) throw new Error('Invalid eBird snapshot');

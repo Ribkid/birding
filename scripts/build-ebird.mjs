@@ -10,32 +10,19 @@
 import { mkdir, readFile, readdir, stat, utimes, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { BIRDS } from '../src/core/species.js';
+import { ALL_BIRDS } from '../src/core/species.js';
+import { PACKS } from '../src/regions/index.js';
 
 const ROOT = new URL('../', import.meta.url);
 const ROOT_PATH = fileURLToPath(ROOT);
-const OUT = new URL('public/data/ebird/spots.json', ROOT);
+/** Each region's snapshot is written to public/data/regions/<code>/ebird.json. */
+export const outFor = (pack) => new URL(`public/data/regions/${pack.code}/ebird.json`, ROOT);
 const BASE = 'https://api.ebird.org/v2/';
 const USER_AGENT = 'BirdyDex build (seqbirding.com)';
-const REGIONS = [
-  'AU-QLD-BRI', 'AU-QLD-GOL', 'AU-QLD-IPS', 'AU-QLD-LOV', 'AU-QLD-LOG', 'AU-QLD-MRB',
-  'AU-QLD-RED', 'AU-QLD-SCE', 'AU-QLD-SOM', 'AU-QLD-SUN', 'AU-QLD-TOO',
-];
-export const REGION_NAMES = {
-  BRI: 'Brisbane',
-  GOL: 'Gold Coast',
-  IPS: 'Ipswich',
-  LOV: 'Lockyer Valley',
-  LOG: 'Logan',
-  MRB: 'Moreton Bay',
-  RED: 'Redland',
-  SCE: 'Scenic Rim',
-  SOM: 'Somerset',
-  SUN: 'Sunshine Coast',
-  TOO: 'Toowoomba',
-};
+/** A region pack's councils as full eBird region codes (AU-QLD-BRI…), in display order. */
+export const councilCodes = (pack) => Object.keys(pack.ebird.councils).map((c) => `${pack.ebird.state}-${c}`);
 
-/** How many hotspots get a baked species list. The rest fall back to the live list route. */
+/** How many hotspots per region get a baked species list. The rest fall back to the live list route. */
 export const LIST_LIMIT = 150;
 /** At most this many species-list requests may be in flight together. */
 export const LIST_CONCURRENCY = 3;
@@ -48,7 +35,7 @@ const LEGACY_LIST_CACHE = join(ROOT_PATH, '.cache', 'ebird-lists');
 // App scientific name -> eBird scientific name, only where the two taxonomies differ.
 export const SCI_ALIASES = {};
 
-export function mapTaxonomy(taxonomy, birds = BIRDS, aliases = SCI_ALIASES) {
+export function mapTaxonomy(taxonomy, birds = ALL_BIRDS, aliases = SCI_ALIASES) {
   const codeBySci = new Map(taxonomy.map((row) => [row.sciName, row.speciesCode]));
   const byCode = new Map();
   const unmatched = [];
@@ -66,7 +53,10 @@ export function snapshotIsCurrent(snapshot, now = new Date()) {
   return snapshot?.source === 'eBird' && String(snapshot.built).slice(0, 10) === now.toISOString().slice(0, 10);
 }
 
-export function compactSnapshot({ byCode, hotspots, lists, regionLists = {}, recent, notable, built }) {
+// `regionLists` are council species lists keyed by council suffix (BRI); the snapshot's `regions` group them into the
+// pack's areas (zones), keyed by zone. In SEQ each council is its own zone, so the two match.
+export function compactSnapshot({ byCode, hotspots, lists, regionLists = {}, recent, notable, built, pack = PACKS.seq }) {
+  const statePrefix = `${pack.ebird.state}-`;
   const deduped = new Map();
   for (const spot of hotspots) {
     if (spot.numSpeciesAllTime < 10) continue;
@@ -78,7 +68,7 @@ export function compactSnapshot({ byCode, hotspots, lists, regionLists = {}, rec
       spot.numSpeciesAllTime,
       spot.numChecklistsAllTime,
       spot.latestObsDt,
-      String(spot.subnational2Code ?? '').replace(/^AU-QLD-/, ''),
+      String(spot.subnational2Code ?? '').replace(statePrefix, ''),
     ]);
   }
   const spots = [...deduped.values()].sort((a, b) => b[4] - a[4] || a[1].localeCompare(b[1]));
@@ -89,9 +79,12 @@ export function compactSnapshot({ byCode, hotspots, lists, regionLists = {}, rec
   }
 
   const compactRegions = {};
-  for (const [code, codes] of Object.entries(regionLists)) {
-    compactRegions[code] = {
-      name: REGION_NAMES[code] ?? code,
+  for (const [zone, { name, councils }] of Object.entries(pack.ebird.zones)) {
+    const present = councils.filter((council) => regionLists[council]);
+    if (!present.length) continue; // every council list for this area failed; leave the area out, as before
+    const codes = present.flatMap((council) => regionLists[council]);
+    compactRegions[zone] = {
+      name,
       ids: [...new Set(codes.map((speciesCode) => byCode.get(speciesCode)).filter((id) => id != null))],
     };
   }
@@ -312,31 +305,47 @@ export async function pool(items, limit, worker) {
 async function build() {
   await loadLocalEnv();
   if (!process.env.EBIRD_API_KEY) {
-    console.log('eBird key not set; keeping the previous snapshot and using ALA spots.');
+    console.log('eBird key not set; keeping the previous snapshots and using ALA spots.');
     return null;
   }
-  if (!process.argv.includes('--refresh')) {
-    try {
-      const existing = JSON.parse(await readFile(OUT, 'utf8'));
-      if (snapshotIsCurrent(existing)) {
-        console.log('eBird snapshot was already built today; keeping it.');
-        return existing;
+  const refresh = process.argv.includes('--refresh');
+  const todo = [];
+  for (const pack of Object.values(PACKS)) {
+    if (!refresh) {
+      try {
+        const existing = JSON.parse(await readFile(outFor(pack), 'utf8'));
+        if (snapshotIsCurrent(existing)) {
+          console.log(`[${pack.code}] eBird snapshot was already built today; keeping it.`);
+          continue;
+        }
+      } catch {
+        // No usable local snapshot yet, so fetch one.
       }
-    } catch {
-      // No usable local snapshot yet, so fetch one.
     }
+    todo.push(pack);
   }
+  if (!todo.length) return null;
 
-  const startedAt = Date.now();
   const migrated = await migrateLegacyLists(LEGACY_LIST_CACHE, LIST_CACHE);
   if (migrated) console.log(`Moved ${migrated} cached species lists into node_modules/.cache/birdydex-ebird.`);
 
+  // One taxonomy for every region, mapped against the whole catalogue so a shared bird keeps one id everywhere.
   const taxonomy = await ebird('ref/taxonomy/ebird?fmt=json&cat=species');
   const { byCode, unmatched } = mapTaxonomy(taxonomy);
   console.log(`Taxonomy: ${byCode.size} app birds matched`);
+  console.log(`unmatched app birds: ${unmatched.length}${unmatched.length ? ` — ${unmatched.map((bird) => `${bird.name} (${bird.sci})`).join(', ')}` : ''}`);
 
+  const built = {};
+  for (const pack of todo) built[pack.code] = await buildRegion(pack, byCode);
+  return built;
+}
+
+async function buildRegion(pack, byCode) {
+  const startedAt = Date.now();
+  const regions = councilCodes(pack);
+  const statePrefix = `${pack.ebird.state}-`;
   const hotspots = [];
-  for (const region of REGIONS) {
+  for (const region of regions) {
     const rows = await ebird(`ref/hotspot/${region}?fmt=json`);
     hotspots.push(...rows);
   }
@@ -372,11 +381,11 @@ async function build() {
 
   const regionLists = {};
   let regionListsFailed = 0;
-  await pool(REGIONS, LIST_CONCURRENCY, async (region) => {
+  await pool(regions, LIST_CONCURRENCY, async (region) => {
     try {
       const codes = await ebird(`product/spplist/${region}`);
       if (!Array.isArray(codes)) throw new Error('Region species list was not an array');
-      regionLists[region.replace(/^AU-QLD-/, '')] = codes;
+      regionLists[region.replace(statePrefix, '')] = codes;
     } catch (error) {
       regionListsFailed++;
       console.warn(`Region list for ${region} skipped: ${error instanceof Error ? error.message : error}`);
@@ -385,7 +394,7 @@ async function build() {
 
   const recent = [];
   const notable = [];
-  for (const region of REGIONS) {
+  for (const region of regions) {
     recent.push(...await ebird(`data/obs/${region}/recent?back=30&hotspot=true`));
     notable.push(...await ebird(`data/obs/${region}/recent/notable?back=7&detail=simple`));
   }
@@ -398,21 +407,23 @@ async function build() {
     recent,
     notable,
     built: new Date().toISOString(),
+    pack,
   });
-  await mkdir(new URL('public/data/ebird/', ROOT), { recursive: true });
-  await writeFile(OUT, `${JSON.stringify(snapshot)}\n`);
+  const out = outFor(pack);
+  await mkdir(new URL('./', out), { recursive: true });
+  await writeFile(out, `${JSON.stringify(snapshot)}
+`);
 
+  const tag = `[${pack.code}]`;
   const recentCount = Object.values(snapshot.recent).reduce((sum, rows) => sum + rows.length, 0);
   const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-  console.log(`Species lists: ${Object.keys(snapshot.lists).length} of ${picked.length} (${hits} cached, ${misses} fetched${failed ? `, ${failed} failed` : ''})`);
-  console.log(`spots: ${snapshot.spots.length}`);
-  console.log(`lists: ${Object.keys(snapshot.lists).length}`);
-  console.log(`region lists: ${Object.keys(snapshot.regions).length} of ${REGIONS.length}${regionListsFailed ? `, ${regionListsFailed} failed` : ''}`);
-  console.log(`recent: ${recentCount} species-days at ${Object.keys(snapshot.recent).length} spots`);
-  console.log(`notable: ${snapshot.notable.length}`);
-  console.log(`unmatched app birds: ${unmatched.length}${unmatched.length ? ` — ${unmatched.map((bird) => `${bird.name} (${bird.sci})`).join(', ')}` : ''}`);
-  console.log(`Wrote ${(JSON.stringify(snapshot).length / 1024).toFixed(0)} KB to public/data/ebird/spots.json`);
-  console.log(`eBird step took ${seconds} s`);
+  console.log(`${tag} Species lists: ${Object.keys(snapshot.lists).length} of ${picked.length} (${hits} cached, ${misses} fetched${failed ? `, ${failed} failed` : ''})`);
+  console.log(`${tag} spots: ${snapshot.spots.length}`);
+  console.log(`${tag} council lists: ${regions.length - regionListsFailed} of ${regions.length}${regionListsFailed ? `, ${regionListsFailed} failed` : ''}; areas: ${Object.keys(snapshot.regions).length}`);
+  console.log(`${tag} recent: ${recentCount} species-days at ${Object.keys(snapshot.recent).length} spots`);
+  console.log(`${tag} notable: ${snapshot.notable.length}`);
+  console.log(`${tag} Wrote ${(JSON.stringify(snapshot).length / 1024).toFixed(0)} KB to public/data/regions/${pack.code}/ebird.json`);
+  console.log(`${tag} eBird step took ${seconds} s`);
   return snapshot;
 }
 

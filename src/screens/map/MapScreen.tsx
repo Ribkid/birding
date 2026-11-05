@@ -25,6 +25,7 @@ import { announce, toast as appToast } from '../../lib/toast';
 import { localPlaceMatches, myPlaces, searchAddress } from '../../lib/places';
 import { loadSpotData, nearestEbirdSpot } from '../../lib/ebird';
 import type { HotspotLike } from '../../lib/spots';
+import { REGION } from '../../lib/region';
 import {
   boundsKey,
   buildOverpassQuery,
@@ -126,9 +127,9 @@ interface Settings {
 // Constants and small helpers
 // ---------------------------------------------------------------------------
 
-// The map's home view (v1 renderMap).
-const SEQ_CENTER: [number, number] = [-27.47, 153.02];
-const SEQ_ZOOM = 9;
+// The map's home view (v1 renderMap), from the region pack.
+const SEQ_CENTER: [number, number] = REGION.map.center;
+const SEQ_ZOOM = REGION.map.zoom;
 
 /**
  * Popup options with v1's width (`want`: 260 for hotspots and spots, Leaflet's 300 for the rest), narrowed on a small
@@ -1444,7 +1445,7 @@ function MapView() {
           ref={mapElRef}
           role="region"
           tabIndex={0}
-          aria-label="Map of your sightings and SEQ birding hotspots"
+          aria-label={`Map of your sightings and ${REGION.short} birding hotspots`}
           aria-describedby="map-help"
         />
 
@@ -1822,7 +1823,7 @@ export function MapSummary({
           <h3 id="map-focus-title">Reported here: {focus.name}</h3>
           {focusPoints.length ? (
             <>
-              <p>{focusPoints.length} one-kilometre squares across SEQ, most records first.</p>
+              <p>{focusPoints.length} one-kilometre squares across {REGION.short}, most records first.</p>
               <ul>
                 {focusPoints.map(([pointLat, pointLng, count]) => (
                   <li key={`${pointLat},${pointLng}`}>
@@ -1892,7 +1893,7 @@ export function MapSummary({
             ))}
           </ul>
         ) : (
-          <p>{focus ? `No SEQ hotspots record ${focus.name}.` : 'No hotspots to show.'}</p>
+          <p>{focus ? `No ${REGION.short} hotspots record ${focus.name}.` : 'No hotspots to show.'}</p>
         )}
       </section>
 

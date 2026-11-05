@@ -1,3 +1,5 @@
+import { PACKS, DEFAULT_REGION } from '../src/regions/index.js';
+
 const BASE = 'https://api.ebird.org/v2/';
 const LOC_ID = /^L\d{1,10}$/;
 const SPECIES_CODE = /^[a-z0-9]{4,8}$/;
@@ -5,11 +7,11 @@ const SUB_ID = /^S\d{4,12}$/;
 // Keep each upstream request short: a stalled eBird call is "not available right now", never a held-open screen.
 export const TIMEOUT_MS = 8000;
 
-const SEQ_REGIONS = [
-  'AU-QLD-BRI', 'AU-QLD-GOL', 'AU-QLD-IPS', 'AU-QLD-LOV', 'AU-QLD-LOG', 'AU-QLD-MRB',
-  'AU-QLD-RED', 'AU-QLD-SCE', 'AU-QLD-SOM', 'AU-QLD-SUN', 'AU-QLD-TOO',
-];
-const REGIONS = new Set(['AU-QLD', ...SEQ_REGIONS]);
+// Every region the app serves, from the region packs (src/regions). A request may name any state or council in them.
+const PACK_LIST = Object.values(PACKS);
+const councilsOf = (pack) => Object.keys(pack.ebird.councils).map((council) => `${pack.ebird.state}-${council}`);
+const REGIONS = new Set(PACK_LIST.flatMap((pack) => [pack.ebird.state, ...councilsOf(pack)]));
+const STATE_PREFIX = /^AU-[A-Z]{2,3}-/;
 const CACHE = {
   recent: 's-maxage=3600, stale-while-revalidate=86400',
   list: 's-maxage=3600, stale-while-revalidate=86400',
@@ -48,7 +50,16 @@ function requireSubId(value) {
   return sub;
 }
 
-/** A real calendar date from 2000 through today in Brisbane (the app's birding day). */
+/** Today's date in a time zone, as YYYY-MM-DD. */
+const dayIn = (timeZone, now = new Date()) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+
+/** The latest "today" anywhere the app serves (or in UTC): Melbourne in daylight saving is a day ahead of UTC first. */
+export function latestToday(now = new Date()) {
+  return [now.toISOString().slice(0, 10), ...PACK_LIST.map((pack) => dayIn(pack.timeZone, now))].sort().at(-1);
+}
+
+/** A real calendar date from 2000 through today in any region's own time zone (the app's birding day). */
 function requireDate(value) {
   const raw = text(value);
   if (!raw || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) throw new BadRequest('Invalid date');
@@ -59,9 +70,7 @@ function requireDate(value) {
     parsed.getUTCMonth() !== month - 1 ||
     parsed.getUTCDate() !== day
   ) throw new BadRequest('Invalid date');
-  const utcToday = new Date().toISOString().slice(0, 10);
-  const brisbaneToday = new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const latest = brisbaneToday > utcToday ? brisbaneToday : utcToday;
+  const latest = latestToday();
   if (raw < '2000-01-01' || raw > latest) throw new BadRequest('Invalid date');
   return raw;
 }
@@ -85,11 +94,22 @@ function numberInRange(value, min, max) {
   return number;
 }
 
-/** Her rough coordinates must stay inside the SEQ box. */
-function requireSeqPoint(query) {
-  const lat = numberInRange(query.lat, -29.2, -25.8);
-  const lng = numberInRange(query.lng, 151.0, 153.6);
+/** Her rough coordinates must fall inside one of the regions the app serves. */
+function requireRegionPoint(query) {
+  const lat = numberInRange(query.lat, -90, 90);
+  const lng = numberInRange(query.lng, -180, 180);
+  const inside = PACK_LIST.some(({ pointBounds: [south, west, north, east] }) =>
+    lat >= south && lat <= north && lng >= west && lng <= east);
+  if (!inside) throw new BadRequest('Invalid number');
   return { lat, lng };
+}
+
+/** The region pack a request is for (?in=seq). Clients from before region packs send none, and they were all SEQ. */
+function requirePack(query) {
+  if (!has(query, 'in')) return PACKS[DEFAULT_REGION];
+  const code = text(query.in);
+  if (!code || !Object.hasOwn(PACKS, code)) throw new BadRequest('Invalid region');
+  return PACKS[code];
 }
 
 function requiredInteger(value, min, max) {
@@ -177,7 +197,7 @@ async function recentOrList(query, route) {
 }
 
 async function nearbyObservations(query, notable = false) {
-  const point = requireSeqPoint(query);
+  const point = requireRegionPoint(query);
   const dist = requiredInteger(query.dist, 1, 50);
   const back = requiredInteger(query.back, 1, 30);
   const params = new URLSearchParams({
@@ -247,8 +267,9 @@ async function checklist(query) {
 
 async function stats(query) {
   const date = requireDate(query.date);
+  const { state } = requirePack(query).ebird;
   const [year, month, day] = date.split('-').map(Number);
-  const data = await ebirdJson(`product/stats/AU-QLD/${year}/${month}/${day}`);
+  const data = await ebirdJson(`product/stats/${state}/${year}/${month}/${day}`);
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Unexpected eBird stats');
   const checklists = finiteCount(data.numChecklists ?? data.checklists);
   const birders = finiteCount(data.numContributors ?? data.contributors ?? data.numBirders);
@@ -263,7 +284,7 @@ async function historic(query) {
   const [year, month, day] = date.split('-').map(Number);
   const data = await ebirdArray(`data/obs/${region}/historic/${year}/${month}/${day}?rank=mrec&detail=simple`);
   return {
-    region: region.replace(/^AU-QLD-/, ''),
+    region: region.replace(STATE_PREFIX, ''),
     date,
     sightings: data.map(observation),
   };
@@ -290,7 +311,7 @@ async function top(query) {
 
 async function nearest(query) {
   const code = requireSpeciesCode(query.sp);
-  const { lat, lng } = requireSeqPoint(query);
+  const { lat, lng } = requireRegionPoint(query);
   const data = await ebirdArray(`data/nearest/geo/recent/${code}?lat=${lat}&lng=${lng}&back=30&maxResults=5`);
   return data.map(observation);
 }
@@ -298,7 +319,7 @@ async function nearest(query) {
 async function species(query) {
   const code = requireSpeciesCode(query.sp);
   // The function runs at the edge in parallel; each request still owns the same eight-second cap.
-  const feeds = await Promise.all(SEQ_REGIONS.map((region) =>
+  const feeds = await Promise.all(councilsOf(requirePack(query)).map((region) =>
     ebirdArray(`data/obs/${region}/recent/${code}?back=30`),
   ));
   const sightings = uniqueNewest(feeds.flat());

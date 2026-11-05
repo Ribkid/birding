@@ -5,6 +5,7 @@ import { sized, photoFor, localCallsNow, loadCallPack } from './media.js';
 import { galleryFor } from './gallery.js';
 import { seq, monthRates, recordCount, spotsFor, hotspots } from './seqdata.js';
 import { MONTHS, inSeason } from './stats.js';
+import { REGION } from '../regions/index.js';
 
 // ---------- randomness (seeded for the daily challenge, so everyone gets the same set) ----------
 export function seeded(seed) {
@@ -275,7 +276,7 @@ const alaSource = sp => {
   const lsid = seq()?.species?.[sp.id]?.lsid;
   return { title: `${sp.name} records, Atlas of Living Australia`, url: lsid ? `https://bie.ala.org.au/species/${encodeURIComponent(lsid)}` : `https://bie.ala.org.au/search?q=${encodeURIComponent(sp.sci)}` };
 };
-const ALA_SEQ = { title: 'Atlas of Living Australia records for SEQ since 2016', url: 'https://www.ala.org.au/' };
+const ALA_SEQ = { title: `Atlas of Living Australia records for ${REGION.short} since 2016`, url: 'https://www.ala.org.au/' };
 const NOTES = { title: 'BirdyDex field notes', url: '' };
 const tOpt = (key, lab, sp = null) => ({ key: String(key), label: lab, sp: sp?.id ?? null });
 // Months at 80% or more of the peak, as 'October to December' when they run on (wrapping past December), else a list.
@@ -309,7 +310,7 @@ export const makers = {
     const low = shuffle(rel.map((v, i) => [v, i]).filter(([v, i]) => v < 0.55 && Math.abs(i - peak) > 1), rng).slice(0, 3);
     if (low.length < 3) return null;
     const lowest = rel.indexOf(Math.min(...rel));
-    return { ttype: 'Seasons', img: sp.id, focus: sp.id, prompt: `In which month is the ${sp.name} reported most often in SEQ?`,
+    return { ttype: 'Seasons', img: sp.id, focus: sp.id, prompt: `In which month is the ${sp.name} reported most often in ${REGION.short}?`,
       options: shuffle([tOpt(peak, MONTHS[peak]), ...low.map(([, i]) => tOpt(i, MONTHS[i]))], rng), answer: String(peak),
       explain: `Reports peak in ${MONTHS[peak]} and are lowest in ${MONTHS[lowest]}.`, source: alaSource(sp) };
   },
@@ -322,7 +323,7 @@ export const makers = {
       const sorted = four.slice().sort((a, b) => recordCount(a.id) - recordCount(b.id));
       const [a, b] = least ? [sorted[0], sorted[1]] : [sorted[3], sorted[2]];
       if (least ? recordCount(b.id) < 2 * recordCount(a.id) : recordCount(a.id) < 2 * recordCount(b.id)) continue; // only clear gaps
-      return { ttype: 'Rarity', img: null, focus: a.id, prompt: `Which of these ${label(a.kind)} is reported ${least ? 'least' : 'most'} often in SEQ?`,
+      return { ttype: 'Rarity', img: null, focus: a.id, prompt: `Which of these ${label(a.kind)} is reported ${least ? 'least' : 'most'} often in ${REGION.short}?`,
         options: shuffle(four.map(s => tOpt(s.id, s.name, s)), rng), answer: String(a.id),
         explain: `${sorted.map(s => `${s.name}: ${fmt(recordCount(s.id))}`).join('; ')} records since 2016.`, source: ALA_SEQ };
     }
@@ -394,7 +395,7 @@ export const makers = {
     const yes = shuffle(pool.filter(s => s.season === 's' && monthRates(s.id)), rng), no = shuffle(pool.filter(s => !s.season), rng);
     if (!yes.length || no.length < 3) return null;
     const a = yes[0], peak = monthRates(a.id).rel.indexOf(1);
-    return { ttype: 'Seasons', img: null, focus: a.id, prompt: 'Which of these birds mostly visits SEQ in spring and summer?',
+    return { ttype: 'Seasons', img: null, focus: a.id, prompt: `Which of these birds mostly visits ${REGION.short} in spring and summer?`,
       options: shuffle([tOpt(a.id, a.name, a), ...no.slice(0, 3).map(s => tOpt(s.id, s.name, s))], rng), answer: String(a.id),
       explain: `The ${a.name} arrives for the warmer months; its reports peak in ${MONTHS[peak]}. The others are here all year.`, source: alaSource(a) };
   },
@@ -535,7 +536,7 @@ export function whenQ(sp, o = {}) {
   }
   const plant = sp.kind === 'plant', peaks = peaksOf(sp.id);
   const se = sentences(sp.notes).find(s => /\b(spring|summer|autumn|winter|cooler|warm|months|migrat\w*|flowers?)\b/i.test(s));
-  return named(sp, { ttype: 'Seasons', prompt: plant ? `When does the ${sp.name} flower?` : `When are you most likely to find the ${sp.name} in SEQ?`,
+  return named(sp, { ttype: 'Seasons', prompt: plant ? `When does the ${sp.name} flower?` : `When are you most likely to find the ${sp.name} in ${REGION.short}?`,
     options: ['s', 'w', 'all'].map(k => tOpt(k, SEASON_TXT[k])), answer: ans, miss: `Not quite. ${SEASON_TXT[ans]}.`,
     explain: `${plant ? `It flowers mainly in ${lc(SEASON_TXT[ans])}.` : ans === 'all' ? `The ${sp.name} is reported all year.` : `The ${sp.name} is mostly about in ${lc(SEASON_TXT[ans])}${peaks && !plant ? `, with reports peaking in ${peaks}` : ''}.`}${se ? ` ${se}` : ''}`,
     source: plant ? NOTES : alaSource(sp) }, o);
@@ -579,7 +580,7 @@ export function setAroundSpecies(ids = []) {
 }
 export const PACKS = [
   { key: 'backyard', name: 'Backyard birds', kind: 'bird', blurb: 'Garden and park regulars', test: s => birdIn('g')(s) && s.rarity <= 2, types: ['photo', 'call', 'silhouette', 'native', 'zoom', 'whoami'] },
-  { key: 'mammals', name: 'Mammals of SEQ', kind: 'mammal', blurb: 'Marsupials, bats and the ones at sea', test: s => s.kind === 'mammal', types: ['photo', 'silhouette', 'daynight', 'where', 'bigger', 'whoami'] },
+  { key: 'mammals', name: `Mammals of ${REGION.short}`, kind: 'mammal', blurb: 'Marsupials, bats and the ones at sea', test: s => s.kind === 'mammal', types: ['photo', 'silhouette', 'daynight', 'where', 'bigger', 'whoami'] },
   { key: 'snakes', name: 'Snakes: dangerous or harmless?', kind: 'reptile', blurb: 'Know which to give a wide berth', test: s => !!snakeSafety(s), types: ['snake', 'photo', 'snake'], safety: true },
   { key: 'frogcalls', name: 'Frogs by call', kind: 'frog', blurb: 'Croaks, bonks and beeps', test: s => s.kind === 'frog' && hasCall(s.id), types: ['call', 'soundalike', 'photo', 'when'] },
   { key: 'butterflies', name: 'Butterflies', kind: 'butterfly', blurb: 'Swallowtails to skippers', test: s => s.kind === 'butterfly', types: ['photo', 'zoom', 'when', 'odd', 'whoami'] },

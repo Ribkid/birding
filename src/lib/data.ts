@@ -21,8 +21,11 @@ export interface Species {
   wiki: string | null;
 }
 
+/** This region's dex. */
 export const SPECIES = core.SPECIES as Species[];
 export const BIRDS = core.BIRDS as Species[];
+/** Every species in every region, for anything that must not depend on the region. */
+export const ALL_SPECIES = core.ALL_SPECIES as Species[];
 export const ANIMALS = core.ANIMALS as Species[];
 export const ANIMAL_KINDS = core.ANIMAL_KINDS as string[];
 export const GROUPS = core.GROUPS as Record<string, string>;

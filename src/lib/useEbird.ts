@@ -1,7 +1,7 @@
 // Small, calm readers for the eBird snapshot and the private function. A live call never holds a screen: it exposes a
 // loading flag, hides when offline, and keeps a null in place of every failure.
 import { useEffect, useMemo, useState } from 'react';
-import { fetchEbirdQuery, type EbirdSnapshot } from './ebird';
+import { EBIRD_SNAPSHOT_URL, fetchEbirdQuery, type EbirdSnapshot } from './ebird';
 
 let snapshot: EbirdSnapshot | null | undefined;
 let snapshotPromise: Promise<EbirdSnapshot | null> | null = null;
@@ -23,7 +23,7 @@ export function useEbirdSnapshot(): EbirdSnapshot | null | undefined {
       return;
     }
     let alive = true;
-    snapshotPromise ??= fetch('/data/ebird/spots.json')
+    snapshotPromise ??= fetch(EBIRD_SNAPSHOT_URL)
       .then((response) => (response.ok ? response.json() : null))
       .then((json: EbirdSnapshot | null) => {
         if (!json || !Array.isArray(json.spots)) return null;

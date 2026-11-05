@@ -1,7 +1,10 @@
-// Council-area dexes: a sighting belongs to the nearest eBird hotspot within 3 km, whose subnational2 code is the
-// council area. Pure, so the assignment and the ring counts can be tested without IndexedDB.
+// Area dexes: a sighting belongs to the nearest eBird hotspot within 3 km. That hotspot's subnational2 code is a
+// council, and the region pack groups councils into areas (in SEQ each council is its own area; Melbourne groups 37
+// councils into 8). The snapshot's `regions` are keyed by area. Pure, so the assignment and the ring counts can be
+// tested without IndexedDB.
 import { haversineKm } from '../core/stats.js';
-import { REGION_NAMES, type EbirdSnapshot } from './ebird';
+import { type EbirdSnapshot } from './ebird';
+import { REGION, zoneOf } from './region';
 
 export interface SightingPoint {
   speciesId: number;
@@ -16,9 +19,9 @@ export interface AreaProgress {
   total: number;
 }
 
-const REGION_ORDER = Object.keys(REGION_NAMES);
+const AREA_ORDER = Object.keys(REGION.ebird.zones);
 
-/** The council code of the closest eBird hotspot, or null when no hotspot is within the radius. */
+/** The area of the closest eBird hotspot, or null when no hotspot in the region is within the radius. */
 export function assignSightingArea(
   sighting: Pick<SightingPoint, 'lat' | 'lng'>,
   snapshot: EbirdSnapshot,
@@ -29,15 +32,15 @@ export function assignSightingArea(
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   let code: string | null = null;
   let best = withinKm;
-  for (const [, , spotLat, spotLng, , , , region] of snapshot.spots) {
-    if (!region) continue;
+  for (const [, , spotLat, spotLng, , , , council] of snapshot.spots) {
+    if (!council) continue;
     const distance = haversineKm({ lat, lng }, { lat: spotLat, lng: spotLng });
     if (distance <= best) {
-      code = region;
+      code = council;
       best = distance;
     }
   }
-  return code;
+  return code ? zoneOf(code) : null;
 }
 
 /** The council area of the closest eBird hotspot to a rough fix, or null without a fix. */
@@ -59,7 +62,7 @@ export function nearestRegionCode(
   return code;
 }
 
-/** Seen and total species for every council area list in the snapshot. */
+/** Seen and total species for every area list in the snapshot. */
 export function areaProgress(sightings: SightingPoint[], snapshot: EbirdSnapshot): AreaProgress[] {
   const regions = snapshot.regions ?? {};
   const seen = new Map<string, Set<number>>();
@@ -75,13 +78,13 @@ export function areaProgress(sightings: SightingPoint[], snapshot: EbirdSnapshot
 
   return Object.entries(regions)
     .sort(([a], [b]) => {
-      const ai = REGION_ORDER.indexOf(a);
-      const bi = REGION_ORDER.indexOf(b);
+      const ai = AREA_ORDER.indexOf(a);
+      const bi = AREA_ORDER.indexOf(b);
       return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi) || a.localeCompare(b);
     })
     .map(([code, region]) => ({
       code,
-      name: region.name || REGION_NAMES[code] || code,
+      name: region.name || REGION.ebird.zones[code]?.name || code,
       seen: seen.get(code)?.size ?? 0,
       total: region.ids.length,
     }));

@@ -4,6 +4,7 @@ import { byId } from '../../lib/data';
 import { useEbirdSnapshot } from '../../lib/useEbird';
 import { applyAroundWeek, recentWeekSpecies } from '../../lib/aroundWeek';
 import { EBIRD_CREDIT } from '../../lib/ebird';
+import { REGION } from '../../lib/region';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import './aroundWeek.css';
 
@@ -44,7 +45,7 @@ export default function AroundWeek() {
       >
         <span className="around-week-photo"><SpeciesImage sp={lead} alt="" /></span>
         <span className="around-week-main">
-          <strong>What's been reported near SEQ hotspots</strong>
+          <strong>What's been reported near {REGION.short} hotspots</strong>
           <span className="small muted">A photo-first pack from the last seven days of eBird reports.</span>
           <span className="around-week-play">Play <span aria-hidden="true">→</span></span>
         </span>

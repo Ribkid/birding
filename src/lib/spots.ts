@@ -4,6 +4,7 @@
 // Everything that decides what she sees is pure and lives here so it can be tested without a browser:
 // the sorts, the suggestions, the filter chips and the name search.
 import { haversineKm } from '../core/stats.js';
+import { regionFile } from './region';
 
 export interface HotspotLike {
   locId?: string;
@@ -224,7 +225,7 @@ export const spotAccess = (source: AccessSource = 'ala'): Record<string, SpotAcc
 export function loadSpotAccess(source: AccessSource = 'ala'): Promise<Record<string, SpotAccess>> {
   const current = baked[source];
   if (current) return Promise.resolve(current);
-  loading[source] ??= fetch(source === 'ebird' ? '/data/spot-access-ebird.json' : '/data/spot-access.json')
+  loading[source] ??= fetch(regionFile(source === 'ebird' ? 'spot-access-ebird.json' : 'spot-access.json'))
     .then((response) => (response.ok ? response.json() : { spots: {} }))
     .then((json: { spots?: Record<string, SpotAccess> }) => {
       baked[source] = json.spots ?? {};

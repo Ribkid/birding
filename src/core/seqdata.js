@@ -1,5 +1,6 @@
-// Regional data built from Atlas of Living Australia records (see scripts/build_ala.py).
+// Regional data built from Atlas of Living Australia records (see scripts/build_ala.py), one rates.json per region.
 import { haversineKm } from './stats.js';
+import { regionFile } from '../regions/index.js';
 
 let data = null;
 // v1 asked for the file once, at boot. Here the shell and each screen ask as they draw, so callers that ask while
@@ -9,7 +10,7 @@ export async function loadSeq() {
   if (data) return data;
   loading ??= (async () => {
     try {
-      const r = await fetch('/data/seq.json');
+      const r = await fetch(regionFile('rates.json'));
       data = await r.json();
     } catch (_) { data = { species: {}, hotspots: [], effort: Array(12).fill(1) }; }
     return data;

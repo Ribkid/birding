@@ -19,6 +19,7 @@ import { announce } from '../../lib/toast';
 import { errorText } from './sighting';
 import './field.css';
 import './calls.css';
+import { REGION } from '../../lib/region';
 
 const IDLE =
   'Point your phone towards the birds and keep still. The first time, the sound model downloads (about 60 MB). After that, Listen works with no signal.';
@@ -296,7 +297,7 @@ export default function Listen() {
       setStatus('Listening. Keep still and let the birds call.');
       // Filter to birds of this area: start with Brisbane (or her last fix), then refine with GPS.
       const last = getLastPos();
-      setLocation(last?.lat ?? -27.47, last?.lng ?? 153.02);
+      setLocation(last?.lat ?? REGION.map.center[0], last?.lng ?? REGION.map.center[1]);
       getPosition()
         .then((pos) => {
           setLastPos(pos);

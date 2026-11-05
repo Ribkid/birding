@@ -1,4 +1,4 @@
-// The access score baked into public/data/spot-access.json by scripts/build-spot-access.mjs. The formula is
+// The access score baked into public/data/regions/seq/spot-access.json by scripts/build-spot-access.mjs. The formula is
 // pure, so it is held here: what earns a point, the 1–5 bounds, the restricted-access cap, and "not known"
 // when nothing useful is tagged.
 import { describe, expect, it } from 'vitest';

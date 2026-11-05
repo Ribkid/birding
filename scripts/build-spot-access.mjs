@@ -1,5 +1,5 @@
-// Bakes hotspot access facts from OpenStreetMap into public/data/spot-access.json.
-// Add --ebird to cover the top eBird spots in public/data/spot-access-ebird.json instead, and
+// Bakes hotspot access facts from OpenStreetMap into public/data/regions/<code>/spot-access.json (--region=<code>).
+// Add --ebird to cover the top eBird spots in public/data/regions/<code>/spot-access-ebird.json instead, and
 // --limit=400 to stop early when Overpass is slow (the default is the top 800).
 //
 // Run by hand, not by `npm run build`:
@@ -19,12 +19,9 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const ROOT = new URL('../', import.meta.url);
-const SEQ = new URL('public/data/seq.json', ROOT);
-const EBIRD = new URL('public/data/ebird/spots.json', ROOT);
-const OUT = new URL('public/data/spot-access.json', ROOT);
-const EBIRD_OUT = new URL('public/data/spot-access-ebird.json', ROOT);
-const CACHE = join(tmpdir(), 'birdydex-spot-access');
-const EBIRD_CACHE = join(tmpdir(), 'birdydex-spot-access-ebird');
+// Every file lives in the region's folder, public/data/regions/<code>/ (pick one with --region=<code>; default seq).
+const regionUrl = (region, name) => new URL(`public/data/regions/${region}/${name}`, ROOT);
+const cacheFor = (region, ebird) => join(tmpdir(), `birdydex-spot-access${ebird ? '-ebird' : ''}${region === 'seq' ? '' : `-${region}`}`);
 
 const ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -282,11 +279,12 @@ async function fetchBatch(spots, index, cacheDir = CACHE) {
   throw new Error(`Overpass is unreachable (both endpoints failed): ${lastError}`);
 }
 
-export async function build({ dryRun = false, ebird = false, limit = 800 } = {}) {
-  const input = JSON.parse(await readFile(ebird ? EBIRD : SEQ, 'utf8'));
+export async function build({ dryRun = false, ebird = false, limit = 800, region = 'seq' } = {}) {
+  const input = JSON.parse(await readFile(regionUrl(region, ebird ? 'ebird.json' : 'rates.json'), 'utf8'));
   const spots = ebird ? ebirdAccessSpots(input, limit) : input.hotspots || [];
-  const outUrl = ebird ? EBIRD_OUT : OUT;
-  const cacheDir = ebird ? EBIRD_CACHE : CACHE;
+  const outName = ebird ? 'spot-access-ebird.json' : 'spot-access.json';
+  const outUrl = regionUrl(region, outName);
+  const cacheDir = cacheFor(region, ebird);
   if (dryRun) {
     for (const [index, h] of spots.slice(0, 5).entries()) {
       const summary = summarise([], h.lat, h.lng);
@@ -319,7 +317,7 @@ export async function build({ dryRun = false, ebird = false, limit = 800 } = {})
   };
   await writeFile(outUrl, `${JSON.stringify(built, null, 1)}\n`);
   const known = Object.values(out).filter((s) => s.score != null).length;
-  console.log(`Wrote ${Object.keys(out).length} spots (${known} with access known) to ${ebird ? 'public/data/spot-access-ebird.json' : 'public/data/spot-access.json'}`);
+  console.log(`Wrote ${Object.keys(out).length} spots (${known} with access known) to public/data/regions/${region}/${outName}`);
   return built;
 }
 
@@ -329,6 +327,7 @@ if (isMain) {
   build({
     dryRun: process.argv.includes('--dry-run'),
     ebird: process.argv.includes('--ebird'),
+    region: process.argv.find((arg) => arg.startsWith('--region='))?.slice('--region='.length) || 'seq',
     limit: limitArg ? Number(limitArg.slice('--limit='.length)) : 800,
   }).catch((error) => {
     console.error(`\nStopped: ${error instanceof Error ? error.message : error}`);

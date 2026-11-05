@@ -1,5 +1,6 @@
 // Lists, patches, targets and badges — all computed from sightings.
 import { SPECIES, GROUPS, HABITATS, byId, ANIMALS, BIRDS, KINDS, kindsPresent } from './species.js';
+import { REGION } from '../regions/index.js';
 
 export const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -173,9 +174,10 @@ export function badges(sightings, outings, learning = {}, areas = null) {
   if (Array.isArray(areas) && areas.length) {
     const started = areas.filter(area => Number(area.seen) > 0).length;
     const bestArea = Math.max(0, ...areas.map(area => Number(area.seen) || 0));
-    add('area100', '100 in one area', 'See 100 species inside one SEQ council area', bestArea, 100);
-    add('areas5', 'Five areas', 'See birds in five SEQ council areas', started, 5);
-    add('areasall', 'Every SEQ area', `See birds in all ${areas.length} SEQ council areas`, started, areas.length);
+    const { short } = REGION, label = REGION.ebird.areaLabel;
+    add('area100', '100 in one area', `See 100 species inside one ${short} ${label}`, bestArea, 100);
+    add('areas5', 'Five areas', `See birds in five ${short} ${label}s`, started, 5);
+    add('areasall', `Every ${short} area`, `See birds in all ${areas.length} ${short} ${label}s`, started, areas.length);
   }
   return list;
 }

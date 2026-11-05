@@ -6,6 +6,7 @@ import { useSyncExternalStore } from 'react';
 import { db } from '../core/db.js';
 import { GROUPS, KINDS, RARITY, dexCode } from '../core/species.js';
 import type { Species } from '../lib/data';
+import { REGION } from '../lib/region';
 import { sizeFact } from './speciesFacts';
 
 const DIGITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
@@ -35,7 +36,7 @@ export function dexEntry(sp: Species): string {
     sentence(sp.notes || ''),
     size ? sentence(spokenUnits(`${size[0]} ${size[1].charAt(0).toLowerCase()}${size[1].slice(1)}`)) : '',
     sp.nocturnal ? 'Most active at night.' : '',
-    rarity ? sentence(`${rarity} in South East Queensland`) : '',
+    rarity ? sentence(`${rarity} in ${REGION.name}`) : '',
   ].filter(Boolean).join(' ');
 }
 
