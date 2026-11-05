@@ -10,8 +10,10 @@
 //   birdydex-older-<VERSION>  /assets/ chunks this release does not list, for a page still running an
 //                             earlier release: the earlier shells' chunks, copied at activate, and any
 //                             unlisted chunk fetched later. The next activate deletes it.
-//   birdydex-runtime-v3       other same-origin files fetched at runtime. It outlives releases, so what an
-//                             earlier release kept here (main kept the BirdNET model there) still works.
+//   birdydex-runtime-v3       other same-origin files fetched at runtime, including the phone's own region's
+//                             data (/data/regions/<code>/), which the page asks for at boot. It outlives
+//                             releases, so what an earlier release kept here (main kept the BirdNET model
+//                             there) still works.
 //   birdydex-photos-v3        same-origin images (icons, /photos/, other .png/.jpg/.webp), about 400.
 //   birddex-images            Wikimedia photos, under their plain address. src/core/quiz.js and the
 //                             Ready for the field card read it.
@@ -398,31 +400,49 @@ self.addEventListener('fetch', (event) => {
 
 // "Ready for the field" in Settings asks how many shell files are saved ('shell-status') and can ask for
 // the missing ones ('shell-fill'). Both answer { version, total, saved } on the message's port.
-async function shellStatus() {
+//
+// A region's own files (/data/regions/<code>/…) are not in the shell: the worker is built before anyone picks a region,
+// and nobody should download another city's data. Only the page knows its region, so it names those files in the
+// message (`files`), and they count towards the total. They live in RUNTIME, which outlives releases.
+const regionPaths = (files) => (Array.isArray(files) ? files : [])
+  .filter((path) => typeof path === 'string' && path.startsWith('/data/regions/'));
+
+async function shellStatus(files) {
   const have = await keysOf(await caches.open(SHELL));
+  const region = regionPaths(files);
+  const regionSaved = (await Promise.all(region.map((path) => caches.match(href(path), MATCH)))).filter(Boolean).length;
   return {
     version: VERSION,
-    total: SHELL_FILES.length,
-    saved: SHELL_FILES.filter((path) => have.has(href(path))).length,
+    total: SHELL_FILES.length + region.length,
+    saved: SHELL_FILES.filter((path) => have.has(href(path))).length + regionSaved,
   };
 }
 
-async function shellFill() {
+async function shellFill(files) {
   const cache = await caches.open(SHELL);
   const have = await keysOf(cache);
   for (const path of SHELL_FILES) {
     if (!have.has(href(path))) await saveShellFile(cache, path);
   }
-  return shellStatus();
+  const runtime = await caches.open(RUNTIME);
+  for (const path of regionPaths(files)) {
+    try {
+      const res = await fetch(new Request(path, { cache: 'reload' }));
+      if (res.ok && !isHtml(res)) await runtime.put(href(path), res);
+    } catch {
+      // Keeps any copy already saved; the status says what is still missing.
+    }
+  }
+  return shellStatus(files);
 }
 
 self.addEventListener('message', (event) => {
   const data = event.data;
   if (data === 'skip-waiting') void self.skipWaiting();
   if (data?.type === 'shell-status') {
-    event.waitUntil(shellStatus().then((status) => event.ports[0]?.postMessage(status)).catch(() => {}));
+    event.waitUntil(shellStatus(data.files).then((status) => event.ports[0]?.postMessage(status)).catch(() => {}));
   }
   if (data?.type === 'shell-fill') {
-    event.waitUntil(shellFill().then((status) => event.ports[0]?.postMessage(status)).catch(() => {}));
+    event.waitUntil(shellFill(data.files).then((status) => event.ports[0]?.postMessage(status)).catch(() => {}));
   }
 });

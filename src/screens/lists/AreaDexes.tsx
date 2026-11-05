@@ -5,9 +5,13 @@ import { useSightings } from '../../lib/hooks';
 import { useEbirdSnapshot } from '../../lib/useEbird';
 import { areaProgress, assignSightingArea } from '../../lib/areas';
 import { EBIRD_CREDIT } from '../../lib/ebird';
+import { REGION } from '../../lib/region';
 import { SpeciesImage } from '../../components/SpeciesImage';
 import NewForYou from '../../components/NewForYou';
 import './areaDexes.css';
+
+// "Council-area dexes" in SEQ, "Area dexes" in Melbourne (whose 37 councils are grouped into 8 areas).
+const AREA_LINE = `${REGION.ebird.areaLabel.charAt(0).toUpperCase()}${REGION.ebird.areaLabel.slice(1).replace(/ /g, '-')} dexes, placed by your nearest eBird hotspot within 3 km.`;
 
 type View = 'all' | 'seen' | 'unseen';
 
@@ -73,7 +77,7 @@ export default function AreaDexes() {
       <header className="area-dex-head">
         <div>
           <h2 id="area-dex-title">Your areas</h2>
-          <p className="small muted">Council-area dexes, placed by your nearest eBird hotspot within 3 km.</p>
+          <p className="small muted">{AREA_LINE}</p>
         </div>
       </header>
 

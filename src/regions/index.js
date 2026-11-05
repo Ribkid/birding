@@ -5,18 +5,36 @@
 // (the dex in core/species.js, the area dexes, the map's home view) is fixed for the life of the page; changing
 // region saves the choice and reloads (setRegion).
 import seq from './seq.js';
+import melb from './melb.js';
 
-export const PACKS = { seq };
+// Every pack, launched or not: the eBird build and proxy serve them all.
+export const PACKS = { seq, melb };
 export const DEFAULT_REGION = 'seq';
 export const REGION_KEY = 'birddex-region';
 
-/** The region code saved on this device, or null if none is saved (or it names a region that no longer exists). */
+// A pack with `launched: false` can only be picked in a dev build (`npm run dev`), never in production.
+const DEV = Boolean(import.meta.env?.DEV);
+
+/** Whether this build lets a device use the region. */
+export const canUse = (code, dev = DEV) => Object.hasOwn(PACKS, code) && (PACKS[code].launched !== false || dev);
+
+/** The region code saved on this device, or null if none is saved (or it names a region this build can't use). */
 export function storedRegion() {
   try {
     const code = globalThis.localStorage?.getItem(REGION_KEY);
-    return code && Object.hasOwn(PACKS, code) ? code : null;
+    return code && canUse(code) ? code : null;
   } catch (_) {
     return null;
+  }
+}
+
+// Dev-only switch: open the app with ?region=melb (or ?region=seq) to save that region before anything reads it.
+if (DEV) {
+  try {
+    const code = new URLSearchParams(globalThis.location?.search ?? '').get('region');
+    if (code && canUse(code)) globalThis.localStorage?.setItem(REGION_KEY, code);
+  } catch (_) {
+    // No storage (private mode); the default region is used.
   }
 }
 
@@ -44,7 +62,7 @@ export const zoneOf = (council, pack = REGION) => zoneByCouncil.get(pack.code)?.
 
 /** Saves a new region and reloads, so every list is rebuilt for it. */
 export function setRegion(code) {
-  if (!Object.hasOwn(PACKS, code) || code === REGION.code) return;
+  if (!canUse(code) || code === REGION.code) return;
   try { localStorage.setItem(REGION_KEY, code); } catch (_) { return; }
   location.reload();
 }

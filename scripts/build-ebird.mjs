@@ -32,8 +32,17 @@ export const LIST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const LIST_CACHE = join(ROOT_PATH, 'node_modules', '.cache', 'birdydex-ebird', 'lists');
 const LEGACY_LIST_CACHE = join(ROOT_PATH, '.cache', 'ebird-lists');
 
-// App scientific name -> eBird scientific name, only where the two taxonomies differ.
-export const SCI_ALIASES = {};
+// App scientific name -> eBird scientific name, only where the two taxonomies differ. Without these the birds drop out
+// of every hotspot list, area list and sighting feed. The build logs any app bird still unmatched.
+export const SCI_ALIASES = {
+  'Ptilinopus magnificus': 'Megaloprepia magnifica', // Wompoo Fruit-Dove
+  'Chrysococcyx lucidus': 'Chalcites lucidus', // Shining Bronze-Cuckoo
+  'Hypotaenidia philippensis': 'Gallirallus philippensis', // Buff-banded Rail
+  'Elseyornis melanops': 'Thinornis melanops', // Black-fronted Dotterel
+  'Parvipsitta pusilla': 'Psitteuteles pusillus', // Little Lorikeet
+  // eBird lumps Eastern Osprey into (Western) Osprey; every Australian osprey is the eastern one.
+  'Pandion cristatus': 'Pandion haliaetus',
+};
 
 export function mapTaxonomy(taxonomy, birds = ALL_BIRDS, aliases = SCI_ALIASES) {
   const codeBySci = new Map(taxonomy.map((row) => [row.sciName, row.speciesCode]));
@@ -78,6 +87,9 @@ export function compactSnapshot({ byCode, hotspots, lists, regionLists = {}, rec
     compactLists[locId] = [...new Set(codes.map((code) => byCode.get(code)).filter((id) => id != null))];
   }
 
+  // An area's dex is the region's dex in that area, so only the pack's own species count (byCode covers the whole
+  // catalogue; in SEQ the pack is the whole catalogue, so nothing is dropped).
+  const inDex = (id) => id != null && pack.species[id] != null;
   const compactRegions = {};
   for (const [zone, { name, councils }] of Object.entries(pack.ebird.zones)) {
     const present = councils.filter((council) => regionLists[council]);
@@ -85,7 +97,7 @@ export function compactSnapshot({ byCode, hotspots, lists, regionLists = {}, rec
     const codes = present.flatMap((council) => regionLists[council]);
     compactRegions[zone] = {
       name,
-      ids: [...new Set(codes.map((speciesCode) => byCode.get(speciesCode)).filter((id) => id != null))],
+      ids: [...new Set(codes.map((speciesCode) => byCode.get(speciesCode)).filter(inDex))],
     };
   }
 

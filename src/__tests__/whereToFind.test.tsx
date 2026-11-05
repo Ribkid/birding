@@ -20,6 +20,10 @@ const SNAPSHOT = {
 };
 
 beforeEach(() => {
+  // The sighting below is dated 30 October; "2 days ago" holds only if today is 1 November. Only Date is faked, so
+  // waitFor's timers still run.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-01T12:00:00+10:00'));
   resetEbirdSnapshotCache();
   setLastPos({ lat: -27.53, lng: 153.01, acc: 10 });
   vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
@@ -48,6 +52,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();

@@ -58,7 +58,9 @@ const saved: DexFilters = { kind: 'animals', q: '', show: 'all', sort: 'dex', la
 const appliedLinks = new Set<string>();
 
 const inScope = (s: Species, scope: string) => (scope === 'all' ? true : scope === 'animals' ? s.kind !== 'plant' : s.kind === scope);
-const scopeNoun = (scope: string, n: number) => (scope === 'all' ? 'species' : pluralFor(scope, n));
+// A region with one kind (Melbourne: birds only, for now) says "birds", not "animals".
+const scopeNoun = (scope: string, n: number) => (scope === 'all' ? 'species'
+  : pluralFor(scope === 'animals' && kindsPresent.length === 1 ? kindsPresent[0] : scope, n));
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const listWords = (list: string[], and = 'and') => (list.length < 2 ? list.join('') : `${list.slice(0, -1).join(', ')} ${and} ${list[list.length - 1]}`);
 const pad = (n: number) => String(n).padStart(2, '0');

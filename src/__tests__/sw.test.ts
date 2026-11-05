@@ -344,6 +344,42 @@ describe('Listen offline', () => {
   });
 });
 
+describe('region files', () => {
+  const precache = ['/index.html', '/assets/index-a.js'];
+  const files = { '/data/regions/melb/rates.json': { body: '{"melb":1}', type: 'application/json' } };
+  const regionFiles = ['/data/regions/melb/rates.json'];
+  const ask = async (sw: Record<string, Listener>, type: string, extra: Record<string, unknown> = {}) => {
+    let status: unknown = null;
+    await dispatch(sw.message, { data: { type, ...extra }, ports: [{ postMessage: (s: unknown) => { status = s; } }] });
+    return status;
+  };
+
+  it('counts the files the page names, and fetches them into the runtime cache', async () => {
+    const { sw, caches, state, get, update } = setup(precache, { files });
+    await update();
+    expect(await ask(sw, 'shell-status', { files: regionFiles })).toMatchObject({ total: 3, saved: 2 });
+    expect(await ask(sw, 'shell-fill', { files: regionFiles })).toMatchObject({ total: 3, saved: 3 });
+    expect(caches.urls('birdydex-runtime-v3')).toContain(abs('/data/regions/melb/rates.json'));
+    state.online = false;
+    expect(await get('/data/regions/melb/rates.json')).toMatchObject({ status: 200, text: '{"melb":1}' });
+  });
+
+  it('keeps a region file the page asked for at boot through the next release', async () => {
+    const { state, get, update } = setup(precache, { files });
+    await update();
+    await get('/data/regions/melb/rates.json');
+    await update();
+    state.online = false;
+    expect(await get('/data/regions/melb/rates.json')).toMatchObject({ status: 200, text: '{"melb":1}' });
+  });
+
+  it('ignores named files outside /data/regions/', async () => {
+    const { sw, update } = setup(precache, { files });
+    await update();
+    expect(await ask(sw, 'shell-status', { files: ['/secret.json', 42] })).toMatchObject({ total: 2, saved: 2 });
+  });
+});
+
 describe('navigations', () => {
   const precache = ['/index.html', '/assets/index-a.js', '/privacy.html'];
   const privacy = { body: '<!doctype html><title>Privacy: Sarah\'s BirdyDex</title><p>Privacy</p>', type: 'text/html' };

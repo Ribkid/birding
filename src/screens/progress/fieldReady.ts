@@ -2,6 +2,7 @@
 import { KINDS, SPECIES, byId } from '../../lib/data';
 import { cachedIndex, callPackStatus, downloadAll, loadCallPack, photoFor, saveCallPack, sized } from '../../core/media.js';
 import { galleryFor } from '../../core/gallery.js';
+import { REGION_FILES } from '../../lib/sw';
 
 export type FieldKey = 'app' | 'photos' | 'calls' | 'maps' | 'listen' | 'scan';
 export interface FieldResult { ok: boolean; text: string; get?: boolean; link?: string; linkText?: string }
@@ -35,7 +36,8 @@ async function askWorker(type: string, ms = 3000): Promise<{ version: string; to
       clearTimeout(timer);
       resolve(event.data);
     };
-    sw.postMessage({ type }, [channel.port2]);
+    // The region's files aren't in the shell; naming them lets the worker count and fetch them too.
+    sw.postMessage({ type, files: REGION_FILES }, [channel.port2]);
   });
 }
 
